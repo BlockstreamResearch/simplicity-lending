@@ -285,7 +285,7 @@ dependencies = [
  "anyhow",
  "clap",
  "config",
- "contracts",
+ "contracts 0.1.0",
  "dotenvy",
  "hex",
  "simplicityhl",
@@ -345,10 +345,26 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "contracts 0.1.0 (git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=b3d1ae9)",
  "hex",
  "ring",
  "sha2",
  "simplicityhl",
+ "simplicityhl-core",
+ "thiserror",
+]
+
+[[package]]
+name = "contracts"
+version = "0.1.0"
+source = "git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=b3d1ae9#b3d1ae98c8fa1aa1078dde94cbe33cb072c70105"
+dependencies = [
+ "bincode",
+ "hex",
+ "ring",
+ "sha2",
+ "simplicityhl",
+ "simplicityhl-core",
  "thiserror",
 ]
 
@@ -1095,6 +1111,19 @@ dependencies = [
  "serde",
  "serde_json",
  "simplicity-lang",
+]
+
+[[package]]
+name = "simplicityhl-core"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bb8fa6da50d4f9cd3cd96837d219654d6d7258e5a637287d7a943e1535cfbe9"
+dependencies = [
+ "bincode",
+ "hex",
+ "sha2",
+ "simplicityhl",
+ "thiserror",
 ]
 
 [[package]]
