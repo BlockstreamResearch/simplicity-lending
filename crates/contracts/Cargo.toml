@@ -10,8 +10,9 @@ keywords = ["simplicity", "lending", "liquid", "bitcoin", "elements", "contracts
 categories = ["cryptography::cryptocurrencies"]
 
 [features]
-default = ["asset_auth"]
+default = ["asset_auth", "script_auth"]
 asset_auth = []
+script_auth = []
 
 [lints]
 workspace = true

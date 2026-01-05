@@ -7,3 +7,5 @@ pub mod sdk;
 
 #[cfg(feature = "asset_auth")]
 pub mod asset_auth;
+#[cfg(feature = "script_auth")]
+pub mod script_auth;

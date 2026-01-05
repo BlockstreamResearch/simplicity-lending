@@ -6,6 +6,12 @@ pub enum AssetAuthError {
     InvalidAuthAssetId { expected: String, actual: String },
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum ScriptAuthError {
+    #[error("Invalid auth UTXO script hash: expected {expected}, got {actual}")]
+    InvalidAuthScriptHash { expected: String, actual: String },
+}
+
 /// Errors from transaction building operations.
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionBuildError {
@@ -23,6 +29,9 @@ pub enum TransactionBuildError {
 
     #[error(transparent)]
     AssetAuth(#[from] AssetAuthError),
+
+    #[error(transparent)]
+    ScriptAuth(#[from] ScriptAuthError),
 
     #[error(transparent)]
     Validation(#[from] ValidationError),

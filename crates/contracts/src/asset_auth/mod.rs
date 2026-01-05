@@ -65,7 +65,7 @@ pub fn execute_asset_auth_program(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn finalize_options_transaction(
+pub fn finalize_asset_auth_transaction(
     mut tx: Transaction,
     options_public_key: &XOnlyPublicKey,
     options_program: &CompiledProgram,
