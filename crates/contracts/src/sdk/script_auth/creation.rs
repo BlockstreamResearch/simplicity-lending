@@ -4,7 +4,7 @@ use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, Sequence, TxOut};
+use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut};
 
 use crate::script_auth::{build_arguments::ScriptAuthArguments, get_script_auth_address};
 
@@ -61,6 +61,13 @@ pub fn build_script_auth_creation(
             None,
         ));
     }
+
+    pst.add_output(Output::new_explicit(
+        Script::new(),
+        fee_amount,
+        fee_asset_id,
+        None,
+    ));
 
     Ok((pst, script_auth_taproot_pubkey_gen))
 }

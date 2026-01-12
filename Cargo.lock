@@ -347,6 +347,7 @@ dependencies = [
  "bincode",
  "contracts 0.1.0 (git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=b3d1ae9)",
  "hex",
+ "modular-bitfield",
  "ring",
  "sha2",
  "simplicityhl",
@@ -685,6 +686,27 @@ checksum = "487906208f38448e186e3deb02f2b8ef046a9078b0de00bdb28bf4fb9b76951c"
 dependencies = [
  "bech32",
  "bitcoin",
+]
+
+[[package]]
+name = "modular-bitfield"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2956e537fc68236d2aa048f55704f231cc93f1c4de42fe1ecb5bd7938061fc4a"
+dependencies = [
+ "modular-bitfield-impl",
+ "static_assertions",
+]
+
+[[package]]
+name = "modular-bitfield-impl"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59b43b4fd69e3437618106f7754f34021b831a514f9e1a98ae863cabcd8d8dad"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1115,9 +1137,9 @@ dependencies = [
 
 [[package]]
 name = "simplicityhl-core"
-version = "0.3.1"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bb8fa6da50d4f9cd3cd96837d219654d6d7258e5a637287d7a943e1535cfbe9"
+checksum = "c21d26d6dd2ce63cf536aa22f1c79757ce74f8a23642952fc86e86c6e7be178d"
 dependencies = [
  "bincode",
  "hex",
@@ -1147,6 +1169,12 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strsim"

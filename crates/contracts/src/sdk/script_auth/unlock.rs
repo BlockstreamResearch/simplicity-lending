@@ -3,11 +3,11 @@ use simplicity_contracts::sdk::validation::TxOutExt;
 use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::{OutPoint, Sequence, TxOut};
+use simplicityhl_core::hash_script;
 
 use crate::error::{ScriptAuthError, TransactionBuildError};
 use crate::script_auth::build_arguments::ScriptAuthArguments;
 use crate::script_auth::build_witness::ScriptAuthWitnessParams;
-use crate::script_auth::hash_script;
 
 pub fn build_script_auth_unlock(
     locked_utxo: (OutPoint, TxOut),

@@ -32,7 +32,7 @@ mod tests {
     use simplicityhl::elements::secp256k1_zkp::Secp256k1;
     use simplicityhl::simplicity::bitcoin::key::Keypair;
     use simplicityhl::simplicity::bitcoin::secp256k1;
-    use simplicityhl_core::{Encodable, get_p2pk_address, hash_script_pubkey};
+    use simplicityhl_core::{Encodable, get_p2pk_address, hash_script};
 
     #[test]
     fn test_serialize_deserialize_default() -> anyhow::Result<()> {
@@ -58,7 +58,7 @@ mod tests {
         )?;
 
         let args = ScriptAuthArguments {
-            script_hash: hash_script_pubkey(&test_address),
+            script_hash: hash_script(&test_address.script_pubkey()),
         };
 
         let serialized = args.encode()?;

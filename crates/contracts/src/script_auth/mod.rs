@@ -1,14 +1,10 @@
 use std::sync::Arc;
 
-use sha2::{Digest, Sha256};
-
 use simplicityhl_core::{
     ProgramError, control_block, create_p2tr_address, get_and_verify_env, load_program, run_program,
 };
 
-use simplicityhl::elements::{
-    self, Address, AddressParams, Script, Transaction, TxInWitness, TxOut,
-};
+use simplicityhl::elements::{self, Address, AddressParams, Transaction, TxInWitness, TxOut};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::jet::Elements;
@@ -55,12 +51,6 @@ pub fn get_compiled_script_auth_program(arguments: &ScriptAuthArguments) -> Comp
     program
         .instantiate(arguments.build_script_auth_arguments(), true)
         .unwrap()
-}
-
-pub fn hash_script(script: &Script) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    sha2::digest::Update::update(&mut hasher, script.as_bytes());
-    hasher.finalize().into()
 }
 
 pub fn execute_script_auth_program(
@@ -139,7 +129,7 @@ mod script_auth_tests {
     use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use simplicityhl_core::{
-        LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, hash_script_pubkey,
+        LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, hash_script,
     };
 
     fn get_creation_pst(
@@ -149,7 +139,7 @@ mod script_auth_tests {
         ScriptAuthArguments,
     )> {
         let asset_auth_arguments = ScriptAuthArguments {
-            script_hash: hash_script_pubkey(&script_pubkey),
+            script_hash: hash_script(&script_pubkey.script_pubkey()),
         };
 
         Ok((

@@ -223,8 +223,8 @@ fn extract_lending_parameters(first_parameters_amount: u64, second_parameters_am
 fn validate_lending_params(collateral_amount: u64, principal_amount: u64, loan_expiration_time: u32, interest_rate: u16) {
     check_asset_amounts_eq(param::COLLATERAL_AMOUNT, collateral_amount);
     check_asset_amounts_eq(param::PRINCIPAL_AMOUNT, principal_amount);
-    check_asset_amounts_eq(param::LOAN_EXPIRATION_TIME, jet::left_pad_low_32_64(loan_expiration_time));
-    check_asset_amounts_eq(param::PRINCIPAL_INTEREST_RATE, jet::left_pad_low_16_64(interest_rate));
+    check_asset_amounts_eq(jet::left_pad_low_32_64(param::LOAN_EXPIRATION_TIME), jet::left_pad_low_32_64(loan_expiration_time));
+    check_asset_amounts_eq(jet::left_pad_low_16_64(param::PRINCIPAL_INTEREST_RATE), jet::left_pad_low_16_64(interest_rate));
 }
 
 // Interest logic
