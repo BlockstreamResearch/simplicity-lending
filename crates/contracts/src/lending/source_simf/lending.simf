@@ -235,7 +235,12 @@ fn calculate_interest(principal_amount: u64, interest_rate: u16) -> u64 {
     let interest_rate: u64 = jet::left_pad_low_16_64(interest_rate);
 
     let interest: u128 = jet::multiply_64(principal_amount, interest_rate);
-    let (interest, _): (u64, u64) = jet::div_mod_128_64(interest, MAX_BASIS_POINTS);
+
+    // TODO: Handle case when hi > 0
+    let (hi, lo): (u64, u64) = <u128>::into(interest);
+    check_asset_amounts_eq(hi, 0);
+
+    let interest: u64 = jet::divide_64(lo, MAX_BASIS_POINTS);
 
     interest
 }

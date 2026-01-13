@@ -1,12 +1,12 @@
-use simplicity_contracts::error::TransactionBuildError;
 use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, Sequence, TxOut};
+use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut};
 
 use crate::asset_auth::{build_arguments::AssetAuthArguments, get_asset_auth_address};
+use crate::error::TransactionBuildError;
 
 pub fn build_asset_auth_creation(
     utxo_to_lock: (OutPoint, TxOut),
@@ -63,4 +63,17 @@ pub fn build_asset_auth_creation(
     }
 
     Ok((pst, asset_auth_taproot_pubkey_gen))
+}
+
+pub fn generate_asset_auth_script(
+    asset_auth_arguments: &AssetAuthArguments,
+    address_params: &'static AddressParams,
+) -> Result<Script, TransactionBuildError> {
+    let asset_auth_taproot_pubkey_gen = TaprootPubkeyGen::from(
+        asset_auth_arguments,
+        address_params,
+        &get_asset_auth_address,
+    )?;
+
+    Ok(asset_auth_taproot_pubkey_gen.address.script_pubkey())
 }

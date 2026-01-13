@@ -114,6 +114,7 @@ impl SecondNFTParameters {
 }
 
 pub const MAX_LIQUID_AMOUNT: u64 = 2_100_000_000_000_000;
+pub const MAX_BASIS_POINTS: u64 = 10_000;
 
 const POWERS_OF_10: [u64; 16] = [
     1,                // 10^0
@@ -163,4 +164,19 @@ pub fn to_base_amount(amount: u64, decimals_mantissa: u8) -> u32 {
         .expect("Base amount bigger than the u32");
 
     result
+}
+
+pub fn calculate_interest(principal_amount: u64, interest_rate: u16) -> u64 {
+    let interest_wide = (principal_amount as u128) * (interest_rate as u128);
+    let interest = interest_wide / (MAX_BASIS_POINTS as u128);
+
+    interest as u64
+}
+
+pub fn calculate_principal_with_interest(principal_amount: u64, interest_rate: u16) -> u64 {
+    let principal_with_interest = principal_amount
+        .checked_add(calculate_interest(principal_amount, interest_rate))
+        .expect("Overflow in principal with interest calculation");
+
+    principal_with_interest
 }

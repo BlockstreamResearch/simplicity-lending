@@ -1,3 +1,4 @@
+mod basic;
 #[cfg(feature = "asset_auth")]
 mod asset_auth;
 #[cfg(feature = "lending")]
@@ -7,6 +8,7 @@ mod script_auth;
 
 pub mod parameters;
 
+pub use basic::*;
 #[cfg(feature = "asset_auth")]
 pub use asset_auth::*;
 #[cfg(feature = "lending")]

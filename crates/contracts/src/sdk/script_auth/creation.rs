@@ -1,4 +1,3 @@
-use simplicity_contracts::error::TransactionBuildError;
 use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 
 use simplicity_contracts::sdk::validation::TxOutExt;
@@ -6,6 +5,7 @@ use simplicity_contracts::sdk::validation::TxOutExt;
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
 use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut};
 
+use crate::error::TransactionBuildError;
 use crate::script_auth::{build_arguments::ScriptAuthArguments, get_script_auth_address};
 
 pub fn build_script_auth_creation(
@@ -70,4 +70,17 @@ pub fn build_script_auth_creation(
     ));
 
     Ok((pst, script_auth_taproot_pubkey_gen))
+}
+
+pub fn generate_script_auth_script(
+    script_auth_arguments: &ScriptAuthArguments,
+    address_params: &'static AddressParams,
+) -> Result<Script, TransactionBuildError> {
+    let asset_auth_taproot_pubkey_gen = TaprootPubkeyGen::from(
+        script_auth_arguments,
+        address_params,
+        &get_script_auth_address,
+    )?;
+
+    Ok(asset_auth_taproot_pubkey_gen.address.script_pubkey())
 }
