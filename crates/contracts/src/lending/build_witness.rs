@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use simplicityhl::{ResolvedType, WitnessValues, parse::ParseFromStr, str::WitnessName, types::TypeConstructible};
+use simplicityhl::{
+    ResolvedType, WitnessValues, parse::ParseFromStr, str::WitnessName, types::TypeConstructible,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum LendingBranch {

@@ -92,20 +92,23 @@ pub fn build_lending_creation(
             script_hash: hash_script(&lending_taproot_pubkey_gen.address.script_pubkey()),
         },
         address_params,
-    ).unwrap().script_pubkey();
+    )
+    .unwrap()
+    .script_pubkey();
 
     let mut pst = PartiallySignedTransaction::new_v2();
 
     // Inputs setup
 
     // Add Collateral input
-    add_base_input_from_utxo(&mut pst, collateral_out_point, collateral_tx_out);
+    add_base_input_from_utxo(&mut pst, collateral_out_point, collateral_tx_out, None);
 
     // Add First Parameters NFT input
     add_base_input_from_utxo(
         &mut pst,
         first_parameters_nft_out_point,
         first_parameters_nft_tx_out,
+        None,
     );
 
     // Add Second Parameters NFT input
@@ -113,19 +116,20 @@ pub fn build_lending_creation(
         &mut pst,
         second_parameters_nft_out_point,
         second_parameters_nft_tx_out,
+        None,
     );
 
     // Add Borrower NFT input
-    add_base_input_from_utxo(&mut pst, borrower_nft_out_point, borrower_nft_tx_out);
+    add_base_input_from_utxo(&mut pst, borrower_nft_out_point, borrower_nft_tx_out, None);
 
     // Add Lender NFT input
-    add_base_input_from_utxo(&mut pst, lender_nft_out_point, lender_nft_tx_out);
+    add_base_input_from_utxo(&mut pst, lender_nft_out_point, lender_nft_tx_out, None);
 
     // Add Principal input
-    add_base_input_from_utxo(&mut pst, principal_out_point, principal_tx_out);
+    add_base_input_from_utxo(&mut pst, principal_out_point, principal_tx_out, None);
 
     // Add Fee input
-    add_base_input_from_utxo(&mut pst, fee_out_point, fee_tx_out);
+    add_base_input_from_utxo(&mut pst, fee_out_point, fee_tx_out, None);
 
     // Outputs setup
 
@@ -203,12 +207,8 @@ pub fn generate_lending_script(
     lending_arguments: &LendingArguments,
     address_params: &'static AddressParams,
 ) -> Result<Script, TransactionBuildError> {
-    let lending_taproot_pubkey_gen = TaprootPubkeyGen::from(
-        lending_arguments,
-        address_params,
-        &get_lending_address,
-    )?;
+    let lending_taproot_pubkey_gen =
+        TaprootPubkeyGen::from(lending_arguments, address_params, &get_lending_address)?;
 
     Ok(lending_taproot_pubkey_gen.address.script_pubkey())
 }
-

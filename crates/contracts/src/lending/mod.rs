@@ -110,15 +110,19 @@ mod lending_tests {
     use crate::asset_auth::get_asset_auth_address;
     use crate::lending::build_witness::LendingBranch;
     use crate::sdk::parameters::{
-        FirstNFTParameters, SecondNFTParameters, calculate_principal_with_interest, to_base_amount,
+        FirstNFTParameters, LendingParameters, SecondNFTParameters,
+        calculate_principal_with_interest, to_base_amount,
     };
-    use crate::sdk::{build_lending_creation, build_lending_loan_repayment, taproot_unspendable_internal_key};
+    use crate::sdk::{
+        build_lending_creation, build_lending_loan_liquidation, build_lending_loan_repayment,
+        taproot_unspendable_internal_key,
+    };
 
     use super::*;
 
     use anyhow::{Ok, Result};
     use simplicityhl::elements::confidential::{Asset, Value};
-    use simplicityhl::elements::hex::ToHex;
+    use simplicityhl::elements::locktime::Height;
     use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::elements::{self, AssetId, OutPoint};
     use simplicityhl::simplicity::hashes::Hash;
@@ -143,10 +147,7 @@ mod lending_tests {
         lender_nft_asset_id: AssetId,
         first_parameters_nft_amount: u64,
         second_parameters_nft_amount: u64,
-        collateral_amount: u64,
-        principal_amount: u64,
-        loan_expiration_time: u32,
-        principal_interest_rate: u16,
+        lending_params: &LendingParameters,
     ) -> Result<(
         (PartiallySignedTransaction, TaprootPubkeyGen),
         LendingArguments,
@@ -163,10 +164,6 @@ mod lending_tests {
         )?
         .script_pubkey();
 
-        println!(
-            "CREATION lender_principal_script - {}",
-            lender_principal_script
-        );
         let principal_auth_script_hash = hash_script(&lender_principal_script);
 
         let lending_arguments = LendingArguments::new(
@@ -177,10 +174,7 @@ mod lending_tests {
             first_parameters_nft_asset_id.into_inner().0,
             second_parameters_nft_asset_id.into_inner().0,
             principal_auth_script_hash,
-            collateral_amount,
-            principal_amount,
-            loan_expiration_time,
-            principal_interest_rate,
+            &lending_params,
         );
 
         Ok((
@@ -189,7 +183,7 @@ mod lending_tests {
                     OutPoint::default(),
                     TxOut {
                         asset: Asset::Explicit(collateral_asset_id),
-                        value: Value::Explicit(collateral_amount),
+                        value: Value::Explicit(lending_params.collateral_amount),
                         nonce: elements::confidential::Nonce::Null,
                         script_pubkey: Script::new(),
                         witness: elements::TxOutWitness::default(),
@@ -199,7 +193,7 @@ mod lending_tests {
                     OutPoint::default(),
                     TxOut {
                         asset: Asset::Explicit(principal_asset_id),
-                        value: Value::Explicit(principal_amount),
+                        value: Value::Explicit(lending_params.principal_amount),
                         nonce: elements::confidential::Nonce::Null,
                         script_pubkey: Script::new(),
                         witness: elements::TxOutWitness::default(),
@@ -266,33 +260,68 @@ mod lending_tests {
         ))
     }
 
-    #[test]
-    fn test_lending_creation() -> Result<()> {
+    fn create_test_assets() -> Result<(AssetId, AssetId, AssetId, AssetId)> {
         let outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 33);
 
         let first_asset_entropy = get_new_asset_entropy(&outpoint, [1; 32]);
         let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
         let third_asset_entropy = get_new_asset_entropy(&outpoint, [3; 32]);
-        let fourth_asset_entropy = get_new_asset_entropy(&outpoint, [3; 32]);
+        let fourth_asset_entropy = get_new_asset_entropy(&outpoint, [4; 32]);
 
         let first_parameters_nft_asset_id = AssetId::from_entropy(first_asset_entropy);
         let second_parameters_nft_asset_id = AssetId::from_entropy(second_asset_entropy);
         let borrower_nft_asset_id = AssetId::from_entropy(third_asset_entropy);
         let lender_nft_asset_id = AssetId::from_entropy(fourth_asset_entropy);
 
-        let collateral_amount = 10000;
-        let principal_amount = 4000;
-        let loan_expiration_time = 100;
-        let principal_interest_rate = 250; // 2.5%
+        Ok((
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+        ))
+    }
 
-        let first_parameters_nft_encoded_amount =
-            FirstNFTParameters::encode(principal_interest_rate, loan_expiration_time, 2, 2)
-                .expect("Failed to encode first parameters nft amount");
+    fn encode_parameters_amounts(
+        lending_params: &LendingParameters,
+        amounts_decimals: u8,
+    ) -> Result<(u64, u64)> {
+        let first_parameters_nft_encoded_amount = FirstNFTParameters::encode(
+            lending_params.principal_interest_rate,
+            lending_params.loan_expiration_time,
+            amounts_decimals,
+            amounts_decimals,
+        )
+        .expect("Failed to encode first parameters nft amount");
         let second_parameters_nft_encoded_amount = SecondNFTParameters::encode(
-            to_base_amount(collateral_amount, 2),
-            to_base_amount(principal_amount, 2),
+            to_base_amount(lending_params.collateral_amount, amounts_decimals),
+            to_base_amount(lending_params.principal_amount, amounts_decimals),
         )
         .expect("Failed to encode second parameters nft amount");
+
+        Ok((
+            first_parameters_nft_encoded_amount,
+            second_parameters_nft_encoded_amount,
+        ))
+    }
+
+    #[test]
+    fn test_lending_creation() -> Result<()> {
+        let (
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+        ) = create_test_assets()?;
+
+        let amounts_decimals = 2;
+        let lending_params = LendingParameters {
+            collateral_amount: 10000,
+            principal_amount: 4000,
+            loan_expiration_time: 100,
+            principal_interest_rate: 250, // 2.5%
+        };
+        let (first_parameters_amount, second_parameters_amount) =
+            encode_parameters_amounts(&lending_params, amounts_decimals)?;
 
         let _ = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
@@ -301,12 +330,9 @@ mod lending_tests {
             second_parameters_nft_asset_id,
             borrower_nft_asset_id,
             lender_nft_asset_id,
-            first_parameters_nft_encoded_amount,
-            second_parameters_nft_encoded_amount,
-            collateral_amount,
-            principal_amount,
-            loan_expiration_time,
-            principal_interest_rate,
+            first_parameters_amount,
+            second_parameters_amount,
+            &lending_params,
         )?;
 
         Ok(())
@@ -314,53 +340,23 @@ mod lending_tests {
 
     #[test]
     fn test_loan_repayment() -> Result<()> {
-        let outpoint = OutPoint::new(Txid::from_slice(&[2; 32])?, 33);
-
-        let first_asset_entropy = get_new_asset_entropy(&outpoint, [1; 32]);
-        let second_asset_entropy = get_new_asset_entropy(&outpoint, [2; 32]);
-        let third_asset_entropy = get_new_asset_entropy(&outpoint, [3; 32]);
-        let fourth_asset_entropy = get_new_asset_entropy(&outpoint, [4; 32]);
-
         let principal_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
-        let first_parameters_nft_asset_id = AssetId::from_entropy(first_asset_entropy);
-        let second_parameters_nft_asset_id = AssetId::from_entropy(second_asset_entropy);
-        let borrower_nft_asset_id = AssetId::from_entropy(third_asset_entropy);
-        let lender_nft_asset_id = AssetId::from_entropy(fourth_asset_entropy);
+        let (
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+        ) = create_test_assets()?;
 
-        println!("principal_asset_id - {}", principal_asset_id.to_string());
-        println!(
-            "collateral_asset_id - {}",
-            (*LIQUID_TESTNET_BITCOIN_ASSET).to_hex()
-        );
-        println!(
-            "first_parameters_nft_asset_id - {}",
-            first_parameters_nft_asset_id.to_hex()
-        );
-        println!(
-            "second_parameters_nft_asset_id - {}",
-            second_parameters_nft_asset_id.to_hex()
-        );
-        println!("borrower_nft_asset_id - {}", borrower_nft_asset_id.to_hex());
-        println!("lender_nft_asset_id - {}", lender_nft_asset_id.to_hex());
-
-        let amounts_dec = 2;
-        let collateral_amount = 10000;
-        let principal_amount = 4000;
-        let loan_expiration_time = 100;
-        let principal_interest_rate = 250; // 2.5%
-
-        let first_parameters_nft_encoded_amount = FirstNFTParameters::encode(
-            principal_interest_rate,
-            loan_expiration_time,
-            amounts_dec,
-            amounts_dec,
-        )
-        .expect("Failed to encode first parameters nft amount");
-        let second_parameters_nft_encoded_amount = SecondNFTParameters::encode(
-            to_base_amount(collateral_amount, amounts_dec),
-            to_base_amount(principal_amount, amounts_dec),
-        )
-        .expect("Failed to encode second parameters nft amount");
+        let amounts_decimals = 2;
+        let lending_params = LendingParameters {
+            collateral_amount: 10000,
+            principal_amount: 4000,
+            loan_expiration_time: 100,
+            principal_interest_rate: 250, // 2.5%
+        };
+        let (first_parameters_amount, second_parameters_amount) =
+            encode_parameters_amounts(&lending_params, amounts_decimals)?;
 
         let ((pst, lending_pubkey_gen), lending_arguments) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
@@ -369,20 +365,19 @@ mod lending_tests {
             second_parameters_nft_asset_id,
             borrower_nft_asset_id,
             lender_nft_asset_id,
-            first_parameters_nft_encoded_amount,
-            second_parameters_nft_encoded_amount,
-            collateral_amount,
-            principal_amount,
-            loan_expiration_time,
-            principal_interest_rate,
+            first_parameters_amount,
+            second_parameters_amount,
+            &lending_params,
         )?;
 
         let pst = pst.extract_tx()?;
 
         let lending_tx_out = pst.output[0].clone();
 
-        let principal_amount_with_interest =
-            calculate_principal_with_interest(principal_amount, principal_interest_rate);
+        let principal_amount_with_interest = calculate_principal_with_interest(
+            lending_params.principal_amount,
+            lending_params.principal_interest_rate,
+        );
 
         let pst = build_lending_loan_repayment(
             (OutPoint::default(), lending_tx_out),
@@ -400,7 +395,7 @@ mod lending_tests {
                 OutPoint::default(),
                 TxOut {
                     asset: Asset::Explicit(first_parameters_nft_asset_id),
-                    value: Value::Explicit(first_parameters_nft_encoded_amount),
+                    value: Value::Explicit(first_parameters_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
                     witness: elements::TxOutWitness::default(),
@@ -410,7 +405,7 @@ mod lending_tests {
                 OutPoint::default(),
                 TxOut {
                     asset: Asset::Explicit(second_parameters_nft_asset_id),
-                    value: Value::Explicit(second_parameters_nft_encoded_amount),
+                    value: Value::Explicit(second_parameters_amount),
                     nonce: elements::confidential::Nonce::Null,
                     script_pubkey: Script::new(),
                     witness: elements::TxOutWitness::default(),
@@ -450,17 +445,17 @@ mod lending_tests {
                 ElementsUtxo {
                     script_pubkey: lending_pubkey_gen.address.script_pubkey(),
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
-                    value: Value::Explicit(collateral_amount),
+                    value: Value::Explicit(lending_params.collateral_amount),
                 },
                 ElementsUtxo {
                     script_pubkey: Script::new(),
                     asset: Asset::Explicit(first_parameters_nft_asset_id),
-                    value: Value::Explicit(first_parameters_nft_encoded_amount),
+                    value: Value::Explicit(first_parameters_amount),
                 },
                 ElementsUtxo {
                     script_pubkey: Script::new(),
                     asset: Asset::Explicit(second_parameters_nft_asset_id),
-                    value: Value::Explicit(second_parameters_nft_encoded_amount),
+                    value: Value::Explicit(second_parameters_amount),
                 },
                 ElementsUtxo {
                     script_pubkey: Script::new(),
@@ -490,6 +485,268 @@ mod lending_tests {
         assert!(
             run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
             "expected success loan repayment"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_loan_liquidation() -> Result<()> {
+        let (
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+        ) = create_test_assets()?;
+
+        let amounts_decimals = 2;
+        let lending_params = LendingParameters {
+            collateral_amount: 10000,
+            principal_amount: 4000,
+            loan_expiration_time: 100,
+            principal_interest_rate: 250, // 2.5%
+        };
+        let (first_parameters_amount, second_parameters_amount) =
+            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+
+        let ((pst, lending_pubkey_gen), lending_arguments) = get_creation_pst(
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+            first_parameters_amount,
+            second_parameters_amount,
+            &lending_params,
+        )?;
+
+        let pst = pst.extract_tx()?;
+
+        let lending_tx_out = pst.output[0].clone();
+
+        let pst = build_lending_loan_liquidation(
+            (OutPoint::default(), lending_tx_out),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(first_parameters_nft_asset_id),
+                    value: Value::Explicit(first_parameters_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(second_parameters_nft_asset_id),
+                    value: Value::Explicit(second_parameters_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(lender_nft_asset_id),
+                    value: Value::Explicit(1),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            &lending_arguments,
+            &Script::new(),
+            100,
+        )?;
+
+        let program = get_compiled_lending_program(&lending_arguments);
+
+        let env = ElementsEnv::new(
+            Arc::new(pst.extract_tx()?),
+            vec![
+                ElementsUtxo {
+                    script_pubkey: lending_pubkey_gen.address.script_pubkey(),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(lending_params.collateral_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(first_parameters_nft_asset_id),
+                    value: Value::Explicit(first_parameters_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(second_parameters_nft_asset_id),
+                    value: Value::Explicit(second_parameters_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(lender_nft_asset_id),
+                    value: Value::Explicit(1),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                },
+            ],
+            0,
+            simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
+            ControlBlock::from_slice(&[0xc0; 33])?,
+            None,
+            elements::BlockHash::all_zeros(),
+        );
+
+        let witness_values = build_lending_witness(LendingBranch::LoanLiquidation);
+
+        assert!(
+            run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
+            "expected success loan liquidation"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_loan_liquidation_fail() -> Result<()> {
+        let (
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+        ) = create_test_assets()?;
+
+        let amounts_decimals = 2;
+        let lending_params = LendingParameters {
+            collateral_amount: 10000,
+            principal_amount: 4000,
+            loan_expiration_time: 100,
+            principal_interest_rate: 250, // 2.5%
+        };
+        let (first_parameters_amount, second_parameters_amount) =
+            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+
+        let ((pst, lending_pubkey_gen), lending_arguments) = get_creation_pst(
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+            first_parameters_amount,
+            second_parameters_amount,
+            &lending_params,
+        )?;
+
+        let pst = pst.extract_tx()?;
+
+        let lending_tx_out = pst.output[0].clone();
+
+        let mut pst = build_lending_loan_liquidation(
+            (OutPoint::default(), lending_tx_out),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(first_parameters_nft_asset_id),
+                    value: Value::Explicit(first_parameters_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(second_parameters_nft_asset_id),
+                    value: Value::Explicit(second_parameters_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(lender_nft_asset_id),
+                    value: Value::Explicit(1),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            &lending_arguments,
+            &Script::new(),
+            100,
+        )?;
+
+        pst.inputs_mut()[0].required_height_locktime = Some(Height::from_consensus(10).unwrap());
+
+        let program = get_compiled_lending_program(&lending_arguments);
+
+        let env = ElementsEnv::new(
+            Arc::new(pst.extract_tx()?),
+            vec![
+                ElementsUtxo {
+                    script_pubkey: lending_pubkey_gen.address.script_pubkey(),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(lending_params.collateral_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(first_parameters_nft_asset_id),
+                    value: Value::Explicit(first_parameters_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(second_parameters_nft_asset_id),
+                    value: Value::Explicit(second_parameters_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(lender_nft_asset_id),
+                    value: Value::Explicit(1),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                },
+            ],
+            0,
+            simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
+            ControlBlock::from_slice(&[0xc0; 33])?,
+            None,
+            elements::BlockHash::all_zeros(),
+        );
+
+        let witness_values = build_lending_witness(LendingBranch::LoanLiquidation);
+
+        assert!(
+            run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_err(),
+            "expected failed loan liquidation"
         );
 
         Ok(())

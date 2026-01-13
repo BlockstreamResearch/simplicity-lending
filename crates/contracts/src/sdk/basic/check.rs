@@ -1,5 +1,5 @@
-use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::AssetId;
+use simplicityhl::elements::hex::ToHex;
 
 use crate::error::TransactionBuildError;
 

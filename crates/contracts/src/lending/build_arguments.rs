@@ -30,10 +30,7 @@ impl LendingArguments {
         first_parameters_nft_asset_id: [u8; 32],
         second_parameters_nft_asset_id: [u8; 32],
         lender_principal_cov_hash: [u8; 32],
-        collateral_amount: u64,
-        principal_amount: u64,
-        loan_expiration_time: u32,
-        principal_interest_rate: u16,
+        lending_params: &LendingParameters,
     ) -> Self {
         Self {
             collateral_asset_id,
@@ -43,10 +40,10 @@ impl LendingArguments {
             first_parameters_nft_asset_id,
             second_parameters_nft_asset_id,
             lender_principal_cov_hash,
-            collateral_amount,
-            principal_amount,
-            loan_expiration_time,
-            principal_interest_rate,
+            collateral_amount: lending_params.collateral_amount,
+            principal_amount: lending_params.principal_amount,
+            loan_expiration_time: lending_params.loan_expiration_time,
+            principal_interest_rate: lending_params.principal_interest_rate,
         }
     }
 
