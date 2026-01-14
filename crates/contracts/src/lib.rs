@@ -9,5 +9,7 @@ pub mod sdk;
 pub mod asset_auth;
 #[cfg(feature = "lending")]
 pub mod lending;
+#[cfg(feature = "pre_lock")]
+pub mod pre_lock;
 #[cfg(feature = "script_auth")]
 pub mod script_auth;
