@@ -1,7 +1,23 @@
-use simplicityhl::elements::AssetId;
 use simplicityhl::elements::hex::ToHex;
+use simplicityhl::elements::{AssetId, Script};
+use simplicityhl_core::hash_script;
 
 use crate::error::TransactionBuildError;
+
+pub fn check_script(
+    actual_script: &Script,
+    expected_script_hash: [u8; 32],
+) -> Result<(), TransactionBuildError> {
+    let script_hash = hash_script(actual_script);
+    if script_hash != expected_script_hash {
+        return Err(TransactionBuildError::InvalidAssetId {
+            expected: expected_script_hash.to_hex(),
+            actual: script_hash.to_hex(),
+        });
+    }
+
+    Ok(())
+}
 
 pub fn check_asset_id(
     actual_asset_id: AssetId,
