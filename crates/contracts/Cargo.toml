@@ -9,6 +9,12 @@ readme = "README.md"
 keywords = ["simplicity", "lending", "liquid", "bitcoin", "elements", "contracts"]
 categories = ["cryptography::cryptocurrencies"]
 
+[features]
+default = ["asset_auth", "script_auth", "lending"]
+asset_auth = []
+script_auth = []
+lending = []
+
 [lints]
 workspace = true
 
@@ -21,8 +27,13 @@ ring = { workspace = true }
 sha2 = { workspace = true }
 
 hex = { workspace = true }
+modular-bitfield = { workspace = true }
 
 simplicityhl = { workspace = true }
+
+simplicityhl-core = { workspace = true }
+
+simplicity-contracts = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"

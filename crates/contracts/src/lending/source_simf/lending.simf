@@ -1,0 +1,257 @@
+// Helper getters
+
+fn get_script_hash(index: u32, is_input_index: bool) -> u256 {
+    let script_hash: u256 = match is_input_index {
+        true => unwrap(jet::input_script_hash(index)),
+        false => unwrap(jet::output_script_hash(index)),
+    };
+
+    script_hash
+}
+
+fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
+    let pair: (Asset1, Amount1) = match is_input_index {
+        true => unwrap(jet::input_amount(index)),
+        false => unwrap(jet::output_amount(index)),
+    };
+    let (asset, amount): (Asset1, Amount1) = pair;
+    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_bits, amount)
+}
+
+// Check helpers
+
+fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
+    assert!(jet::eq_64(asset_amount_1, asset_amount_2));
+}
+
+fn check_assets_eq(asset_bits_1: u256, asset_bits_2: u256) {
+    assert!(jet::eq_256(asset_bits_1, asset_bits_2));
+}
+
+fn check_script_hashes_eq(script_1: u256, script_2: u256) {
+    assert!(jet::eq_256(script_1, script_2));
+}
+
+fn ensure_script_hash(index: u32, is_input_index: bool, expected_script_hash: u256) {
+    let script_hash: u256 = get_script_hash(index, is_input_index);
+
+    check_script_hashes_eq(script_hash, expected_script_hash);
+}
+
+fn ensure_asset_with_amount(index: u32, is_input_index: bool, expected_asset_bits: u256, expected_amount: u64) {
+    let (asset_bits, amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
+
+    check_assets_eq(asset_bits, expected_asset_bits);
+    check_asset_amounts_eq(amount, expected_amount);
+}
+
+fn ensure_input_and_output_assets_eq(input_index: u32, output_index: u32, expected_asset_bits: u256) -> u64 {
+    let (input_asset_bits, input_amount): (u256, u64) = get_asset_and_amount(input_index, true);
+    let (output_asset_bits, output_amount): (u256, u64) = get_asset_and_amount(output_index, false);
+
+    check_assets_eq(input_asset_bits, expected_asset_bits);
+    check_assets_eq(input_asset_bits, output_asset_bits);
+
+    check_asset_amounts_eq(input_amount, output_amount);
+
+    input_amount
+}
+
+fn ensure_input_and_output_assets_with_amount_eq(input_index: u32, output_index: u32, expected_asset_bits: u256, expected_amount: u64) {
+    let (input_asset_bits, input_amount): (u256, u64) = get_asset_and_amount(input_index, true);
+    let (output_asset_bits, output_amount): (u256, u64) = get_asset_and_amount(output_index, false);
+
+    check_assets_eq(input_asset_bits, expected_asset_bits);
+    check_assets_eq(input_asset_bits, output_asset_bits);
+
+    check_asset_amounts_eq(input_amount, expected_amount);
+    check_asset_amounts_eq(input_amount, output_amount);
+}
+
+fn ensure_output_is_op_return(index: u32) {
+    match jet::output_null_datum(index, 0) {
+        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => (),
+        None => panic!(),
+    }
+}
+
+fn ensure_zero_bit(bit: bool) { assert!(jet::eq_1(<bool>::into(bit), 0)); }
+
+// Lending parameters functions
+
+fn count_multiplier(acc: u64, decimals_mantissa: u8, i: u8) -> Either<u64, u64> {
+    match jet::eq_8(decimals_mantissa, i) {
+        true => Left(acc),
+        false => {
+            let new_acc: u128 = jet::multiply_64(acc, 10);
+            let (_, new_acc): (u64, u64) = <u128>::into(new_acc);
+
+            Right(new_acc)
+        }
+    }
+}
+
+fn get_decimals_multiplier(decimals_mantissa: u4) -> u64 {
+    let decimals_mantissa: u8 = <(u4, u4)>::into((0, decimals_mantissa));
+    let multiplier: u64 = unwrap_left::<u64>(for_while::<count_multiplier>(1, decimals_mantissa));
+
+    multiplier
+}
+
+fn from_base_amount(base_amount: u32, decimals_mantissa: u4) -> u64 {
+    let base_amount: u64 = jet::left_pad_low_32_64(base_amount);
+    let multiplier: u64 = get_decimals_multiplier(decimals_mantissa);
+
+    let result_amount: u128 = jet::multiply_64(base_amount, multiplier);
+
+    let (carry, result_amount): (u64, u64) = <u128>::into(result_amount);
+
+    assert!(jet::eq_64(carry, 0));
+
+    result_amount    
+}
+
+fn extract_bits_from_amount(encoded_amount: u64, bits_count: u8, shift: u8) -> (u64, u8) {
+    let mask: u64 =  jet::left_shift_64(shift, jet::left_shift_with_64(1, bits_count, 0));
+    let shifted_amount: u64 = jet::right_shift_64(shift, jet::and_64(encoded_amount, mask));
+
+    let (carry, new_shift): (bool, u8) = jet::add_8(shift, bits_count);
+    ensure_zero_bit(carry);
+
+    (shifted_amount, new_shift)
+}
+
+fn extract_lending_parameters(first_parameters_amount: u64, second_parameters_amount: u64) -> (u64, u64, u32, u16) {
+    // Extracting parameter values from the first parameters amount
+    let interest_rate_bits: u8 = 16;
+
+    let (interest_rate_raw, shift): (u64, u8) = extract_bits_from_amount(first_parameters_amount, interest_rate_bits, 0);
+    let interest_rate: u16 = jet::rightmost_64_16(interest_rate_raw);
+
+    let loan_expiration_time_bits: u8 = 27;
+
+    let (loan_expiration_time_raw, shift): (u64, u8) = extract_bits_from_amount(first_parameters_amount, loan_expiration_time_bits, shift);
+    let loan_expiration_time: u32 = jet::rightmost_64_32(loan_expiration_time_raw);
+
+    let decimals_mantissa_bits: u8 = 4;
+
+    let (collateral_decimals_mantissa_raw, shift): (u64, u8) = extract_bits_from_amount(first_parameters_amount, decimals_mantissa_bits, shift);
+    let collateral_decimals_mantissa: u4 = jet::rightmost_64_4(collateral_decimals_mantissa_raw);
+
+    let (principal_decimals_mantissa_raw, shift): (u64, u8) = extract_bits_from_amount(first_parameters_amount, decimals_mantissa_bits, shift);
+    let principal_decimals_mantissa: u4 = jet::rightmost_64_4(principal_decimals_mantissa_raw);
+    
+    // Extracting parameter values from the second parameters amount
+    let base_amount_bits: u8 = 25;
+
+    let (collateral_base_amount_raw, shift): (u64, u8) = extract_bits_from_amount(second_parameters_amount, base_amount_bits, 0);
+    let collateral_base_amount: u32 = jet::rightmost_64_32(collateral_base_amount_raw);
+
+    let (principal_base_amount_raw, shift): (u64, u8) = extract_bits_from_amount(second_parameters_amount, base_amount_bits, shift);
+    let principal_base_amount: u32 = jet::rightmost_64_32(principal_base_amount_raw);
+
+    let collateral_amount: u64 = from_base_amount(collateral_base_amount, collateral_decimals_mantissa);
+    let principal_amount: u64 = from_base_amount(principal_base_amount, principal_decimals_mantissa);
+
+    (collateral_amount, principal_amount, loan_expiration_time, interest_rate)
+}
+
+fn validate_lending_params(collateral_amount: u64, principal_amount: u64, loan_expiration_time: u32, interest_rate: u16) {
+    check_asset_amounts_eq(param::COLLATERAL_AMOUNT, collateral_amount);
+    check_asset_amounts_eq(param::PRINCIPAL_AMOUNT, principal_amount);
+    check_asset_amounts_eq(jet::left_pad_low_32_64(param::LOAN_EXPIRATION_TIME), jet::left_pad_low_32_64(loan_expiration_time));
+    check_asset_amounts_eq(jet::left_pad_low_16_64(param::PRINCIPAL_INTEREST_RATE), jet::left_pad_low_16_64(interest_rate));
+}
+
+// Interest logic
+
+fn calculate_interest(principal_amount: u64, interest_rate: u16) -> u64 {
+    let MAX_BASIS_POINTS: u64 = 10_000;
+
+    let interest_rate: u64 = jet::left_pad_low_16_64(interest_rate);
+
+    let interest: u128 = jet::multiply_64(principal_amount, interest_rate);
+
+    // TODO: Handle case when hi > 0
+    let (hi, lo): (u64, u64) = <u128>::into(interest);
+    check_asset_amounts_eq(hi, 0);
+
+    let interest: u64 = jet::divide_64(lo, MAX_BASIS_POINTS);
+
+    interest
+}
+
+fn calculate_principal_with_interest(principal_without_interest: u64, interest_rate: u16) -> u64 {
+    let interest: u64 = calculate_interest(principal_without_interest, interest_rate);
+
+    let (carry, principal_with_interest): (bool, u64) = jet::add_64(principal_without_interest, interest);
+    ensure_zero_bit(carry);
+
+    principal_with_interest
+}
+
+// Main paths logic
+
+fn loan_repayment_path() {
+    assert!(jet::eq_32(jet::current_index(), 0));
+
+    ensure_input_and_output_assets_with_amount_eq(0, 0, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+    let first_parameters_amount: u64 = ensure_input_and_output_assets_eq(1, 2, param::FIRST_PARAMETERS_NFT_ASSET_ID);
+    let second_parameters_amount: u64 = ensure_input_and_output_assets_eq(2, 3, param::SECOND_PARAMETERS_NFT_ASSET_ID);
+    ensure_input_and_output_assets_with_amount_eq(3, 4, param::BORROWER_NFT_ASSET_ID, 1);
+
+    let (
+        collateral_amount,
+        principal_amount,
+        loan_expiration_time,
+        interest_rate
+    ): (u64, u64, u32, u16) = extract_lending_parameters(first_parameters_amount, second_parameters_amount);
+
+    validate_lending_params(collateral_amount, principal_amount, loan_expiration_time, interest_rate);
+
+    let principal_amount_with_interest: u64 = calculate_principal_with_interest(principal_amount, interest_rate);
+
+    ensure_asset_with_amount(1, false, param::PRINCIPAL_ASSET_ID, principal_amount_with_interest);
+    ensure_script_hash(1, false, param::LENDER_PRINCIPAL_COV_HASH);
+
+    ensure_output_is_op_return(2);
+    ensure_output_is_op_return(3);
+    ensure_output_is_op_return(4);
+}
+
+fn loan_liquidation_path() {
+    assert!(jet::eq_32(jet::current_index(), 0));
+
+    ensure_input_and_output_assets_with_amount_eq(0, 0, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+    let first_parameters_amount: u64 = ensure_input_and_output_assets_eq(1, 1, param::FIRST_PARAMETERS_NFT_ASSET_ID);
+    let second_parameters_amount: u64 = ensure_input_and_output_assets_eq(2, 2, param::SECOND_PARAMETERS_NFT_ASSET_ID);
+    ensure_input_and_output_assets_with_amount_eq(3, 3, param::LENDER_NFT_ASSET_ID, 1);
+
+    let (
+        collateral_amount,
+        principal_amount,
+        loan_expiration_time,
+        interest_rate
+    ): (u64, u64, u32, u16) = extract_lending_parameters(first_parameters_amount, second_parameters_amount);
+
+    validate_lending_params(collateral_amount, principal_amount, loan_expiration_time, interest_rate);
+
+    jet::check_lock_height(loan_expiration_time);
+
+    ensure_output_is_op_return(1);
+    ensure_output_is_op_return(2);
+    ensure_output_is_op_return(3);
+}
+
+fn main() {
+    match witness::PATH {
+        Left(params: ()) => {
+            loan_repayment_path();
+        },
+        Right(params: ()) => {
+            loan_liquidation_path();
+        }
+    }
+}

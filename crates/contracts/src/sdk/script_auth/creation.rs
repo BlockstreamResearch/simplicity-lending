@@ -1,0 +1,86 @@
+use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
+
+use simplicity_contracts::sdk::validation::TxOutExt;
+
+use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
+use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut};
+
+use crate::error::TransactionBuildError;
+use crate::script_auth::{build_arguments::ScriptAuthArguments, get_script_auth_address};
+
+pub fn build_script_auth_creation(
+    utxo_to_lock: (OutPoint, TxOut),
+    fee_utxo: (OutPoint, TxOut),
+    script_auth_arguments: &ScriptAuthArguments,
+    fee_amount: u64,
+    address_params: &'static AddressParams,
+) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
+    let (lock_out_point, lock_tx_out) = utxo_to_lock;
+    let (fee_out_point, fee_tx_out) = fee_utxo;
+
+    let (lock_asset_id, lock_value) = lock_tx_out.explicit()?;
+    let (fee_asset_id, total_lbtc_left) = (
+        fee_tx_out.explicit_asset()?,
+        fee_tx_out.validate_amount(fee_amount)?,
+    );
+
+    let change_recipient_script = fee_tx_out.script_pubkey.clone();
+
+    let script_auth_taproot_pubkey_gen = TaprootPubkeyGen::from(
+        script_auth_arguments,
+        address_params,
+        &get_script_auth_address,
+    )?;
+
+    let mut pst = PartiallySignedTransaction::new_v2();
+
+    let mut lock_input = Input::from_prevout(lock_out_point);
+    lock_input.witness_utxo = Some(lock_tx_out.clone());
+    lock_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    pst.add_input(lock_input);
+
+    let mut fee_input = Input::from_prevout(fee_out_point);
+    fee_input.witness_utxo = Some(fee_tx_out.clone());
+    fee_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
+    pst.add_input(fee_input);
+
+    let is_lbtc_change_needed = total_lbtc_left != 0;
+
+    pst.add_output(Output::new_explicit(
+        script_auth_taproot_pubkey_gen.address.script_pubkey(),
+        lock_value,
+        lock_asset_id,
+        None,
+    ));
+
+    if is_lbtc_change_needed {
+        pst.add_output(Output::new_explicit(
+            change_recipient_script,
+            total_lbtc_left,
+            fee_asset_id,
+            None,
+        ));
+    }
+
+    pst.add_output(Output::new_explicit(
+        Script::new(),
+        fee_amount,
+        fee_asset_id,
+        None,
+    ));
+
+    Ok((pst, script_auth_taproot_pubkey_gen))
+}
+
+pub fn generate_script_auth_script(
+    script_auth_arguments: &ScriptAuthArguments,
+    address_params: &'static AddressParams,
+) -> Result<Script, TransactionBuildError> {
+    let asset_auth_taproot_pubkey_gen = TaprootPubkeyGen::from(
+        script_auth_arguments,
+        address_params,
+        &get_script_auth_address,
+    )?;
+
+    Ok(asset_auth_taproot_pubkey_gen.address.script_pubkey())
+}

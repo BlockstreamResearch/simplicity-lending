@@ -1,0 +1,13 @@
+fn ensure_input_script_hash(input_script_index: u32, expected_script_hash: u256) {
+    let actual_script_hash: u256 = unwrap(jet::input_script_hash(input_script_index));
+
+    assert!(jet::eq_256(actual_script_hash, expected_script_hash));
+}
+
+fn script_auth_check(input_script_index: u32) {
+    ensure_input_script_hash(input_script_index, param::SCRIPT_HASH);
+}
+
+fn main() {
+    script_auth_check(witness::INPUT_SCRIPT_INDEX);
+}

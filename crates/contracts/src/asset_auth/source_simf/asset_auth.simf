@@ -1,0 +1,39 @@
+fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
+    let pair: (Asset1, Amount1) = match is_input_index {
+        true => unwrap(jet::input_amount(index)),
+        false => unwrap(jet::output_amount(index)),
+    };
+    let (asset, amount): (Asset1, Amount1) = pair;
+    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_bits, amount)
+}
+
+fn ensure_output_is_op_return(index: u32) {
+    match jet::output_null_datum(index, 0) {
+        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => (),
+        None => panic!(),
+    }
+}
+
+fn ensure_asset_and_amount_eq(index: u32, is_input_index: bool, expected_asset_bits: u256, expected_amount: u64) {
+    let (asset_bits, amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
+    assert!(jet::eq_256(asset_bits, expected_asset_bits));
+    assert!(jet::eq_64(amount, expected_amount));
+}
+
+fn auth_with_burn_check(input_asset_index: u32, output_asset_index: u32) {
+    ensure_asset_and_amount_eq(input_asset_index, true, param::ASSET_ID, param::ASSET_AMOUNT);
+    ensure_asset_and_amount_eq(output_asset_index, false, param::ASSET_ID, param::ASSET_AMOUNT);
+
+    match param::WITH_ASSET_BURN {
+        true => {
+            ensure_output_is_op_return(output_asset_index);
+        },
+        false => {},
+    }
+}
+
+fn main() {
+    auth_with_burn_check(witness::INPUT_ASSET_INDEX, witness::OUTPUT_ASSET_INDEX);
+}

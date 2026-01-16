@@ -18,4 +18,9 @@ sha2 = { version = "0.10.9", features = ["compress"] }
 hex = "0.4.3"
 tracing = { version = "0.1.41" }
 
+modular-bitfield = { version = "0.13.1"}
+
 simplicityhl = { version = "0.4.0" }
+simplicityhl-core = { version = "0.3.4", features = ["encoding"] }
+
+simplicity-contracts = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "b3d1ae9", package = "contracts" }
