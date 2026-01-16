@@ -30,6 +30,9 @@ pub enum ScriptAuthError {
 /// Errors from transaction building operations.
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionBuildError {
+    #[error("Invalid script: expected {expected}, got {actual}")]
+    InvalidScript { expected: String, actual: String },
+
     #[error("Invalid asset id: expected {expected}, got {actual}")]
     InvalidAssetId { expected: String, actual: String },
 
