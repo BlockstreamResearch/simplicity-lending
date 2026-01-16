@@ -30,3 +30,6 @@ hex = { workspace = true }
 contracts = { path = "../contracts" }
 
 simplicityhl = { workspace = true }
+
+[dev-dependencies]
+cargo-husky = { workspace = true }
