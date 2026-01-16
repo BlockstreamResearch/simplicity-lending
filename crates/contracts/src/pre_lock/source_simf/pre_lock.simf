@@ -81,83 +81,21 @@ fn ensure_zero_bit(bit: bool) { assert!(jet::eq_1(<bool>::into(bit), 0)); }
 
 // Lending parameters functions
 
+fn count_multiplier(acc: u64, decimals_mantissa: u8, i: u8) -> Either<u64, u64> {
+    match jet::eq_8(decimals_mantissa, i) {
+        true => Left(acc),
+        false => {
+            let new_acc: u128 = jet::multiply_64(acc, 10);
+            let (_, new_acc): (u64, u64) = <u128>::into(new_acc);
+
+            Right(new_acc)
+        }
+    }
+}
+
 fn get_decimals_multiplier(decimals_mantissa: u4) -> u64 {
     let decimals_mantissa: u8 = <(u4, u4)>::into((0, decimals_mantissa));
-
-    let multiplier: u64 = match jet::lt_8(decimals_mantissa, 8) {
-        true => { // case 0-7
-            match jet::lt_8(decimals_mantissa, 4) {
-                true => { // case 0-3
-                    match jet::lt_8(decimals_mantissa, 2) {
-                        true => { // case 0-1
-                            match jet::lt_8(decimals_mantissa, 1) {
-                                true => 1,                      // case 0
-                                false => 10,                    // case 1
-                            }
-                        },
-                        false => { // case 2-3
-                            match jet::lt_8(decimals_mantissa, 3) {
-                                true => 100,                    // case 2
-                                false => 1_000,                 // case 3
-                            }
-                        },
-                    }
-                },
-                false => { // case 4-7
-                    match jet::lt_8(decimals_mantissa, 6) {
-                        true => { // case 4-5
-                            match jet::lt_8(decimals_mantissa, 5) {
-                                true => 10_000,                 // case 4
-                                false => 100_000,               // case 5
-                            }
-                        },
-                        false => { // case 6-7
-                            match jet::lt_8(decimals_mantissa, 7) {
-                                true => 1_000_000,              // case 6
-                                false => 10_000_000,            // case 7
-                            }
-                        },
-                    }
-                },
-            }
-        },
-        false => { // case 8-15
-            match jet::lt_8(decimals_mantissa, 12) {
-                true => { // case 8-11
-                    match jet::lt_8(decimals_mantissa, 10) {
-                        true => { // case 8-9
-                            match jet::lt_8(decimals_mantissa, 9) {
-                                true => 10_000_000,             // case 8
-                                false => 1_000_000_000,         // case 9
-                            }
-                        },
-                        false => { // case 10-11
-                            match jet::lt_8(decimals_mantissa, 11) {
-                                true => 10_000_000_000,         // case 10
-                                false => 100_000_000_000,       // case 11
-                            }
-                        },
-                    }
-                },
-                false => { // case 12-15
-                    match jet::lt_8(decimals_mantissa, 14) {
-                        true => { // case 12-13
-                            match jet::lt_8(decimals_mantissa, 13) {
-                                true => 1_000_000_000_000,      // case 12
-                                false => 10_000_000_000_000,    // case 13
-                            }
-                        },
-                        false => { // case 14-15
-                            match jet::lt_8(decimals_mantissa, 15) {
-                                true => 100_000_000_000_000,    // case 14
-                                false => 1_000_000_000_000_000, // case 15
-                            }
-                        },
-                    }
-                },
-            }
-        },
-    };
+    let multiplier: u64 = unwrap_left::<u64>(for_while::<count_multiplier>(1, decimals_mantissa));
 
     multiplier
 }
