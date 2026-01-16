@@ -1,1 +1,1 @@
-cargo fmt --all && cargo clippy --workspace --all-targets --all-features && git add -u
+cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings && git add -u
