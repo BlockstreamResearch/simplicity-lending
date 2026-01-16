@@ -1,32 +1,25 @@
-use simplicity_contracts::bytes32_tr_storage::unspendable_internal_key;
-use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
-
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, AssetId, OutPoint, Script, TxOut};
-use simplicityhl_core::hash_script;
+use simplicityhl::elements::{OutPoint, Script, TxOut};
 
 use crate::error::TransactionBuildError;
 use crate::pre_lock::build_arguments::PreLockArguments;
-use crate::pre_lock::get_pre_lock_address;
-use crate::script_auth::build_arguments::ScriptAuthArguments;
-use crate::script_auth::get_script_auth_address;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
 
-pub fn build_pre_lock_creation(
-    collateral_utxo: (OutPoint, TxOut),
+pub fn build_pre_lock_cancellation(
+    pre_lock_utxo: (OutPoint, TxOut),
     first_parameters_nft_utxo: (OutPoint, TxOut),
     second_parameters_nft_utxo: (OutPoint, TxOut),
     borrower_nft_utxo: (OutPoint, TxOut),
     lender_nft_utxo: (OutPoint, TxOut),
     fee_utxo: (OutPoint, TxOut),
     pre_lock_arguments: &PreLockArguments,
+    collateral_output_script: &Script,
     fee_amount: u64,
-    address_params: &'static AddressParams,
-) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
-    let (collateral_out_point, collateral_tx_out) = collateral_utxo;
+) -> Result<PartiallySignedTransaction, TransactionBuildError> {
+    let (pre_lock_out_point, pre_lock_tx_out) = pre_lock_utxo;
     let (first_parameters_nft_out_point, first_parameters_nft_tx_out) = first_parameters_nft_utxo;
     let (second_parameters_nft_out_point, second_parameters_nft_tx_out) =
         second_parameters_nft_utxo;
@@ -34,7 +27,7 @@ pub fn build_pre_lock_creation(
     let (lender_nft_out_point, lender_nft_tx_out) = lender_nft_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
 
-    let (collateral_asset_id, collateral_value) = collateral_tx_out.explicit()?;
+    let (pre_lock_asset_id, pre_lock_value) = pre_lock_tx_out.explicit()?;
     let (first_parameters_nft_asset_id, first_parameters_nft_value) =
         first_parameters_nft_tx_out.explicit()?;
     let (second_parameters_nft_asset_id, second_parameters_nft_value) =
@@ -53,10 +46,7 @@ pub fn build_pre_lock_creation(
 
     lending_params.validate_params(&first_nft_parameters, &second_nft_parameters)?;
 
-    check_asset_id(
-        collateral_asset_id,
-        pre_lock_arguments.collateral_asset_id(),
-    )?;
+    check_asset_id(pre_lock_asset_id, pre_lock_arguments.collateral_asset_id())?;
     check_asset_id(
         first_parameters_nft_asset_id,
         pre_lock_arguments.first_parameters_nft_asset_id(),
@@ -74,32 +64,19 @@ pub fn build_pre_lock_creation(
         pre_lock_arguments.lender_nft_asset_id(),
     )?;
 
-    check_asset_value(collateral_value, lending_params.collateral_amount)?;
+    check_asset_value(pre_lock_value, lending_params.collateral_amount)?;
 
     check_asset_value(borrower_nft_value, 1)?;
     check_asset_value(lender_nft_value, 1)?;
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
-    let pre_lock_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(pre_lock_arguments, address_params, &get_pre_lock_address)?;
-
-    let utility_nfts_output_script = get_script_auth_address(
-        &unspendable_internal_key(),
-        &ScriptAuthArguments {
-            script_hash: hash_script(&pre_lock_taproot_pubkey_gen.address.script_pubkey()),
-        },
-        address_params,
-    )
-    .unwrap()
-    .script_pubkey();
-
     let mut pst = PartiallySignedTransaction::new_v2();
 
     // Inputs setup
 
-    // Add Collateral input
-    add_base_input_from_utxo(&mut pst, collateral_out_point, collateral_tx_out, None);
+    // Add Pre Lock input
+    add_base_input_from_utxo(&mut pst, pre_lock_out_point, pre_lock_tx_out, None);
 
     // Add First Parameters NFT input
     add_base_input_from_utxo(
@@ -130,17 +107,17 @@ pub fn build_pre_lock_creation(
 
     let is_lbtc_change_needed = total_lbtc_left != 0;
 
-    // Add Lending Covenant output with the collateral asset
+    // Add Collateral asset output
     pst.add_output(Output::new_explicit(
-        pre_lock_taproot_pubkey_gen.address.script_pubkey(),
-        collateral_value,
-        collateral_asset_id,
+        collateral_output_script.clone(),
+        pre_lock_value,
+        pre_lock_asset_id,
         None,
     ));
 
     // Add First Parameters NFT output
     pst.add_output(Output::new_explicit(
-        utility_nfts_output_script.clone(),
+        Script::new_op_return(b"burn"),
         first_parameters_nft_value,
         first_parameters_nft_asset_id,
         None,
@@ -148,7 +125,7 @@ pub fn build_pre_lock_creation(
 
     // Add Second Parameters NFT output
     pst.add_output(Output::new_explicit(
-        utility_nfts_output_script.clone(),
+        Script::new_op_return(b"burn"),
         second_parameters_nft_value,
         second_parameters_nft_asset_id,
         None,
@@ -156,7 +133,7 @@ pub fn build_pre_lock_creation(
 
     // Add Borrower NFT output
     pst.add_output(Output::new_explicit(
-        utility_nfts_output_script.clone(),
+        Script::new_op_return(b"burn"),
         borrower_nft_value,
         borrower_nft_asset_id,
         None,
@@ -164,17 +141,9 @@ pub fn build_pre_lock_creation(
 
     // Add Lender NFT output
     pst.add_output(Output::new_explicit(
-        utility_nfts_output_script.clone(),
+        Script::new_op_return(b"burn"),
         lender_nft_value,
         lender_nft_asset_id,
-        None,
-    ));
-
-    // Add OP_RETURN output with the Borrower public key
-    pst.add_output(Output::new_explicit(
-        Script::new_op_return(&pre_lock_arguments.borrower_pub_key()),
-        0,
-        AssetId::default(),
         None,
     ));
 
@@ -195,15 +164,5 @@ pub fn build_pre_lock_creation(
         None,
     ));
 
-    Ok((pst, pre_lock_taproot_pubkey_gen))
-}
-
-pub fn generate_pre_lock_script(
-    pre_lock_arguments: &PreLockArguments,
-    address_params: &'static AddressParams,
-) -> Result<Script, TransactionBuildError> {
-    let pre_lock_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(pre_lock_arguments, address_params, &get_pre_lock_address)?;
-
-    Ok(pre_lock_taproot_pubkey_gen.address.script_pubkey())
+    Ok(pst)
 }

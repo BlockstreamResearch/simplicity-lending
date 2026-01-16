@@ -117,11 +117,10 @@ mod lending_tests {
     use crate::script_auth::build_arguments::ScriptAuthArguments;
     use crate::script_auth::get_script_auth_address;
     use crate::sdk::parameters::{
-        FirstNFTParameters, LendingParameters, SecondNFTParameters,
-        to_base_amount,
+        FirstNFTParameters, LendingParameters, SecondNFTParameters, to_base_amount,
     };
     use crate::sdk::{
-        build_pre_lock_creation, taproot_unspendable_internal_key,
+        build_pre_lock_cancellation, build_pre_lock_creation, taproot_unspendable_internal_key,
     };
 
     use super::*;
@@ -131,8 +130,10 @@ mod lending_tests {
     use simplicityhl::elements::confidential::{Asset, Value};
     use simplicityhl::elements::schnorr::Keypair;
     use simplicityhl::elements::secp256k1_zkp::Secp256k1;
+    use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::elements::{self, AssetId, OutPoint};
     use simplicityhl::simplicity::hashes::Hash;
+    use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use std::str::FromStr;
 
     use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
@@ -394,6 +395,175 @@ mod lending_tests {
         let op_return_public_key = XOnlyPublicKey::from_slice(op_return_bytes).unwrap();
 
         assert!(op_return_public_key.serialize() == test_borrower_key.serialize());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_pre_lock_cancellation() -> Result<()> {
+        let keypair = Keypair::from_secret_key(
+            &Secp256k1::new(),
+            &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
+        );
+        let test_borrower_key = keypair.x_only_public_key().0;
+
+        let (
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+        ) = create_test_assets()?;
+
+        let amounts_decimals = 2;
+        let lending_params = LendingParameters {
+            collateral_amount: 10000,
+            principal_amount: 4000,
+            loan_expiration_time: 100,
+            principal_interest_rate: 250, // 2.5%
+        };
+        let (first_parameters_amount, second_parameters_amount) =
+            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+
+        let ((pst, pre_lock_pubkey_gen), pre_lock_arguments) = get_creation_pst(
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+            first_parameters_amount,
+            second_parameters_amount,
+            &test_borrower_key,
+            &lending_params,
+        )?;
+
+        let pst = pst.extract_tx()?;
+
+        let pre_lock_tx_out = pst.output[0].clone();
+
+        let collateral_output_script =
+            Script::new_p2pkh(&PubkeyHash::hash(&test_borrower_key.serialize()));
+
+        let pst = build_pre_lock_cancellation(
+            (OutPoint::default(), pre_lock_tx_out),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(first_parameters_nft_asset_id),
+                    value: Value::Explicit(first_parameters_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(second_parameters_nft_asset_id),
+                    value: Value::Explicit(second_parameters_amount),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(borrower_nft_asset_id),
+                    value: Value::Explicit(1),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(lender_nft_asset_id),
+                    value: Value::Explicit(1),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            (
+                OutPoint::default(),
+                TxOut {
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                    nonce: elements::confidential::Nonce::Null,
+                    script_pubkey: Script::new(),
+                    witness: elements::TxOutWitness::default(),
+                },
+            ),
+            &pre_lock_arguments,
+            &collateral_output_script,
+            100,
+        )?;
+
+        let program = get_compiled_pre_lock_program(&pre_lock_arguments);
+
+        let env = ElementsEnv::new(
+            Arc::new(pst.extract_tx()?),
+            vec![
+                ElementsUtxo {
+                    script_pubkey: pre_lock_pubkey_gen.address.script_pubkey(),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(lending_params.collateral_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(first_parameters_nft_asset_id),
+                    value: Value::Explicit(first_parameters_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(second_parameters_nft_asset_id),
+                    value: Value::Explicit(second_parameters_amount),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(borrower_nft_asset_id),
+                    value: Value::Explicit(1),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(lender_nft_asset_id),
+                    value: Value::Explicit(1),
+                },
+                ElementsUtxo {
+                    script_pubkey: Script::new(),
+                    asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
+                    value: Value::Explicit(100),
+                },
+            ],
+            0,
+            simplicityhl::simplicity::Cmr::from_byte_array([0; 32]),
+            ControlBlock::from_slice(&[0xc0; 33])?,
+            None,
+            elements::BlockHash::all_zeros(),
+        );
+
+        let sighash_all = env.c_tx_env().sighash_all();
+        let signature =
+            keypair.sign_schnorr(secp256k1::Message::from_digest(sighash_all.to_byte_array()));
+
+        let witness_values = build_pre_lock_witness(PreLockBranch::PreLockCancellation {
+            cancellation_signature: &signature,
+        });
+
+        assert!(
+            run_program(&program, witness_values, &env, TrackerLogLevel::Trace).is_ok(),
+            "expected success cancellation path"
+        );
+
+        let pst = pst.extract_tx()?;
+
+        assert!(pst.output[0].script_pubkey == collateral_output_script);
+        assert!(pst.output[1].is_null_data());
+        assert!(pst.output[2].is_null_data());
+        assert!(pst.output[3].is_null_data());
+        assert!(pst.output[4].is_null_data());
 
         Ok(())
     }

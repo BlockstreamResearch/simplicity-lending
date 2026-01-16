@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
+use simplicityhl::Value;
 use simplicityhl::simplicity::bitcoin;
+use simplicityhl::value::ValueConstructible;
 use simplicityhl::{
     ResolvedType, WitnessValues, parse::ParseFromStr, str::WitnessName, types::TypeConstructible,
 };
@@ -15,7 +17,7 @@ pub enum PreLockBranch<'a> {
 
 pub fn build_pre_lock_witness(branch: PreLockBranch) -> WitnessValues {
     let lending_creation = ResolvedType::parse_from_str("()").unwrap();
-    let pre_lock_cancellation = ResolvedType::parse_from_str("(Signature)").unwrap();
+    let pre_lock_cancellation = ResolvedType::parse_from_str("Signature").unwrap();
 
     let path_type = ResolvedType::either(lending_creation, pre_lock_cancellation);
 
@@ -26,8 +28,10 @@ pub fn build_pre_lock_witness(branch: PreLockBranch) -> WitnessValues {
         PreLockBranch::PreLockCancellation {
             cancellation_signature,
         } => {
-            let sig_hex = hex::encode(cancellation_signature.serialize());
-            format!("Right(0x{sig_hex})")
+            format!(
+                "Right({})",
+                Value::byte_array(cancellation_signature.serialize()),
+            )
         }
     };
 
