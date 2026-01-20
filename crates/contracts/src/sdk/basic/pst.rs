@@ -9,7 +9,7 @@ pub fn add_base_input_from_utxo(
     required_height: Option<Height>,
 ) {
     let mut new_input = Input::from_prevout(utxo_out_point);
-    new_input.witness_utxo = Some(utxo_tx_out.clone());
+    new_input.witness_utxo = Some(utxo_tx_out);
     new_input.sequence = Some(Sequence::ENABLE_LOCKTIME_NO_RBF);
     new_input.required_height_locktime = required_height;
     pst.add_input(new_input);

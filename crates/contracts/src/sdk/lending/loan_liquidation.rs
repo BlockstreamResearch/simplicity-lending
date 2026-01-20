@@ -9,6 +9,21 @@ use crate::lending::build_arguments::LendingArguments;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
 
+/// Liquidate a loan offer after loan expiration time
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
+/// - The parameters NFT values validation fails
+/// - Passed UTXOs asset ids and values differ from the arguments
+///
+/// # Panics
+///
+/// - if getting the block height from the loan expiration time fails
+#[allow(clippy::too_many_arguments)]
 pub fn build_lending_loan_liquidation(
     lending_utxo: (OutPoint, TxOut),
     first_parameters_nft_utxo: (OutPoint, TxOut),

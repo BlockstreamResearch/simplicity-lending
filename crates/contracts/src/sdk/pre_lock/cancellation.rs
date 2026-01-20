@@ -8,6 +8,18 @@ use crate::pre_lock::build_arguments::PreLockArguments;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
 
+/// Cancel a pre lock contract and return locked collateral.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
+/// - The parameters NFT values validation fails
+/// - Passed UTXOs asset ids and values differ from the arguments
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 pub fn build_pre_lock_cancellation(
     pre_lock_utxo: (OutPoint, TxOut),
     first_parameters_nft_utxo: (OutPoint, TxOut),

@@ -7,6 +7,7 @@ pub struct ScriptAuthWitnessParams {
     pub input_script_index: u32,
 }
 
+#[must_use]
 pub fn build_script_auth_witness(params: &ScriptAuthWitnessParams) -> WitnessValues {
     WitnessValues::from(HashMap::from([(
         WitnessName::from_str_unchecked("INPUT_SCRIPT_INDEX"),

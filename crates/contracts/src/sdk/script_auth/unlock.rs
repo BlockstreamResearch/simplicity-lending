@@ -9,6 +9,15 @@ use crate::error::{ScriptAuthError, TransactionBuildError};
 use crate::script_auth::build_arguments::ScriptAuthArguments;
 use crate::script_auth::build_witness::ScriptAuthWitnessParams;
 
+/// Unlock `ScriptAuth` UTXO by providing auth UTXO with the needed script public key
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
+/// - The passed auth UTXO has an invalid script public key
 pub fn build_script_auth_unlock(
     locked_utxo: (OutPoint, TxOut),
     auth_utxo: (OutPoint, TxOut),

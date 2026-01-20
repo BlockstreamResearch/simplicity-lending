@@ -15,6 +15,22 @@ use crate::script_auth::get_script_auth_address;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
 
+/// Create a new lending contract.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
+/// - The parameters NFT values validation fails
+/// - Passed UTXOs asset ids and values differ from the arguments
+///
+/// # Panics
+///
+/// - if getting the script auth covenant address for the parameters NFTs output script fails
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 pub fn build_lending_creation(
     collateral_utxo: (OutPoint, TxOut),
     principal_utxo: (OutPoint, TxOut),
@@ -203,6 +219,11 @@ pub fn build_lending_creation(
     Ok((pst, lending_taproot_pubkey_gen))
 }
 
+/// Create a new lending script.
+///
+/// # Errors
+///
+/// Returns an error if the taproot pubkey generation fails
 pub fn generate_lending_script(
     lending_arguments: &LendingArguments,
     address_params: &'static AddressParams,

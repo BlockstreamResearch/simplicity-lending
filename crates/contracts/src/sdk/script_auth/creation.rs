@@ -8,6 +8,14 @@ use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut};
 use crate::error::TransactionBuildError;
 use crate::script_auth::{build_arguments::ScriptAuthArguments, get_script_auth_address};
 
+/// Create a new script auth contract.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
 pub fn build_script_auth_creation(
     utxo_to_lock: (OutPoint, TxOut),
     fee_utxo: (OutPoint, TxOut),
@@ -72,6 +80,11 @@ pub fn build_script_auth_creation(
     Ok((pst, script_auth_taproot_pubkey_gen))
 }
 
+/// Create a new script auth script.
+///
+/// # Errors
+///
+/// Returns an error if the taproot pubkey generation fails
 pub fn generate_script_auth_script(
     script_auth_arguments: &ScriptAuthArguments,
     address_params: &'static AddressParams,

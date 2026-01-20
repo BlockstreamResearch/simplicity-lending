@@ -8,6 +8,15 @@ use crate::asset_auth::build_arguments::AssetAuthArguments;
 use crate::asset_auth::build_witness::AssetAuthWitnessParams;
 use crate::error::{AssetAuthError, TransactionBuildError};
 
+/// Unlock `AssetAuth` UTXO by providing auth UTXO with the needed asset id and amount
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
+/// - The passed auth UTXO has an invalid asset id or amount
 pub fn build_asset_auth_unlock(
     locked_utxo: (OutPoint, TxOut),
     auth_utxo: (OutPoint, TxOut),
