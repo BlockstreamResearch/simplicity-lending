@@ -13,6 +13,22 @@ use crate::sdk::parameters::{
 };
 use crate::sdk::taproot_unspendable_internal_key;
 
+/// Repay a loan offer with the principal tokens
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
+/// - The parameters NFT values validation fails
+/// - Passed UTXOs asset ids and values differ from the arguments
+///
+/// # Panics
+///
+/// - if getting the script auth covenant address for the lender principal script fails
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 pub fn build_lending_loan_repayment(
     lending_utxo: (OutPoint, TxOut),
     principal_utxo: (OutPoint, TxOut),

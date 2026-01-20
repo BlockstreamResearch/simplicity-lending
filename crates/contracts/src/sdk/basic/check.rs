@@ -4,6 +4,11 @@ use simplicityhl_core::hash_script;
 
 use crate::error::TransactionBuildError;
 
+/// Verify that the actual script matches the expected script hash.
+///
+/// # Errors
+///
+/// Returns an error if the actual script hash does not match the expected script hash
 pub fn check_script(
     actual_script: &Script,
     expected_script_hash: [u8; 32],
@@ -19,6 +24,11 @@ pub fn check_script(
     Ok(())
 }
 
+/// Verify that the actual asset ID matches the expected asset ID.
+///
+/// # Errors
+///
+/// Returns an error if the actual asset ID does not match the expected asset ID
 pub fn check_asset_id(
     actual_asset_id: AssetId,
     expected_asset_id: [u8; 32],
@@ -33,6 +43,11 @@ pub fn check_asset_id(
     Ok(())
 }
 
+/// Verify that the actual asset value matches the expected asset value.
+///
+/// # Errors
+///
+/// Returns an error if the actual asset value does not match the expected asset value
 pub fn check_asset_value(
     actual_asset_value: u64,
     expected_asset_value: u64,

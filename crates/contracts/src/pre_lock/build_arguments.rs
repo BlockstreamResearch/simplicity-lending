@@ -25,7 +25,9 @@ pub struct PreLockArguments {
 }
 
 impl PreLockArguments {
+    /// Create new `PreLockArguments`
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         collateral_asset_id: [u8; 32],
         principal_asset_id: [u8; 32],
@@ -59,50 +61,74 @@ impl PreLockArguments {
         }
     }
 
+    /// Returns the collateral asset id
+    #[must_use]
     pub const fn collateral_asset_id(&self) -> [u8; 32] {
         self.collateral_asset_id
     }
 
+    /// Returns the principal asset id
+    #[must_use]
     pub const fn principal_asset_id(&self) -> [u8; 32] {
         self.principal_asset_id
     }
 
+    /// Returns the borrower NFT asset id
+    #[must_use]
     pub const fn borrower_nft_asset_id(&self) -> [u8; 32] {
         self.borrower_nft_asset_id
     }
 
+    /// Returns the lender NFT asset id
+    #[must_use]
     pub const fn lender_nft_asset_id(&self) -> [u8; 32] {
         self.lender_nft_asset_id
     }
 
+    /// Returns the first parameters NFT asset id
+    #[must_use]
     pub const fn first_parameters_nft_asset_id(&self) -> [u8; 32] {
         self.first_parameters_nft_asset_id
     }
 
+    /// Returns the second parameters NFT asset id
+    #[must_use]
     pub const fn second_parameters_nft_asset_id(&self) -> [u8; 32] {
         self.second_parameters_nft_asset_id
     }
 
+    /// Returns the lending covenant script hash
+    #[must_use]
     pub const fn lending_cov_hash(&self) -> [u8; 32] {
         self.lending_cov_hash
     }
 
+    /// Returns the parameters NFT output script hash
+    #[must_use]
     pub const fn parameters_nft_output_script_hash(&self) -> [u8; 32] {
         self.parameters_nft_output_script_hash
     }
 
+    /// Returns the borrower NFT output script hash
+    #[must_use]
     pub const fn borrower_nft_output_script_hash(&self) -> [u8; 32] {
         self.borrower_nft_output_script_hash
     }
 
+    /// Returns the principal UTXO output script hash
+    #[must_use]
     pub const fn principal_output_script_hash(&self) -> [u8; 32] {
         self.principal_output_script_hash
     }
 
+    /// Returns the borrower public key
+    #[must_use]
     pub const fn borrower_pub_key(&self) -> [u8; 32] {
         self.borrower_pub_key
     }
 
+    /// Returns the `LendingParameters` struct with the lending offer parameters
+    #[must_use]
     pub const fn lending_params(&self) -> LendingParameters {
         LendingParameters {
             collateral_amount: self.collateral_amount,
@@ -112,6 +138,7 @@ impl PreLockArguments {
         }
     }
 
+    /// Convert to Simplicity program arguments.
     #[must_use]
     pub fn build_pre_lock_arguments(&self) -> Arguments {
         Arguments::from(HashMap::from([

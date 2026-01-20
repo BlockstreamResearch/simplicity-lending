@@ -15,6 +15,22 @@ use crate::script_auth::get_script_auth_address;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
 
+/// Create a new pre lock contract.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
+/// - The parameters NFT values validation fails
+/// - Passed UTXOs asset ids and values differ from the arguments
+///
+/// # Panics
+///
+/// - if getting the script auth covenant address for the utility NFTs output script fails
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 pub fn build_pre_lock_creation(
     collateral_utxo: (OutPoint, TxOut),
     first_parameters_nft_utxo: (OutPoint, TxOut),
@@ -198,6 +214,11 @@ pub fn build_pre_lock_creation(
     Ok((pst, pre_lock_taproot_pubkey_gen))
 }
 
+/// Create a new pre lock script.
+///
+/// # Errors
+///
+/// Returns an error if the taproot pubkey generation fails
 pub fn generate_pre_lock_script(
     pre_lock_arguments: &PreLockArguments,
     address_params: &'static AddressParams,

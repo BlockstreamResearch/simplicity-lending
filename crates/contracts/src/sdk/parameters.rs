@@ -1,3 +1,8 @@
+#![allow(clippy::double_must_use)]
+#![allow(clippy::must_use_candidate)]
+
+use std::num::TryFromIntError;
+
 use modular_bitfield::{error::OutOfBounds, prelude::*};
 
 use crate::error::ParametersError;
@@ -11,6 +16,10 @@ pub struct LendingParameters {
 }
 
 impl LendingParameters {
+    /// Validate lending offer parameters according to the first and second NFT parameters
+    ///
+    /// # Errors
+    /// Returns an error if a parameter from `LendingParameters` differs from the NFT parameter
     pub fn validate_params(
         &self,
         first_nft_params: &FirstNFTParameters,
@@ -58,6 +67,7 @@ impl LendingParameters {
 }
 
 #[bitfield]
+#[must_use]
 pub struct FirstNFTParameters {
     pub interest_rate: B16,
     pub loan_expiration_time: B27,
@@ -68,6 +78,14 @@ pub struct FirstNFTParameters {
 }
 
 impl FirstNFTParameters {
+    /// Encode base amounts in the u64 amount
+    ///
+    /// # Errors
+    /// Returns an error if passed parameters exceed the next bit structure:
+    ///  - `interest_rate` - 16 bits
+    ///  - `loan_expiration_time` - 27 bits
+    ///  - `collateral_dec` - 4 bits
+    ///  - `principal_dec` - 4 bits
     pub fn encode(
         interest_rate: u16,
         loan_expiration_time: u32,
@@ -83,12 +101,14 @@ impl FirstNFTParameters {
         Ok(u64::from_le_bytes(params.into_bytes()))
     }
 
+    #[must_use]
     pub fn decode(encoded_amount: u64) -> Self {
         Self::from_bytes(encoded_amount.to_le_bytes())
     }
 }
 
 #[bitfield]
+#[must_use]
 pub struct SecondNFTParameters {
     pub collateral_base_amount: B25,
     pub principal_base_amount: B25,
@@ -97,6 +117,10 @@ pub struct SecondNFTParameters {
 }
 
 impl SecondNFTParameters {
+    /// Encode base amounts in the u64 amount
+    ///
+    /// # Errors
+    /// Returns an error if passed base amounts exceed the 25-bit value limit
     pub fn encode(
         collateral_base_amount: u32,
         principal_base_amount: u32,
@@ -108,6 +132,7 @@ impl SecondNFTParameters {
         Ok(u64::from_le_bytes(params.into_bytes()))
     }
 
+    #[must_use]
     pub fn decode(encoded_amount: u64) -> Self {
         Self::from_bytes(encoded_amount.to_le_bytes())
     }
@@ -117,30 +142,37 @@ pub const MAX_LIQUID_AMOUNT: u64 = 2_100_000_000_000_000;
 pub const MAX_BASIS_POINTS: u64 = 10_000;
 
 const POWERS_OF_10: [u64; 16] = [
-    1,                // 10^0
-    10,               // 10^1
-    100,              // 10^2
-    1000,             // 10^3
-    10000,            // 10^4
-    100000,           // 10^5
-    1000000,          // 10^6
-    10000000,         // 10^7
-    100000000,        // 10^8
-    1000000000,       // 10^9
-    10000000000,      // 10^10
-    100000000000,     // 10^11
-    1000000000000,    // 10^12
-    10000000000000,   // 10^13
-    100000000000000,  // 10^14
-    1000000000000000, // 10^15
+    1,                     // 10^0
+    10,                    // 10^1
+    100,                   // 10^2
+    1_000,                 // 10^3
+    10_000,                // 10^4
+    100_000,               // 10^5
+    1_000_000,             // 10^6
+    10_000_000,            // 10^7
+    100_000_000,           // 10^8
+    1_000_000_000,         // 10^9
+    10_000_000_000,        // 10^10
+    100_000_000_000,       // 10^11
+    1_000_000_000_000,     // 10^12
+    10_000_000_000_000,    // 10^13
+    100_000_000_000_000,   // 10^14
+    1_000_000_000_000_000, // 10^15
 ];
 
+/// Convert amount from base amount using the passed decimal mantissa
+///
+/// # Panics
+/// - if `decimals_mantissa` value is greater than 15
+/// - if the result amount overflowed u64
+/// - if the amount exceeds Liquid 51-bit limit
+#[must_use]
 pub fn from_base_amount(base_amount: u32, decimals_mantissa: u8) -> u64 {
     let multiplier = POWERS_OF_10
         .get(decimals_mantissa as usize)
         .expect("Decimals mantissa must be between 0 and 15");
 
-    let result = (base_amount as u64)
+    let result = u64::from(base_amount)
         .checked_mul(*multiplier)
         .expect("Amount overflowed u64");
 
@@ -152,6 +184,12 @@ pub fn from_base_amount(base_amount: u32, decimals_mantissa: u8) -> u64 {
     result
 }
 
+/// Convert amount to base amount using the passed decimal mantissa
+///
+/// # Panics
+/// - if `decimals_mantissa` value is greater than 15
+/// - if the result base amount is greater than `U64::MAX`
+#[must_use]
 pub fn to_base_amount(amount: u64, decimals_mantissa: u8) -> u32 {
     let multiplier = POWERS_OF_10
         .get(decimals_mantissa as usize)
@@ -161,22 +199,35 @@ pub fn to_base_amount(amount: u64, decimals_mantissa: u8) -> u32 {
         .checked_div(*multiplier)
         .unwrap()
         .try_into()
-        .expect("Base amount bigger than the u32");
+        .expect("Base amount greater than u32");
 
     result
 }
 
-pub fn calculate_interest(principal_amount: u64, interest_rate: u16) -> u64 {
-    let interest_wide = (principal_amount as u128) * (interest_rate as u128);
-    let interest = interest_wide / (MAX_BASIS_POINTS as u128);
+/// Calculate interest amount based on the principal amount and the interest rate
+///
+/// # Errors
+/// Returns error if the result interest amount is greater than `U64::MAX`
+pub fn calculate_interest(
+    principal_amount: u64,
+    interest_rate: u16,
+) -> Result<u64, TryFromIntError> {
+    let interest_wide = u128::from(principal_amount) * u128::from(interest_rate);
+    let interest = interest_wide / u128::from(MAX_BASIS_POINTS);
 
-    interest as u64
+    u64::try_from(interest)
 }
 
+/// Calculate principal amount with the principal interest
+///
+/// # Panics
+/// - if final amount is greater than `U64::MAX`
+#[must_use]
 pub fn calculate_principal_with_interest(principal_amount: u64, interest_rate: u16) -> u64 {
-    let principal_with_interest = principal_amount
-        .checked_add(calculate_interest(principal_amount, interest_rate))
-        .expect("Overflow in principal with interest calculation");
+    let interest = calculate_interest(principal_amount, interest_rate)
+        .expect("Interest is greater than U64::MAX");
 
-    principal_with_interest
+    principal_amount
+        .checked_add(interest)
+        .expect("Overflow in principal with interest calculation")
 }

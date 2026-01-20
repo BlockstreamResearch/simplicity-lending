@@ -22,11 +22,20 @@ use crate::asset_auth::build_witness::{AssetAuthWitnessParams, build_asset_auth_
 
 pub const ASSET_AUTH_SOURCE: &str = include_str!("source_simf/asset_auth.simf");
 
+/// Get the asset auth template program for instantiation.
+///
+/// # Panics
+/// - if the embedded source fails to compile (should never happen).
+#[must_use]
 pub fn get_asset_auth_template_program() -> TemplateProgram {
     TemplateProgram::new(ASSET_AUTH_SOURCE)
         .expect("INTERNAL: expected Asset Auth Program to compile successfully.")
 }
 
+/// Derive P2TR address for an asset auth contract.
+///
+/// # Errors
+/// Returns error if program compilation fails.
 pub fn get_asset_auth_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &AssetAuthArguments,
@@ -39,12 +48,21 @@ pub fn get_asset_auth_address(
     ))
 }
 
+/// Compile asset auth program with the given arguments.
+///
+/// # Errors
+/// Returns error if compilation fails.
 pub fn get_asset_auth_program(
     arguments: &AssetAuthArguments,
 ) -> Result<CompiledProgram, ProgramError> {
     load_program(ASSET_AUTH_SOURCE, arguments.build_asset_auth_arguments())
 }
 
+/// Get compiled asset auth program, panicking on failure.
+///
+/// # Panics
+/// - if program instantiation fails.
+#[must_use]
 pub fn get_compiled_asset_auth_program(arguments: &AssetAuthArguments) -> CompiledProgram {
     let program = get_asset_auth_template_program();
 
@@ -53,6 +71,10 @@ pub fn get_compiled_asset_auth_program(arguments: &AssetAuthArguments) -> Compil
         .unwrap()
 }
 
+/// Execute asset auth program with the specific witness parameters.
+///
+/// # Errors
+/// Returns error if program execution fails.
 pub fn execute_asset_auth_program(
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
@@ -64,6 +86,10 @@ pub fn execute_asset_auth_program(
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
 
+/// Finalize asset auth transaction with Simplicity witness.
+///
+/// # Errors
+/// Returns error if program execution fails or script pubkey doesn't match.
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_asset_auth_transaction(
     mut tx: Transaction,

@@ -8,6 +8,7 @@ pub struct AssetAuthWitnessParams {
     pub output_asset_index: u32,
 }
 
+#[must_use]
 pub fn build_asset_auth_witness(params: &AssetAuthWitnessParams) -> WitnessValues {
     WitnessValues::from(HashMap::from([
         (

@@ -22,6 +22,7 @@ pub struct LendingArguments {
 
 impl LendingArguments {
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         collateral_asset_id: [u8; 32],
         principal_asset_id: [u8; 32],
@@ -47,34 +48,42 @@ impl LendingArguments {
         }
     }
 
+    #[must_use]
     pub const fn collateral_asset_id(&self) -> [u8; 32] {
         self.collateral_asset_id
     }
 
+    #[must_use]
     pub const fn principal_asset_id(&self) -> [u8; 32] {
         self.principal_asset_id
     }
 
+    #[must_use]
     pub const fn borrower_nft_asset_id(&self) -> [u8; 32] {
         self.borrower_nft_asset_id
     }
 
+    #[must_use]
     pub const fn lender_nft_asset_id(&self) -> [u8; 32] {
         self.lender_nft_asset_id
     }
 
+    #[must_use]
     pub const fn first_parameters_nft_asset_id(&self) -> [u8; 32] {
         self.first_parameters_nft_asset_id
     }
 
+    #[must_use]
     pub const fn second_parameters_nft_asset_id(&self) -> [u8; 32] {
         self.second_parameters_nft_asset_id
     }
 
+    #[must_use]
     pub const fn lender_principal_cov_hash(&self) -> [u8; 32] {
         self.lender_principal_cov_hash
     }
 
+    #[must_use]
     pub const fn lending_params(&self) -> LendingParameters {
         LendingParameters {
             collateral_amount: self.collateral_amount,

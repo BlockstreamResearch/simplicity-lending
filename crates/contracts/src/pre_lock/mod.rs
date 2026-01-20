@@ -22,11 +22,20 @@ use crate::pre_lock::build_witness::{PreLockBranch, build_pre_lock_witness};
 
 pub const PRE_LOCK_SOURCE: &str = include_str!("source_simf/pre_lock.simf");
 
+/// Get the pre lock template program for instantiation.
+///
+/// # Panics
+/// - if the embedded source fails to compile (should never happen).
+#[must_use]
 pub fn get_pre_lock_template_program() -> TemplateProgram {
     TemplateProgram::new(PRE_LOCK_SOURCE)
         .expect("INTERNAL: expected Pre Lock Program to compile successfully.")
 }
 
+/// Derive P2TR address for a pre lock contract.
+///
+/// # Errors
+/// Returns error if program compilation fails.
 pub fn get_pre_lock_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &PreLockArguments,
@@ -39,10 +48,19 @@ pub fn get_pre_lock_address(
     ))
 }
 
+/// Compile pre lock program with the given arguments.
+///
+/// # Errors
+/// Returns error if compilation fails.
 pub fn get_pre_lock_program(arguments: &PreLockArguments) -> Result<CompiledProgram, ProgramError> {
     load_program(PRE_LOCK_SOURCE, arguments.build_pre_lock_arguments())
 }
 
+/// Get compiled pre lock program, panicking on failure.
+///
+/// # Panics
+/// - if program instantiation fails.
+#[must_use]
 pub fn get_compiled_pre_lock_program(arguments: &PreLockArguments) -> CompiledProgram {
     let program = get_pre_lock_template_program();
 
@@ -51,6 +69,10 @@ pub fn get_compiled_pre_lock_program(arguments: &PreLockArguments) -> CompiledPr
         .unwrap()
 }
 
+/// Execute pre lock program for specific pre lock branch.
+///
+/// # Errors
+/// Returns error if program execution fails.
 pub fn execute_pre_lock_program(
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
@@ -62,6 +84,10 @@ pub fn execute_pre_lock_program(
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
 
+/// Finalize pre lock transaction with Simplicity witness.
+///
+/// # Errors
+/// Returns error if program execution fails or script pubkey doesn't match.
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_pre_lock_transaction(
     mut tx: Transaction,
@@ -146,6 +172,8 @@ mod lending_tests {
         hash_script,
     };
 
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_lines)]
     fn get_creation_pst(
         collateral_asset_id: AssetId,
         principal_asset_id: AssetId,
@@ -184,7 +212,7 @@ mod lending_tests {
             first_parameters_nft_asset_id.into_inner().0,
             second_parameters_nft_asset_id.into_inner().0,
             principal_auth_script_hash,
-            &lending_params,
+            lending_params,
         );
         let lending_script = get_lending_address(
             &taproot_unspendable_internal_key(),
@@ -383,7 +411,7 @@ mod lending_tests {
 
         let op_return_data = pst.output[5].script_pubkey.clone();
 
-        let mut op_return_instr_iter = op_return_data.instructions_minimal().into_iter();
+        let mut op_return_instr_iter = op_return_data.instructions_minimal();
 
         op_return_instr_iter.next();
 
@@ -401,6 +429,7 @@ mod lending_tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_pre_lock_cancellation() -> Result<()> {
         let keypair = Keypair::from_secret_key(
             &Secp256k1::new(),
@@ -570,6 +599,7 @@ mod lending_tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_pre_lock_lending_creation() -> Result<()> {
         let secp = &Secp256k1::new();
         let borrower_keypair =

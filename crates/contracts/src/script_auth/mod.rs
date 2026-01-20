@@ -22,11 +22,20 @@ use crate::script_auth::build_witness::{ScriptAuthWitnessParams, build_script_au
 
 pub const SCRIPT_AUTH_SOURCE: &str = include_str!("source_simf/script_auth.simf");
 
+/// Get the script auth template program for instantiation.
+///
+/// # Panics
+/// - if the embedded source fails to compile (should never happen).
+#[must_use]
 pub fn get_script_auth_template_program() -> TemplateProgram {
     TemplateProgram::new(SCRIPT_AUTH_SOURCE)
         .expect("INTERNAL: expected Asset Auth Program to compile successfully.")
 }
 
+/// Derive P2TR address for a script auth contract.
+///
+/// # Errors
+/// Returns error if program compilation fails.
 pub fn get_script_auth_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &ScriptAuthArguments,
@@ -39,12 +48,21 @@ pub fn get_script_auth_address(
     ))
 }
 
+/// Compile script auth program with the given arguments.
+///
+/// # Errors
+/// Returns error if compilation fails.
 pub fn get_script_auth_program(
     arguments: &ScriptAuthArguments,
 ) -> Result<CompiledProgram, ProgramError> {
     load_program(SCRIPT_AUTH_SOURCE, arguments.build_script_auth_arguments())
 }
 
+/// Get compiled script auth program, panicking on failure.
+///
+/// # Panics
+/// - if program instantiation fails.
+#[must_use]
 pub fn get_compiled_script_auth_program(arguments: &ScriptAuthArguments) -> CompiledProgram {
     let program = get_script_auth_template_program();
 
@@ -53,6 +71,10 @@ pub fn get_compiled_script_auth_program(arguments: &ScriptAuthArguments) -> Comp
         .unwrap()
 }
 
+/// Execute script auth program with the specific witness parameters.
+///
+/// # Errors
+/// Returns error if program execution fails.
 pub fn execute_script_auth_program(
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
@@ -64,6 +86,10 @@ pub fn execute_script_auth_program(
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
 
+/// Finalize script auth transaction with Simplicity witness.
+///
+/// # Errors
+/// Returns error if program execution fails or script pubkey doesn't match.
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_script_auth_transaction(
     mut tx: Transaction,

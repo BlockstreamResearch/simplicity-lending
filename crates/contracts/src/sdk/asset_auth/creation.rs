@@ -8,6 +8,14 @@ use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut};
 use crate::asset_auth::{build_arguments::AssetAuthArguments, get_asset_auth_address};
 use crate::error::TransactionBuildError;
 
+/// Create a new asset auth contract.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The UTXO values are not explicit
+/// - The fee UTXO does not have enough fee value
+/// - The taproot pubkey generation fails
 pub fn build_asset_auth_creation(
     utxo_to_lock: (OutPoint, TxOut),
     fee_utxo: (OutPoint, TxOut),
@@ -65,6 +73,11 @@ pub fn build_asset_auth_creation(
     Ok((pst, asset_auth_taproot_pubkey_gen))
 }
 
+/// Create a new asset auth script.
+///
+/// # Errors
+///
+/// Returns an error if the taproot pubkey generation fails
 pub fn generate_asset_auth_script(
     asset_auth_arguments: &AssetAuthArguments,
     address_params: &'static AddressParams,

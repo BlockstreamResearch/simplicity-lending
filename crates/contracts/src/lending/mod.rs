@@ -22,11 +22,20 @@ use crate::lending::build_witness::{LendingBranch, build_lending_witness};
 
 pub const LENDING_SOURCE: &str = include_str!("source_simf/lending.simf");
 
+/// Get the lending template program for instantiation.
+///
+/// # Panics
+/// - if the embedded source fails to compile (should never happen).
+#[must_use]
 pub fn get_lending_template_program() -> TemplateProgram {
     TemplateProgram::new(LENDING_SOURCE)
         .expect("INTERNAL: expected Lending Program to compile successfully.")
 }
 
+/// Derive P2TR address for a lending contract.
+///
+/// # Errors
+/// Returns error if program compilation fails.
 pub fn get_lending_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &LendingArguments,
@@ -39,10 +48,19 @@ pub fn get_lending_address(
     ))
 }
 
+/// Compile lending program with the given arguments.
+///
+/// # Errors
+/// Returns error if compilation fails.
 pub fn get_lending_program(arguments: &LendingArguments) -> Result<CompiledProgram, ProgramError> {
     load_program(LENDING_SOURCE, arguments.build_lending_arguments())
 }
 
+/// Get compiled lending program, panicking on failure.
+///
+/// # Panics
+/// - if program instantiation fails.
+#[must_use]
 pub fn get_compiled_lending_program(arguments: &LendingArguments) -> CompiledProgram {
     let program = get_lending_template_program();
 
@@ -51,6 +69,10 @@ pub fn get_compiled_lending_program(arguments: &LendingArguments) -> CompiledPro
         .unwrap()
 }
 
+/// Execute lending program for specific lending branch.
+///
+/// # Errors
+/// Returns error if program execution fails.
 pub fn execute_lending_program(
     compiled_program: &CompiledProgram,
     env: &ElementsEnv<Arc<Transaction>>,
@@ -62,6 +84,10 @@ pub fn execute_lending_program(
     Ok(run_program(compiled_program, witness_values, env, runner_log_level)?.0)
 }
 
+/// Finalize lending transaction with Simplicity witness.
+///
+/// # Errors
+/// Returns error if program execution fails or script pubkey doesn't match.
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_lending_transaction(
     mut tx: Transaction,
@@ -138,6 +164,8 @@ mod lending_tests {
         hash_script,
     };
 
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_lines)]
     fn get_creation_pst(
         collateral_asset_id: AssetId,
         principal_asset_id: AssetId,
@@ -174,7 +202,7 @@ mod lending_tests {
             first_parameters_nft_asset_id.into_inner().0,
             second_parameters_nft_asset_id.into_inner().0,
             principal_auth_script_hash,
-            &lending_params,
+            lending_params,
         );
 
         Ok((
@@ -339,6 +367,7 @@ mod lending_tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_loan_repayment() -> Result<()> {
         let principal_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
         let (
@@ -491,6 +520,7 @@ mod lending_tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_loan_liquidation() -> Result<()> {
         let (
             first_parameters_nft_asset_id,
@@ -621,6 +651,7 @@ mod lending_tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_loan_liquidation_fail() -> Result<()> {
         let (
             first_parameters_nft_asset_id,
