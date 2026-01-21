@@ -2,8 +2,8 @@ use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::hashes::Hash;
 use simplicityhl::elements::pset::{Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, PubkeyHash, Script, TxOut};
-use simplicityhl_core::hash_script;
+use simplicityhl::elements::{OutPoint, PubkeyHash, Script, TxOut};
+use simplicityhl_core::{SimplicityNetwork, hash_script};
 
 use crate::asset_auth::build_arguments::AssetAuthArguments;
 use crate::asset_auth::get_asset_auth_address;
@@ -46,7 +46,7 @@ pub fn build_pre_lock_lending_creation(
     pre_lock_arguments: &PreLockArguments,
     lender_nft_output_script: &Script,
     fee_amount: u64,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<PartiallySignedTransaction, TransactionBuildError> {
     let (pre_lock_out_point, pre_lock_tx_out) = pre_lock_utxo;
     let (principal_out_point, principal_tx_out) = principal_utxo;
@@ -86,7 +86,7 @@ pub fn build_pre_lock_lending_creation(
     let lender_principal_script = get_asset_auth_address(
         &taproot_unspendable_internal_key(),
         &asset_auth_arguments,
-        address_params,
+        network,
     )
     .unwrap()
     .script_pubkey();
@@ -106,7 +106,7 @@ pub fn build_pre_lock_lending_creation(
     let lending_script = get_lending_address(
         &taproot_unspendable_internal_key(),
         &lending_arguments,
-        address_params,
+        network,
     )
     .unwrap()
     .script_pubkey();
@@ -117,7 +117,7 @@ pub fn build_pre_lock_lending_creation(
     let script_auth_script = get_script_auth_address(
         &taproot_unspendable_internal_key(),
         &script_auth_arguments,
-        address_params,
+        network,
     )
     .unwrap()
     .script_pubkey();

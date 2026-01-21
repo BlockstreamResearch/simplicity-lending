@@ -3,7 +3,8 @@ use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut};
+use simplicityhl::elements::{OutPoint, Script, Sequence, TxOut};
+use simplicityhl_core::SimplicityNetwork;
 
 use crate::error::TransactionBuildError;
 use crate::script_auth::{build_arguments::ScriptAuthArguments, get_script_auth_address};
@@ -21,7 +22,7 @@ pub fn build_script_auth_creation(
     fee_utxo: (OutPoint, TxOut),
     script_auth_arguments: &ScriptAuthArguments,
     fee_amount: u64,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
     let (lock_out_point, lock_tx_out) = utxo_to_lock;
     let (fee_out_point, fee_tx_out) = fee_utxo;
@@ -34,11 +35,8 @@ pub fn build_script_auth_creation(
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
-    let script_auth_taproot_pubkey_gen = TaprootPubkeyGen::from(
-        script_auth_arguments,
-        address_params,
-        &get_script_auth_address,
-    )?;
+    let script_auth_taproot_pubkey_gen =
+        TaprootPubkeyGen::from(script_auth_arguments, network, &get_script_auth_address)?;
 
     let mut pst = PartiallySignedTransaction::new_v2();
 
@@ -87,13 +85,10 @@ pub fn build_script_auth_creation(
 /// Returns an error if the taproot pubkey generation fails
 pub fn generate_script_auth_script(
     script_auth_arguments: &ScriptAuthArguments,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Script, TransactionBuildError> {
-    let asset_auth_taproot_pubkey_gen = TaprootPubkeyGen::from(
-        script_auth_arguments,
-        address_params,
-        &get_script_auth_address,
-    )?;
+    let asset_auth_taproot_pubkey_gen =
+        TaprootPubkeyGen::from(script_auth_arguments, network, &get_script_auth_address)?;
 
     Ok(asset_auth_taproot_pubkey_gen.address.script_pubkey())
 }

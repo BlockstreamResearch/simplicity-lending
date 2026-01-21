@@ -28,7 +28,6 @@ impl simplicityhl_core::Encodable for ScriptAuthArguments {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simplicityhl::elements::AddressParams;
     use simplicityhl::elements::secp256k1_zkp::Secp256k1;
     use simplicityhl::simplicity::bitcoin::key::Keypair;
     use simplicityhl::simplicity::bitcoin::secp256k1;
@@ -54,7 +53,7 @@ mod tests {
 
         let test_address = get_p2pk_address(
             &test_kp.x_only_public_key().0,
-            &AddressParams::LIQUID_TESTNET,
+            simplicityhl_core::SimplicityNetwork::LiquidTestnet,
         )?;
 
         let args = ScriptAuthArguments {

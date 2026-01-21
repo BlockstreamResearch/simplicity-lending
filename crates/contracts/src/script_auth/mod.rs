@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use simplicityhl_core::{
-    ProgramError, control_block, create_p2tr_address, get_and_verify_env, load_program, run_program,
+    ProgramError, SimplicityNetwork, control_block, create_p2tr_address, get_and_verify_env,
+    load_program, run_program,
 };
 
-use simplicityhl::elements::{self, Address, AddressParams, Transaction, TxInWitness, TxOut};
+use simplicityhl::elements::{Address, Transaction, TxInWitness, TxOut};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::jet::Elements;
@@ -39,12 +40,12 @@ pub fn get_script_auth_template_program() -> TemplateProgram {
 pub fn get_script_auth_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &ScriptAuthArguments,
-    params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_script_auth_program(arguments)?.commit().cmr(),
         x_only_public_key,
-        params,
+        network.address_params(),
     ))
 }
 
@@ -98,21 +99,19 @@ pub fn finalize_script_auth_transaction(
     utxos: &[TxOut],
     input_index: usize,
     witness_params: &ScriptAuthWitnessParams,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
+    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
         options_program,
         options_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
-    let pruned =
-        execute_script_auth_program(options_program, &env, witness_params, TrackerLogLevel::None)?;
+    let pruned = execute_script_auth_program(options_program, &env, witness_params, log_level)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -158,6 +157,8 @@ mod script_auth_tests {
         LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, hash_script,
     };
 
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
+
     fn get_creation_pst(
         script_pubkey: &Address,
     ) -> Result<(
@@ -192,7 +193,7 @@ mod script_auth_tests {
                 ),
                 &asset_auth_arguments,
                 100,
-                &AddressParams::LIQUID_TESTNET,
+                NETWORK,
             )?,
             asset_auth_arguments,
         ))
@@ -207,7 +208,7 @@ mod script_auth_tests {
         let test_p2pkh_address = Address::p2pkh(
             &PublicKey::new(keypair.public_key()),
             None,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         );
 
         let _ = get_creation_pst(&test_p2pkh_address)?;
@@ -224,7 +225,7 @@ mod script_auth_tests {
         let p2pkh_address = Address::p2pkh(
             &PublicKey::new(keypair.public_key()),
             None,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK.address_params(),
         );
 
         let ((pst, script_auth_pubkey_gen), script_auth_arguments) =

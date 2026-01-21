@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use simplicityhl_core::{
-    ProgramError, control_block, create_p2tr_address, get_and_verify_env, load_program, run_program,
+    ProgramError, SimplicityNetwork, control_block, create_p2tr_address, get_and_verify_env,
+    load_program, run_program,
 };
 
-use simplicityhl::elements::{self, Address, AddressParams, Transaction, TxInWitness, TxOut};
+use simplicityhl::elements::{Address, Transaction, TxInWitness, TxOut};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::jet::Elements;
@@ -39,12 +40,12 @@ pub fn get_lending_template_program() -> TemplateProgram {
 pub fn get_lending_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &LendingArguments,
-    params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_lending_program(arguments)?.commit().cmr(),
         x_only_public_key,
-        params,
+        network.address_params(),
     ))
 }
 
@@ -96,21 +97,19 @@ pub fn finalize_lending_transaction(
     utxos: &[TxOut],
     input_index: usize,
     lending_branch: LendingBranch,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
+    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
         options_program,
         options_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
-    let pruned =
-        execute_lending_program(options_program, &env, lending_branch, TrackerLogLevel::None)?;
+    let pruned = execute_lending_program(options_program, &env, lending_branch, log_level)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -164,6 +163,8 @@ mod lending_tests {
         hash_script,
     };
 
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
+
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::too_many_lines)]
     fn get_creation_pst(
@@ -188,7 +189,7 @@ mod lending_tests {
         let lender_principal_script = get_asset_auth_address(
             &taproot_unspendable_internal_key(),
             &asset_auth_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
         )?
         .script_pubkey();
 
@@ -282,7 +283,7 @@ mod lending_tests {
                 &Script::new(),
                 &Script::new(),
                 100,
-                &AddressParams::LIQUID_TESTNET,
+                NETWORK,
             )?,
             lending_arguments,
         ))
@@ -463,7 +464,7 @@ mod lending_tests {
             &lending_arguments,
             &Script::new(),
             100,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
         )?;
 
         let program = get_compiled_lending_program(&lending_arguments);

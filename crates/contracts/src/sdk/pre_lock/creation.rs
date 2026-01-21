@@ -4,8 +4,8 @@ use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, AssetId, OutPoint, Script, TxOut};
-use simplicityhl_core::hash_script;
+use simplicityhl::elements::{AssetId, OutPoint, Script, TxOut};
+use simplicityhl_core::{SimplicityNetwork, hash_script};
 
 use crate::error::TransactionBuildError;
 use crate::pre_lock::build_arguments::PreLockArguments;
@@ -40,7 +40,7 @@ pub fn build_pre_lock_creation(
     fee_utxo: (OutPoint, TxOut),
     pre_lock_arguments: &PreLockArguments,
     fee_amount: u64,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;
     let (first_parameters_nft_out_point, first_parameters_nft_tx_out) = first_parameters_nft_utxo;
@@ -98,14 +98,14 @@ pub fn build_pre_lock_creation(
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
     let pre_lock_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(pre_lock_arguments, address_params, &get_pre_lock_address)?;
+        TaprootPubkeyGen::from(pre_lock_arguments, network, &get_pre_lock_address)?;
 
     let utility_nfts_output_script = get_script_auth_address(
         &unspendable_internal_key(),
         &ScriptAuthArguments {
             script_hash: hash_script(&pre_lock_taproot_pubkey_gen.address.script_pubkey()),
         },
-        address_params,
+        network,
     )
     .unwrap()
     .script_pubkey();
@@ -221,10 +221,10 @@ pub fn build_pre_lock_creation(
 /// Returns an error if the taproot pubkey generation fails
 pub fn generate_pre_lock_script(
     pre_lock_arguments: &PreLockArguments,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Script, TransactionBuildError> {
     let pre_lock_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(pre_lock_arguments, address_params, &get_pre_lock_address)?;
+        TaprootPubkeyGen::from(pre_lock_arguments, network, &get_pre_lock_address)?;
 
     Ok(pre_lock_taproot_pubkey_gen.address.script_pubkey())
 }
