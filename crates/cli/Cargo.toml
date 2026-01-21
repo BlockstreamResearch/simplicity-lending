@@ -1,5 +1,5 @@
 [package]
-name = "cli"
+name = "lending-cli"
 version = "0.1.0"
 edition = "2024"
 description = "Simplicity Lending helper CLI for Liquid testnet"
@@ -31,6 +31,7 @@ hex = { workspace = true }
 
 contracts = { path = "../contracts" }
 simplicity-contracts = { workspace = true }
+simplicity-contracts-cli = { workspace = true }
 
 simplicityhl = { workspace = true }
 

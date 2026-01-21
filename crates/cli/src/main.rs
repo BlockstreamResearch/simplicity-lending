@@ -1,13 +1,14 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use cli::commands::basic::Basic;
+
+use simplicity_contracts_cli::commands::basic::Basic;
 
 /// Command-line entrypoint for the Simplicity helper CLI.
 #[derive(Parser, Debug)]
 #[command(
-    name = "simplicity-cli",
+    name = "simplicity-lending-cli",
     version,
-    about = "Simplicity helper CLI for Liquid testnet"
+    about = "Simplicity helper Lending CLI for Liquid testnet"
 )]
 struct Cli {
     #[command(subcommand)]

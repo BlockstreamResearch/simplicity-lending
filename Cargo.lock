@@ -287,12 +287,11 @@ checksum = "c3e64b0cc0439b12df2fa678eae89a1c56a529fd067a9115f7827f1fffd22b32"
 [[package]]
 name = "cli"
 version = "0.1.0"
+source = "git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=87f89e9#87f89e9e75c91845bf5c4ce7be0e85dcfd648a1e"
 dependencies = [
  "anyhow",
- "cargo-husky",
  "clap",
  "config",
- "contracts 0.1.0",
  "contracts 0.1.0 (git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=87f89e9)",
  "dotenvy",
  "hex",
@@ -661,6 +660,27 @@ dependencies = [
  "pest",
  "pest_derive",
  "serde",
+]
+
+[[package]]
+name = "lending-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cargo-husky",
+ "clap",
+ "cli",
+ "config",
+ "contracts 0.1.0",
+ "contracts 0.1.0 (git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=87f89e9)",
+ "dotenvy",
+ "hex",
+ "minreq",
+ "simplicityhl",
+ "simplicityhl-core",
+ "sled",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

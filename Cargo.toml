@@ -24,5 +24,6 @@ simplicityhl = { version = "0.4.0" }
 simplicityhl-core = { version = "0.4.1", features = ["encoding"] }
 
 simplicity-contracts = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "87f89e9", package = "contracts" }
+simplicity-contracts-cli = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "87f89e9", package = "cli" }
 
 cargo-husky = { version = "1.5.0", default-features = false, features = ["user-hooks"] }
