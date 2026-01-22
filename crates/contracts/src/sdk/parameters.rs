@@ -16,6 +16,29 @@ pub struct LendingParameters {
 }
 
 impl LendingParameters {
+    /// Build lending parameters by using values from the first and second NFT parameters
+    #[must_use]
+    pub fn build_from_parameters_nfts(
+        first_nft_params: &FirstNFTParameters,
+        second_nft_params: &SecondNFTParameters,
+    ) -> Self {
+        let collateral_amount = from_base_amount(
+            second_nft_params.collateral_base_amount(),
+            first_nft_params.collateral_dec(),
+        );
+        let principal_amount = from_base_amount(
+            second_nft_params.principal_base_amount(),
+            first_nft_params.principal_dec(),
+        );
+
+        Self {
+            collateral_amount,
+            principal_amount,
+            loan_expiration_time: first_nft_params.loan_expiration_time(),
+            principal_interest_rate: first_nft_params.interest_rate(),
+        }
+    }
+
     /// Encode Parameters NFT amounts from the `LendingParameters` values and the passed `amounts_decimals`
     ///
     /// # Errors
