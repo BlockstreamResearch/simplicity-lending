@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+use lending_cli::commands::pre_lock::PreLock;
 use simplicity_contracts_cli::commands::basic::Basic;
 
 /// Command-line entrypoint for the Simplicity helper CLI.
@@ -23,11 +24,16 @@ enum Commands {
         #[command(subcommand)]
         basic: Box<Basic>,
     },
+    PreLock {
+        #[command(subcommand)]
+        pre_lock: Box<PreLock>,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     match Cli::parse().command {
         Commands::Basic { basic } => basic.handle().await,
+        Commands::PreLock { pre_lock } => pre_lock.handle().await,
     }
 }

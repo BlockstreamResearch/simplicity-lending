@@ -29,7 +29,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync"] 
 
 hex = { workspace = true }
 
-contracts = { path = "../contracts" }
+lending-contracts = { path = "../contracts" }
 simplicity-contracts = { workspace = true }
 simplicity-contracts-cli = { workspace = true }
 

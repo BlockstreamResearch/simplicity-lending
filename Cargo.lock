@@ -292,7 +292,7 @@ dependencies = [
  "anyhow",
  "clap",
  "config",
- "contracts 0.1.0 (git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=87f89e9)",
+ "contracts",
  "dotenvy",
  "hex",
  "minreq",
@@ -347,23 +347,6 @@ dependencies = [
  "getrandom",
  "once_cell",
  "tiny-keccak",
-]
-
-[[package]]
-name = "contracts"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "cargo-husky",
- "contracts 0.1.0 (git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=87f89e9)",
- "hex",
- "modular-bitfield",
- "ring",
- "sha2",
- "simplicityhl",
- "simplicityhl-core",
- "thiserror",
 ]
 
 [[package]]
@@ -671,16 +654,33 @@ dependencies = [
  "clap",
  "cli",
  "config",
- "contracts 0.1.0",
- "contracts 0.1.0 (git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=87f89e9)",
+ "contracts",
  "dotenvy",
  "hex",
+ "lending-contracts",
  "minreq",
  "simplicityhl",
  "simplicityhl-core",
  "sled",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "lending-contracts"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "cargo-husky",
+ "contracts",
+ "hex",
+ "modular-bitfield",
+ "ring",
+ "sha2",
+ "simplicityhl",
+ "simplicityhl-core",
+ "thiserror",
 ]
 
 [[package]]

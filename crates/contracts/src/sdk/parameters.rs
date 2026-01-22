@@ -16,6 +16,37 @@ pub struct LendingParameters {
 }
 
 impl LendingParameters {
+    /// Encode Parameters NFT amounts from the `LendingParameters` values and the passed `amounts_decimals`
+    ///
+    /// # Errors
+    /// Returns an error if a parameter from `LendingParameters` is out of bounds of the parameters bits structure
+    pub fn encode_parameters_nft_amounts(
+        &self,
+        amounts_decimals: u8,
+    ) -> Result<(u64, u64), ParametersError> {
+        let first_parameters_nft_encoded_amount = FirstNFTParameters::encode(
+            self.principal_interest_rate,
+            self.loan_expiration_time,
+            amounts_decimals,
+            amounts_decimals,
+        )
+        .map_err(|e| ParametersError::ValueOutOfBounds {
+            actual_error: e.to_string(),
+        })?;
+        let second_parameters_nft_encoded_amount = SecondNFTParameters::encode(
+            to_base_amount(self.collateral_amount, amounts_decimals),
+            to_base_amount(self.principal_amount, amounts_decimals),
+        )
+        .map_err(|e| ParametersError::ValueOutOfBounds {
+            actual_error: e.to_string(),
+        })?;
+
+        Ok((
+            first_parameters_nft_encoded_amount,
+            second_parameters_nft_encoded_amount,
+        ))
+    }
+
     /// Validate lending offer parameters according to the first and second NFT parameters
     ///
     /// # Errors
@@ -207,7 +238,7 @@ pub fn to_base_amount(amount: u64, decimals_mantissa: u8) -> u32 {
 /// Calculate interest amount based on the principal amount and the interest rate
 ///
 /// # Errors
-/// Returns error if the result interest amount is greater than `U64::MAX`
+/// Returns an error if the result interest amount is greater than `U64::MAX`
 pub fn calculate_interest(
     principal_amount: u64,
     interest_rate: u16,

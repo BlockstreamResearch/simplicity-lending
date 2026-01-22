@@ -137,9 +137,7 @@ mod lending_tests {
     use crate::lending::get_lending_address;
     use crate::script_auth::build_arguments::ScriptAuthArguments;
     use crate::script_auth::get_script_auth_address;
-    use crate::sdk::parameters::{
-        FirstNFTParameters, LendingParameters, SecondNFTParameters, to_base_amount,
-    };
+    use crate::sdk::parameters::LendingParameters;
     use crate::sdk::{
         build_pre_lock_cancellation, build_pre_lock_creation, build_pre_lock_lending_creation,
         taproot_unspendable_internal_key,
@@ -340,29 +338,6 @@ mod lending_tests {
         ))
     }
 
-    fn encode_parameters_amounts(
-        lending_params: &LendingParameters,
-        amounts_decimals: u8,
-    ) -> Result<(u64, u64)> {
-        let first_parameters_nft_encoded_amount = FirstNFTParameters::encode(
-            lending_params.principal_interest_rate,
-            lending_params.loan_expiration_time,
-            amounts_decimals,
-            amounts_decimals,
-        )
-        .expect("Failed to encode first parameters nft amount");
-        let second_parameters_nft_encoded_amount = SecondNFTParameters::encode(
-            to_base_amount(lending_params.collateral_amount, amounts_decimals),
-            to_base_amount(lending_params.principal_amount, amounts_decimals),
-        )
-        .expect("Failed to encode second parameters nft amount");
-
-        Ok((
-            first_parameters_nft_encoded_amount,
-            second_parameters_nft_encoded_amount,
-        ))
-    }
-
     #[test]
     fn test_pre_lock_creation() -> Result<()> {
         let keypair = Keypair::from_secret_key(
@@ -386,7 +361,7 @@ mod lending_tests {
             principal_interest_rate: 250, // 2.5%
         };
         let (first_parameters_amount, second_parameters_amount) =
-            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+            lending_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
         let ((pst, _), _) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
@@ -449,7 +424,7 @@ mod lending_tests {
             principal_interest_rate: 250, // 2.5%
         };
         let (first_parameters_amount, second_parameters_amount) =
-            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+            lending_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
         let ((pst, pre_lock_pubkey_gen), pre_lock_arguments) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
@@ -622,7 +597,7 @@ mod lending_tests {
             principal_interest_rate: 250, // 2.5%
         };
         let (first_parameters_amount, second_parameters_amount) =
-            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+            lending_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
         let ((pst, pre_lock_pubkey_gen), pre_lock_arguments) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,

@@ -1,5 +1,5 @@
 [package]
-name = "contracts"
+name = "lending-contracts"
 version = "0.1.0"
 edition = "2024"
 description = "Simplicity Lending contract"
