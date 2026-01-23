@@ -94,8 +94,8 @@ pub fn execute_asset_auth_program(
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_asset_auth_transaction(
     mut tx: Transaction,
-    options_public_key: &XOnlyPublicKey,
-    options_program: &CompiledProgram,
+    asset_auth_public_key: &XOnlyPublicKey,
+    asset_auth_program: &CompiledProgram,
     utxos: &[TxOut],
     input_index: usize,
     witness_params: &AssetAuthWitnessParams,
@@ -104,14 +104,14 @@ pub fn finalize_asset_auth_transaction(
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
-        options_program,
-        options_public_key,
+        asset_auth_program,
+        asset_auth_public_key,
         utxos,
         network,
         input_index,
     )?;
 
-    let pruned = execute_asset_auth_program(options_program, &env, witness_params, log_level)?;
+    let pruned = execute_asset_auth_program(asset_auth_program, &env, witness_params, log_level)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -123,7 +123,7 @@ pub fn finalize_asset_auth_transaction(
             simplicity_witness_bytes,
             simplicity_program_bytes,
             cmr.as_ref().to_vec(),
-            control_block(cmr, *options_public_key).serialize(),
+            control_block(cmr, *asset_auth_public_key).serialize(),
         ],
         pegin_witness: vec![],
     };

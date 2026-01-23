@@ -92,8 +92,8 @@ pub fn execute_lending_program(
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_lending_transaction(
     mut tx: Transaction,
-    options_public_key: &XOnlyPublicKey,
-    options_program: &CompiledProgram,
+    lending_public_key: &XOnlyPublicKey,
+    lending_program: &CompiledProgram,
     utxos: &[TxOut],
     input_index: usize,
     lending_branch: LendingBranch,
@@ -102,14 +102,14 @@ pub fn finalize_lending_transaction(
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
-        options_program,
-        options_public_key,
+        lending_program,
+        lending_public_key,
         utxos,
         network,
         input_index,
     )?;
 
-    let pruned = execute_lending_program(options_program, &env, lending_branch, log_level)?;
+    let pruned = execute_lending_program(lending_program, &env, lending_branch, log_level)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -121,7 +121,7 @@ pub fn finalize_lending_transaction(
             simplicity_witness_bytes,
             simplicity_program_bytes,
             cmr.as_ref().to_vec(),
-            control_block(cmr, *options_public_key).serialize(),
+            control_block(cmr, *lending_public_key).serialize(),
         ],
         pegin_witness: vec![],
     };
