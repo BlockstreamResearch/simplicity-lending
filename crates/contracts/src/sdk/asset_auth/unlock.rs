@@ -96,6 +96,13 @@ pub fn build_asset_auth_unlock(
         ));
     }
 
+    pst.add_output(Output::new_explicit(
+        Script::new(),
+        fee_amount,
+        fee_asset_id,
+        None,
+    ));
+
     let witness_params = AssetAuthWitnessParams {
         input_asset_index: 1,
         output_asset_index: 1,

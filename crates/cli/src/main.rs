@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+use lending_cli::commands::asset_auth::AssetAuth;
 use lending_cli::commands::pre_lock::PreLock;
 use simplicity_contracts_cli::commands::basic::Basic;
 
@@ -19,11 +20,16 @@ struct Cli {
 /// Top-level subcommand groups.
 #[derive(Subcommand, Debug)]
 enum Commands {
+    AssetAuth {
+        #[command(subcommand)]
+        asset_auth: Box<AssetAuth>,
+    },
     /// P2PK and simple transaction utilities
     Basic {
         #[command(subcommand)]
         basic: Box<Basic>,
     },
+    /// Pre lock covenant utilities
     PreLock {
         #[command(subcommand)]
         pre_lock: Box<PreLock>,
@@ -33,6 +39,7 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<()> {
     match Cli::parse().command {
+        Commands::AssetAuth { asset_auth } => asset_auth.handle().await,
         Commands::Basic { basic } => basic.handle().await,
         Commands::PreLock { pre_lock } => pre_lock.handle().await,
     }

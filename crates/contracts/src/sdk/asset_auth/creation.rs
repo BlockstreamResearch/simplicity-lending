@@ -68,6 +68,13 @@ pub fn build_asset_auth_creation(
         ));
     }
 
+    pst.add_output(Output::new_explicit(
+        Script::new(),
+        fee_amount,
+        fee_asset_id,
+        None,
+    ));
+
     Ok((pst, asset_auth_taproot_pubkey_gen))
 }
 
