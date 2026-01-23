@@ -27,8 +27,10 @@ use simplicity_contracts::bytes32_tr_storage::unspendable_internal_key;
 use simplicity_contracts::sdk::validation::TxOutExt;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::hashes::Hash;
+use simplicityhl::elements::hex::ToHex;
 use simplicityhl::elements::pset::serialize::Serialize;
-use simplicityhl::elements::{Address, AssetId, OutPoint};
+use simplicityhl::elements::schnorr::XOnlyPublicKey;
+use simplicityhl::elements::{Address, AssetId, OutPoint, Txid};
 use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl::tracker::TrackerLogLevel;
@@ -47,6 +49,12 @@ use crate::commands::NETWORK;
 /// Pre lock contract utilities
 #[derive(Subcommand, Debug)]
 pub enum PreLock {
+    /// Show information about loan offer from the pre lock covenant creation transaction
+    ShowInfo {
+        /// Transaction ID with the pre lock covenant creation
+        #[arg(long = "pre-lock-tx-id")]
+        pre_lock_tx_id: Txid,
+    },
     /// Issue Utility NFTs required to create a pre lock covenant UTXO
     IssueUtilityNFTS {
         /// First issuance UTXO used to issue Borrower NFT asset UTXO
@@ -128,6 +136,7 @@ pub enum PreLock {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
+    /// Cancel a pre lock covenant using the borrower signature
     Cancel {
         /// UTXO with the pre lock covenant script
         #[arg(long = "pre-lock-utxo")]
@@ -170,9 +179,87 @@ impl PreLock {
     ///
     /// # Errors
     /// Returns an error if the subcommand operation fails.
+    ///
+    /// # Panics
+    /// - if `OP_RETURN` data fetching fails
     #[expect(clippy::too_many_lines)]
     pub async fn handle(&self) -> Result<()> {
         match self {
+            Self::ShowInfo { pre_lock_tx_id } => {
+                let pre_lock_utxo = OutPoint::new(*pre_lock_tx_id, 0);
+                let first_parameters_nft_utxo = OutPoint::new(*pre_lock_tx_id, 1);
+                let second_parameters_nft_utxo = OutPoint::new(*pre_lock_tx_id, 2);
+                let borrower_nft_utxo = OutPoint::new(*pre_lock_tx_id, 3);
+                let lender_nft_utxo = OutPoint::new(*pre_lock_tx_id, 4);
+                let op_return_utxo = OutPoint::new(*pre_lock_tx_id, 5);
+
+                let pre_lock_tx_out = fetch_utxo(pre_lock_utxo).await?;
+                let first_parameters_nft_tx_out = fetch_utxo(first_parameters_nft_utxo).await?;
+                let second_parameters_nft_tx_out = fetch_utxo(second_parameters_nft_utxo).await?;
+                let borrower_nft_tx_out = fetch_utxo(borrower_nft_utxo).await?;
+                let lender_nft_tx_out = fetch_utxo(lender_nft_utxo).await?;
+                let op_return_tx_out = fetch_utxo(op_return_utxo).await?;
+
+                let (pre_lock_asset_id, _) = pre_lock_tx_out.explicit()?;
+                let (first_parameters_nft_asset_id, first_parameters_nft_value) =
+                    first_parameters_nft_tx_out.explicit()?;
+                let (second_parameters_nft_asset_id, second_parameters_nft_value) =
+                    second_parameters_nft_tx_out.explicit()?;
+                let (borrower_nft_asset_id, _) = borrower_nft_tx_out.explicit()?;
+                let (lender_nft_asset_id, _) = lender_nft_tx_out.explicit()?;
+
+                let first_parameters = FirstNFTParameters::decode(first_parameters_nft_value);
+                let second_parameters = SecondNFTParameters::decode(second_parameters_nft_value);
+
+                let lending_params = LendingParameters::build_from_parameters_nfts(
+                    &first_parameters,
+                    &second_parameters,
+                );
+
+                let mut op_return_instr_iter =
+                    op_return_tx_out.script_pubkey.instructions_minimal();
+
+                op_return_instr_iter.next();
+
+                let op_return_bytes = op_return_instr_iter
+                    .next()
+                    .unwrap()
+                    .unwrap()
+                    .push_bytes()
+                    .unwrap();
+                let borrower_public_key = XOnlyPublicKey::from_slice(op_return_bytes).unwrap();
+
+                println!("Pre Lock covenant info:");
+                println!("Assets Info:");
+                println!("\tCollateral asset id: {}", pre_lock_asset_id.to_hex());
+                println!(
+                    "\tFirst Parameters NFT asset id: {}",
+                    first_parameters_nft_asset_id.to_hex()
+                );
+                println!(
+                    "\tSecond Parameters NFT asset id: {}",
+                    second_parameters_nft_asset_id.to_hex()
+                );
+                println!(
+                    "\tBorrower NFT asset id: {}",
+                    borrower_nft_asset_id.to_hex()
+                );
+                println!("\tLender NFT asset id: {}", lender_nft_asset_id.to_hex());
+                println!("Lending Offer Info:");
+                println!("\tBorrower public key: {borrower_public_key}");
+                println!("\tCollateral amount: {}", lending_params.collateral_amount);
+                println!("\tPrincipal amount: {}", lending_params.principal_amount);
+                println!(
+                    "\tLoan expiration time (block height): {}",
+                    lending_params.loan_expiration_time
+                );
+                println!(
+                    "\tPrincipal interest rate (100% = 10_000): {}",
+                    lending_params.principal_interest_rate
+                );
+
+                Ok(())
+            }
             Self::IssueUtilityNFTS {
                 first_issuance_utxo,
                 second_issuance_utxo,
