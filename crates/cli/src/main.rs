@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 
 use lending_cli::commands::asset_auth::AssetAuth;
 use lending_cli::commands::pre_lock::PreLock;
+use lending_cli::commands::script_auth::ScriptAuth;
 use simplicity_contracts_cli::commands::basic::Basic;
 
 /// Command-line entrypoint for the Simplicity helper CLI.
@@ -20,6 +21,7 @@ struct Cli {
 /// Top-level subcommand groups.
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Asset auth covenant utilities
     AssetAuth {
         #[command(subcommand)]
         asset_auth: Box<AssetAuth>,
@@ -34,6 +36,11 @@ enum Commands {
         #[command(subcommand)]
         pre_lock: Box<PreLock>,
     },
+    /// Script auth covenant utilities
+    ScriptAuth {
+        #[command(subcommand)]
+        script_auth: Box<ScriptAuth>,
+    },
 }
 
 #[tokio::main]
@@ -42,5 +49,6 @@ async fn main() -> Result<()> {
         Commands::AssetAuth { asset_auth } => asset_auth.handle().await,
         Commands::Basic { basic } => basic.handle().await,
         Commands::PreLock { pre_lock } => pre_lock.handle().await,
+        Commands::ScriptAuth { script_auth } => script_auth.handle().await,
     }
 }
