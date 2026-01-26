@@ -162,7 +162,7 @@ mod lending_tests {
     use simplicityhl::elements::{PubkeyHash, Script, Txid};
     use simplicityhl_core::{
         LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, get_new_asset_entropy,
-        hash_script,
+        get_p2pk_address, hash_script,
     };
 
     const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
@@ -227,10 +227,9 @@ mod lending_tests {
         .script_pubkey();
         let parameters_nft_output_script_hash = hash_script(&script_auth_script);
 
-        // Calculate P2PKH script hash with the borrower public key
-        let borrower_p2pkh_script =
-            Script::new_p2pkh(&PubkeyHash::hash(&borrower_pub_key.serialize()));
-        let borrower_p2pkh_script_hash = hash_script(&borrower_p2pkh_script);
+        // Calculate P2TR script hash
+        let borrower_p2tr_address = get_p2pk_address(borrower_pub_key, NETWORK)?;
+        let borrower_p2tr_script_hash = hash_script(&borrower_p2tr_address.script_pubkey());
 
         let pre_lock_arguments = PreLockArguments::new(
             collateral_asset_id.into_inner().0,
@@ -241,8 +240,8 @@ mod lending_tests {
             second_parameters_nft_asset_id.into_inner().0,
             lending_cov_hash,
             parameters_nft_output_script_hash,
-            borrower_p2pkh_script_hash,
-            borrower_p2pkh_script_hash,
+            borrower_p2tr_script_hash,
+            borrower_p2tr_script_hash,
             borrower_pub_key.serialize(),
             lending_params,
         );

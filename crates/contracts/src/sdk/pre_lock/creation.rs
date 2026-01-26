@@ -1,4 +1,3 @@
-use simplicity_contracts::bytes32_tr_storage::unspendable_internal_key;
 use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 
 use simplicity_contracts::sdk::validation::TxOutExt;
@@ -14,6 +13,7 @@ use crate::script_auth::build_arguments::ScriptAuthArguments;
 use crate::script_auth::get_script_auth_address;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
+use crate::sdk::taproot_unspendable_internal_key;
 
 /// Create a new pre lock contract.
 ///
@@ -101,7 +101,7 @@ pub fn build_pre_lock_creation(
         TaprootPubkeyGen::from(pre_lock_arguments, network, &get_pre_lock_address)?;
 
     let utility_nfts_output_script = get_script_auth_address(
-        &unspendable_internal_key(),
+        &taproot_unspendable_internal_key(),
         &ScriptAuthArguments {
             script_hash: hash_script(&pre_lock_taproot_pubkey_gen.address.script_pubkey()),
         },

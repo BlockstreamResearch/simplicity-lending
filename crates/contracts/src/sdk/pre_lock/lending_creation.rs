@@ -1,9 +1,9 @@
 use simplicity_contracts::sdk::validation::TxOutExt;
 
-use simplicityhl::elements::hashes::Hash;
 use simplicityhl::elements::pset::{Output, PartiallySignedTransaction};
-use simplicityhl::elements::{OutPoint, PubkeyHash, Script, TxOut};
-use simplicityhl_core::{SimplicityNetwork, hash_script};
+use simplicityhl::elements::schnorr::XOnlyPublicKey;
+use simplicityhl::elements::{OutPoint, Script, TxOut};
+use simplicityhl_core::{SimplicityNetwork, get_p2pk_address, hash_script};
 
 use crate::asset_auth::build_arguments::AssetAuthArguments;
 use crate::asset_auth::get_asset_auth_address;
@@ -122,9 +122,11 @@ pub fn build_pre_lock_lending_creation(
     .unwrap()
     .script_pubkey();
 
-    // Calculate P2PKH script with the borrower public key
-    let borrower_p2pkh_script =
-        Script::new_p2pkh(&PubkeyHash::hash(&pre_lock_arguments.borrower_pub_key()));
+    // Calculate P2TR script with the borrower public key
+    let borrower_x_only_public_key =
+        XOnlyPublicKey::from_slice(&pre_lock_arguments.borrower_pub_key())
+            .expect("Failed to create borrower x only public key.");
+    let borrower_p2tr_address = get_p2pk_address(&borrower_x_only_public_key, network).unwrap();
 
     check_asset_id(pre_lock_asset_id, pre_lock_arguments.collateral_asset_id())?;
     check_asset_id(principal_asset_id, pre_lock_arguments.principal_asset_id())?;
@@ -153,11 +155,11 @@ pub fn build_pre_lock_lending_creation(
 
     check_script(&lending_script, pre_lock_arguments.lending_cov_hash())?;
     check_script(
-        &borrower_p2pkh_script,
+        &borrower_p2tr_address.script_pubkey(),
         pre_lock_arguments.principal_output_script_hash(),
     )?;
     check_script(
-        &borrower_p2pkh_script,
+        &borrower_p2tr_address.script_pubkey(),
         pre_lock_arguments.borrower_nft_output_script_hash(),
     )?;
     check_script(
@@ -216,7 +218,7 @@ pub fn build_pre_lock_lending_creation(
 
     // Add Principal output
     pst.add_output(Output::new_explicit(
-        borrower_p2pkh_script.clone(),
+        borrower_p2tr_address.script_pubkey().clone(),
         principal_value,
         principal_asset_id,
         None,
@@ -240,7 +242,7 @@ pub fn build_pre_lock_lending_creation(
 
     // Add Borrower NFT output
     pst.add_output(Output::new_explicit(
-        borrower_p2pkh_script,
+        borrower_p2tr_address.script_pubkey().clone(),
         borrower_nft_value,
         borrower_nft_asset_id,
         None,

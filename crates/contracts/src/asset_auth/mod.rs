@@ -279,7 +279,7 @@ mod asset_auth_tests {
 
         let pst = pst.extract_tx()?;
 
-        assert_eq!(pst.output.len(), 3, "Invalid outputs count");
+        assert_eq!(pst.output.len(), 4, "Invalid outputs count");
 
         let asset_output = pst.output[1].clone();
 
@@ -363,7 +363,7 @@ mod asset_auth_tests {
 
         let pst = pst.extract_tx()?;
 
-        assert_eq!(pst.output.len(), 3, "Invalid outputs count");
+        assert_eq!(pst.output.len(), 4, "Invalid outputs count");
 
         let asset_output = pst.output[1].clone();
 
