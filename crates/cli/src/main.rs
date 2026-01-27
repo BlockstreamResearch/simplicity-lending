@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use lending_cli::commands::asset_auth::AssetAuth;
+use lending_cli::commands::lending::Lending;
 use lending_cli::commands::pre_lock::PreLock;
 use lending_cli::commands::script_auth::ScriptAuth;
 use simplicity_contracts_cli::commands::basic::Basic;
@@ -26,6 +27,11 @@ enum Commands {
         #[command(subcommand)]
         asset_auth: Box<AssetAuth>,
     },
+    /// Lending covenant utilities
+    Lending {
+        #[command(subcommand)]
+        lending: Box<Lending>,
+    },
     /// P2PK and simple transaction utilities
     Basic {
         #[command(subcommand)]
@@ -47,6 +53,7 @@ enum Commands {
 async fn main() -> Result<()> {
     match Cli::parse().command {
         Commands::AssetAuth { asset_auth } => asset_auth.handle().await,
+        Commands::Lending { lending } => lending.handle().await,
         Commands::Basic { basic } => basic.handle().await,
         Commands::PreLock { pre_lock } => pre_lock.handle().await,
         Commands::ScriptAuth { script_auth } => script_auth.handle().await,

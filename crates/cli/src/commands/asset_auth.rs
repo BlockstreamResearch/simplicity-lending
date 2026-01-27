@@ -9,9 +9,11 @@ use clap::Subcommand;
 use lending_contracts::asset_auth::build_arguments::AssetAuthArguments;
 
 use lending_contracts::asset_auth::{finalize_asset_auth_transaction, get_asset_auth_program};
+use lending_contracts::sdk::taproot_unspendable_internal_key;
 use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::{AssetId, OutPoint};
+use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl::tracker::TrackerLogLevel;
 
@@ -66,6 +68,36 @@ pub enum AssetAuth {
         /// Asset auth taproot pubkey generator string
         #[arg(long = "asset-auth-taproot-pubkey-gen")]
         asset_auth_taproot_pubkey_gen: String,
+        /// Account index that will pay for transaction fees
+        #[arg(long = "account-index")]
+        account_index: u32,
+        /// Fee amount in satoshis (LBTC)
+        #[arg(long = "fee-amount")]
+        fee_amount: u64,
+        /// When set, broadcast the built transaction via Esplora and print the transaction ID
+        #[arg(long = "broadcast")]
+        broadcast: bool,
+    },
+    /// Unlock an asset auth covenant UTXO by providing the authorization asset and auth arguments
+    UnlockWithArguments {
+        /// UTXO locked by the asset auth covenant
+        #[arg(long = "locked-utxo")]
+        locked_utxo: OutPoint,
+        /// Authorization asset UTXO containing the authorization asset
+        #[arg(long = "auth-utxo")]
+        auth_utxo: OutPoint,
+        /// Fee UTXO used to pay transaction fees
+        #[arg(long = "fee-utxo")]
+        fee_utxo: OutPoint,
+        /// Auth asset ID in hexadecimal (big-endian)
+        #[arg(long = "auth-asset-id-hex-be")]
+        auth_asset_id_hex_be: String,
+        /// Auth asset amount
+        #[arg(long = "auth-asset-amount")]
+        auth_asset_amount: u64,
+        /// With asset burn
+        #[arg(long = "with-asset-burn")]
+        with_asset_burn: bool,
         /// Account index that will pay for transaction fees
         #[arg(long = "account-index")]
         account_index: u32,
@@ -207,6 +239,87 @@ impl AssetAuth {
                 let tx = finalize_asset_auth_transaction(
                     tx,
                     &taproot_pubkey_gen.get_x_only_pubkey(),
+                    &get_asset_auth_program(&asset_auth_arguments)?,
+                    &utxos,
+                    0,
+                    &witness_params,
+                    NETWORK,
+                    TrackerLogLevel::None,
+                )?;
+
+                let signature_0 = create_p2pk_signature(&tx, &utxos, &keypair, 1, NETWORK)?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &x_only_public_key,
+                    &signature_0,
+                    1,
+                    NETWORK,
+                    TrackerLogLevel::None,
+                )?;
+
+                let signature_1 = create_p2pk_signature(&tx, &utxos, &keypair, 2, NETWORK)?;
+                let tx = finalize_p2pk_transaction(
+                    tx,
+                    &utxos,
+                    &x_only_public_key,
+                    &signature_1,
+                    2,
+                    NETWORK,
+                    TrackerLogLevel::None,
+                )?;
+
+                if *broadcast {
+                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
+                } else {
+                    println!("{}", tx.serialize().to_lower_hex_string());
+                }
+
+                Ok(())
+            }
+            Self::UnlockWithArguments {
+                locked_utxo,
+                auth_utxo,
+                fee_utxo,
+                auth_asset_id_hex_be,
+                auth_asset_amount,
+                with_asset_burn,
+                account_index,
+                fee_amount,
+                broadcast,
+            } => {
+                let keypair = derive_keypair(*account_index);
+                let x_only_public_key = keypair.x_only_public_key().0;
+
+                let locked_tx_out = fetch_utxo(*locked_utxo).await?;
+                let auth_tx_out = fetch_utxo(*auth_utxo).await?;
+                let fee_tx_out = fetch_utxo(*fee_utxo).await?;
+
+                let auth_asset_id = AssetId::from_str(auth_asset_id_hex_be)?;
+                let asset_auth_arguments: AssetAuthArguments = AssetAuthArguments::new(
+                    auth_asset_id.into_inner().0,
+                    *auth_asset_amount,
+                    *with_asset_burn,
+                );
+
+                let (pst, witness_params) = lending_contracts::sdk::build_asset_auth_unlock(
+                    (*locked_utxo, locked_tx_out.clone()),
+                    (*auth_utxo, auth_tx_out.clone()),
+                    (*fee_utxo, fee_tx_out.clone()),
+                    &asset_auth_arguments,
+                    *fee_amount,
+                )?;
+
+                let tx = pst.extract_tx()?;
+                let utxos = vec![
+                    locked_tx_out.clone(),
+                    auth_tx_out.clone(),
+                    fee_tx_out.clone(),
+                ];
+
+                let tx = finalize_asset_auth_transaction(
+                    tx,
+                    &taproot_unspendable_internal_key().to_x_only_pubkey(),
                     &get_asset_auth_program(&asset_auth_arguments)?,
                     &utxos,
                     0,

@@ -50,7 +50,7 @@ pub fn build_pre_lock_creation(
     let (lender_nft_out_point, lender_nft_tx_out) = lender_nft_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
 
-    let (collateral_asset_id, collateral_value) = collateral_tx_out.explicit()?;
+    let collateral_asset_id = collateral_tx_out.explicit_asset()?;
     let (first_parameters_nft_asset_id, first_parameters_nft_value) =
         first_parameters_nft_tx_out.explicit()?;
     let (second_parameters_nft_asset_id, second_parameters_nft_value) =
@@ -90,12 +90,14 @@ pub fn build_pre_lock_creation(
         pre_lock_arguments.lender_nft_asset_id(),
     )?;
 
-    check_asset_value(collateral_value, lending_params.collateral_amount)?;
+    let total_collateral_left =
+        collateral_tx_out.validate_amount(lending_params.collateral_amount)?;
 
     check_asset_value(borrower_nft_value, 1)?;
     check_asset_value(lender_nft_value, 1)?;
 
-    let change_recipient_script = fee_tx_out.script_pubkey.clone();
+    let change_fee_recipient_script = fee_tx_out.script_pubkey.clone();
+    let change_collateral_recipient_script = collateral_tx_out.script_pubkey.clone();
 
     let pre_lock_taproot_pubkey_gen =
         TaprootPubkeyGen::from(pre_lock_arguments, network, &get_pre_lock_address)?;
@@ -145,11 +147,12 @@ pub fn build_pre_lock_creation(
     // Outputs setup
 
     let is_lbtc_change_needed = total_lbtc_left != 0;
+    let is_collateral_change_needed = total_collateral_left != 0;
 
     // Add Lending Covenant output with the collateral asset
     pst.add_output(Output::new_explicit(
         pre_lock_taproot_pubkey_gen.address.script_pubkey(),
-        collateral_value,
+        lending_params.collateral_amount,
         collateral_asset_id,
         None,
     ));
@@ -194,10 +197,20 @@ pub fn build_pre_lock_creation(
         None,
     ));
 
+    // Return collateral asset change
+    if is_collateral_change_needed {
+        pst.add_output(Output::new_explicit(
+            change_collateral_recipient_script,
+            total_collateral_left,
+            collateral_asset_id,
+            None,
+        ));
+    }
+
     // Fee outputs
     if is_lbtc_change_needed {
         pst.add_output(Output::new_explicit(
-            change_recipient_script,
+            change_fee_recipient_script,
             total_lbtc_left,
             fee_asset_id,
             None,

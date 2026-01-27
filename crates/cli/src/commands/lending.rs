@@ -6,13 +6,14 @@ use clap::Subcommand;
 
 use lending_contracts::lending::build_arguments::LendingArguments;
 use lending_contracts::lending::build_witness::LendingBranch;
-use lending_contracts::lending::{finalize_lending_transaction, get_lending_program};
+use lending_contracts::lending::{
+    finalize_lending_transaction, get_lending_address, get_lending_program,
+};
 use lending_contracts::script_auth::build_arguments::ScriptAuthArguments;
 use lending_contracts::script_auth::build_witness::ScriptAuthWitnessParams;
 use lending_contracts::script_auth::{finalize_script_auth_transaction, get_script_auth_program};
 
 use lending_contracts::sdk::taproot_unspendable_internal_key;
-use simplicityhl::elements::hashes::sha256;
 use simplicityhl::elements::pset::serialize::Serialize;
 use simplicityhl::elements::{Address, OutPoint};
 use simplicityhl::simplicity::ToXOnlyPubkey;
@@ -23,13 +24,14 @@ use simplicity_contracts_cli::explorer::{broadcast_tx, fetch_utxo};
 use simplicity_contracts_cli::modules::store::Store;
 use simplicity_contracts_cli::modules::utils::derive_keypair;
 
-use simplicityhl_core::{create_p2pk_signature, finalize_p2pk_transaction};
+use simplicityhl_core::{create_p2pk_signature, finalize_p2pk_transaction, hash_script};
 
 use crate::commands::NETWORK;
 
 /// Lending contract utilities
 #[derive(Subcommand, Debug)]
 pub enum Lending {
+    /// Repay the loan and unlock the collateral
     Repay {
         /// UTXO with the lending covenant script
         #[arg(long = "lending-utxo")]
@@ -65,6 +67,7 @@ pub enum Lending {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
+    /// Liquidate the borrower and receive locked collateral
     Liquidate {
         /// UTXO with the lending covenant script
         #[arg(long = "lending-utxo")]
@@ -177,9 +180,15 @@ impl Lending {
                     TrackerLogLevel::None,
                 )?;
 
-                let script_auth_arguments = ScriptAuthArguments::new(
-                    sha256::Midstate::from_slice(lending_cov_hash.as_bytes())?.0,
-                );
+                let lending_script = get_lending_address(
+                    &taproot_unspendable_internal_key(),
+                    &lending_arguments,
+                    NETWORK,
+                )?
+                .script_pubkey();
+                let lending_cov_hash = hash_script(&lending_script);
+
+                let script_auth_arguments = ScriptAuthArguments::new(lending_cov_hash);
                 let script_auth_program = get_script_auth_program(&script_auth_arguments)?;
                 let script_auth_witness_params = ScriptAuthWitnessParams {
                     input_script_index: 0,
@@ -313,9 +322,15 @@ impl Lending {
                     TrackerLogLevel::None,
                 )?;
 
-                let script_auth_arguments = ScriptAuthArguments::new(
-                    sha256::Midstate::from_slice(lending_cov_hash.as_bytes())?.0,
-                );
+                let lending_script = get_lending_address(
+                    &taproot_unspendable_internal_key(),
+                    &lending_arguments,
+                    NETWORK,
+                )?
+                .script_pubkey();
+                let lending_cov_hash = hash_script(&lending_script);
+
+                let script_auth_arguments = ScriptAuthArguments::new(lending_cov_hash);
                 let script_auth_program = get_script_auth_program(&script_auth_arguments)?;
                 let script_auth_witness_params = ScriptAuthWitnessParams {
                     input_script_index: 0,

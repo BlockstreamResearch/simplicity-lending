@@ -54,7 +54,7 @@ pub enum PreLock {
         #[arg(long = "pre-lock-tx-id")]
         pre_lock_tx_id: Txid,
     },
-    /// Issue four UTXOs of 1 satoshi each to facilitate the issuance of Utility NFTs.
+    /// Issue four UTXOs of 100 satoshi each to facilitate the issuance of Utility NFTs.
     PrepareUtilityNFTSIssuance {
         /// Fee UTXO used to pay transaction fees
         #[arg(long = "fee-utxo")]
@@ -72,6 +72,7 @@ pub enum PreLock {
         #[arg(long = "broadcast")]
         broadcast: bool,
     },
+    /// Issue Utility NFTs required to create a pre lock covenant UTXO using tx id with the issuance utxos
     IssueUtilityNFTSFromTX {
         /// Transaction ID with the utility NFTs issuance preparation
         #[arg(long = "pre-issuance-tx-id")]
@@ -82,6 +83,9 @@ pub enum PreLock {
         /// Recipient address (Liquid testnet bech32m)
         #[arg(long = "to-address")]
         to_address: Address,
+        /// Index of the first issuance utxo
+        #[arg(long = "first-issuance-utxo-index")]
+        first_issuance_utxo_index: u32,
         /// Collateral amount in satoshis
         #[arg(long = "collateral-amount")]
         collateral_amount: u64,
@@ -395,6 +399,7 @@ impl PreLock {
                 prep_issuance_tx_id,
                 fee_utxo,
                 to_address,
+                first_issuance_utxo_index,
                 collateral_amount,
                 principal_amount,
                 loan_expiration_time,
@@ -406,10 +411,14 @@ impl PreLock {
             } => {
                 let keypair = derive_keypair(*account_index);
 
-                let first_issuance_utxo = OutPoint::new(*prep_issuance_tx_id, 0);
-                let second_issuance_utxo = OutPoint::new(*prep_issuance_tx_id, 1);
-                let third_issuance_utxo = OutPoint::new(*prep_issuance_tx_id, 2);
-                let fourth_issuance_utxo = OutPoint::new(*prep_issuance_tx_id, 3);
+                let first_issuance_utxo =
+                    OutPoint::new(*prep_issuance_tx_id, *first_issuance_utxo_index);
+                let second_issuance_utxo =
+                    OutPoint::new(*prep_issuance_tx_id, *first_issuance_utxo_index + 1);
+                let third_issuance_utxo =
+                    OutPoint::new(*prep_issuance_tx_id, *first_issuance_utxo_index + 2);
+                let fourth_issuance_utxo =
+                    OutPoint::new(*prep_issuance_tx_id, *first_issuance_utxo_index + 3);
 
                 let first_tx_out = fetch_utxo(first_issuance_utxo).await?;
                 let second_tx_out = fetch_utxo(second_issuance_utxo).await?;

@@ -20,9 +20,10 @@ pub fn build_utility_nfts_issuance_preparation(
     let (fee_out_point, fee_tx_out) = fee_utxo;
 
     let issuance_utxos_count = 4;
+    let issuance_utxos_value = 100;
     let (fee_asset_id, total_lbtc_left) = (
         fee_tx_out.explicit_asset()?,
-        fee_tx_out.validate_amount(fee_amount + issuance_utxos_count)?,
+        fee_tx_out.validate_amount(fee_amount + issuance_utxos_count * issuance_utxos_value)?,
     );
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
@@ -41,7 +42,7 @@ pub fn build_utility_nfts_issuance_preparation(
     // Add First issuance UTXO output
     pst.add_output(Output::new_explicit(
         issuance_utxos_output_script.clone(),
-        1,
+        issuance_utxos_value,
         fee_asset_id,
         None,
     ));
@@ -49,7 +50,7 @@ pub fn build_utility_nfts_issuance_preparation(
     // Add Second issuance UTXO output
     pst.add_output(Output::new_explicit(
         issuance_utxos_output_script.clone(),
-        1,
+        issuance_utxos_value,
         fee_asset_id,
         None,
     ));
@@ -57,7 +58,7 @@ pub fn build_utility_nfts_issuance_preparation(
     // Add Third issuance UTXO output
     pst.add_output(Output::new_explicit(
         issuance_utxos_output_script.clone(),
-        1,
+        issuance_utxos_value,
         fee_asset_id,
         None,
     ));
@@ -65,7 +66,7 @@ pub fn build_utility_nfts_issuance_preparation(
     // Add Fourth issuance UTXO output
     pst.add_output(Output::new_explicit(
         issuance_utxos_output_script.clone(),
-        1,
+        issuance_utxos_value,
         fee_asset_id,
         None,
     ));
