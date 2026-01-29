@@ -187,7 +187,7 @@ impl AssetAuth {
                 )?;
 
                 if *broadcast {
-                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
+                    println!("Broadcast txid: {}", broadcast_tx(&tx).await?);
                 } else {
                     println!("{}", tx.serialize().to_lower_hex_string());
                 }
@@ -270,7 +270,7 @@ impl AssetAuth {
                 )?;
 
                 if *broadcast {
-                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
+                    println!("Broadcast txid: {}", broadcast_tx(&tx).await?);
                 } else {
                     println!("{}", tx.serialize().to_lower_hex_string());
                 }
@@ -351,7 +351,7 @@ impl AssetAuth {
                 )?;
 
                 if *broadcast {
-                    println!("Broadcasted txid: {}", broadcast_tx(&tx).await?);
+                    println!("Broadcast txid: {}", broadcast_tx(&tx).await?);
                 } else {
                     println!("{}", tx.serialize().to_lower_hex_string());
                 }
