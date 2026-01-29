@@ -189,9 +189,13 @@ pub fn build_pre_lock_creation(
         None,
     ));
 
-    // Add OP_RETURN output with the Borrower public key
+    // Add OP_RETURN output with the Borrower public key and the Principal asset id
+    let mut op_return_data = [0u8; 64];
+    op_return_data[..32].copy_from_slice(&pre_lock_arguments.borrower_pub_key());
+    op_return_data[32..].copy_from_slice(&pre_lock_arguments.principal_asset_id());
+
     pst.add_output(Output::new_explicit(
-        Script::new_op_return(&pre_lock_arguments.borrower_pub_key()),
+        Script::new_op_return(&op_return_data),
         0,
         AssetId::default(),
         None,

@@ -130,7 +130,7 @@ pub fn finalize_pre_lock_transaction(
 }
 
 #[cfg(test)]
-mod lending_tests {
+mod pre_lock_tests {
     use crate::asset_auth::build_arguments::AssetAuthArguments;
     use crate::asset_auth::get_asset_auth_address;
     use crate::lending::build_arguments::LendingArguments;
@@ -345,6 +345,7 @@ mod lending_tests {
         );
         let test_borrower_key = keypair.x_only_public_key().0;
 
+        let principal_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
         let (
             first_parameters_nft_asset_id,
             second_parameters_nft_asset_id,
@@ -364,7 +365,7 @@ mod lending_tests {
 
         let ((pst, _), _) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
-            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
+            principal_asset_id,
             first_parameters_nft_asset_id,
             second_parameters_nft_asset_id,
             borrower_nft_asset_id,
@@ -392,9 +393,16 @@ mod lending_tests {
             .unwrap()
             .push_bytes()
             .unwrap();
-        let op_return_public_key = XOnlyPublicKey::from_slice(op_return_bytes).unwrap();
+
+        let (op_return_pub_key, op_return_asset_id) = op_return_bytes.split_at(32);
+
+        let op_return_asset_id: [u8; 32] =
+            op_return_asset_id.try_into().expect("Length must be 32");
+
+        let op_return_public_key = XOnlyPublicKey::from_slice(op_return_pub_key).unwrap();
 
         assert!(op_return_public_key.serialize() == test_borrower_key.serialize());
+        assert!(principal_asset_id.into_inner().0 == op_return_asset_id);
 
         Ok(())
     }

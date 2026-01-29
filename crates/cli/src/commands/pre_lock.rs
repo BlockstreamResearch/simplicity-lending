@@ -322,11 +322,18 @@ impl PreLock {
                     .unwrap()
                     .push_bytes()
                     .unwrap();
-                let borrower_public_key = XOnlyPublicKey::from_slice(op_return_bytes).unwrap();
+
+                let (op_return_pub_key, op_return_asset_id) = op_return_bytes.split_at(32);
+
+                let principal_asset_id: [u8; 32] =
+                    op_return_asset_id.try_into().expect("Length must be 32");
+
+                let borrower_public_key = XOnlyPublicKey::from_slice(op_return_pub_key).unwrap();
 
                 println!("Pre Lock covenant info:");
                 println!("Assets Info:");
                 println!("\tCollateral asset id: {}", pre_lock_asset_id.to_hex());
+                println!("\tPrincipal asset id: {}", principal_asset_id.to_hex());
                 println!(
                     "\tFirst Parameters NFT asset id: {}",
                     first_parameters_nft_asset_id.to_hex()
