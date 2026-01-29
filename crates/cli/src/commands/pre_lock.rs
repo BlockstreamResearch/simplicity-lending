@@ -12,7 +12,9 @@ use lending_contracts::lending::build_arguments::LendingArguments;
 use lending_contracts::lending::get_lending_address;
 use lending_contracts::pre_lock::build_arguments::PreLockArguments;
 use lending_contracts::pre_lock::build_witness::PreLockBranch;
-use lending_contracts::pre_lock::{finalize_pre_lock_transaction, get_pre_lock_program};
+use lending_contracts::pre_lock::{
+    finalize_pre_lock_transaction, get_pre_lock_address, get_pre_lock_program,
+};
 use lending_contracts::script_auth::build_arguments::ScriptAuthArguments;
 use lending_contracts::script_auth::build_witness::ScriptAuthWitnessParams;
 use lending_contracts::script_auth::{
@@ -34,7 +36,7 @@ use simplicityhl::simplicity::ToXOnlyPubkey;
 use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl::tracker::TrackerLogLevel;
 
-use simplicity_contracts::sdk::taproot_pubkey_gen::{TaprootPubkeyGen, get_random_seed};
+use simplicity_contracts::sdk::taproot_pubkey_gen::get_random_seed;
 use simplicity_contracts_cli::explorer::{broadcast_tx, fetch_utxo};
 use simplicity_contracts_cli::modules::utils::derive_keypair;
 
@@ -212,9 +214,9 @@ pub enum PreLock {
         /// Fee UTXO used to pay transaction fees
         #[arg(long = "fee-utxo")]
         fee_utxo: OutPoint,
-        /// Pre lock taproot pubkey gen that in this CLI works as unique contract identifier
-        #[arg(long = "pre-lock-taproot-pubkey-gen")]
-        pre_lock_taproot_pubkey_gen: String,
+        /// Pre lock covenant hash that in this CLI works as unique contract identifier
+        #[arg(long = "pre-lock-cov-hash")]
+        pre_lock_cov_hash: String,
         /// Recipient address (Liquid testnet bech32m)
         #[arg(long = "to-address")]
         to_address: Address,
@@ -251,9 +253,9 @@ pub enum PreLock {
         /// Fee UTXO used to pay transaction fees
         #[arg(long = "fee-utxo")]
         fee_utxo: OutPoint,
-        /// Pre lock taproot pubkey gen that in this CLI works as unique contract identifier
-        #[arg(long = "pre-lock-taproot-pubkey-gen")]
-        pre_lock_taproot_pubkey_gen: String,
+        /// Pre lock covenant hash that in this CLI works as unique contract identifier
+        #[arg(long = "pre-lock-cov-hash")]
+        pre_lock_cov_hash: String,
         /// Recipient address (Liquid testnet bech32m)
         #[arg(long = "to-address")]
         to_address: Address,
@@ -755,24 +757,23 @@ impl PreLock {
                     &lending_params,
                 );
 
-                let (pst, pre_lock_taproot_pubkey_gen) =
-                    lending_contracts::sdk::build_pre_lock_creation(
-                        (*collateral_utxo, collateral_tx_out.clone()),
-                        (
-                            *first_parameters_nft_utxo,
-                            first_parameters_nft_tx_out.clone(),
-                        ),
-                        (
-                            *second_parameters_nft_utxo,
-                            second_parameters_nft_tx_out.clone(),
-                        ),
-                        (*borrower_nft_utxo, borrower_nft_tx_out.clone()),
-                        (*lender_nft_utxo, lender_nft_tx_out.clone()),
-                        (*fee_utxo, fee_tx_out.clone()),
-                        &pre_lock_arguments,
-                        *fee_amount,
-                        NETWORK,
-                    )?;
+                let (pst, pre_lock_address) = lending_contracts::sdk::build_pre_lock_creation(
+                    (*collateral_utxo, collateral_tx_out.clone()),
+                    (
+                        *first_parameters_nft_utxo,
+                        first_parameters_nft_tx_out.clone(),
+                    ),
+                    (
+                        *second_parameters_nft_utxo,
+                        second_parameters_nft_tx_out.clone(),
+                    ),
+                    (*borrower_nft_utxo, borrower_nft_tx_out.clone()),
+                    (*lender_nft_utxo, lender_nft_tx_out.clone()),
+                    (*fee_utxo, fee_tx_out.clone()),
+                    &pre_lock_arguments,
+                    *fee_amount,
+                    NETWORK,
+                )?;
 
                 let tx = pst.extract_tx()?;
                 let utxos = vec![
@@ -850,12 +851,12 @@ impl PreLock {
                     TrackerLogLevel::None,
                 )?;
 
-                println!("Pre lock taproot pubkey gen: {pre_lock_taproot_pubkey_gen}");
-                store.import_arguments(
-                    &pre_lock_taproot_pubkey_gen.to_string(),
+                let pre_lock_cov_hash = hash_script(&pre_lock_address.script_pubkey());
+
+                println!("Pre lock covenant hash: {}", pre_lock_cov_hash.to_hex());
+                store.import_arguments_by_key(
+                    &pre_lock_cov_hash.to_hex(),
                     &pre_lock_arguments.to_hex()?,
-                    NETWORK,
-                    &lending_contracts::pre_lock::get_pre_lock_address,
                 )?;
 
                 if *broadcast {
@@ -873,7 +874,7 @@ impl PreLock {
                 borrower_nft_utxo,
                 lender_nft_utxo,
                 fee_utxo,
-                pre_lock_taproot_pubkey_gen,
+                pre_lock_cov_hash,
                 to_address,
                 account_index,
                 fee_amount,
@@ -884,14 +885,7 @@ impl PreLock {
                 let x_only_public_key = keypair.x_only_public_key().0;
 
                 let pre_lock_arguments: PreLockArguments =
-                    store.get_arguments(pre_lock_taproot_pubkey_gen)?;
-
-                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
-                    pre_lock_taproot_pubkey_gen,
-                    &pre_lock_arguments,
-                    NETWORK,
-                    &lending_contracts::pre_lock::get_pre_lock_address,
-                )?;
+                    store.get_arguments(pre_lock_cov_hash)?;
 
                 let pre_lock_tx_out = fetch_utxo(*pre_lock_utxo).await?;
                 let first_parameters_nft_tx_out = fetch_utxo(*first_parameters_nft_utxo).await?;
@@ -928,12 +922,14 @@ impl PreLock {
                     fee_tx_out.clone(),
                 ];
 
+                let unspendable_x_only_public_key =
+                    taproot_unspendable_internal_key().to_x_only_pubkey();
                 let pre_lock_program = get_pre_lock_program(&pre_lock_arguments)?;
 
                 let env = get_and_verify_env(
                     &tx,
                     &pre_lock_program,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
+                    &unspendable_x_only_public_key,
                     &utxos,
                     NETWORK,
                     0,
@@ -945,7 +941,7 @@ impl PreLock {
 
                 let tx = finalize_pre_lock_transaction(
                     tx,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
+                    &unspendable_x_only_public_key,
                     &pre_lock_program,
                     &utxos,
                     0,
@@ -956,11 +952,14 @@ impl PreLock {
                     TrackerLogLevel::None,
                 )?;
 
-                let unspendable_x_only_public_key =
-                    taproot_unspendable_internal_key().to_x_only_pubkey();
-                let script_auth_arguments = ScriptAuthArguments::new(hash_script(
-                    &taproot_pubkey_gen.address.script_pubkey(),
-                ));
+                let pre_lock_script = get_pre_lock_address(
+                    &unspendable_x_only_public_key,
+                    &pre_lock_arguments,
+                    NETWORK,
+                )?
+                .script_pubkey();
+
+                let script_auth_arguments = ScriptAuthArguments::new(hash_script(&pre_lock_script));
                 let script_auth_program = get_script_auth_program(&script_auth_arguments)?;
                 let script_auth_witness_params = ScriptAuthWitnessParams {
                     input_script_index: 0,
@@ -1037,7 +1036,7 @@ impl PreLock {
                 borrower_nft_utxo,
                 lender_nft_utxo,
                 fee_utxo,
-                pre_lock_taproot_pubkey_gen,
+                pre_lock_cov_hash,
                 to_address,
                 account_index,
                 fee_amount,
@@ -1048,14 +1047,7 @@ impl PreLock {
                 let x_only_public_key = keypair.x_only_public_key().0;
 
                 let pre_lock_arguments: PreLockArguments =
-                    store.get_arguments(pre_lock_taproot_pubkey_gen)?;
-
-                let taproot_pubkey_gen = TaprootPubkeyGen::build_from_str(
-                    pre_lock_taproot_pubkey_gen,
-                    &pre_lock_arguments,
-                    NETWORK,
-                    &lending_contracts::pre_lock::get_pre_lock_address,
-                )?;
+                    store.get_arguments(pre_lock_cov_hash)?;
 
                 let pre_lock_tx_out = fetch_utxo(*pre_lock_utxo).await?;
                 let principal_tx_out = fetch_utxo(*principal_utxo).await?;
@@ -1096,9 +1088,12 @@ impl PreLock {
                     fee_tx_out.clone(),
                 ];
 
+                let unspendable_x_only_public_key =
+                    taproot_unspendable_internal_key().to_x_only_pubkey();
+
                 let tx = finalize_pre_lock_transaction(
                     tx,
-                    &taproot_pubkey_gen.get_x_only_pubkey(),
+                    &unspendable_x_only_public_key,
                     &get_pre_lock_program(&pre_lock_arguments)?,
                     &utxos,
                     0,
@@ -1107,11 +1102,14 @@ impl PreLock {
                     TrackerLogLevel::None,
                 )?;
 
-                let unspendable_x_only_public_key =
-                    taproot_unspendable_internal_key().to_x_only_pubkey();
-                let script_auth_arguments = ScriptAuthArguments::new(hash_script(
-                    &taproot_pubkey_gen.address.script_pubkey(),
-                ));
+                let pre_lock_script = get_pre_lock_address(
+                    &unspendable_x_only_public_key,
+                    &pre_lock_arguments,
+                    NETWORK,
+                )?
+                .script_pubkey();
+
+                let script_auth_arguments = ScriptAuthArguments::new(hash_script(&pre_lock_script));
                 let script_auth_program = get_script_auth_program(&script_auth_arguments)?;
                 let script_auth_witness_params = ScriptAuthWitnessParams {
                     input_script_index: 0,

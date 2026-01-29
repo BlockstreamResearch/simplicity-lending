@@ -156,8 +156,6 @@ mod pre_lock_tests {
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use std::str::FromStr;
 
-    use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
-
     use simplicityhl::elements::pset::PartiallySignedTransaction;
     use simplicityhl::elements::{PubkeyHash, Script, Txid};
     use simplicityhl_core::{
@@ -180,10 +178,7 @@ mod pre_lock_tests {
         second_parameters_nft_amount: u64,
         borrower_pub_key: &XOnlyPublicKey,
         lending_params: &LendingParameters,
-    ) -> Result<(
-        (PartiallySignedTransaction, TaprootPubkeyGen),
-        PreLockArguments,
-    )> {
+    ) -> Result<((PartiallySignedTransaction, Address), PreLockArguments)> {
         // Calculate script hash for the AssetAuth covenant with the Lender NFT auth
         let asset_auth_arguments = AssetAuthArguments {
             asset_id: lender_nft_asset_id.into_inner().0,
@@ -433,7 +428,7 @@ mod pre_lock_tests {
         let (first_parameters_amount, second_parameters_amount) =
             lending_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
-        let ((pst, pre_lock_pubkey_gen), pre_lock_arguments) = get_creation_pst(
+        let ((pst, pre_lock_address), pre_lock_arguments) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
             AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
             first_parameters_nft_asset_id,
@@ -516,7 +511,7 @@ mod pre_lock_tests {
             Arc::new(pst.extract_tx()?),
             vec![
                 ElementsUtxo {
-                    script_pubkey: pre_lock_pubkey_gen.address.script_pubkey(),
+                    script_pubkey: pre_lock_address.script_pubkey(),
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(lending_params.collateral_amount),
                 },
@@ -606,7 +601,7 @@ mod pre_lock_tests {
         let (first_parameters_amount, second_parameters_amount) =
             lending_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
-        let ((pst, pre_lock_pubkey_gen), pre_lock_arguments) = get_creation_pst(
+        let ((pst, pre_lock_address), pre_lock_arguments) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
             principal_asset_id,
             first_parameters_nft_asset_id,
@@ -700,7 +695,7 @@ mod pre_lock_tests {
             Arc::new(pst.extract_tx()?),
             vec![
                 ElementsUtxo {
-                    script_pubkey: pre_lock_pubkey_gen.address.script_pubkey(),
+                    script_pubkey: pre_lock_address.script_pubkey(),
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(lending_params.collateral_amount),
                 },

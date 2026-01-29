@@ -1,9 +1,10 @@
+use simplicity_contracts::error::TaprootPubkeyGenError;
 use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AssetId, OutPoint, Script, TxOut};
+use simplicityhl::elements::{Address, AssetId, OutPoint, Script, TxOut};
 use simplicityhl_core::{SimplicityNetwork, hash_script};
 
 use crate::error::TransactionBuildError;
@@ -41,7 +42,7 @@ pub fn build_pre_lock_creation(
     pre_lock_arguments: &PreLockArguments,
     fee_amount: u64,
     network: SimplicityNetwork,
-) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
+) -> Result<(PartiallySignedTransaction, Address), TransactionBuildError> {
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;
     let (first_parameters_nft_out_point, first_parameters_nft_tx_out) = first_parameters_nft_utxo;
     let (second_parameters_nft_out_point, second_parameters_nft_tx_out) =
@@ -99,13 +100,15 @@ pub fn build_pre_lock_creation(
     let change_fee_recipient_script = fee_tx_out.script_pubkey.clone();
     let change_collateral_recipient_script = collateral_tx_out.script_pubkey.clone();
 
-    let pre_lock_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(pre_lock_arguments, network, &get_pre_lock_address)?;
+    let taproot_internal_key = taproot_unspendable_internal_key();
+
+    let pre_lock_address = get_pre_lock_address(&taproot_internal_key, pre_lock_arguments, network)
+        .map_err(TaprootPubkeyGenError::AddressGeneration)?;
 
     let utility_nfts_output_script = get_script_auth_address(
-        &taproot_unspendable_internal_key(),
+        &taproot_internal_key,
         &ScriptAuthArguments {
-            script_hash: hash_script(&pre_lock_taproot_pubkey_gen.address.script_pubkey()),
+            script_hash: hash_script(&pre_lock_address.script_pubkey()),
         },
         network,
     )
@@ -151,7 +154,7 @@ pub fn build_pre_lock_creation(
 
     // Add Lending Covenant output with the collateral asset
     pst.add_output(Output::new_explicit(
-        pre_lock_taproot_pubkey_gen.address.script_pubkey(),
+        pre_lock_address.script_pubkey(),
         lending_params.collateral_amount,
         collateral_asset_id,
         None,
@@ -228,7 +231,7 @@ pub fn build_pre_lock_creation(
         None,
     ));
 
-    Ok((pst, pre_lock_taproot_pubkey_gen))
+    Ok((pst, pre_lock_address))
 }
 
 /// Create a new pre lock script.
