@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use simplicityhl_core::{
-    ProgramError, control_block, create_p2tr_address, get_and_verify_env, load_program, run_program,
+    ProgramError, SimplicityNetwork, control_block, create_p2tr_address, get_and_verify_env,
+    load_program, run_program,
 };
 
-use simplicityhl::elements::{self, Address, AddressParams, Transaction, TxInWitness, TxOut};
+use simplicityhl::elements::{Address, Transaction, TxInWitness, TxOut};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::jet::Elements;
@@ -39,12 +40,12 @@ pub fn get_asset_auth_template_program() -> TemplateProgram {
 pub fn get_asset_auth_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &AssetAuthArguments,
-    params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_asset_auth_program(arguments)?.commit().cmr(),
         x_only_public_key,
-        params,
+        network.address_params(),
     ))
 }
 
@@ -93,26 +94,24 @@ pub fn execute_asset_auth_program(
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_asset_auth_transaction(
     mut tx: Transaction,
-    options_public_key: &XOnlyPublicKey,
-    options_program: &CompiledProgram,
+    asset_auth_public_key: &XOnlyPublicKey,
+    asset_auth_program: &CompiledProgram,
     utxos: &[TxOut],
     input_index: usize,
     witness_params: &AssetAuthWitnessParams,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
+    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
-        options_program,
-        options_public_key,
+        asset_auth_program,
+        asset_auth_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
-    let pruned =
-        execute_asset_auth_program(options_program, &env, witness_params, TrackerLogLevel::None)?;
+    let pruned = execute_asset_auth_program(asset_auth_program, &env, witness_params, log_level)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -124,7 +123,7 @@ pub fn finalize_asset_auth_transaction(
             simplicity_witness_bytes,
             simplicity_program_bytes,
             cmr.as_ref().to_vec(),
-            control_block(cmr, *options_public_key).serialize(),
+            control_block(cmr, *asset_auth_public_key).serialize(),
         ],
         pegin_witness: vec![],
     };
@@ -151,6 +150,8 @@ mod asset_auth_tests {
     use simplicityhl::elements::taproot::ControlBlock;
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use simplicityhl_core::{LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR};
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     fn get_creation_pst(
         asset_id: AssetId,
@@ -190,7 +191,7 @@ mod asset_auth_tests {
                 ),
                 &asset_auth_arguments,
                 100,
-                &AddressParams::LIQUID_TESTNET,
+                NETWORK,
             )?,
             asset_auth_arguments,
         ))
@@ -278,7 +279,7 @@ mod asset_auth_tests {
 
         let pst = pst.extract_tx()?;
 
-        assert_eq!(pst.output.len(), 3, "Invalid outputs count");
+        assert_eq!(pst.output.len(), 4, "Invalid outputs count");
 
         let asset_output = pst.output[1].clone();
 
@@ -362,7 +363,7 @@ mod asset_auth_tests {
 
         let pst = pst.extract_tx()?;
 
-        assert_eq!(pst.output.len(), 3, "Invalid outputs count");
+        assert_eq!(pst.output.len(), 4, "Invalid outputs count");
 
         let asset_output = pst.output[1].clone();
 

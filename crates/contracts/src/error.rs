@@ -13,6 +13,9 @@ pub enum ParametersError {
 
     #[error("Invalid loan expiration time: expected {expected}, got {actual}")]
     InvalidLoanExpirationTime { expected: String, actual: String },
+
+    #[error("Out of bounds error: {actual_error}")]
+    ValueOutOfBounds { actual_error: String },
 }
 
 #[derive(Debug, thiserror::Error)]

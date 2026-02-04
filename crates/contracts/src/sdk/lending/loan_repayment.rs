@@ -1,7 +1,8 @@
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, Script, TxOut};
+use simplicityhl::elements::{OutPoint, Script, TxOut};
+use simplicityhl_core::SimplicityNetwork;
 
 use crate::asset_auth::build_arguments::AssetAuthArguments;
 use crate::asset_auth::get_asset_auth_address;
@@ -39,7 +40,7 @@ pub fn build_lending_loan_repayment(
     lending_arguments: &LendingArguments,
     collateral_output_script: &Script,
     fee_amount: u64,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<PartiallySignedTransaction, TransactionBuildError> {
     let (lending_out_point, lending_tx_out) = lending_utxo;
     let (principal_out_point, principal_tx_out) = principal_utxo;
@@ -102,7 +103,7 @@ pub fn build_lending_loan_repayment(
             asset_amount: 1,
             with_asset_burn: true,
         },
-        address_params,
+        network,
     )
     .unwrap()
     .script_pubkey();

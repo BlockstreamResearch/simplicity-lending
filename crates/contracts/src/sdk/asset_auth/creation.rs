@@ -3,7 +3,8 @@ use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Input, Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, Script, Sequence, TxOut};
+use simplicityhl::elements::{OutPoint, Script, Sequence, TxOut};
+use simplicityhl_core::SimplicityNetwork;
 
 use crate::asset_auth::{build_arguments::AssetAuthArguments, get_asset_auth_address};
 use crate::error::TransactionBuildError;
@@ -21,7 +22,7 @@ pub fn build_asset_auth_creation(
     fee_utxo: (OutPoint, TxOut),
     asset_auth_arguments: &AssetAuthArguments,
     fee_amount: u64,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
     let (lock_out_point, lock_tx_out) = utxo_to_lock;
     let (fee_out_point, fee_tx_out) = fee_utxo;
@@ -34,11 +35,8 @@ pub fn build_asset_auth_creation(
 
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
-    let asset_auth_taproot_pubkey_gen = TaprootPubkeyGen::from(
-        asset_auth_arguments,
-        address_params,
-        &get_asset_auth_address,
-    )?;
+    let asset_auth_taproot_pubkey_gen =
+        TaprootPubkeyGen::from(asset_auth_arguments, network, &get_asset_auth_address)?;
 
     let mut pst = PartiallySignedTransaction::new_v2();
 
@@ -70,6 +68,13 @@ pub fn build_asset_auth_creation(
         ));
     }
 
+    pst.add_output(Output::new_explicit(
+        Script::new(),
+        fee_amount,
+        fee_asset_id,
+        None,
+    ));
+
     Ok((pst, asset_auth_taproot_pubkey_gen))
 }
 
@@ -80,13 +85,10 @@ pub fn build_asset_auth_creation(
 /// Returns an error if the taproot pubkey generation fails
 pub fn generate_asset_auth_script(
     asset_auth_arguments: &AssetAuthArguments,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Script, TransactionBuildError> {
-    let asset_auth_taproot_pubkey_gen = TaprootPubkeyGen::from(
-        asset_auth_arguments,
-        address_params,
-        &get_asset_auth_address,
-    )?;
+    let asset_auth_taproot_pubkey_gen =
+        TaprootPubkeyGen::from(asset_auth_arguments, network, &get_asset_auth_address)?;
 
     Ok(asset_auth_taproot_pubkey_gen.address.script_pubkey())
 }

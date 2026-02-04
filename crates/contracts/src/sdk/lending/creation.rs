@@ -1,11 +1,10 @@
-use simplicity_contracts::bytes32_tr_storage::unspendable_internal_key;
 use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, OutPoint, Script, TxOut};
-use simplicityhl_core::hash_script;
+use simplicityhl::elements::{OutPoint, Script, TxOut};
+use simplicityhl_core::{SimplicityNetwork, hash_script};
 
 use crate::error::TransactionBuildError;
 use crate::lending::build_arguments::LendingArguments;
@@ -14,6 +13,7 @@ use crate::script_auth::build_arguments::ScriptAuthArguments;
 use crate::script_auth::get_script_auth_address;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
+use crate::sdk::taproot_unspendable_internal_key;
 
 /// Create a new lending contract.
 ///
@@ -44,7 +44,7 @@ pub fn build_lending_creation(
     borrower_nft_output_script: &Script,
     lender_nft_output_script: &Script,
     fee_amount: u64,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;
     let (principal_out_point, principal_tx_out) = principal_utxo;
@@ -100,14 +100,14 @@ pub fn build_lending_creation(
     let change_recipient_script = fee_tx_out.script_pubkey.clone();
 
     let lending_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(lending_arguments, address_params, &get_lending_address)?;
+        TaprootPubkeyGen::from(lending_arguments, network, &get_lending_address)?;
 
     let parameters_nft_output_script = get_script_auth_address(
-        &unspendable_internal_key(),
+        &taproot_unspendable_internal_key(),
         &ScriptAuthArguments {
             script_hash: hash_script(&lending_taproot_pubkey_gen.address.script_pubkey()),
         },
-        address_params,
+        network,
     )
     .unwrap()
     .script_pubkey();
@@ -226,10 +226,10 @@ pub fn build_lending_creation(
 /// Returns an error if the taproot pubkey generation fails
 pub fn generate_lending_script(
     lending_arguments: &LendingArguments,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Script, TransactionBuildError> {
     let lending_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(lending_arguments, address_params, &get_lending_address)?;
+        TaprootPubkeyGen::from(lending_arguments, network, &get_lending_address)?;
 
     Ok(lending_taproot_pubkey_gen.address.script_pubkey())
 }

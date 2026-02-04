@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use simplicityhl_core::{
-    ProgramError, control_block, create_p2tr_address, get_and_verify_env, load_program, run_program,
+    ProgramError, SimplicityNetwork, control_block, create_p2tr_address, get_and_verify_env,
+    load_program, run_program,
 };
 
-use simplicityhl::elements::{self, Address, AddressParams, Transaction, TxInWitness, TxOut};
+use simplicityhl::elements::{Address, Transaction, TxInWitness, TxOut};
 
 use simplicityhl::simplicity::RedeemNode;
 use simplicityhl::simplicity::jet::Elements;
@@ -39,12 +40,12 @@ pub fn get_pre_lock_template_program() -> TemplateProgram {
 pub fn get_pre_lock_address(
     x_only_public_key: &XOnlyPublicKey,
     arguments: &PreLockArguments,
-    params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Address, ProgramError> {
     Ok(create_p2tr_address(
         get_pre_lock_program(arguments)?.commit().cmr(),
         x_only_public_key,
-        params,
+        network.address_params(),
     ))
 }
 
@@ -91,30 +92,24 @@ pub fn execute_pre_lock_program(
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_pre_lock_transaction(
     mut tx: Transaction,
-    options_public_key: &XOnlyPublicKey,
-    options_program: &CompiledProgram,
+    pre_lock_public_key: &XOnlyPublicKey,
+    pre_lock_program: &CompiledProgram,
     utxos: &[TxOut],
     input_index: usize,
     pre_lock_branch: PreLockBranch,
-    params: &'static AddressParams,
-    genesis_hash: elements::BlockHash,
+    network: SimplicityNetwork,
+    log_level: TrackerLogLevel,
 ) -> Result<Transaction, ProgramError> {
     let env = get_and_verify_env(
         &tx,
-        options_program,
-        options_public_key,
+        pre_lock_program,
+        pre_lock_public_key,
         utxos,
-        params,
-        genesis_hash,
+        network,
         input_index,
     )?;
 
-    let pruned = execute_pre_lock_program(
-        options_program,
-        &env,
-        pre_lock_branch,
-        TrackerLogLevel::None,
-    )?;
+    let pruned = execute_pre_lock_program(pre_lock_program, &env, pre_lock_branch, log_level)?;
 
     let (simplicity_program_bytes, simplicity_witness_bytes) = pruned.to_vec_with_witness();
     let cmr = pruned.cmr();
@@ -126,7 +121,7 @@ pub fn finalize_pre_lock_transaction(
             simplicity_witness_bytes,
             simplicity_program_bytes,
             cmr.as_ref().to_vec(),
-            control_block(cmr, *options_public_key).serialize(),
+            control_block(cmr, *pre_lock_public_key).serialize(),
         ],
         pegin_witness: vec![],
     };
@@ -135,16 +130,14 @@ pub fn finalize_pre_lock_transaction(
 }
 
 #[cfg(test)]
-mod lending_tests {
+mod pre_lock_tests {
     use crate::asset_auth::build_arguments::AssetAuthArguments;
     use crate::asset_auth::get_asset_auth_address;
     use crate::lending::build_arguments::LendingArguments;
     use crate::lending::get_lending_address;
     use crate::script_auth::build_arguments::ScriptAuthArguments;
     use crate::script_auth::get_script_auth_address;
-    use crate::sdk::parameters::{
-        FirstNFTParameters, LendingParameters, SecondNFTParameters, to_base_amount,
-    };
+    use crate::sdk::parameters::LendingParameters;
     use crate::sdk::{
         build_pre_lock_cancellation, build_pre_lock_creation, build_pre_lock_lending_creation,
         taproot_unspendable_internal_key,
@@ -163,14 +156,14 @@ mod lending_tests {
     use simplicityhl::simplicity::jet::elements::ElementsUtxo;
     use std::str::FromStr;
 
-    use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
-
     use simplicityhl::elements::pset::PartiallySignedTransaction;
     use simplicityhl::elements::{PubkeyHash, Script, Txid};
     use simplicityhl_core::{
         LIQUID_TESTNET_BITCOIN_ASSET, LIQUID_TESTNET_TEST_ASSET_ID_STR, get_new_asset_entropy,
-        hash_script,
+        get_p2pk_address, hash_script,
     };
+
+    const NETWORK: SimplicityNetwork = SimplicityNetwork::LiquidTestnet;
 
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::too_many_lines)]
@@ -185,10 +178,7 @@ mod lending_tests {
         second_parameters_nft_amount: u64,
         borrower_pub_key: &XOnlyPublicKey,
         lending_params: &LendingParameters,
-    ) -> Result<(
-        (PartiallySignedTransaction, TaprootPubkeyGen),
-        PreLockArguments,
-    )> {
+    ) -> Result<((PartiallySignedTransaction, Address), PreLockArguments)> {
         // Calculate script hash for the AssetAuth covenant with the Lender NFT auth
         let asset_auth_arguments = AssetAuthArguments {
             asset_id: lender_nft_asset_id.into_inner().0,
@@ -198,7 +188,7 @@ mod lending_tests {
         let lender_principal_script = get_asset_auth_address(
             &taproot_unspendable_internal_key(),
             &asset_auth_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
         )?
         .script_pubkey();
         let principal_auth_script_hash = hash_script(&lender_principal_script);
@@ -217,7 +207,7 @@ mod lending_tests {
         let lending_script = get_lending_address(
             &taproot_unspendable_internal_key(),
             &lending_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
         )?
         .script_pubkey();
         let lending_cov_hash = hash_script(&lending_script);
@@ -227,15 +217,14 @@ mod lending_tests {
         let script_auth_script = get_script_auth_address(
             &taproot_unspendable_internal_key(),
             &script_auth_arguments,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
         )?
         .script_pubkey();
         let parameters_nft_output_script_hash = hash_script(&script_auth_script);
 
-        // Calculate P2PKH script hash with the borrower public key
-        let borrower_p2pkh_script =
-            Script::new_p2pkh(&PubkeyHash::hash(&borrower_pub_key.serialize()));
-        let borrower_p2pkh_script_hash = hash_script(&borrower_p2pkh_script);
+        // Calculate P2TR script hash
+        let borrower_p2tr_address = get_p2pk_address(borrower_pub_key, NETWORK)?;
+        let borrower_p2tr_script_hash = hash_script(&borrower_p2tr_address.script_pubkey());
 
         let pre_lock_arguments = PreLockArguments::new(
             collateral_asset_id.into_inner().0,
@@ -246,8 +235,8 @@ mod lending_tests {
             second_parameters_nft_asset_id.into_inner().0,
             lending_cov_hash,
             parameters_nft_output_script_hash,
-            borrower_p2pkh_script_hash,
-            borrower_p2pkh_script_hash,
+            borrower_p2tr_script_hash,
+            borrower_p2tr_script_hash,
             borrower_pub_key.serialize(),
             lending_params,
         );
@@ -316,7 +305,7 @@ mod lending_tests {
                 ),
                 &pre_lock_arguments,
                 100,
-                &AddressParams::LIQUID_TESTNET,
+                NETWORK,
             )?,
             pre_lock_arguments,
         ))
@@ -343,29 +332,6 @@ mod lending_tests {
         ))
     }
 
-    fn encode_parameters_amounts(
-        lending_params: &LendingParameters,
-        amounts_decimals: u8,
-    ) -> Result<(u64, u64)> {
-        let first_parameters_nft_encoded_amount = FirstNFTParameters::encode(
-            lending_params.principal_interest_rate,
-            lending_params.loan_expiration_time,
-            amounts_decimals,
-            amounts_decimals,
-        )
-        .expect("Failed to encode first parameters nft amount");
-        let second_parameters_nft_encoded_amount = SecondNFTParameters::encode(
-            to_base_amount(lending_params.collateral_amount, amounts_decimals),
-            to_base_amount(lending_params.principal_amount, amounts_decimals),
-        )
-        .expect("Failed to encode second parameters nft amount");
-
-        Ok((
-            first_parameters_nft_encoded_amount,
-            second_parameters_nft_encoded_amount,
-        ))
-    }
-
     #[test]
     fn test_pre_lock_creation() -> Result<()> {
         let keypair = Keypair::from_secret_key(
@@ -374,6 +340,7 @@ mod lending_tests {
         );
         let test_borrower_key = keypair.x_only_public_key().0;
 
+        let principal_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
         let (
             first_parameters_nft_asset_id,
             second_parameters_nft_asset_id,
@@ -389,11 +356,11 @@ mod lending_tests {
             principal_interest_rate: 250, // 2.5%
         };
         let (first_parameters_amount, second_parameters_amount) =
-            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+            lending_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
         let ((pst, _), _) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
-            AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
+            principal_asset_id,
             first_parameters_nft_asset_id,
             second_parameters_nft_asset_id,
             borrower_nft_asset_id,
@@ -421,9 +388,16 @@ mod lending_tests {
             .unwrap()
             .push_bytes()
             .unwrap();
-        let op_return_public_key = XOnlyPublicKey::from_slice(op_return_bytes).unwrap();
+
+        let (op_return_pub_key, op_return_asset_id) = op_return_bytes.split_at(32);
+
+        let op_return_asset_id: [u8; 32] =
+            op_return_asset_id.try_into().expect("Length must be 32");
+
+        let op_return_public_key = XOnlyPublicKey::from_slice(op_return_pub_key).unwrap();
 
         assert!(op_return_public_key.serialize() == test_borrower_key.serialize());
+        assert!(principal_asset_id.into_inner().0 == op_return_asset_id);
 
         Ok(())
     }
@@ -452,9 +426,9 @@ mod lending_tests {
             principal_interest_rate: 250, // 2.5%
         };
         let (first_parameters_amount, second_parameters_amount) =
-            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+            lending_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
-        let ((pst, pre_lock_pubkey_gen), pre_lock_arguments) = get_creation_pst(
+        let ((pst, pre_lock_address), pre_lock_arguments) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
             AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?,
             first_parameters_nft_asset_id,
@@ -537,7 +511,7 @@ mod lending_tests {
             Arc::new(pst.extract_tx()?),
             vec![
                 ElementsUtxo {
-                    script_pubkey: pre_lock_pubkey_gen.address.script_pubkey(),
+                    script_pubkey: pre_lock_address.script_pubkey(),
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(lending_params.collateral_amount),
                 },
@@ -625,9 +599,9 @@ mod lending_tests {
             principal_interest_rate: 250, // 2.5%
         };
         let (first_parameters_amount, second_parameters_amount) =
-            encode_parameters_amounts(&lending_params, amounts_decimals)?;
+            lending_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
-        let ((pst, pre_lock_pubkey_gen), pre_lock_arguments) = get_creation_pst(
+        let ((pst, pre_lock_address), pre_lock_arguments) = get_creation_pst(
             *LIQUID_TESTNET_BITCOIN_ASSET,
             principal_asset_id,
             first_parameters_nft_asset_id,
@@ -712,7 +686,7 @@ mod lending_tests {
             &pre_lock_arguments,
             &lender_nft_output_script,
             100,
-            &AddressParams::LIQUID_TESTNET,
+            NETWORK,
         )?;
 
         let program = get_compiled_pre_lock_program(&pre_lock_arguments);
@@ -721,7 +695,7 @@ mod lending_tests {
             Arc::new(pst.extract_tx()?),
             vec![
                 ElementsUtxo {
-                    script_pubkey: pre_lock_pubkey_gen.address.script_pubkey(),
+                    script_pubkey: pre_lock_address.script_pubkey(),
                     asset: Asset::Explicit(*LIQUID_TESTNET_BITCOIN_ASSET),
                     value: Value::Explicit(lending_params.collateral_amount),
                 },

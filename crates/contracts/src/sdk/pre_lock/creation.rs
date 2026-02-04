@@ -1,11 +1,11 @@
-use simplicity_contracts::bytes32_tr_storage::unspendable_internal_key;
+use simplicity_contracts::error::TaprootPubkeyGenError;
 use simplicity_contracts::sdk::taproot_pubkey_gen::TaprootPubkeyGen;
 
 use simplicity_contracts::sdk::validation::TxOutExt;
 
 use simplicityhl::elements::pset::{Output, PartiallySignedTransaction};
-use simplicityhl::elements::{AddressParams, AssetId, OutPoint, Script, TxOut};
-use simplicityhl_core::hash_script;
+use simplicityhl::elements::{Address, AssetId, OutPoint, Script, TxOut};
+use simplicityhl_core::{SimplicityNetwork, hash_script};
 
 use crate::error::TransactionBuildError;
 use crate::pre_lock::build_arguments::PreLockArguments;
@@ -14,6 +14,7 @@ use crate::script_auth::build_arguments::ScriptAuthArguments;
 use crate::script_auth::get_script_auth_address;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
+use crate::sdk::taproot_unspendable_internal_key;
 
 /// Create a new pre lock contract.
 ///
@@ -40,8 +41,8 @@ pub fn build_pre_lock_creation(
     fee_utxo: (OutPoint, TxOut),
     pre_lock_arguments: &PreLockArguments,
     fee_amount: u64,
-    address_params: &'static AddressParams,
-) -> Result<(PartiallySignedTransaction, TaprootPubkeyGen), TransactionBuildError> {
+    network: SimplicityNetwork,
+) -> Result<(PartiallySignedTransaction, Address), TransactionBuildError> {
     let (collateral_out_point, collateral_tx_out) = collateral_utxo;
     let (first_parameters_nft_out_point, first_parameters_nft_tx_out) = first_parameters_nft_utxo;
     let (second_parameters_nft_out_point, second_parameters_nft_tx_out) =
@@ -50,7 +51,7 @@ pub fn build_pre_lock_creation(
     let (lender_nft_out_point, lender_nft_tx_out) = lender_nft_utxo;
     let (fee_out_point, fee_tx_out) = fee_utxo;
 
-    let (collateral_asset_id, collateral_value) = collateral_tx_out.explicit()?;
+    let collateral_asset_id = collateral_tx_out.explicit_asset()?;
     let (first_parameters_nft_asset_id, first_parameters_nft_value) =
         first_parameters_nft_tx_out.explicit()?;
     let (second_parameters_nft_asset_id, second_parameters_nft_value) =
@@ -90,22 +91,26 @@ pub fn build_pre_lock_creation(
         pre_lock_arguments.lender_nft_asset_id(),
     )?;
 
-    check_asset_value(collateral_value, lending_params.collateral_amount)?;
+    let total_collateral_left =
+        collateral_tx_out.validate_amount(lending_params.collateral_amount)?;
 
     check_asset_value(borrower_nft_value, 1)?;
     check_asset_value(lender_nft_value, 1)?;
 
-    let change_recipient_script = fee_tx_out.script_pubkey.clone();
+    let change_fee_recipient_script = fee_tx_out.script_pubkey.clone();
+    let change_collateral_recipient_script = collateral_tx_out.script_pubkey.clone();
 
-    let pre_lock_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(pre_lock_arguments, address_params, &get_pre_lock_address)?;
+    let taproot_internal_key = taproot_unspendable_internal_key();
+
+    let pre_lock_address = get_pre_lock_address(&taproot_internal_key, pre_lock_arguments, network)
+        .map_err(TaprootPubkeyGenError::AddressGeneration)?;
 
     let utility_nfts_output_script = get_script_auth_address(
-        &unspendable_internal_key(),
+        &taproot_internal_key,
         &ScriptAuthArguments {
-            script_hash: hash_script(&pre_lock_taproot_pubkey_gen.address.script_pubkey()),
+            script_hash: hash_script(&pre_lock_address.script_pubkey()),
         },
-        address_params,
+        network,
     )
     .unwrap()
     .script_pubkey();
@@ -145,11 +150,12 @@ pub fn build_pre_lock_creation(
     // Outputs setup
 
     let is_lbtc_change_needed = total_lbtc_left != 0;
+    let is_collateral_change_needed = total_collateral_left != 0;
 
     // Add Lending Covenant output with the collateral asset
     pst.add_output(Output::new_explicit(
-        pre_lock_taproot_pubkey_gen.address.script_pubkey(),
-        collateral_value,
+        pre_lock_address.script_pubkey(),
+        lending_params.collateral_amount,
         collateral_asset_id,
         None,
     ));
@@ -186,18 +192,32 @@ pub fn build_pre_lock_creation(
         None,
     ));
 
-    // Add OP_RETURN output with the Borrower public key
+    // Add OP_RETURN output with the Borrower public key and the Principal asset id
+    let mut op_return_data = [0u8; 64];
+    op_return_data[..32].copy_from_slice(&pre_lock_arguments.borrower_pub_key());
+    op_return_data[32..].copy_from_slice(&pre_lock_arguments.principal_asset_id());
+
     pst.add_output(Output::new_explicit(
-        Script::new_op_return(&pre_lock_arguments.borrower_pub_key()),
+        Script::new_op_return(&op_return_data),
         0,
         AssetId::default(),
         None,
     ));
 
+    // Return collateral asset change
+    if is_collateral_change_needed {
+        pst.add_output(Output::new_explicit(
+            change_collateral_recipient_script,
+            total_collateral_left,
+            collateral_asset_id,
+            None,
+        ));
+    }
+
     // Fee outputs
     if is_lbtc_change_needed {
         pst.add_output(Output::new_explicit(
-            change_recipient_script,
+            change_fee_recipient_script,
             total_lbtc_left,
             fee_asset_id,
             None,
@@ -211,7 +231,7 @@ pub fn build_pre_lock_creation(
         None,
     ));
 
-    Ok((pst, pre_lock_taproot_pubkey_gen))
+    Ok((pst, pre_lock_address))
 }
 
 /// Create a new pre lock script.
@@ -221,10 +241,10 @@ pub fn build_pre_lock_creation(
 /// Returns an error if the taproot pubkey generation fails
 pub fn generate_pre_lock_script(
     pre_lock_arguments: &PreLockArguments,
-    address_params: &'static AddressParams,
+    network: SimplicityNetwork,
 ) -> Result<Script, TransactionBuildError> {
     let pre_lock_taproot_pubkey_gen =
-        TaprootPubkeyGen::from(pre_lock_arguments, address_params, &get_pre_lock_address)?;
+        TaprootPubkeyGen::from(pre_lock_arguments, network, &get_pre_lock_address)?;
 
     Ok(pre_lock_taproot_pubkey_gen.address.script_pubkey())
 }
