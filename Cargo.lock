@@ -1418,9 +1418,13 @@ dependencies = [
  "anyhow",
  "axum",
  "cargo-husky",
+ "hex",
  "reqwest",
  "serde",
+ "serde_json",
+ "simplicityhl",
  "sqlx",
+ "thiserror 2.0.18",
  "tokio",
 ]
 

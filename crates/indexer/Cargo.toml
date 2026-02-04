@@ -15,13 +15,20 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+anyhow = "1"
+thiserror = "2"
+serde_json = "1"
+
 axum = "0.8.8"
+reqwest = "0.13.1"
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
 serde = { version= "1", features = ["derive"]}
 sqlx = { version = "0.8", features = [ "runtime-tokio" ] }
 
+hex = { workspace = true }
+
+simplicityhl = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"
-reqwest = "0.13.1"
 cargo-husky = { workspace = true }
