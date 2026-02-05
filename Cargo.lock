@@ -1418,6 +1418,7 @@ dependencies = [
  "anyhow",
  "axum",
  "cargo-husky",
+ "config",
  "hex",
  "reqwest",
  "serde",
