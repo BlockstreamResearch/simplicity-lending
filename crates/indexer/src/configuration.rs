@@ -2,6 +2,7 @@
 pub struct Settings {
     pub database: DatabaseSettings,
     pub esplora: EsploraSettings,
+    pub indexer: IndexerSettings,
     pub application_port: u16,
 }
 
@@ -27,6 +28,11 @@ impl DatabaseSettings {
 pub struct EsploraSettings {
     pub base_url: String,
     pub timeout: u16,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct IndexerSettings {
+    pub interval: u64,
 }
 
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
