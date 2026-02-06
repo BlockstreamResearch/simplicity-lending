@@ -7,6 +7,14 @@ on:
   pull_request:
   workflow_call:
 
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_VERSION: 0.8.0
+  SQLX_FEATURES: "rustls,postgres"
+  APP_USER: app
+  APP_USER_PWD: secret
+  APP_DB_NAME: lending-indexer
+
 permissions:
   contents: read
 
@@ -14,6 +22,16 @@ jobs:
   test:
     name: Build and test (matrix)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+
     strategy:
       fail-fast: false
       matrix:
@@ -31,10 +49,34 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          cache-on-failure: true
+          cache-on-failure: true  
 
-      - name: Build
-        run: cargo build --workspace --all-features --verbose
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli
+          --version=${{ env.SQLX_VERSION }}
+          --features ${{ env.SQLX_FEATURES }}
+          --no-default-features
+          --locked
 
-      - name: Test
+      - name: Create app user in Postgres
+        run: |
+          sudo apt-get install postgresql-client
+
+          # Create the application user
+          CREATE_QUERY="CREATE USER ${APP_USER} WITH PASSWORD '${APP_USER_PWD}';"
+          PGPASSWORD="password" psql -U "postgres" -h "localhost" -c "${CREATE_QUERY}"
+
+          # Grant create db privileges to the app user
+          GRANT_QUERY="ALTER USER ${APP_USER} CREATEDB;"
+          PGPASSWORD="password" psql -U "postgres" -h "localhost" -c "${GRANT_QUERY}"
+
+      - name: Migrate database
+        run:  |
+          cd crates/indexer
+          SKIP_DOCKER=true ./scripts/init_db.sh
+
+      - name: Run tests
         run: cargo test --workspace --all-features --no-fail-fast --verbose
+
+      - name: Check that queries are fresh
+        run: cargo sqlx prepare --workspace --check -- --all-targets
