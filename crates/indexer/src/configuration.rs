@@ -33,6 +33,7 @@ pub struct EsploraSettings {
 #[derive(serde::Deserialize, Clone)]
 pub struct IndexerSettings {
     pub interval: u64,
+    pub start_height: u64,
 }
 
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
