@@ -29,7 +29,7 @@ pub async fn run_indexer(settings: IndexerSettings, db_pool: Arc<PgPool>, client
 
     let mut current_height = get_starting_height(&db_pool, settings.start_height).await;
 
-    println!("Indexer started. Starting height: {}", current_height);
+    tracing::info!("Indexer started. Starting height: {}", current_height);
 
     loop {
         interval.tick().await;
@@ -37,7 +37,7 @@ pub async fn run_indexer(settings: IndexerSettings, db_pool: Arc<PgPool>, client
         let latest_height = match client.get_latest_block_height().await {
             Ok(h) => h,
             Err(error) => {
-                println!("Failed to get latest block height: {error}");
+                tracing::error!("Failed to get latest block height: {error}");
                 continue;
             }
         };
@@ -45,26 +45,30 @@ pub async fn run_indexer(settings: IndexerSettings, db_pool: Arc<PgPool>, client
         while current_height < latest_height {
             let next_height = current_height + 1;
 
-            println!("Processing block {}", next_height);
+            tracing::info!("Processing block {}", next_height);
 
             match process_block(&db_pool, &client, next_height).await {
                 Ok(_) => {
                     current_height = next_height;
                 }
                 Err(error) => {
-                    println!("Failed to process block #{next_height}: {error}");
+                    tracing::error!("Failed to process block #{next_height}: {error}");
                     break;
                 }
             }
         }
 
         match client.get_latest_block_height().await {
-            Ok(height) => println!("Current height is {height}"),
-            Err(error) => println!("Failed to get height: {error}"),
+            Ok(height) => tracing::info!("Current height is {height}"),
+            Err(error) => tracing::error!("Failed to get height: {error}"),
         }
     }
 }
 
+#[tracing::instrument(
+    skip(db, client),
+    fields(block_run_id = %Uuid::new_v4(), height = %block_height)
+)]
 pub async fn process_block(
     db: &Arc<PgPool>,
     client: &EsploraClient,
@@ -108,9 +112,10 @@ pub async fn process_block(
 
     tx.commit().await?;
 
-    println!(
+    tracing::info!(
         "Successfully indexed block #{} ({} txs)",
-        block_height, tx_count
+        block_height,
+        tx_count
     );
 
     Ok(())
@@ -125,6 +130,7 @@ pub async fn process_pre_lock_tx(
 
     match is_pre_lock_creation_tx(tx) {
         Some(args) => {
+            tracing::info!("Found pre lock transaction - {txid}");
             let lending_params = args.lending_params();
 
             sqlx::query!(
@@ -157,7 +163,7 @@ pub async fn process_pre_lock_tx(
             .await?;
         }
         None => {
-            println!("Not a pre lock transaction - {}", txid);
+            tracing::info!("Not a pre lock transaction - {txid}");
         }
     }
 
@@ -173,7 +179,7 @@ pub async fn get_starting_height(db: &Arc<PgPool>, config_height: u64) -> u64 {
     match row {
         Some(r) => r.last_indexed_height as u64,
         None => {
-            println!(
+            tracing::info!(
                 "No sync state found in DB, starting from config: {}",
                 config_height
             );

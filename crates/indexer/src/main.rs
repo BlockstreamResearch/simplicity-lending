@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use lending_indexer::esplora_client::EsploraClient;
 use lending_indexer::indexer::run_indexer;
+use lending_indexer::telemetry::{get_subscriber, init_subscriber};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 
@@ -10,6 +11,9 @@ use lending_indexer::startup::run;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
+    let subscriber = get_subscriber("lending-indexer".into(), "info".into(), std::io::stdout);
+    init_subscriber(subscriber);
+
     let configuration = get_configuration().expect("Failed to read configuration");
 
     let connection_pool = Arc::new(
