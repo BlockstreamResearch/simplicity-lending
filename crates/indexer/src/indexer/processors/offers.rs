@@ -1,7 +1,4 @@
-use std::{sync::Arc, time::Duration};
-
 use sqlx::PgPool;
-use tokio::time::interval;
 
 use simplicityhl::elements::{Transaction, hashes::Hash};
 
@@ -11,7 +8,7 @@ use lending_contracts::{
 };
 use uuid::Uuid;
 
-use crate::{configuration::IndexerSettings, esplora_client::EsploraClient};
+use crate::esplora_client::EsploraClient;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
 #[sqlx(type_name = "offer_status", rename_all = "lowercase")]
@@ -24,53 +21,12 @@ pub enum OfferStatus {
     Claimed,
 }
 
-pub async fn run_indexer(settings: IndexerSettings, db_pool: Arc<PgPool>, client: EsploraClient) {
-    let mut interval = interval(Duration::from_millis(settings.interval));
-
-    let mut current_height = get_starting_height(&db_pool, settings.start_height).await;
-
-    tracing::info!("Indexer started. Starting height: {}", current_height);
-
-    loop {
-        interval.tick().await;
-
-        let latest_height = match client.get_latest_block_height().await {
-            Ok(h) => h,
-            Err(error) => {
-                tracing::error!("Failed to get latest block height: {error}");
-                continue;
-            }
-        };
-
-        while current_height < latest_height {
-            let next_height = current_height + 1;
-
-            tracing::info!("Processing block {}", next_height);
-
-            match process_block(&db_pool, &client, next_height).await {
-                Ok(_) => {
-                    current_height = next_height;
-                }
-                Err(error) => {
-                    tracing::error!("Failed to process block #{next_height}: {error}");
-                    break;
-                }
-            }
-        }
-
-        match client.get_latest_block_height().await {
-            Ok(height) => tracing::info!("Current height is {height}"),
-            Err(error) => tracing::error!("Failed to get height: {error}"),
-        }
-    }
-}
-
 #[tracing::instrument(
     skip(db, client),
     fields(block_run_id = %Uuid::new_v4(), height = %block_height)
 )]
 pub async fn process_block(
-    db: &Arc<PgPool>,
+    db: &PgPool,
     client: &EsploraClient,
     block_height: u64,
 ) -> anyhow::Result<()> {
@@ -122,7 +78,7 @@ pub async fn process_block(
 }
 
 pub async fn process_pre_lock_tx(
-    db: &Arc<PgPool>,
+    db: &PgPool,
     tx: &Transaction,
     current_height: u64,
 ) -> anyhow::Result<()> {
@@ -159,7 +115,7 @@ pub async fn process_pre_lock_tx(
                 current_height as i64,
                 txid.as_byte_array(),
             )
-            .execute(db.as_ref())
+            .execute(db)
             .await?;
         }
         None => {
@@ -168,24 +124,6 @@ pub async fn process_pre_lock_tx(
     }
 
     Ok(())
-}
-
-pub async fn get_starting_height(db: &Arc<PgPool>, config_height: u64) -> u64 {
-    let row = sqlx::query!("SELECT last_indexed_height FROM sync_state WHERE id = 1")
-        .fetch_optional(db.as_ref())
-        .await
-        .unwrap_or(None);
-
-    match row {
-        Some(r) => r.last_indexed_height as u64,
-        None => {
-            tracing::info!(
-                "No sync state found in DB, starting from config: {}",
-                config_height
-            );
-            config_height
-        }
-    }
 }
 
 fn is_pre_lock_creation_tx(tx: &Transaction) -> Option<PreLockArguments> {

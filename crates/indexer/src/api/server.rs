@@ -1,14 +1,12 @@
-use std::sync::Arc;
-
 use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
-use crate::routes::greet;
+use crate::api::routes::greet;
 
-pub async fn run(listener: TcpListener, _db_pool: Arc<PgPool>) {
+pub async fn run_server(listener: TcpListener, _db_pool: PgPool) {
     let app = Router::new()
         .route("/", get(greet))
         .layer(

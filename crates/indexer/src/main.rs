@@ -1,13 +1,10 @@
-use std::sync::Arc;
-
 use lending_indexer::esplora_client::EsploraClient;
-use lending_indexer::indexer::run_indexer;
 use lending_indexer::telemetry::{get_subscriber, init_subscriber};
+use lending_indexer::{api, indexer};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 
 use lending_indexer::configuration::get_configuration;
-use lending_indexer::startup::run;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
@@ -15,25 +12,27 @@ async fn main() -> Result<(), std::io::Error> {
     init_subscriber(subscriber);
 
     let configuration = get_configuration().expect("Failed to read configuration");
+    let pool = PgPool::connect(&configuration.database.connection_string())
+        .await
+        .expect("Failed to connect to Postgres.");
 
-    let connection_pool = Arc::new(
-        PgPool::connect(&configuration.database.connection_string())
-            .await
-            .expect("Failed to connect to Postgres."),
-    );
+    let run_mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "api".into());
 
-    let address = format!("127.0.0.1:{}", configuration.application_port);
-    let listener = TcpListener::bind(address).await?;
+    match run_mode.as_str() {
+        "indexer" => {
+            let esplora_client = EsploraClient::with_base_url(&configuration.esplora.base_url);
 
-    let esplora_client = EsploraClient::with_base_url(&configuration.esplora.base_url);
+            tracing::info!("Starting indexer service");
+            indexer::worker::run_indexer(configuration.indexer, pool, esplora_client).await;
+        }
+        _ => {
+            let address = format!("127.0.0.1:{}", configuration.application_port);
+            let listener = TcpListener::bind(address).await?;
 
-    let indexer_db = Arc::clone(&connection_pool);
-
-    let _indexer_handle = tokio::spawn(async move {
-        run_indexer(configuration.indexer, indexer_db, esplora_client).await
-    });
-
-    run(listener, connection_pool).await;
+            tracing::info!("Starting api server");
+            api::server::run_server(listener, pool).await;
+        }
+    }
 
     Ok(())
 }
