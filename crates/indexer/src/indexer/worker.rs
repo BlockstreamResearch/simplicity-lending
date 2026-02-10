@@ -16,8 +16,6 @@ pub async fn run_indexer(settings: IndexerSettings, db_pool: PgPool, client: Esp
         .await
         .expect("Failed to load active utxos");
 
-    tracing::info!("Indexer started. Starting height: {}", current_height);
-
     loop {
         interval.tick().await;
 
@@ -32,8 +30,6 @@ pub async fn run_indexer(settings: IndexerSettings, db_pool: PgPool, client: Esp
         while current_height < latest_height {
             let next_height = current_height + 1;
 
-            tracing::info!("Processing block {}", next_height);
-
             match process_block(&db_pool, &client, &mut active_utxos, next_height).await {
                 Ok(_) => {
                     current_height = next_height;
@@ -43,11 +39,6 @@ pub async fn run_indexer(settings: IndexerSettings, db_pool: PgPool, client: Esp
                     break;
                 }
             }
-        }
-
-        match client.get_latest_block_height().await {
-            Ok(height) => tracing::info!("Current height is {height}"),
-            Err(error) => tracing::error!("Failed to get height: {error}"),
         }
     }
 }

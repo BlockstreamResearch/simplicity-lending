@@ -36,7 +36,7 @@ CREATE TABLE offers (
 );
 
 CREATE TYPE utxo_type AS ENUM (
-    'pre-lock',
+    'pre_lock',
     'lending',
     'cancellation',
     'repayment',
@@ -49,7 +49,7 @@ CREATE TABLE offer_utxos (
     txid BYTEA NOT NULL,
     vout INTEGER NOT NULL,
     PRIMARY KEY (txid, vout),
-    utxo_type utxo_type NOT NULL DEFAULT 'pre-lock',
+    utxo_type utxo_type NOT NULL DEFAULT 'pre_lock',
     created_at_height BIGINT NOT NULL,
     spent_txid BYTEA,
     spent_at_height BIGINT
