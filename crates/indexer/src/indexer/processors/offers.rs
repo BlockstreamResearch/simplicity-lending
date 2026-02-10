@@ -8,26 +8,16 @@ use lending_contracts::{
 };
 use uuid::Uuid;
 
-use crate::esplora_client::EsploraClient;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
-#[sqlx(type_name = "offer_status", rename_all = "lowercase")]
-pub enum OfferStatus {
-    Pending,
-    Active,
-    Repaid,
-    Liquidated,
-    Cancelled,
-    Claimed,
-}
+use crate::{esplora_client::EsploraClient, indexer::UtxoCache};
 
 #[tracing::instrument(
-    skip(db, client),
+    skip(db, client, _cache),
     fields(block_run_id = %Uuid::new_v4(), height = %block_height)
 )]
 pub async fn process_block(
     db: &PgPool,
     client: &EsploraClient,
+    _cache: &mut UtxoCache,
     block_height: u64,
 ) -> anyhow::Result<()> {
     let block_hash = client.get_block_hash_at_height(block_height).await?;
@@ -41,15 +31,6 @@ pub async fn process_block(
 
         process_pre_lock_tx(db, &tx, block_height).await?;
     }
-
-    sqlx::query!(
-        "INSERT INTO blocks_log (height, block_hash, tx_count) VALUES ($1, $2, $3)",
-        block_height as i64,
-        block_hash,
-        tx_count as i32,
-    )
-    .execute(&mut *tx)
-    .await?;
 
     sqlx::query!(
         r#"

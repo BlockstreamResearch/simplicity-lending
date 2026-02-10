@@ -7,13 +7,6 @@ CREATE TABLE sync_state (
     CONSTRAINT single_row CHECK (id = 1)
 );
 
-CREATE TABLE blocks_log (
-    height BIGINT PRIMARY KEY,
-    block_hash TEXT NOT NULL,
-    tx_count INTEGER NOT NULL,
-    indexed_at timestamptz DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TYPE offer_status AS ENUM (
     'pending',
     'active',
@@ -41,3 +34,27 @@ CREATE TABLE offers (
     created_at_height BIGINT NOT NULL,
     created_at_txid BYTEA NOT NULL UNIQUE
 );
+
+CREATE TYPE utxo_type AS ENUM (
+    'pre-lock',
+    'lending',
+    'cancellation',
+    'repayment',
+    'liquidation',
+    'claim'
+);
+
+CREATE TABLE offer_utxos (
+    offer_id uuid NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+    txid BYTEA NOT NULL,
+    vout INTEGER NOT NULL,
+    PRIMARY KEY (txid, vout),
+    utxo_type utxo_type NOT NULL DEFAULT 'pre-lock',
+    created_at_height BIGINT NOT NULL,
+    spent_txid BYTEA,
+    spent_at_height BIGINT
+);
+
+CREATE INDEX idx_offer_utxos_unspent 
+ON offer_utxos (txid, vout) 
+WHERE spent_txid IS NULL;

@@ -5,12 +5,16 @@ use tokio::time::interval;
 
 use crate::configuration::IndexerSettings;
 use crate::esplora_client::EsploraClient;
-use crate::indexer::{get_starting_height, process_block};
+use crate::indexer::{get_starting_height, load_active_utxos, process_block};
 
 pub async fn run_indexer(settings: IndexerSettings, db_pool: PgPool, client: EsploraClient) {
     let mut interval = interval(Duration::from_millis(settings.interval));
 
     let mut current_height = get_starting_height(&db_pool, settings.start_height).await;
+
+    let mut active_utxos = load_active_utxos(&db_pool)
+        .await
+        .expect("Failed to load active utxos");
 
     tracing::info!("Indexer started. Starting height: {}", current_height);
 
@@ -30,7 +34,7 @@ pub async fn run_indexer(settings: IndexerSettings, db_pool: PgPool, client: Esp
 
             tracing::info!("Processing block {}", next_height);
 
-            match process_block(&db_pool, &client, next_height).await {
+            match process_block(&db_pool, &client, &mut active_utxos, next_height).await {
                 Ok(_) => {
                     current_height = next_height;
                 }
