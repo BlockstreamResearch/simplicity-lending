@@ -150,7 +150,7 @@ pub async fn insert_offer_utxo(
 )]
 pub async fn spend_offer_utxo(
     sql_tx: &mut DbTx<'_>,
-    out_point: OutPoint,
+    out_point: &OutPoint,
     block_height: u64,
     txid: Txid,
 ) -> Result<(), sqlx::Error> {
@@ -193,8 +193,8 @@ pub async fn get_starting_height(db: &PgPool, config_height: u64) -> u64 {
 }
 
 pub struct ActiveUtxo {
-    _offer_id: Uuid,
-    _utxo_type: UtxoType,
+    pub offer_id: Uuid,
+    pub utxo_type: UtxoType,
 }
 
 pub type UtxoCache = HashMap<OutPoint, ActiveUtxo>;
@@ -236,8 +236,8 @@ pub async fn load_active_utxos(db: &PgPool) -> anyhow::Result<UtxoCache> {
         active_utxos.insert(
             outpoint,
             ActiveUtxo {
-                _offer_id: rec.offer_id,
-                _utxo_type: rec.utxo_type,
+                offer_id: rec.offer_id,
+                utxo_type: rec.utxo_type,
             },
         );
     }

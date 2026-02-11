@@ -12,13 +12,13 @@ use crate::{
 
 #[tracing::instrument(
     name = "Processing block",
-    skip(db, client, _cache),
+    skip(db, client, cache),
     fields(block_run_id = %Uuid::new_v4(), height = %block_height)
 )]
 pub async fn process_block(
     db: &PgPool,
     client: &EsploraClient,
-    _cache: &mut UtxoCache,
+    cache: &mut UtxoCache,
     block_height: u64,
 ) -> anyhow::Result<()> {
     let block_hash = client.get_block_hash_at_height(block_height).await?;
@@ -30,11 +30,10 @@ pub async fn process_block(
     for txid in txids {
         let tx = client.get_tx_by_id(txid).await?;
 
-        process_tx(&mut sql_tx, &tx, block_height).await?;
+        process_tx(&mut sql_tx, &tx, cache, block_height).await?;
     }
 
     db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
-
     sql_tx.commit().await?;
 
     tracing::info!(
@@ -48,15 +47,28 @@ pub async fn process_block(
 
 #[tracing::instrument(
     name = "Processing transaction",
-    skip(sql_tx, tx, block_height),
+    skip(sql_tx, tx, block_height, cache),
     fields(txid = %tx.txid().to_hex())
 )]
 pub async fn process_tx(
     sql_tx: &mut DbTx<'_>,
     tx: &Transaction,
+    cache: &mut UtxoCache,
     block_height: u64,
 ) -> anyhow::Result<()> {
     let txid = tx.txid();
+
+    for input in &tx.input {
+        if let Some(utxo_info) = cache.get(&input.previous_output) {
+            tracing::info!(
+                offer_id = %utxo_info.offer_id,
+                "Detected transition for offer from UTXO type {:?}",
+                utxo_info.utxo_type
+            );
+
+            return Ok(());
+        }
+    }
 
     if let Some(args) = is_pre_lock_creation_tx(tx) {
         tracing::info!("Found pre lock transaction - {txid}");

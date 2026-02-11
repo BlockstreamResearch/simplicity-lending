@@ -24,7 +24,7 @@ pub async fn handle_pre_lock_creation(
 
     db::insert_offer(sql_tx, &offer_model).await?;
 
-    let offer_utxo_model = OfferUtxoModel {
+    let pre_lock_offer_utxo = OfferUtxoModel {
         offer_id: offer_model.id,
         txid: txid.to_byte_array().to_vec(),
         vout: 0,
@@ -34,7 +34,7 @@ pub async fn handle_pre_lock_creation(
         spent_txid: None,
     };
 
-    db::insert_offer_utxo(sql_tx, &offer_utxo_model).await?;
+    db::insert_offer_utxo(sql_tx, &pre_lock_offer_utxo).await?;
 
     Ok(())
 }
