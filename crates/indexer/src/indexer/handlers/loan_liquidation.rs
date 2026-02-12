@@ -1,34 +1,34 @@
 use simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
+use uuid::Uuid;
 
 use crate::indexer::db;
 use crate::models::{OfferUtxoModel, UtxoType};
 use crate::{
     db::DbTx,
-    indexer::{ActiveUtxo, UtxoCache},
-    models::OfferStatus,
+    models::{OfferStatus, UtxoCache},
 };
 
 #[tracing::instrument(
     name = "Handling offer liquidation",
-    skip(sql_tx, cache, old_outpoint, utxo_info, txid, block_height),
-    fields(offer_id = %utxo_info.offer_id, %txid, %block_height),
+    skip(sql_tx, cache, old_outpoint, offer_id, txid, block_height),
+    fields(%offer_id, %txid, %block_height),
 )]
 pub async fn handle_loan_liquidation(
     sql_tx: &mut DbTx<'_>,
     cache: &mut UtxoCache,
     old_outpoint: &OutPoint,
-    utxo_info: &ActiveUtxo,
+    offer_id: Uuid,
     txid: Txid,
     block_height: u64,
 ) -> anyhow::Result<()> {
     db::spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
     cache.remove(old_outpoint);
 
-    db::update_offer_status(sql_tx, utxo_info.offer_id, OfferStatus::Liquidated).await?;
+    db::update_offer_status(sql_tx, offer_id, OfferStatus::Liquidated).await?;
 
     let repayment_outpoint = OutPoint { txid, vout: 0 };
     let repayment_utxo = OfferUtxoModel {
-        offer_id: utxo_info.offer_id,
+        offer_id,
         txid: repayment_outpoint.txid.to_byte_array().to_vec(),
         vout: repayment_outpoint.vout as i32,
         utxo_type: UtxoType::Repayment,
@@ -43,7 +43,7 @@ pub async fn handle_loan_liquidation(
 
     db::insert_offer_utxo(sql_tx, &repayment_utxo).await?;
 
-    tracing::info!(offer_id = %utxo_info.offer_id, "Offer archived");
+    tracing::info!(%offer_id, "Offer archived");
     Ok(())
 }
 

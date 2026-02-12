@@ -1,8 +1,26 @@
+use std::collections::HashMap;
+
 use uuid::Uuid;
 
-use simplicityhl::elements::{Txid, hashes::Hash};
+use simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
 
 use lending_contracts::pre_lock::build_arguments::PreLockArguments;
+
+use crate::models::{ParticipantType, UtxoType};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UtxoData {
+    Offer(UtxoType),
+    Participant(ParticipantType),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActiveUtxo {
+    pub offer_id: Uuid,
+    pub data: UtxoData,
+}
+
+pub type UtxoCache = HashMap<OutPoint, ActiveUtxo>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
 #[sqlx(type_name = "offer_status", rename_all = "lowercase")]

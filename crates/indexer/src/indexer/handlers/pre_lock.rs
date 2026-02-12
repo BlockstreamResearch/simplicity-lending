@@ -1,29 +1,44 @@
-use simplicityhl::elements::{Transaction, Txid, hashes::Hash};
+use simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
 
 use lending_contracts::{
     pre_lock::{build_arguments::PreLockArguments, get_pre_lock_address},
     sdk::{extract_arguments_from_tx, taproot_unspendable_internal_key},
 };
 
-use crate::db::DbTx;
 use crate::indexer::db;
 use crate::models::{OfferModel, OfferUtxoModel, UtxoType};
+use crate::{
+    db::DbTx,
+    models::{ActiveUtxo, OfferParticipantModel, ParticipantType, UtxoCache, UtxoData},
+};
 
 #[tracing::instrument(
     name = "Handling pre lock creation transaction",
-    skip(sql_tx, pre_lock_args, txid, block_height),
-    fields(%txid, %block_height),
+    skip(sql_tx, pre_lock_args, tx, block_height),
+    fields(txid = %tx.txid(), %block_height),
 )]
 pub async fn handle_pre_lock_creation(
     sql_tx: &mut DbTx<'_>,
+    cache: &mut UtxoCache,
     pre_lock_args: PreLockArguments,
-    txid: Txid,
+    tx: &Transaction,
     block_height: u64,
 ) -> anyhow::Result<()> {
+    let txid = tx.txid();
+
+    if tx.output.len() < 7 {
+        return Err(anyhow::anyhow!(
+            "Malformed PreLock transaction {}: expected at least 6 outputs, found {}",
+            txid,
+            tx.output.len()
+        ));
+    }
+
     let offer_model = OfferModel::new(&pre_lock_args, block_height, txid);
 
     db::insert_offer(sql_tx, &offer_model).await?;
 
+    let pre_lock_outpoint = OutPoint { txid, vout: 0 };
     let pre_lock_offer_utxo = OfferUtxoModel {
         offer_id: offer_model.id,
         txid: txid.to_byte_array().to_vec(),
@@ -35,6 +50,53 @@ pub async fn handle_pre_lock_creation(
     };
 
     db::insert_offer_utxo(sql_tx, &pre_lock_offer_utxo).await?;
+    cache.insert(
+        pre_lock_outpoint,
+        ActiveUtxo {
+            offer_id: offer_model.id,
+            data: UtxoData::Offer(UtxoType::PreLock),
+        },
+    );
+
+    let borrower_nft_outpoint = OutPoint { txid, vout: 3 };
+    let borrower_participant_utxo = OfferParticipantModel {
+        offer_id: offer_model.id,
+        participant_type: ParticipantType::Borrower,
+        script_pubkey: tx.output[3].script_pubkey.to_bytes().to_vec(),
+        txid: txid.to_byte_array().to_vec(),
+        vout: borrower_nft_outpoint.vout as i32,
+        created_at_height: block_height as i64,
+        spent_txid: None,
+        spent_at_height: None,
+    };
+    db::insert_participant_utxo(sql_tx, &borrower_participant_utxo).await?;
+    cache.insert(
+        borrower_nft_outpoint,
+        ActiveUtxo {
+            offer_id: offer_model.id,
+            data: UtxoData::Participant(ParticipantType::Borrower),
+        },
+    );
+
+    let lender_nft_outpoint = OutPoint { txid, vout: 4 };
+    let lender_participant_utxo = OfferParticipantModel {
+        offer_id: offer_model.id,
+        participant_type: ParticipantType::Lender,
+        script_pubkey: tx.output[4].script_pubkey.to_bytes().to_vec(),
+        txid: txid.to_byte_array().to_vec(),
+        vout: lender_nft_outpoint.vout as i32,
+        created_at_height: block_height as i64,
+        spent_txid: None,
+        spent_at_height: None,
+    };
+    db::insert_participant_utxo(sql_tx, &lender_participant_utxo).await?;
+    cache.insert(
+        lender_nft_outpoint,
+        ActiveUtxo {
+            offer_id: offer_model.id,
+            data: UtxoData::Participant(ParticipantType::Lender),
+        },
+    );
 
     Ok(())
 }

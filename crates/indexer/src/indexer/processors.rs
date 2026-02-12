@@ -7,7 +7,8 @@ use uuid::Uuid;
 use crate::{
     db::DbTx,
     esplora_client::EsploraClient,
-    indexer::{UtxoCache, db, handlers, is_pre_lock_creation_tx},
+    indexer::{db, handlers, is_pre_lock_creation_tx},
+    models::{UtxoCache, UtxoData},
 };
 
 #[tracing::instrument(
@@ -56,23 +57,42 @@ pub async fn process_tx(
     cache: &mut UtxoCache,
     block_height: u64,
 ) -> anyhow::Result<()> {
-    let txid = tx.txid();
+    let mut is_offer_tx = false;
 
     for input in &tx.input {
         if let Some(utxo_info) = cache.get(&input.previous_output) {
-            tracing::info!(
-                offer_id = %utxo_info.offer_id,
-                "Detected transition for offer from UTXO type {:?}",
-                utxo_info.utxo_type
-            );
-
-            return Ok(());
+            match utxo_info.data {
+                UtxoData::Offer(utxo_type) => {
+                    handlers::handle_offer_transition(
+                        sql_tx,
+                        tx,
+                        cache,
+                        &input.previous_output,
+                        utxo_info.offer_id,
+                        utxo_type,
+                        block_height,
+                    )
+                    .await?;
+                    is_offer_tx = true;
+                }
+                UtxoData::Participant(participant_type) => {
+                    handlers::handle_participant_movement(
+                        sql_tx,
+                        tx,
+                        cache,
+                        &input.previous_output,
+                        utxo_info.offer_id,
+                        participant_type,
+                        block_height,
+                    )
+                    .await?;
+                }
+            }
         }
     }
 
-    if let Some(args) = is_pre_lock_creation_tx(tx) {
-        tracing::info!("Found pre lock transaction - {txid}");
-        handlers::pre_lock::handle_pre_lock_creation(sql_tx, args, txid, block_height).await?;
+    if !is_offer_tx && let Some(args) = is_pre_lock_creation_tx(tx) {
+        handlers::pre_lock::handle_pre_lock_creation(sql_tx, cache, args, tx, block_height).await?;
     }
 
     Ok(())

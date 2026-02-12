@@ -46,15 +46,42 @@ CREATE TYPE utxo_type AS ENUM (
 
 CREATE TABLE offer_utxos (
     offer_id uuid NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+    utxo_type utxo_type NOT NULL DEFAULT 'pre_lock',
+
     txid BYTEA NOT NULL,
     vout INTEGER NOT NULL,
-    PRIMARY KEY (txid, vout),
-    utxo_type utxo_type NOT NULL DEFAULT 'pre_lock',
     created_at_height BIGINT NOT NULL,
+
     spent_txid BYTEA,
-    spent_at_height BIGINT
+    spent_at_height BIGINT,
+
+    PRIMARY KEY (txid, vout)
 );
 
 CREATE INDEX idx_offer_utxos_unspent 
 ON offer_utxos (txid, vout) 
+WHERE spent_txid IS NULL;
+
+CREATE TYPE participant_type AS ENUM (
+    'borrower',
+    'lender'
+);
+
+CREATE TABLE offer_participants (
+    offer_id uuid NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+    participant_type participant_type NOT NULL,
+    script_pubkey BYTEA NOT NULL,
+
+    txid BYTEA NOT NULL,
+    vout INTEGER NOT NULL,
+    created_at_height BIGINT NOT NULL,
+
+    spent_txid BYTEA,
+    spent_at_height BIGINT,
+
+    PRIMARY KEY (txid, vout)
+);
+
+CREATE INDEX idx_participants_current_owner 
+ON offer_participants(script_pubkey) 
 WHERE spent_txid IS NULL;

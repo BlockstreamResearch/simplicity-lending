@@ -1,18 +1,16 @@
 use simplicityhl::elements::{OutPoint, Transaction, hex::ToHex};
+use uuid::Uuid;
 
 use crate::indexer::handlers::{handle_lending_creation, handle_offer_cancellation};
 use crate::indexer::{
     handle_loan_liquidation, handle_loan_repayment, handle_repayment_claim, is_loan_repayment_tx,
 };
 use crate::models::UtxoType;
-use crate::{
-    db::DbTx,
-    indexer::{ActiveUtxo, UtxoCache, is_offer_cancellation_tx},
-};
+use crate::{db::DbTx, indexer::is_offer_cancellation_tx, models::UtxoCache};
 
 #[tracing::instrument(
     name = "Handling offer status transition",
-    skip(sql_tx, tx, cache, old_outpoint, utxo_info),
+    skip(sql_tx, tx, cache, old_outpoint, offer_id, utxo_type),
     fields(out_point = %old_outpoint, txid = %tx.txid().to_hex()),
 )]
 pub async fn handle_offer_transition(
@@ -20,17 +18,18 @@ pub async fn handle_offer_transition(
     tx: &Transaction,
     cache: &mut UtxoCache,
     old_outpoint: &OutPoint,
-    utxo_info: &ActiveUtxo,
+    offer_id: Uuid,
+    utxo_type: UtxoType,
     block_height: u64,
 ) -> anyhow::Result<()> {
-    match utxo_info.utxo_type {
+    match utxo_type {
         UtxoType::PreLock => {
             if is_offer_cancellation_tx(tx) {
                 handle_offer_cancellation(
                     sql_tx,
                     cache,
                     old_outpoint,
-                    utxo_info,
+                    offer_id,
                     tx.txid(),
                     block_height,
                 )
@@ -40,7 +39,7 @@ pub async fn handle_offer_transition(
                     sql_tx,
                     cache,
                     old_outpoint,
-                    utxo_info,
+                    offer_id,
                     tx.txid(),
                     block_height,
                 )
@@ -53,7 +52,7 @@ pub async fn handle_offer_transition(
                     sql_tx,
                     cache,
                     old_outpoint,
-                    utxo_info,
+                    offer_id,
                     tx.txid(),
                     block_height,
                 )
@@ -63,7 +62,7 @@ pub async fn handle_offer_transition(
                     sql_tx,
                     cache,
                     old_outpoint,
-                    utxo_info,
+                    offer_id,
                     tx.txid(),
                     block_height,
                 )
@@ -75,17 +74,14 @@ pub async fn handle_offer_transition(
                 sql_tx,
                 cache,
                 old_outpoint,
-                utxo_info,
+                offer_id,
                 tx.txid(),
                 block_height,
             )
             .await
         }
         _ => {
-            tracing::warn!(
-                "Unexpected transition for UTXO type: {:?}",
-                utxo_info.utxo_type
-            );
+            tracing::warn!("Unexpected transition for UTXO type: {:?}", utxo_type);
 
             Ok(())
         }
