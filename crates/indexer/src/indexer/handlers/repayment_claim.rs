@@ -24,7 +24,7 @@ pub async fn handle_repayment_claim(
     db::spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
     cache.remove(old_outpoint);
 
-    db::update_offer_status(sql_tx, offer_id, OfferStatus::Cancelled).await?;
+    db::update_offer_status(sql_tx, offer_id, OfferStatus::Claimed).await?;
 
     let claim_outpoint = OutPoint { txid, vout: 1 };
 

@@ -47,6 +47,16 @@ pub async fn handle_participant_movement(
     });
 
     if let Some((vout, script_pubkey)) = found_output {
+        if script_pubkey.is_op_return() {
+            tracing::info!(
+                %offer_id,
+                ?participant_type,
+                "NFT sent to OP_RETURN. Marking as burned and NOT inserting new record."
+            );
+
+            return Ok(());
+        }
+
         let new_outpoint = OutPoint { txid, vout };
 
         let new_participant = OfferParticipantModel {

@@ -26,7 +26,7 @@ pub async fn handle_loan_repayment(
 
     db::update_offer_status(sql_tx, offer_id, OfferStatus::Repaid).await?;
 
-    let repayment_outpoint = OutPoint { txid, vout: 0 };
+    let repayment_outpoint = OutPoint { txid, vout: 1 };
     let repayment_utxo = OfferUtxoModel {
         offer_id,
         txid: repayment_outpoint.txid.to_byte_array().to_vec(),

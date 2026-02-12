@@ -123,14 +123,16 @@ pub async fn insert_offer_utxo(
     sqlx::query!(
         r#"
         INSERT INTO offer_utxos (
-            offer_id, txid, vout, utxo_type, created_at_height
-        ) VALUES ($1, $2, $3, $4, $5)
+            offer_id, txid, vout, utxo_type, created_at_height, spent_txid, spent_at_height
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         "#,
         offer_utxo.offer_id,
         offer_utxo.txid,
         offer_utxo.vout,
         offer_utxo.utxo_type as UtxoType,
-        offer_utxo.created_at_height
+        offer_utxo.created_at_height,
+        offer_utxo.spent_txid,
+        offer_utxo.spent_at_height,
     )
     .execute(&mut **sql_tx)
     .await
@@ -188,8 +190,9 @@ pub async fn insert_participant_utxo(
     sqlx::query!(
         r#"
         INSERT INTO offer_participants (
-            offer_id, participant_type, script_pubkey, txid, vout, created_at_height
-        ) VALUES ($1, $2, $3, $4, $5, $6)
+            offer_id, participant_type, script_pubkey, txid, vout, created_at_height, spent_txid,
+            spent_at_height
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         "#,
         participant_utxo.offer_id,
         participant_utxo.participant_type as ParticipantType,
@@ -197,6 +200,8 @@ pub async fn insert_participant_utxo(
         participant_utxo.txid,
         participant_utxo.vout,
         participant_utxo.created_at_height,
+        participant_utxo.spent_txid,
+        participant_utxo.spent_at_height,
     )
     .execute(&mut **sql_tx)
     .await
