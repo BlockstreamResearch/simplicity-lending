@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
@@ -22,8 +23,9 @@ pub struct ActiveUtxo {
 
 pub type UtxoCache = HashMap<OutPoint, ActiveUtxo>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "offer_status", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum OfferStatus {
     Pending,
     Active,
@@ -36,7 +38,7 @@ pub enum OfferStatus {
 #[derive(Debug, sqlx::FromRow)]
 pub struct OfferModel {
     pub id: Uuid,
-    pub borrower_pub_key: Vec<u8>,
+    pub borrower_pubkey: Vec<u8>,
     pub collateral_asset_id: Vec<u8>,
     pub principal_asset_id: Vec<u8>,
     pub first_parameters_nft_asset_id: Vec<u8>,
@@ -58,7 +60,7 @@ impl OfferModel {
 
         Self {
             id: Uuid::new_v4(),
-            borrower_pub_key: pre_lock_args.collateral_asset_id().to_vec(),
+            borrower_pubkey: pre_lock_args.collateral_asset_id().to_vec(),
             collateral_asset_id: pre_lock_args.collateral_asset_id().to_vec(),
             principal_asset_id: pre_lock_args.principal_asset_id().to_vec(),
             first_parameters_nft_asset_id: pre_lock_args.first_parameters_nft_asset_id().to_vec(),
@@ -74,4 +76,18 @@ impl OfferModel {
             created_at_txid: txid.as_byte_array().to_vec(),
         }
     }
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct OfferModelShort {
+    pub id: Uuid,
+    pub collateral_asset_id: Vec<u8>,
+    pub principal_asset_id: Vec<u8>,
+    pub collateral_amount: i64,
+    pub principal_amount: i64,
+    pub interest_rate: i32,
+    pub loan_expiration_time: i32,
+    pub current_status: OfferStatus,
+    pub created_at_height: i64,
+    pub created_at_txid: Vec<u8>,
 }

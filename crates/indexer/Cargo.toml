@@ -26,7 +26,7 @@ tracing-log = "0.2"
 tracing-bunyan-formatter = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.5", features = ["trace", "request-id"] }
-uuid = { version= "1", features = ["v4"] }
+uuid = { version= "1", features = ["v4", "serde"] }
 config = { version = "0.15.16", default-features = true }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
 serde = { version= "1", features = ["derive"]}

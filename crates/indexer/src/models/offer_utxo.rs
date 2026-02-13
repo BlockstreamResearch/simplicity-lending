@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "utxo_type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum UtxoType {
     PreLock,
     Lending,

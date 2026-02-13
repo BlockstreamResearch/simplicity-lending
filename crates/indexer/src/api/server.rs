@@ -1,14 +1,38 @@
+use std::sync::Arc;
+
 use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
-use crate::api::routes::greet;
+use crate::api::handlers::{
+    get_latest_offer_participants, get_offer_details, get_offer_participants_history,
+    get_offer_utxos_history, get_offers_full_info, get_offers_short_info, greet,
+};
 
-pub async fn run_server(listener: TcpListener, _db_pool: PgPool) {
+pub struct AppState {
+    pub db: PgPool,
+}
+
+pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
+    let state = Arc::new(AppState { db: db_pool });
+
     let app = Router::new()
         .route("/", get(greet))
+        .route("/offers", get(get_offers_short_info))
+        .route("/offers/full", get(get_offers_full_info))
+        .route("/offers/{id}", get(get_offer_details))
+        .route(
+            "/offers/{id}/participants/history",
+            get(get_offer_participants_history),
+        )
+        .route(
+            "/offers/{id}/participants",
+            get(get_latest_offer_participants),
+        )
+        .route("/offers/{id}/utxos", get(get_offer_utxos_history))
+        .with_state(state)
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
                 let request_id = request

@@ -19,7 +19,7 @@ CREATE TYPE offer_status AS ENUM (
 CREATE TABLE offers (
     id uuid NOT NULL,
     PRIMARY KEY (id),
-    borrower_pub_key BYTEA NOT NULL,
+    borrower_pubkey BYTEA NOT NULL,
     collateral_asset_id BYTEA NOT NULL,
     principal_asset_id BYTEA NOT NULL,
     first_parameters_nft_asset_id BYTEA NOT NULL,
