@@ -1,14 +1,18 @@
 use std::sync::Arc;
 
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
 use crate::api::handlers::{
-    get_latest_offer_participants, get_offer_details, get_offer_participants_history,
-    get_offer_utxos_history, get_offers_full_info, get_offers_short_info, greet,
+    get_latest_offer_participants, get_offer_details, get_offer_details_batch,
+    get_offer_ids_by_script, get_offer_participants_history, get_offer_utxos_history,
+    get_offers_full_info, get_offers_short_info, greet,
 };
 
 pub struct AppState {
@@ -22,6 +26,8 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
         .route("/", get(greet))
         .route("/offers", get(get_offers_short_info))
         .route("/offers/full", get(get_offers_full_info))
+        .route("/offers/batch", post(get_offer_details_batch))
+        .route("/offers/by-script", post(get_offer_ids_by_script))
         .route("/offers/{id}", get(get_offer_details))
         .route(
             "/offers/{id}/participants/history",

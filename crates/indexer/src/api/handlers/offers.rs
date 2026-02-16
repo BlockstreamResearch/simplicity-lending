@@ -6,25 +6,25 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::api::dto::{OfferListItemFull, OfferListItemShort};
-use crate::api::{ApiError, AppState, Pagination, db, dto::OfferDetailsResponse};
+use crate::api::dto::{BatchIdsRequest, OfferListItemFull, OfferListItemShort};
+use crate::api::{ApiError, AppState, OfferFilters, db, dto::OfferDetailsResponse};
 
-#[tracing::instrument(name = "Getting offers short info", skip(state, pagination))]
+#[tracing::instrument(name = "Getting offers short info", skip(state, filters))]
 pub async fn get_offers_short_info(
     State(state): State<Arc<AppState>>,
-    Query(pagination): Query<Pagination>,
+    Query(filters): Query<OfferFilters>,
 ) -> Result<Json<Vec<OfferListItemShort>>, ApiError> {
-    let offers = db::fetch_offers_short_info_list(&state.db, pagination).await?;
+    let offers = db::fetch_offers_short_info_filtered(&state.db, filters).await?;
 
     Ok(Json(offers))
 }
 
-#[tracing::instrument(name = "Getting offers full info", skip(state, pagination))]
+#[tracing::instrument(name = "Getting offers full info", skip(state, filters))]
 pub async fn get_offers_full_info(
     State(state): State<Arc<AppState>>,
-    Query(pagination): Query<Pagination>,
+    Query(filters): Query<OfferFilters>,
 ) -> Result<Json<Vec<OfferListItemFull>>, ApiError> {
-    let offers = db::fetch_offers_full_info_list(&state.db, pagination).await?;
+    let offers = db::fetch_offers_full_info_filtered(&state.db, filters).await?;
 
     Ok(Json(offers))
 }
@@ -44,4 +44,19 @@ pub async fn get_offer_details(
         info: offer_info,
         participants,
     }))
+}
+
+#[tracing::instrument(
+    name = "Getting offer details by ids",
+    skip(state, payload),
+    fields(
+        request_ids_count = %payload.ids.len()
+    )
+)]
+pub async fn get_offer_details_batch(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BatchIdsRequest>,
+) -> Result<Json<Vec<OfferDetailsResponse>>, ApiError> {
+    let result = db::fetch_offer_details_by_ids(&state.db, &payload.ids).await?;
+    Ok(Json(result))
 }

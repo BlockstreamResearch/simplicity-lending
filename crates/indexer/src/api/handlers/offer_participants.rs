@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
 };
 use uuid::Uuid;
 
-use crate::api::dto::ParticipantDto;
+use crate::api::dto::{ParticipantDto, ScriptQuery};
 use crate::api::{ApiError, AppState, db};
 
 #[tracing::instrument(
@@ -38,4 +38,17 @@ pub async fn get_latest_offer_participants(
     }
 
     Ok(Json(latest_participants))
+}
+
+#[tracing::instrument(name = "Getting offer ids by script", skip(state, query))]
+pub async fn get_offer_ids_by_script(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ScriptQuery>,
+) -> Result<Json<Vec<Uuid>>, ApiError> {
+    let script_bytes = hex::decode(&query.script_pubkey)
+        .map_err(|_| ApiError::BadRequest("Invalid script_pubkey hex".to_string()))?;
+
+    let ids = db::fetch_offer_ids_by_script(&state.db, &script_bytes).await?;
+
+    Ok(Json(ids))
 }

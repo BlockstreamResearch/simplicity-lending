@@ -32,3 +32,8 @@ impl From<OfferParticipantModel> for ParticipantDto {
         }
     }
 }
+
+#[derive(serde::Deserialize)]
+pub struct ScriptQuery {
+    pub script_pubkey: String,
+}

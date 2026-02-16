@@ -73,6 +73,11 @@ impl From<OfferModel> for OfferListItemFull {
     }
 }
 
+#[derive(serde::Deserialize, Debug)]
+pub struct BatchIdsRequest {
+    pub ids: Vec<Uuid>,
+}
+
 #[derive(Serialize)]
 pub struct OfferDetailsResponse {
     #[serde(flatten)]
