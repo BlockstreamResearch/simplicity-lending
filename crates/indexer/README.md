@@ -88,7 +88,8 @@ indexer:
   start_height: 2309541
 ```
 
-[!TIP] If `sqlx` fails to detect the `DATABASE_URL` environment variable while you are using VS Code with the `rust-analyzer` extension, you may need to restart the extension or the editor itself to refresh the environment context.
+> [!TIP]
+> If `sqlx` fails to detect the `DATABASE_URL` environment variable while you are using VS Code with the `rust-analyzer` extension, you may need to restart the extension or the editor itself to refresh the environment context.
 
 ### Database Setup
 
@@ -122,11 +123,11 @@ RUN_MODE=api cargo run -p lending-indexer
 cargo run -p lending-indexer
 ```
 
-[!TIP] For readable, pretty-printed logs in your console, pipe the output to bunyan.
-If you don't have it installed, run `cargo install bunyan`:
-```bash
-RUN_MODE=indexer cargo run -p lending-indexer | bunyan
-```
+> [!TIP]
+> For readable, pretty-printed logs in your console, pipe the output to bunyan. If you don't have it installed, run `cargo install bunyan`:
+> ```bash
+> RUN_MODE=indexer cargo run -p lending-indexer | bunyan
+> ```
 
 ## Development & Testing
 
