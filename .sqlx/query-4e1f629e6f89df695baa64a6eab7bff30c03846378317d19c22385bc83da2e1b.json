@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE offers SET current_status = $1 WHERE id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "offer_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "active",
+                "repaid",
+                "liquidated",
+                "cancelled",
+                "claimed"
+              ]
+            }
+          }
+        },
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4e1f629e6f89df695baa64a6eab7bff30c03846378317d19c22385bc83da2e1b"
+}

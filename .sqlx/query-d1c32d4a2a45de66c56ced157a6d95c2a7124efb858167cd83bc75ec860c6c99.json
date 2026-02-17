@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT DISTINCT ON (offer_id, participant_type)\n            offer_id, participant_type AS \"participant_type: ParticipantType\",\n            script_pubkey, txid, vout, created_at_height, spent_txid, spent_at_height\n        FROM offer_participants\n        WHERE offer_id = ANY($1)\n        ORDER BY offer_id, participant_type, created_at_height DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "offer_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "participant_type: ParticipantType",
+        "type_info": {
+          "Custom": {
+            "name": "participant_type",
+            "kind": {
+              "Enum": [
+                "borrower",
+                "lender"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "script_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "vout",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "spent_txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 7,
+        "name": "spent_at_height",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "d1c32d4a2a45de66c56ced157a6d95c2a7124efb858167cd83bc75ec860c6c99"
+}

@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            offer_id, \n            txid, \n            vout, \n            utxo_type AS \"utxo_type: UtxoType\", \n            created_at_height, \n            spent_txid, \n            spent_at_height\n        FROM offer_utxos \n        WHERE spent_txid IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "offer_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "vout",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "utxo_type: UtxoType",
+        "type_info": {
+          "Custom": {
+            "name": "utxo_type",
+            "kind": {
+              "Enum": [
+                "pre_lock",
+                "lending",
+                "cancellation",
+                "repayment",
+                "liquidation",
+                "claim"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "spent_txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
+        "name": "spent_at_height",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "55466b4753b467252554afaaed68a9b1ca89a46532fa6087f59cc1704f7c8f50"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT borrower_nft_asset_id, lender_nft_asset_id FROM offers WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "borrower_nft_asset_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "lender_nft_asset_id",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "df565db5aeaf3f1871374e4286ef8177d078e1a65d1fd4964bdf7edee7bf9457"
+}

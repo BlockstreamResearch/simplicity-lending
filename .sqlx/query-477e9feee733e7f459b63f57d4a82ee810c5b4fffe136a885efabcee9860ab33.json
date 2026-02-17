@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO offer_participants (\n            offer_id, participant_type, script_pubkey, txid, vout, created_at_height, spent_txid,\n            spent_at_height\n        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "participant_type",
+            "kind": {
+              "Enum": [
+                "borrower",
+                "lender"
+              ]
+            }
+          }
+        },
+        "Bytea",
+        "Bytea",
+        "Int4",
+        "Int8",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "477e9feee733e7f459b63f57d4a82ee810c5b4fffe136a885efabcee9860ab33"
+}
