@@ -6,6 +6,7 @@ use axum::{
 };
 use sqlx::PgPool;
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
@@ -38,6 +39,7 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
         )
         .route("/offers/{id}/utxos", get(get_offer_utxos_history))
         .with_state(state)
+        .layer(CorsLayer::permissive())
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {
                 let request_id = request
