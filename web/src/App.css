@@ -59,9 +59,76 @@
   text-transform: capitalize;
 }
 
-.status-active { background: #e0f7e0; color: #0a0; }
-.status-pending { background: #fff3e0; color: #e65100; }
-.status-repaid { background: #e3f2fd; color: #1976d2; }
-.status-liquidated { background: #ffebee; color: #c62828; }
-.status-cancelled { background: #f5f5f5; color: #616161; }
-.status-claimed { background: #e8f5e9; color: #2e7d32; }
+.status-active {
+  background: #e0f7e0;
+  color: #0a0;
+}
+.status-pending {
+  background: #fff3e0;
+  color: #e65100;
+}
+.status-repaid {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+.status-liquidated {
+  background: #ffebee;
+  color: #c62828;
+}
+.status-cancelled {
+  background: #f5f5f5;
+  color: #616161;
+}
+.status-claimed {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* Seed gate (first visit) */
+.seed-gate .seed-form {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.seed-gate .seed-input {
+  flex: 1;
+  max-width: 400px;
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+}
+
+.seed-gate .seed-submit {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.seed-hint {
+  color: #888;
+  font-size: 0.9em;
+  margin-top: 1rem;
+}
+
+/* Nav */
+.nav {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.5rem;
+}
+
+.nav a {
+  color: #666;
+  text-decoration: none;
+}
+
+.nav a:hover,
+.nav a.active {
+  color: #000;
+}
+
+.nav a.active {
+  font-weight: 600;
+}

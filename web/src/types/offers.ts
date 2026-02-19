@@ -1,11 +1,5 @@
 /** Offer status from indexer API (lowercase) */
-export type OfferStatus =
-  | 'pending'
-  | 'active'
-  | 'repaid'
-  | 'liquidated'
-  | 'cancelled'
-  | 'claimed'
+export type OfferStatus = 'pending' | 'active' | 'repaid' | 'liquidated' | 'cancelled' | 'claimed'
 
 /**
  * Short offer item from GET /offers.
