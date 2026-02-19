@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { SeedContext } from './SeedContext'
 import { parseSeedHex } from './utility/seed'
-import './App.css'
 
 type Props = { children: React.ReactNode }
 
@@ -24,10 +23,10 @@ export function SeedGate({ children }: Props) {
 
   if (seedHex === null) {
     return (
-      <div className="page seed-gate">
-        <h1>Simplicity Lending</h1>
-        <p className="subtitle">Demo signer: enter SEED_HEX (32 bytes, 64 hex chars)</p>
-        <form onSubmit={handleSubmit} className="seed-form">
+      <div className="max-w-5xl mx-auto px-8 py-8">
+        <h1 className="mb-1">Simplicity Lending</h1>
+        <p className="text-gray-600 mb-6">Demo signer: enter SEED_HEX (32 bytes, 64 hex chars)</p>
+        <form onSubmit={handleSubmit} className="flex gap-3 mb-4">
           <input
             type="password"
             inputMode="text"
@@ -35,14 +34,14 @@ export function SeedGate({ children }: Props) {
             placeholder="SEED_HEX"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            className="seed-input"
+            className="flex-1 max-w-md px-3 py-2 font-mono text-sm border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
           />
-          <button type="submit" className="seed-submit">
-            Вперёд
-          </button>
+          <button type="submit">Continue</button>
         </form>
-        {error && <p className="error">{error}</p>}
-        <p className="seed-hint">Only for testing. No real wallet yet. Seed is not persisted.</p>
+        {error && <p className="text-red-700 bg-red-50 p-4 rounded-lg">{error}</p>}
+        <p className="text-gray-500 text-sm mt-4">
+          Only for testing. No real wallet yet. Seed is not persisted.
+        </p>
       </div>
     )
   }

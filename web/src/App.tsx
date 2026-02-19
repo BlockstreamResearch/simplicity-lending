@@ -1,9 +1,17 @@
 import { useState } from 'react'
 import { SeedGate } from './SeedGate'
 import { fetchOffers } from './api/client'
-import type { OfferShort } from './types/offers'
+import type { OfferShort, OfferStatus } from './types/offers'
 import { Utility } from './pages/Utility'
-import './App.css'
+
+const STATUS_CLASSES: Record<OfferStatus, string> = {
+  active: 'bg-green-100 text-green-800',
+  pending: 'bg-amber-100 text-amber-800',
+  repaid: 'bg-blue-100 text-blue-800',
+  liquidated: 'bg-red-100 text-red-800',
+  cancelled: 'bg-gray-100 text-gray-700',
+  claimed: 'bg-green-100 text-green-800',
+}
 
 type Tab = 'offers' | 'utility'
 
@@ -28,12 +36,14 @@ function AppContent() {
   }
 
   return (
-    <div className="page">
-      <h1>Simplicity Lending</h1>
-      <nav className="nav">
+    <div className="max-w-5xl mx-auto px-8 py-8">
+      <h1 className="mb-1">Simplicity Lending</h1>
+      <nav className="flex gap-4 mb-6 border-b border-gray-200 pb-2">
         <a
           href="#offers"
-          className={tab === 'offers' ? 'active' : ''}
+          className={
+            tab === 'offers' ? 'font-semibold text-gray-900' : 'text-gray-600 hover:text-gray-900'
+          }
           onClick={(e) => {
             e.preventDefault()
             handleTab('offers')
@@ -43,7 +53,9 @@ function AppContent() {
         </a>
         <a
           href="#utility"
-          className={tab === 'utility' ? 'active' : ''}
+          className={
+            tab === 'utility' ? 'font-semibold text-gray-900' : 'text-gray-600 hover:text-gray-900'
+          }
           onClick={(e) => {
             e.preventDefault()
             handleTab('utility')
@@ -55,42 +67,62 @@ function AppContent() {
 
       {tab === 'offers' && (
         <>
-          <p className="subtitle">Lending offers</p>
+          <p className="text-gray-600 mb-6">Lending offers</p>
           {loading && <p>Loading offers…</p>}
           {error && (
-            <p className="error">
+            <p className="text-red-700 bg-red-50 p-4 rounded-lg">
               Failed to load offers: {error}. Make sure the indexer API is running and CORS is
               enabled.
             </p>
           )}
-          {!loading && !error && offers.length === 0 && <p className="empty">No offers yet.</p>}
+          {!loading && !error && offers.length === 0 && (
+            <p className="text-gray-600">No offers yet.</p>
+          )}
           {!loading && !error && offers.length > 0 && (
-            <table className="offers-table">
+            <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th>Status</th>
-                  <th>Collateral</th>
-                  <th>Principal</th>
-                  <th>Interest rate</th>
-                  <th>Expiry (blocks)</th>
-                  <th>Created at height</th>
+                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
+                    Status
+                  </th>
+                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
+                    Collateral
+                  </th>
+                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
+                    Principal
+                  </th>
+                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
+                    Interest rate
+                  </th>
+                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
+                    Expiry (blocks)
+                  </th>
+                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
+                    Created at height
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {offers.map((o) => (
                   <tr key={o.id}>
-                    <td>
-                      <span className={`status status-${o.status}`}>{o.status}</span>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      <span
+                        className={`inline-block py-0.5 px-2 rounded text-sm capitalize ${STATUS_CLASSES[o.status]}`}
+                      >
+                        {o.status}
+                      </span>
                     </td>
-                    <td>
+                    <td className="py-2 px-3 border-b border-gray-200">
                       {o.collateral_amount.toString()} ({shortHex(o.collateral_asset)})
                     </td>
-                    <td>
+                    <td className="py-2 px-3 border-b border-gray-200">
                       {o.principal_amount.toString()} ({shortHex(o.principal_asset)})
                     </td>
-                    <td>{o.interest_rate}</td>
-                    <td>{o.loan_expiration_time}</td>
-                    <td>{o.created_at_height.toString()}</td>
+                    <td className="py-2 px-3 border-b border-gray-200">{o.interest_rate}</td>
+                    <td className="py-2 px-3 border-b border-gray-200">{o.loan_expiration_time}</td>
+                    <td className="py-2 px-3 border-b border-gray-200">
+                      {o.created_at_height.toString()}
+                    </td>
                   </tr>
                 ))}
               </tbody>
