@@ -7,7 +7,7 @@
     -moz-osx-font-smoothing: grayscale;
   }
   body {
-    @apply min-h-screen min-w-[320px] flex items-center justify-center bg-white text-gray-900;
+    @apply min-h-screen min-w-[320px] bg-white text-gray-900;
   }
   h1 {
     @apply text-3xl font-bold leading-tight;
@@ -25,5 +25,5 @@
 }
 
 #root {
-  @apply w-full;
+  @apply w-full min-h-screen;
 }

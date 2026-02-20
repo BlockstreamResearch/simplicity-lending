@@ -1,7 +1,19 @@
 import { createContext, useContext } from 'react'
 
-export const SeedContext = createContext<{ seedHex: string | null }>({ seedHex: null })
+export interface SeedContextValue {
+  seedHex: string
+  accountIndex: number
+  /** Returns the 32-byte secret key for the current account (derived from seed + accountIndex). */
+  getCurrentSecretKey: () => Uint8Array
+}
+
+export const SeedContext = createContext<SeedContextValue | null>(null)
 
 export function useSeedHex(): string | null {
-  return useContext(SeedContext).seedHex
+  const ctx = useContext(SeedContext)
+  return ctx?.seedHex ?? null
+}
+
+export function useSeedContext(): SeedContextValue | null {
+  return useContext(SeedContext)
 }

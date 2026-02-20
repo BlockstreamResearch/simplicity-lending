@@ -3,17 +3,17 @@
  * - Initializes wasm once, exposes program creation and P2TR address helpers.
  */
 
-let lwkInit: Promise<typeof import('lwk_node')> | null = null
+let lwkInit: Promise<typeof import('lwk_web')> | null = null
 
 function getWasmUrl(): string {
   if (import.meta.env.DEV) return '/lwk_wasm_bg.wasm'
   return `${import.meta.env.BASE_URL}assets/lwk_wasm_bg.wasm`
 }
 
-export async function getLwk(): Promise<typeof import('lwk_node')> {
+export async function getLwk(): Promise<typeof import('lwk_web')> {
   if (!lwkInit) {
     lwkInit = (async () => {
-      const lwk = await import('lwk_node')
+      const lwk = await import('lwk_web')
       if (typeof lwk.default === 'function') await lwk.default(getWasmUrl())
       return lwk
     })()

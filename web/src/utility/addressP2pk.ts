@@ -42,3 +42,19 @@ export async function getP2pkAddressFromSecret(
 
   return { address, internalKeyHex }
 }
+
+/**
+ * Get script_pubkey (hex) for an Elements/Liquid address using LWK.
+ * Uses the unconfidential address so the script matches what Esplora indexes
+ * (Esplora scripthash is keyed by the revealed P2TR script, not the blinded output).
+ */
+export async function getScriptPubkeyHexFromAddress(address: string): Promise<string> {
+  const lwk = await getLwk()
+  const addr = new lwk.Address(address)
+  const unconf = addr.toUnconfidential()
+  const script = unconf.scriptPubkey()
+  const bytes = script.bytes()
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
