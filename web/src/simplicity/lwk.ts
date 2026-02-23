@@ -29,6 +29,14 @@ export type Lwk = Awaited<ReturnType<typeof getLwk>>
 /** Instance of LWK TxOut (use instead of InstanceType<Lwk['TxOut']> — TxOut has a private constructor). */
 export type LwkTxOut = ReturnType<Lwk['TxOut']['fromExplicit']>
 
+/** LWK transaction type (first argument of getSighashAll / return of finalizeTransaction). */
+export type LwkTransaction = Parameters<InstanceType<Lwk['SimplicityProgram']>['getSighashAll']>[0]
+
+/** PSET that can yield the unsigned transaction for LWK signing (extractTx). */
+export interface PsetWithExtractTx {
+  extractTx(): LwkTransaction
+}
+
 export interface CreateP2trAddressParams {
   source: string
   args: InstanceType<Lwk['SimplicityArguments']>

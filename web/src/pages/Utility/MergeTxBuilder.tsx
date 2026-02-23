@@ -1,48 +1,41 @@
 /**
- * Split transaction builder UI: outpoint, Load, prevout, fee, change, outputs list, Build & Sign.
+ * Merge tx builder: multiple inputs, one or more outputs, fee.
  */
 
-import { useSplitTxForm } from '../../tx/split/useSplitTxForm'
+import { useMergeTxForm } from '../../tx/merge/useMergeTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 
-export interface SplitTxBuilderProps {
+export interface MergeTxBuilderProps {
   accountIndex: number
   accountAddress: string | null
   utxos: ScripthashUtxoEntry[]
   esplora: EsploraClient
   seedHex: string | null
-  outpointTxid: string
-  outpointVout: string
-  setOutpointTxid: (s: string) => void
-  setOutpointVout: (s: string) => void
 }
 
-export function SplitTxBuilder({
+export function MergeTxBuilder({
   accountIndex,
   accountAddress,
   utxos,
   esplora,
   seedHex,
-  outpointTxid,
-  outpointVout,
-  setOutpointTxid,
-  setOutpointVout,
-}: SplitTxBuilderProps) {
-  const splitForm = useSplitTxForm({
+}: MergeTxBuilderProps) {
+  const form = useMergeTxForm({
     esplora,
     accountAddress,
     seedHex,
     accountIndex,
-    outpointTxid,
-    outpointVout,
-    setOutpointTxid,
-    setOutpointVout,
+    utxos,
   })
 
   const {
-    loadedPrevout,
-    loadError,
+    getAvailableUtxosForRow,
+    selectInputUtxo,
+    clearInputRow,
+    inputRows,
+    addInputRow,
+    removeInputRow,
     feeAmount,
     setFeeAmount,
     outputs,
@@ -53,66 +46,82 @@ export function SplitTxBuilder({
     buildError,
     signedTxHex,
     building,
-    loadPrevout,
     handleBuild,
-    inputValue,
-    feeNum,
+    totalInputValue,
     outputsSum,
     changeAmount,
     canBuild,
-  } = splitForm
+  } = form
 
   return (
-    <section className="min-w-0 max-w-4xl mt-10">
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Split LBTC</h3>
+    <section className="min-w-0 max-w-4xl mt-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">Merge</h3>
       {!seedHex ? (
         <p className="text-gray-600">Connect seed to build a transaction.</p>
       ) : (
         <div className="space-y-4 text-sm">
           <div>
-            <p className="font-medium text-gray-700 mb-1">Input (OutPoint)</p>
-            <div className="flex gap-2 flex-wrap items-center">
-              <input
-                type="text"
-                placeholder="txid"
-                className="flex-1 min-w-[200px] border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
-                value={outpointTxid}
-                onChange={(e) => setOutpointTxid(e.target.value)}
-              />
-              <input
-                type="number"
-                placeholder="vout"
-                min={0}
-                className="w-20 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
-                value={outpointVout}
-                onChange={(e) => setOutpointVout(e.target.value)}
-              />
-              <button
-                type="button"
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded"
-                onClick={loadPrevout}
-              >
-                Load
+            <div className="flex items-center justify-between mb-1">
+              <p className="font-medium text-gray-700">Inputs (LBTC only, from your UTXOs)</p>
+              <button type="button" className="text-blue-600 hover:underline" onClick={addInputRow}>
+                + Add input
               </button>
             </div>
-            {utxos.length > 0 && (
-              <p className="text-gray-500 mt-1">Or click a UTXO above to fill txid/vout.</p>
-            )}
-            {loadError && <p className="text-red-600 mt-1">{loadError}</p>}
-            {loadedPrevout && (
-              <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
-                <p className="font-medium text-gray-700">
-                  Input: amount {loadedPrevout.value} sats
-                </p>
-                {loadedPrevout.asset && (
-                  <p className="text-gray-600 font-mono text-xs">asset: {loadedPrevout.asset}</p>
-                )}
-              </div>
+            {inputRows.length === 0 ? (
+              <p className="text-gray-500">
+                Add at least one input and select a UTXO from the list.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {inputRows.map((row) => {
+                  const available = getAvailableUtxosForRow(row.id)
+                  const value = row.txid && row.vout !== '' ? `${row.txid}:${row.vout}` : ''
+                  return (
+                    <li key={row.id} className="flex gap-2 items-center flex-wrap">
+                      <select
+                        className="min-w-[200px] max-w-full border border-gray-300 rounded px-2 py-1.5 text-gray-900 bg-white text-sm font-mono"
+                        value={value}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (!v) {
+                            clearInputRow(row.id)
+                            return
+                          }
+                          const [txid, voutStr] = v.split(':')
+                          const vout = parseInt(voutStr, 10)
+                          if (txid && !Number.isNaN(vout)) selectInputUtxo(row.id, txid, vout)
+                        }}
+                      >
+                        <option value="">Select UTXO…</option>
+                        {available.map((u) => (
+                          <option key={`${u.txid}:${u.vout}`} value={`${u.txid}:${u.vout}`}>
+                            {u.txid.slice(0, 10)}… vout {u.vout} ({u.value ?? '?'} sats)
+                          </option>
+                        ))}
+                      </select>
+                      {row.prevout && (
+                        <span className="text-gray-600">{row.prevout.value} sats (LBTC)</span>
+                      )}
+                      {row.loadError && (
+                        <span className="text-red-600 text-xs">{row.loadError}</span>
+                      )}
+                      <button
+                        type="button"
+                        className="text-gray-500 hover:text-red-600 px-1"
+                        onClick={() => removeInputRow(row.id)}
+                        title="Remove"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
             )}
           </div>
 
           <div>
-            <p className="font-medium text-gray-700 mb-1">Fee (empty script, last output)</p>
+            <p className="font-medium text-gray-700 mb-1">Fee (LBTC)</p>
             <input
               type="number"
               placeholder="sats"
@@ -123,18 +132,18 @@ export function SplitTxBuilder({
             />
           </div>
 
-          {loadedPrevout && (
+          {inputRows.some((r) => r.prevout != null) && (
             <div className="p-2 bg-gray-50 rounded border border-gray-200">
-              <p className="font-medium text-gray-700 mb-1">Change (to your account)</p>
+              <p className="font-medium text-gray-700 mb-1">Summary</p>
               <p className="text-gray-800 font-mono">
-                {changeAmount < 0 ? (
-                  <span className="text-red-600">
-                    Exceeds available ({inputValue} − {feeNum} − {outputsSum} = {changeAmount})
-                  </span>
-                ) : (
-                  <>{changeAmount} sats → current account</>
-                )}
+                Total in: {totalInputValue} − fee {parseInt(feeAmount, 10) || 0} − outputs{' '}
+                {outputsSum} = change {changeAmount}
               </p>
+              {changeAmount < 0 && (
+                <p className="text-red-600 text-xs mt-1">
+                  Reduce outputs or fee so change is non-negative.
+                </p>
+              )}
             </div>
           )}
 
@@ -146,9 +155,7 @@ export function SplitTxBuilder({
               </button>
             </div>
             {outputs.length === 0 ? (
-              <p className="text-gray-500">
-                Optional: add recipient outputs. Change goes to your account.
-              </p>
+              <p className="text-gray-500">Add at least one output (native LBTC).</p>
             ) : (
               <ul className="space-y-2">
                 {outputs.map((o, idx) => (
@@ -197,17 +204,6 @@ export function SplitTxBuilder({
                   </li>
                 ))}
               </ul>
-            )}
-            {loadedPrevout && (
-              <p className="mt-2 text-gray-600">
-                Input {inputValue} − fee {feeNum} − outputs {outputsSum} = change {changeAmount}
-                {changeAmount < 0 && (
-                  <span className="text-red-600 ml-1">
-                    {' '}
-                    — reduce outputs or fee to enable Build & Sign
-                  </span>
-                )}
-              </p>
             )}
           </div>
 

@@ -4,6 +4,7 @@
  */
 
 import { getLwk } from '../simplicity'
+import type { Lwk } from '../simplicity'
 import type { EsploraVout } from '../api/esplora'
 
 export type PsetNetwork = 'mainnet' | 'testnet'
@@ -21,10 +22,7 @@ function getScriptHexFromVout(vout: EsploraVout): string {
   return hex
 }
 
-function getScriptForAddress(
-  lwk: Awaited<ReturnType<typeof getLwk>>,
-  address: string
-): InstanceType<Awaited<ReturnType<typeof getLwk>>['Script']> {
+function getScriptForAddress(lwk: Lwk, address: string): InstanceType<Lwk['Script']> {
   const addr = new lwk.Address(address)
   let script = addr.scriptPubkey()
   if (script == null) script = addr.toUnconfidential().scriptPubkey()

@@ -1,6 +1,6 @@
 /**
  * Account section: P2PK address, chain/mempool stats, UTXO list, refresh.
- * Optional onUtxoSelect(txid, vout) to fill split form outpoint when user clicks a UTXO.
+ * Optional onUtxoSelect(txid, vout, isLbtc) to fill split form outpoint when user clicks a UTXO.
  */
 
 import type { AddressInfo } from '../../api/esplora'
@@ -17,7 +17,7 @@ export interface AccountSectionProps {
   error: string | null
   refreshing: boolean
   onRefresh: () => void
-  onUtxoSelect?: (txid: string, vout: number) => void
+  onUtxoSelect?: (txid: string, vout: number, isLbtc: boolean) => void
 }
 
 export function AccountSection({
@@ -119,36 +119,35 @@ export function AccountSection({
                     </tr>
                   </thead>
                   <tbody>
-                    {utxos.map((u) => (
-                      <tr
-                        key={`${u.txid}:${u.vout}`}
-                        role="button"
-                        tabIndex={0}
-                        className="cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                        onClick={() => onUtxoSelect?.(u.txid, u.vout)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            onUtxoSelect?.(u.txid, u.vout)
-                          }
-                        }}
-                      >
-                        <td className="py-2 px-3 text-gray-500">{u.vout}</td>
-                        <td
-                          className="py-2 px-3 text-gray-700 truncate max-w-[18rem]"
-                          title={u.txid}
+                    {utxos.map((u) => {
+                      const isLbtc =
+                        !u.asset || u.asset.trim().toLowerCase() === POLICY_ASSET_ID[P2PK_NETWORK]
+                      return (
+                        <tr
+                          key={`${u.txid}:${u.vout}`}
+                          role="button"
+                          tabIndex={0}
+                          className="cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                          onClick={() => onUtxoSelect?.(u.txid, u.vout, isLbtc)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              onUtxoSelect?.(u.txid, u.vout, isLbtc)
+                            }
+                          }}
                         >
-                          {u.txid}
-                        </td>
-                        <td className="py-2 px-3 text-right text-gray-900">{u.value ?? '—'}</td>
-                        <td className="py-2 px-3 text-gray-600">
-                          {!u.asset ||
-                          u.asset.trim().toLowerCase() === POLICY_ASSET_ID[P2PK_NETWORK]
-                            ? 'LBTC'
-                            : 'ASSET'}
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="py-2 px-3 text-gray-500">{u.vout}</td>
+                          <td
+                            className="py-2 px-3 text-gray-700 truncate max-w-[18rem]"
+                            title={u.txid}
+                          >
+                            {u.txid}
+                          </td>
+                          <td className="py-2 px-3 text-right text-gray-900">{u.value ?? '—'}</td>
+                          <td className="py-2 px-3 text-gray-600">{isLbtc ? 'LBTC' : 'ASSET'}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
