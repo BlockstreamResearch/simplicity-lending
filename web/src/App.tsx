@@ -276,7 +276,13 @@ export default function App() {
       />
       <div className="flex-1 flex justify-center w-full">
         <SeedGate seedHex={seedHex} setSeedHex={setSeedHex} accountIndex={accountIndex}>
-          <AppContent tab={tab} offers={offers} loading={loading} error={error} accountIndex={accountIndex} />
+          <AppContent
+            tab={tab}
+            offers={offers}
+            loading={loading}
+            error={error}
+            accountIndex={accountIndex}
+          />
         </SeedGate>
       </div>
     </div>

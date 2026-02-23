@@ -7,4 +7,4 @@
 export { getSource, listCovenantIds } from './sources'
 export type { SimplicityCovenantId } from './sources'
 export { getLwk, createP2trAddress } from './lwk'
-export type { P2pkNetwork, CreateP2trAddressParams } from './lwk'
+export type { P2pkNetwork, CreateP2trAddressParams, Lwk, LwkTxOut } from './lwk'

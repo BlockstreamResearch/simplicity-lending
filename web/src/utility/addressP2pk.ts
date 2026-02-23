@@ -7,6 +7,15 @@ import { getSource, getLwk, createP2trAddress, type P2pkNetwork } from '../simpl
 
 export type { P2pkNetwork }
 
+/** Network used for P2PK (Utility page, split tx). */
+export const P2PK_NETWORK: P2pkNetwork = 'testnet'
+
+/** Liquid/Elements policy asset (L-BTC) asset ID per network, hex lowercase. */
+export const POLICY_ASSET_ID: Record<P2pkNetwork, string> = {
+  mainnet: '6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d',
+  testnet: '144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49',
+}
+
 export interface LwkP2pkAddressResult {
   address: string
   internalKeyHex: string

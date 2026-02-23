@@ -3,6 +3,7 @@
 JSON over RESTful HTTP. Amounts are always represented in satoshis.
 
 The blockstream.info public APIs are available at:
+
 - Bitcoin: https://blockstream.info/api/
 - Bitcoin Testnet: https://blockstream.info/testnet/api/
 - Bitcoin Signet: https://blockstream.info/signet/api/
@@ -10,6 +11,7 @@ The blockstream.info public APIs are available at:
 - Liquid Testnet: https://blockstream.info/liquidtestnet/api/
 
 For example:
+
 ```bash
 $ curl https://blockstream.info/api/blocks/tip/hash
 ```
@@ -32,6 +34,7 @@ Returns the transaction confirmation status.
 Available fields: `confirmed` (boolean), `block_height` (optional) and `block_hash` (optional).
 
 ### `GET /tx/:txid/hex`
+
 ### `GET /tx/:txid/raw`
 
 Returns the raw transaction in hex or as binary data.
@@ -41,7 +44,7 @@ Returns the raw transaction in hex or as binary data.
 Returns a merkle inclusion proof for the transaction using
 [bitcoind's merkleblock](https://bitcoin.org/en/glossary/merkle-block) format.
 
-*Note:* This endpoint is not currently available for Liquid/Elements-based chains.
+_Note:_ This endpoint is not currently available for Liquid/Elements-based chains.
 
 ### `GET /tx/:txid/merkle-proof`
 
@@ -75,17 +78,19 @@ A transaction package is a group of related transactions that may depend on each
 The request body should contain a JSON array of transaction hex strings.
 
 Example request body:
+
 ```json
 ["02000000...", "02000000..."]
 ```
 
 Returns a JSON object containing the package acceptance result. On success, returns information about each transaction in the package.
 
-*Note:* This endpoint requires Bitcoin Core 28.0 or later.
+_Note:_ This endpoint requires Bitcoin Core 28.0 or later.
 
 ## Addresses
 
 ### `GET /address/:address`
+
 ### `GET /scripthash/:hash`
 
 Get information about an address/scripthash.
@@ -97,6 +102,7 @@ Available fields: `address`/`scripthash`, `chain_stats` and `mempool_stats`.
 Elements-based chains don't have the `{funded,spent}_txo_sum` fields.
 
 ### `GET /address/:address/txs`
+
 ### `GET /scripthash/:hash/txs`
 
 Get transaction history for the specified address/scripthash, sorted with newest first.
@@ -105,6 +111,7 @@ Returns up to 50 mempool transactions plus the first 25 confirmed transactions.
 You can request more confirmed transactions using `:last_seen_txid`(see below).
 
 ### `GET /address/:address/txs/chain[/:last_seen_txid]`
+
 ### `GET /scripthash/:hash/txs/chain[/:last_seen_txid]`
 
 Get confirmed transaction history for the specified address/scripthash, sorted with newest first.
@@ -112,6 +119,7 @@ Get confirmed transaction history for the specified address/scripthash, sorted w
 Returns 25 transactions per page. More can be requested by specifying the last txid seen by the previous query.
 
 ### `GET /address/:address/txs/mempool`
+
 ### `GET /scripthash/:hash/txs/mempool`
 
 Get unconfirmed transaction history for the specified address/scripthash.
@@ -119,6 +127,7 @@ Get unconfirmed transaction history for the specified address/scripthash.
 Returns up to 50 transactions (no paging).
 
 ### `GET /address/:address/utxo`
+
 ### `GET /scripthash/:hash/utxo`
 
 Get the list of unspent transaction outputs associated with the address/scripthash.
@@ -161,7 +170,7 @@ Available fields: `in_best_chain` (boolean, false for orphaned blocks), `next_be
 
 Returns a list of transactions in the block (up to 25 transactions beginning at `start_index`).
 
-*Note:* The `start_index` value must be a multiple of 25.
+_Note:_ The `start_index` value must be a multiple of 25.
 
 The response from this endpoint can be cached indefinitely.
 
@@ -229,8 +238,7 @@ Example output:
 ```
 
 > In this example, there are transactions weighting a total of 102,131 vbytes that are paying more than 53 sat/vB,
-110,990 vbytes of transactions paying between 38 and 53 sat/vB, 138,976 vbytes paying between 34 and 38, etc.
-
+> 110,990 vbytes of transactions paying between 38 and 53 sat/vB, 138,976 vbytes paying between 34 and 38, etc.
 
 ### `GET /mempool/txids`
 
@@ -328,7 +336,9 @@ Example user-issued asset:
 ```
 
 ### `GET /asset/:asset_id/txs`
+
 ### `GET /asset/:asset_id/txs/mempool`
+
 ### `GET /asset/:asset_id/txs/chain[/:last_seen]`
 
 Get transactions associated with the specified asset.
@@ -340,6 +350,7 @@ For user-issued assets, returns a list of issuance, reissuance and burn transact
 Does not include regular transactions transferring this asset.
 
 ### `GET /asset/:asset_id/supply`
+
 ### `GET /asset/:asset_id/supply/decimal`
 
 Get the current total supply of the specified asset.
@@ -366,7 +377,6 @@ Query string parameters:
 
 Assets are returned in the same format as in `GET /asset/:asset_id`.
 
-
 The total number of results will be returned as the `x-total-results` header.
 
 ## Transaction format
@@ -388,7 +398,7 @@ The total number of results will be returned as the `x-total-results` header.
   - `sequence`
   - `witness[]`
   - `prevout` (previous output in the same format as in `vout` below)
-  - *(Elements only)*
+  - _(Elements only)_
   - `is_pegin`
   - `issuance` (available for asset issuance transactions, `null` otherwise)
     - `asset_id`
@@ -405,7 +415,7 @@ The total number of results will be returned as the `x-total-results` header.
   - `scriptpubkey_type`
   - `scriptpubkey_address`
   - `value`
-  - *(Elements only)*
+  - _(Elements only)_
   - `valuecommitment`
   - `asset` or `assetcommitment`
   - `pegout` (available for peg-out outputs, `null` otherwise)
@@ -434,7 +444,7 @@ The total number of results will be returned as the `x-total-results` header.
 - `weight`
 - `previousblockhash`
 - `mediantime` (median time-past)
-- *(Elements only)*
+- _(Elements only)_
 - `proof`
   - `challenge`
   - `challenge_asm`

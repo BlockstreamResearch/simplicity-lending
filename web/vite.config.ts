@@ -43,10 +43,7 @@ export default defineConfig({
       name: 'lwk-wasm-dev',
       configureServer(server) {
         server.middlewares.use('/lwk_wasm_bg.wasm', (_req, res, next) => {
-          const wasmPath = path.resolve(
-            server.config.root,
-            'node_modules/lwk_web/lwk_wasm_bg.wasm'
-          )
+          const wasmPath = path.resolve(server.config.root, 'node_modules/lwk_web/lwk_wasm_bg.wasm')
           if (!fs.existsSync(wasmPath)) return next()
           res.setHeader('Content-Type', 'application/wasm')
           fs.createReadStream(wasmPath).pipe(res)

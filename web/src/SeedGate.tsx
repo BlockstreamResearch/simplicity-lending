@@ -54,9 +54,7 @@ export function SeedGate({ seedHex, setSeedHex, accountIndex, children }: Props)
   const seedBytes = parseSeedHex(seedHex)
   const getCurrentSecretKey = () => deriveSecretKeyFromIndex(seedBytes, accountIndex)
   return (
-    <SeedContext.Provider
-      value={{ seedHex, accountIndex, getCurrentSecretKey }}
-    >
+    <SeedContext.Provider value={{ seedHex, accountIndex, getCurrentSecretKey }}>
       {children}
     </SeedContext.Provider>
   )

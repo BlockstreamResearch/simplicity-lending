@@ -23,12 +23,16 @@ export async function getLwk(): Promise<typeof import('lwk_web')> {
 
 export type P2pkNetwork = 'mainnet' | 'testnet'
 
-type LwkModule = Awaited<ReturnType<typeof getLwk>>
+/** LWK module (return type of getLwk()). Use for typing lwk argument across the app. */
+export type Lwk = Awaited<ReturnType<typeof getLwk>>
+
+/** Instance of LWK TxOut (use instead of InstanceType<Lwk['TxOut']> — TxOut has a private constructor). */
+export type LwkTxOut = ReturnType<Lwk['TxOut']['fromExplicit']>
 
 export interface CreateP2trAddressParams {
   source: string
-  args: InstanceType<LwkModule['SimplicityArguments']>
-  internalKey: InstanceType<LwkModule['XOnlyPublicKey']>
+  args: InstanceType<Lwk['SimplicityArguments']>
+  internalKey: InstanceType<Lwk['XOnlyPublicKey']>
   network: P2pkNetwork
 }
 

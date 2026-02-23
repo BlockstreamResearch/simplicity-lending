@@ -34,12 +34,8 @@ export class EsploraClient {
   private readonly baseUrl: string
   private readonly timeoutMs: number
 
-  constructor(
-    baseUrl?: string,
-    timeoutMs: number = DEFAULT_TIMEOUT_MS
-  ) {
-    this.baseUrl =
-      (baseUrl?.trim() && baseUrl.trim().replace(/\/+$/, '')) || getBaseUrl()
+  constructor(baseUrl?: string, timeoutMs: number = DEFAULT_TIMEOUT_MS) {
+    this.baseUrl = (baseUrl?.trim() && baseUrl.trim().replace(/\/+$/, '')) || getBaseUrl()
     this.timeoutMs = timeoutMs
   }
 
@@ -52,11 +48,7 @@ export class EsploraClient {
       clearTimeout(timeoutId)
       const body = await res.text()
       if (!res.ok) {
-        throw new EsploraApiError(
-          `Esplora API error: ${res.status}`,
-          res.status,
-          body
-        )
+        throw new EsploraApiError(`Esplora API error: ${res.status}`, res.status, body)
       }
       return body
     } catch (e) {
@@ -76,11 +68,7 @@ export class EsploraClient {
       clearTimeout(timeoutId)
       if (!res.ok) {
         const body = await res.text()
-        throw new EsploraApiError(
-          `Esplora API error: ${res.status}`,
-          res.status,
-          body
-        )
+        throw new EsploraApiError(`Esplora API error: ${res.status}`, res.status, body)
       }
       const buffer = await res.arrayBuffer()
       return new Uint8Array(buffer)
@@ -132,6 +120,16 @@ export class EsploraClient {
     return this.getBytes(`/tx/${txId}/raw`)
   }
 
+  /** GET /tx/:txid — full transaction JSON (vin, vout with scriptpubkey, value, asset). */
+  async getTx(txId: string): Promise<EsploraTx> {
+    const body = await this.get(`/tx/${txId}`)
+    try {
+      return JSON.parse(body) as EsploraTx
+    } catch (e) {
+      throw new EsploraApiError(`Failed to parse tx: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
   // --- Scripthash (script_pubkey) — for P2TR and other scripts ---
 
   /** GET /scripthash/:hash — chain_stats, mempool_stats. */
@@ -162,10 +160,7 @@ export class EsploraClient {
   }
 
   /** GET /scripthash/:hash/txs or .../txs/chain/:last_seen_txid — tx history (newest first). */
-  async getScripthashTxs(
-    scripthash: string,
-    lastSeenTxid?: string
-  ): Promise<ScripthashTxEntry[]> {
+  async getScripthashTxs(scripthash: string, lastSeenTxid?: string): Promise<ScripthashTxEntry[]> {
     const path =
       lastSeenTxid != null && lastSeenTxid
         ? `/scripthash/${scripthash}/txs/chain/${lastSeenTxid}`
@@ -215,15 +210,10 @@ export class EsploraClient {
   }
 
   /** GET /address/:address/txs or .../txs/chain/:last_seen_txid — tx history (newest first). */
-  async getAddressTxs(
-    address: string,
-    lastSeenTxid?: string
-  ): Promise<ScripthashTxEntry[]> {
+  async getAddressTxs(address: string, lastSeenTxid?: string): Promise<ScripthashTxEntry[]> {
     const prefix = `/address/${encodeURIComponent(address)}`
     const path =
-      lastSeenTxid != null && lastSeenTxid
-        ? `${prefix}/txs/chain/${lastSeenTxid}`
-        : `${prefix}/txs`
+      lastSeenTxid != null && lastSeenTxid ? `${prefix}/txs/chain/${lastSeenTxid}` : `${prefix}/txs`
     const body = await this.get(path)
     try {
       const raw = JSON.parse(body) as unknown
@@ -276,6 +266,23 @@ export interface ScripthashUtxoEntry {
 export interface ScripthashTxEntry {
   txid: string
   status: { confirmed: boolean; block_height?: number; block_hash?: string }
+  [key: string]: unknown
+}
+
+/** One output from GET /tx/:txid (vout[]). Elements: value + asset; scriptpubkey as hex string. */
+export interface EsploraVout {
+  scriptpubkey?: string
+  scriptpubkey_hex?: string
+  value?: number
+  asset?: string
+  [key: string]: unknown
+}
+
+/** Full transaction from GET /tx/:txid. */
+export interface EsploraTx {
+  txid: string
+  vout: EsploraVout[]
+  vin?: unknown[]
   [key: string]: unknown
 }
 

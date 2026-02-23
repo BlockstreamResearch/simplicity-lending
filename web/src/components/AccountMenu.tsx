@@ -116,7 +116,9 @@ export function AccountMenu({
         >
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">Address (P2PK, {P2PK_NETWORK})</p>
+              <p className="text-xs font-medium text-gray-500 mb-1">
+                Address (P2PK, {P2PK_NETWORK})
+              </p>
               {addressLoading ? (
                 <p className="text-sm text-gray-500">Loading…</p>
               ) : accountAddress ? (
