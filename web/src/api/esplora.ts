@@ -2,6 +2,7 @@
  * Esplora HTTP API client for chain data.
  * Mirrors the indexer's EsploraClient (crates/indexer/src/esplora_client.rs).
  * Base URL from env VITE_ESPLORA_BASE_URL (required).
+ * Explorer URL for tx links from VITE_ESPLORA_EXPLORER_URL (optional; falls back to API base URL).
  * Results use default JS types (string, number, string[], Uint8Array).
  */
 
@@ -14,6 +15,14 @@ function getBaseUrl(): string {
     throw new EsploraApiError('VITE_ESPLORA_BASE_URL is not set')
   }
   return env.trim().replace(/\/+$/, '')
+}
+
+function getExplorerBaseUrl(apiBaseUrl: string): string {
+  const env = import.meta.env.VITE_ESPLORA_EXPLORER_URL
+  if (typeof env === 'string' && env.trim()) {
+    return env.trim().replace(/\/+$/, '')
+  }
+  return apiBaseUrl
 }
 
 export class EsploraApiError extends Error {
@@ -32,10 +41,12 @@ export class EsploraApiError extends Error {
  */
 export class EsploraClient {
   private readonly baseUrl: string
+  private readonly explorerBaseUrl: string
   private readonly timeoutMs: number
 
   constructor(baseUrl?: string, timeoutMs: number = DEFAULT_TIMEOUT_MS) {
     this.baseUrl = (baseUrl?.trim() && baseUrl.trim().replace(/\/+$/, '')) || getBaseUrl()
+    this.explorerBaseUrl = getExplorerBaseUrl(this.baseUrl)
     this.timeoutMs = timeoutMs
   }
 
@@ -78,6 +89,42 @@ export class EsploraClient {
       if (e instanceof Error) throw new EsploraApiError(e.message)
       throw new EsploraApiError(String(e))
     }
+  }
+
+  private async post(path: string, body: string): Promise<string> {
+    const url = `${this.baseUrl}${path}`
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs)
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body,
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+      const resBody = await res.text()
+      if (!res.ok) {
+        throw new EsploraApiError(`Esplora API error: ${res.status}`, res.status, resBody)
+      }
+      return resBody
+    } catch (e) {
+      clearTimeout(timeoutId)
+      if (e instanceof EsploraApiError) throw e
+      if (e instanceof Error) throw new EsploraApiError(e.message)
+      throw new EsploraApiError(String(e))
+    }
+  }
+
+  /** POST /tx — broadcast raw transaction (hex). Returns txid on success. */
+  async broadcastTx(txHex: string): Promise<string> {
+    const body = await this.post('/tx', txHex.trim())
+    return body.trim()
+  }
+
+  /** URL of the transaction page on the block explorer (e.g. to open in a new tab). Uses VITE_ESPLORA_EXPLORER_URL if set. */
+  getTxExplorerUrl(txid: string): string {
+    return `${this.explorerBaseUrl}/tx/${txid.trim()}`
   }
 
   /** Latest block hash (tip). */

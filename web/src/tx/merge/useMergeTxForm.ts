@@ -6,9 +6,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
-import type { EsploraClient } from '../../api/esplora'
-import type { EsploraVout } from '../../api/esplora'
-import type { ScripthashUtxoEntry } from '../../api/esplora'
+import {
+  EsploraApiError,
+  type EsploraClient,
+  type EsploraVout,
+  type ScripthashUtxoEntry,
+} from '../../api/esplora'
 import { buildAndSignMergeTx } from '../../utility/buildMergeTx'
 import type { TxOutputRow } from '../split/types'
 
@@ -27,6 +30,8 @@ export interface UseMergeTxFormParams {
   accountIndex: number
   /** Account UTXOs; only native (LBTC) are offered in input dropdowns. */
   utxos: ScripthashUtxoEntry[]
+  /** Called after a successful broadcast (e.g. to refresh UTXOs). */
+  onBroadcastSuccess?: () => void
 }
 
 export interface UseMergeTxFormResult {
@@ -53,7 +58,11 @@ export interface UseMergeTxFormResult {
   buildError: string | null
   signedTxHex: string | null
   building: boolean
+  broadcastTxid: string | null
+  broadcastError: string | null
   handleBuild: () => Promise<void>
+  handleBuildAndBroadcast: () => Promise<void>
+  handleClear: () => void
   totalInputValue: number
   outputsSum: number
   changeAmount: number
@@ -70,6 +79,7 @@ export function useMergeTxForm({
   seedHex,
   accountIndex,
   utxos,
+  onBroadcastSuccess,
 }: UseMergeTxFormParams): UseMergeTxFormResult {
   const nativeUtxos = useMemo(() => {
     const policyId = POLICY_ASSET_ID[P2PK_NETWORK]
@@ -84,6 +94,20 @@ export function useMergeTxForm({
   const [buildError, setBuildError] = useState<string | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
+  const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
+  const [broadcastError, setBroadcastError] = useState<string | null>(null)
+
+  const handleClear = useCallback(() => {
+    setInputRows([])
+    setNextInputId(0)
+    setFeeAmount('')
+    setOutputs([])
+    setNextOutputId(0)
+    setBuildError(null)
+    setSignedTxHex(null)
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+  }, [])
 
   const getAvailableUtxosForRow = useCallback(
     (rowId: number) => {
@@ -270,6 +294,8 @@ export function useMergeTxForm({
     if (inputs.length === 0) return
     setBuildError(null)
     setSignedTxHex(null)
+    setBroadcastTxid(null)
+    setBroadcastError(null)
     setBuilding(true)
     try {
       const seed = parseSeedHex(seedHex)
@@ -292,6 +318,60 @@ export function useMergeTxForm({
     }
   }, [seedHex, accountAddress, accountIndex, canBuild, inputRows, outputs, feeNum])
 
+  const handleBuildAndBroadcast = useCallback(async () => {
+    if (!seedHex || !accountAddress || !canBuild) return
+    const inputs = inputRows
+      .filter((r) => r.prevout != null)
+      .map((r) => ({
+        outpoint: { txid: r.txid.trim(), vout: parseInt(r.vout.trim(), 10) },
+        prevout: r.prevout!,
+      }))
+    if (inputs.length === 0) return
+    setBuildError(null)
+    setSignedTxHex(null)
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+    setBuilding(true)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const hex = await buildAndSignMergeTx({
+        inputs,
+        outputs: outputs.map((o) => ({
+          address: o.address.trim(),
+          amount: BigInt(parseInt(o.amount, 10) || 0),
+        })),
+        feeAmount: BigInt(feeNum),
+        secretKey: secret,
+        network: P2PK_NETWORK,
+      })
+      setSignedTxHex(hex)
+      const txidRes = await esplora.broadcastTx(hex)
+      setBroadcastTxid(txidRes)
+      setBroadcastError(null)
+      onBroadcastSuccess?.()
+    } catch (e) {
+      if (e instanceof EsploraApiError) {
+        setBroadcastError(e.body ?? e.message)
+        setBroadcastTxid(null)
+      } else {
+        setBuildError(e instanceof Error ? e.message : String(e))
+      }
+    } finally {
+      setBuilding(false)
+    }
+  }, [
+    seedHex,
+    accountAddress,
+    accountIndex,
+    canBuild,
+    inputRows,
+    outputs,
+    feeNum,
+    esplora,
+    onBroadcastSuccess,
+  ])
+
   return {
     nativeUtxos,
     getAvailableUtxosForRow,
@@ -312,7 +392,11 @@ export function useMergeTxForm({
     buildError,
     signedTxHex,
     building,
+    broadcastTxid,
+    broadcastError,
     handleBuild,
+    handleBuildAndBroadcast,
+    handleClear,
     totalInputValue,
     outputsSum,
     changeAmount,

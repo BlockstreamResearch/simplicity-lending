@@ -90,6 +90,7 @@ export function Utility({ accountIndex }: { accountIndex: number }) {
           outpointVout={outpointVout}
           setOutpointTxid={setOutpointTxid}
           setOutpointVout={setOutpointVout}
+          onBroadcastSuccess={refresh}
         />
       )}
       {utilityMode === 'split-asset' && (
@@ -107,6 +108,7 @@ export function Utility({ accountIndex }: { accountIndex: number }) {
           outpointAssetVout={outpointAssetVout}
           setOutpointAssetTxid={setOutpointAssetTxid}
           setOutpointAssetVout={setOutpointAssetVout}
+          onBroadcastSuccess={refresh}
         />
       )}
       {utilityMode === 'merge' && (
@@ -116,6 +118,7 @@ export function Utility({ accountIndex }: { accountIndex: number }) {
           utxos={utxos}
           esplora={esplora}
           seedHex={seedHex}
+          onBroadcastSuccess={refresh}
         />
       )}
     </div>

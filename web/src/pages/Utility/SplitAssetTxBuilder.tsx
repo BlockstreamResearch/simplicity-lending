@@ -6,6 +6,7 @@
 import { useSplitAssetTxForm } from '../../tx/split/useSplitAssetTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
+import { CopyIcon } from '../../components/CopyIcon'
 
 export interface SplitAssetTxBuilderProps {
   accountIndex: number
@@ -22,6 +23,8 @@ export interface SplitAssetTxBuilderProps {
   outpointAssetVout?: string
   setOutpointAssetTxid?: (s: string) => void
   setOutpointAssetVout?: (s: string) => void
+  /** Called after a successful broadcast (e.g. to refresh UTXOs). */
+  onBroadcastSuccess?: () => void
 }
 
 export function SplitAssetTxBuilder({
@@ -38,6 +41,7 @@ export function SplitAssetTxBuilder({
   outpointAssetVout: outpointAssetVoutProp,
   setOutpointAssetTxid: setOutpointAssetTxidProp,
   setOutpointAssetVout: setOutpointAssetVoutProp,
+  onBroadcastSuccess,
 }: SplitAssetTxBuilderProps) {
   const form = useSplitAssetTxForm({
     esplora,
@@ -52,6 +56,7 @@ export function SplitAssetTxBuilder({
     outpointAssetVout: outpointAssetVoutProp,
     setOutpointAssetTxid: setOutpointAssetTxidProp,
     setOutpointAssetVout: setOutpointAssetVoutProp,
+    onBroadcastSuccess,
   })
 
   const {
@@ -79,7 +84,11 @@ export function SplitAssetTxBuilder({
     buildError,
     signedTxHex,
     building,
+    broadcastTxid,
+    broadcastError,
     handleBuild,
+    handleBuildAndBroadcast,
+    handleClear,
     feeValue,
     assetValue,
     outputsSum,
@@ -278,7 +287,7 @@ export function SplitAssetTxBuilder({
             )}
           </div>
 
-          <div>
+          <div className="flex flex-wrap gap-2 items-center">
             <button
               type="button"
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:pointer-events-none"
@@ -287,25 +296,64 @@ export function SplitAssetTxBuilder({
             >
               {building ? 'Building…' : 'Build & Sign'}
             </button>
-            {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
-            {signedTxHex && (
-              <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
-                <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
-                <textarea
-                  readOnly
-                  className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded p-2 h-24"
-                  value={signedTxHex}
-                />
-                <button
-                  type="button"
-                  className="mt-2 text-blue-600 hover:underline text-sm"
-                  onClick={() => navigator.clipboard?.writeText(signedTxHex)}
-                >
-                  Copy hex
-                </button>
-              </div>
-            )}
+            <button
+              type="button"
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:pointer-events-none"
+              disabled={!canBuild || building}
+              onClick={handleBuildAndBroadcast}
+            >
+              {building ? 'Building…' : 'Build & Broadcast'}
+            </button>
+            <button
+              type="button"
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded disabled:opacity-50 disabled:pointer-events-none"
+              disabled={building}
+              onClick={handleClear}
+            >
+              Clear
+            </button>
           </div>
+          {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
+          {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
+          {broadcastTxid && (
+            <p className="mt-2 text-green-700 flex items-center gap-1.5 flex-wrap">
+              <span>Broadcast successful. Txid:</span>
+              <a
+                href={esplora.getTxExplorerUrl(broadcastTxid)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs break-all text-green-800 hover:underline underline-offset-1"
+              >
+                {broadcastTxid}
+              </a>
+              <button
+                type="button"
+                className="p-1 rounded text-green-700 hover:bg-green-100"
+                onClick={() => navigator.clipboard?.writeText(broadcastTxid)}
+                title="Copy txid"
+                aria-label="Copy txid"
+              >
+                <CopyIcon className="h-4 w-4" />
+              </button>
+            </p>
+          )}
+          {signedTxHex && (
+            <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
+              <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
+              <textarea
+                readOnly
+                className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded p-2 h-24"
+                value={signedTxHex}
+              />
+              <button
+                type="button"
+                className="mt-2 text-blue-600 hover:underline text-sm"
+                onClick={() => navigator.clipboard?.writeText(signedTxHex)}
+              >
+                Copy hex
+              </button>
+            </div>
+          )}
         </div>
       )}
     </section>
