@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { CopyIcon } from './CopyIcon'
+import { ButtonPrimary, ButtonIconNeutral } from './Button'
 
 const P2PK_NETWORK: 'testnet' | 'mainnet' = 'testnet'
 const EXPLORER_ADDRESS_URL = 'https://blockstream.info/liquidtestnet/address/'
@@ -87,9 +88,8 @@ export function AccountMenu({
       <button
         type="button"
         onClick={() => setIsOpen((o) => !o)}
-        className="rounded-lg px-3 py-1.5 text-sm font-medium
-                   bg-gray-700 text-white hover:bg-gray-800
-                   focus:ring-2 focus:ring-gray-500 focus:ring-offset-1
+        className="rounded-lg bg-[#5F3DC4] px-3 py-1.5 text-sm font-medium text-white
+                   hover:bg-[#4f36a8] focus:ring-2 focus:ring-[#5F3DC4] focus:ring-offset-1
                    font-mono max-w-[180px] truncate"
         title={accountAddress ?? undefined}
       >
@@ -114,20 +114,21 @@ export function AccountMenu({
                   <code className="flex-1 min-w-0 text-xs font-mono text-gray-800 break-all bg-gray-50 px-2 py-1.5 rounded">
                     {accountAddress}
                   </code>
-                  <button
-                    type="button"
+                  <ButtonIconNeutral
                     onClick={handleCopyAddress}
                     title="Copy address"
-                    className="shrink-0 rounded border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    aria-label="Copy address"
+                    className="shrink-0"
                   >
                     <CopyIcon className="h-4 w-4" />
-                  </button>
+                  </ButtonIconNeutral>
                   <a
                     href={`${EXPLORER_ADDRESS_URL}${encodeURIComponent(accountAddress)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="View in explorer"
-                    className="shrink-0 rounded border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    aria-label="View in explorer"
+                    className="shrink-0 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
                   >
                     <ExternalLinkIcon className="h-4 w-4" />
                   </a>
@@ -150,25 +151,16 @@ export function AccountMenu({
                   className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-900
                              [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                 />
-                <button
-                  type="button"
-                  onClick={handleApplyIndex}
-                  className="rounded border border-gray-300 px-2 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
+                <ButtonPrimary size="sm" onClick={handleApplyIndex}>
                   Switch
-                </button>
+                </ButtonPrimary>
               </div>
             </div>
 
             <div className="pt-2 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={handleDisconnect}
-                className="w-full rounded-lg px-3 py-2 text-sm font-medium
-                           bg-gray-700 text-white hover:bg-gray-800"
-              >
+              <ButtonPrimary size="md" className="w-full" onClick={handleDisconnect}>
                 Disconnect
-              </button>
+              </ButtonPrimary>
             </div>
           </div>
         </div>

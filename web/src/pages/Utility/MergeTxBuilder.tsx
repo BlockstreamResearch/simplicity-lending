@@ -6,6 +6,12 @@ import { useMergeTxForm } from '../../tx/merge/useMergeTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { CopyIcon } from '../../components/CopyIcon'
+import {
+  ButtonPrimary,
+  ButtonSecondary,
+  ButtonNeutral,
+  ButtonIconNeutral,
+} from '../../components/Button'
 
 export interface MergeTxBuilderProps {
   accountIndex: number
@@ -217,30 +223,19 @@ export function MergeTxBuilder({
           </div>
 
           <div className="flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:pointer-events-none"
-              disabled={!canBuild || building}
-              onClick={handleBuild}
-            >
+            <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
               {building ? 'Building…' : 'Build & Sign'}
-            </button>
-            <button
-              type="button"
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50 disabled:pointer-events-none"
+            </ButtonSecondary>
+            <ButtonPrimary
+              size="md"
               disabled={!canBuild || building}
               onClick={handleBuildAndBroadcast}
             >
               {building ? 'Building…' : 'Build & Broadcast'}
-            </button>
-            <button
-              type="button"
-              className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded disabled:opacity-50 disabled:pointer-events-none"
-              disabled={building}
-              onClick={handleClear}
-            >
+            </ButtonPrimary>
+            <ButtonNeutral size="md" disabled={building} onClick={handleClear}>
               Clear
-            </button>
+            </ButtonNeutral>
           </div>
           {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
           {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
@@ -255,15 +250,13 @@ export function MergeTxBuilder({
               >
                 {broadcastTxid}
               </a>
-              <button
-                type="button"
-                className="p-1 rounded text-green-700 hover:bg-green-100"
+              <ButtonIconNeutral
                 onClick={() => navigator.clipboard?.writeText(broadcastTxid)}
                 title="Copy txid"
                 aria-label="Copy txid"
               >
                 <CopyIcon className="h-4 w-4" />
-              </button>
+              </ButtonIconNeutral>
             </p>
           )}
           {signedTxHex && (
@@ -274,13 +267,13 @@ export function MergeTxBuilder({
                 className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded p-2 h-24"
                 value={signedTxHex}
               />
-              <button
-                type="button"
-                className="mt-2 text-blue-600 hover:underline text-sm"
+              <ButtonNeutral
+                size="sm"
+                className="mt-2"
                 onClick={() => navigator.clipboard?.writeText(signedTxHex)}
               >
                 Copy hex
-              </button>
+              </ButtonNeutral>
             </div>
           )}
         </div>

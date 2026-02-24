@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { SeedGate } from './SeedGate'
-import { fetchOffers } from './api/client'
-import type { OfferShort, OfferStatus } from './types/offers'
 import { Utility } from './pages/Utility'
+import { CreateOfferPage } from './pages/CreateOffer'
+import { Dashboard } from './pages/Dashboard'
+import { LenderPage } from './pages/Lender'
 import { AccountMenu } from './components/AccountMenu'
 import { parseSeedHex, deriveSecretKeyFromIndex } from './utility/seed'
 import { getP2pkAddressFromSecret } from './utility/addressP2pk'
@@ -11,16 +12,7 @@ const SEED_STORAGE_KEY = 'simplicity-lending-seed-hex'
 const ACCOUNT_INDEX_STORAGE_KEY = 'simplicity-lending-account-index'
 const P2PK_NETWORK: 'testnet' | 'mainnet' = 'testnet'
 
-const STATUS_CLASSES: Record<OfferStatus, string> = {
-  active: 'bg-green-100 text-green-800',
-  pending: 'bg-amber-100 text-amber-800',
-  repaid: 'bg-blue-100 text-blue-800',
-  liquidated: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-700',
-  claimed: 'bg-green-100 text-green-800',
-}
-
-type Tab = 'offers' | 'utility'
+export type Tab = 'dashboard' | 'utility' | 'borrower' | 'lender'
 
 function Header({
   tab,
@@ -44,7 +36,10 @@ function Header({
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="max-w-7xl mx-auto px-8 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold text-gray-900">Simplicity Lending</h1>
+        <div className="flex flex-col">
+          <h1 className="text-2xl font-bold uppercase text-gray-900">LENDING DEMO</h1>
+          <p className="text-sm uppercase text-gray-500">POWERED BY SIMPLICITY</p>
+        </div>
         {showTabs && (
           <div className="flex items-center gap-6">
             <nav className="flex gap-6">
@@ -53,13 +48,13 @@ function Header({
                 className={
                   'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
                   'hover:underline focus:ring-0 focus:ring-offset-0 ' +
-                  (tab === 'offers'
+                  (tab === 'dashboard'
                     ? 'font-semibold text-gray-900'
                     : 'text-gray-600 hover:text-gray-900 font-medium')
                 }
-                onClick={() => onTab('offers')}
+                onClick={() => onTab('dashboard')}
               >
-                Offers
+                Dashboard
               </button>
               <button
                 type="button"
@@ -73,6 +68,32 @@ function Header({
                 onClick={() => onTab('utility')}
               >
                 Utility
+              </button>
+              <button
+                type="button"
+                className={
+                  'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
+                  'hover:underline focus:ring-0 focus:ring-offset-0 ' +
+                  (tab === 'borrower'
+                    ? 'font-semibold text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900 font-medium')
+                }
+                onClick={() => onTab('borrower')}
+              >
+                Borrower
+              </button>
+              <button
+                type="button"
+                className={
+                  'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
+                  'hover:underline focus:ring-0 focus:ring-offset-0 ' +
+                  (tab === 'lender'
+                    ? 'font-semibold text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900 font-medium')
+                }
+                onClick={() => onTab('lender')}
+              >
+                Lender
               </button>
             </nav>
             <AccountMenu
@@ -91,93 +112,24 @@ function Header({
 
 function AppContent({
   tab,
-  offers,
-  loading,
-  error,
+  onTab,
   accountIndex,
 }: {
   tab: Tab
-  offers: OfferShort[]
-  loading: boolean
-  error: string | null
+  onTab: (t: Tab) => void
   accountIndex: number
 }) {
   return (
     <main className="max-w-7xl mx-auto px-8 py-8">
-      {tab === 'offers' && (
-        <>
-          <p className="text-gray-600 mb-6">Lending offers</p>
-          {loading && <p>Loading offers…</p>}
-          {error && (
-            <p className="text-red-700 bg-red-50 p-4 rounded-lg">
-              Failed to load offers: {error}. Make sure the indexer API is running and CORS is
-              enabled.
-            </p>
-          )}
-          {!loading && !error && offers.length === 0 && (
-            <p className="text-gray-600">No offers yet.</p>
-          )}
-          {!loading && !error && offers.length > 0 && (
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
-                    Status
-                  </th>
-                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
-                    Collateral
-                  </th>
-                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
-                    Principal
-                  </th>
-                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
-                    Interest rate
-                  </th>
-                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
-                    Expiry (blocks)
-                  </th>
-                  <th className="text-left py-2 px-3 border-b border-gray-200 font-semibold text-gray-700">
-                    Created at height
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {offers.map((o) => (
-                  <tr key={o.id}>
-                    <td className="py-2 px-3 border-b border-gray-200">
-                      <span
-                        className={`inline-block py-0.5 px-2 rounded text-sm capitalize ${STATUS_CLASSES[o.status]}`}
-                      >
-                        {o.status}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 border-b border-gray-200">
-                      {o.collateral_amount.toString()} ({shortHex(o.collateral_asset)})
-                    </td>
-                    <td className="py-2 px-3 border-b border-gray-200">
-                      {o.principal_amount.toString()} ({shortHex(o.principal_asset)})
-                    </td>
-                    <td className="py-2 px-3 border-b border-gray-200">{o.interest_rate}</td>
-                    <td className="py-2 px-3 border-b border-gray-200">{o.loan_expiration_time}</td>
-                    <td className="py-2 px-3 border-b border-gray-200">
-                      {o.created_at_height.toString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </>
-      )}
+      {tab === 'dashboard' && <Dashboard onTab={onTab} />}
 
       {tab === 'utility' && <Utility accountIndex={accountIndex} />}
+
+      {tab === 'borrower' && <CreateOfferPage accountIndex={accountIndex} onTab={onTab} />}
+
+      {tab === 'lender' && <LenderPage onTab={onTab} />}
     </main>
   )
-}
-
-function shortHex(hex: string, len = 8): string {
-  if (hex.length <= len) return hex
-  return hex.slice(0, 4) + '…' + hex.slice(-4)
 }
 
 function readStoredAccountIndex(): number {
@@ -195,10 +147,7 @@ export default function App() {
   const [accountIndex, setAccountIndexState] = useState(readStoredAccountIndex)
   const [currentAccountAddress, setCurrentAccountAddress] = useState<string | null>(null)
   const [addressLoading, setAddressLoading] = useState(false)
-  const [tab, setTab] = useState<Tab>('utility')
-  const [offers, setOffers] = useState<OfferShort[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('dashboard')
 
   useEffect(() => {
     if (!seedHex) return
@@ -248,18 +197,8 @@ export default function App() {
     setSeedHex(null)
   }
 
-  const loadOffers = () => {
-    setLoading(true)
-    setError(null)
-    fetchOffers({ limit: 50 })
-      .then(setOffers)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false))
-  }
-
   const handleTab = (t: Tab) => {
     setTab(t)
-    if (t === 'offers' && offers.length === 0 && !error) loadOffers()
   }
 
   return (
@@ -276,13 +215,7 @@ export default function App() {
       />
       <div className="flex-1 flex justify-center w-full">
         <SeedGate seedHex={seedHex} setSeedHex={setSeedHex} accountIndex={accountIndex}>
-          <AppContent
-            tab={tab}
-            offers={offers}
-            loading={loading}
-            error={error}
-            accountIndex={accountIndex}
-          />
+          <AppContent tab={tab} onTab={handleTab} accountIndex={accountIndex} />
         </SeedGate>
       </div>
     </div>

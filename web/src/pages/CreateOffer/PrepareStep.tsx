@@ -1,0 +1,263 @@
+/**
+ * Step 1: Prepare 4 UTXOs for Utility NFTs issuance.
+ * One fee UTXO (LBTC) → 4×100 sats to address + change + fee.
+ */
+
+import { useCallback, useMemo, useState } from 'react'
+import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
+import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
+import { EsploraApiError, type EsploraClient } from '../../api/esplora'
+import type { ScripthashUtxoEntry } from '../../api/esplora'
+import { buildAndSignPrepareUtilityNftsTx } from '../../utility/buildPrepareUtilityNftsTx'
+import { CopyIcon } from '../../components/CopyIcon'
+import {
+  ButtonPrimary,
+  ButtonSecondary,
+  ButtonIconNeutral,
+  ButtonNeutral,
+} from '../../components/Button'
+
+const ISSUANCE_UTXOS_COUNT = 4
+const ISSUANCE_UTXO_VALUE = 100
+
+export interface PrepareStepProps {
+  accountIndex: number
+  accountAddress: string | null
+  utxos: ScripthashUtxoEntry[]
+  esplora: EsploraClient
+  seedHex: string
+  onSuccess: (txid: string) => void
+}
+
+export function PrepareStep({
+  accountIndex,
+  accountAddress,
+  utxos,
+  esplora,
+  seedHex,
+  onSuccess,
+}: PrepareStepProps) {
+  const nativeUtxos = useMemo(() => {
+    const policyId = POLICY_ASSET_ID[P2PK_NETWORK]
+    return utxos.filter((u) => !u.asset || u.asset.trim().toLowerCase() === policyId)
+  }, [utxos])
+
+  const [selectedUtxoIndex, setSelectedUtxoIndex] = useState<number>(0)
+  const [feeAmount, setFeeAmount] = useState('')
+  const [toAddress, setToAddress] = useState(accountAddress ?? '')
+  const [building, setBuilding] = useState(false)
+  const [buildError, setBuildError] = useState<string | null>(null)
+  const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
+  const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
+  const [broadcastError, setBroadcastError] = useState<string | null>(null)
+
+  const selectedUtxo =
+    nativeUtxos.length > 0 && selectedUtxoIndex >= 0 && selectedUtxoIndex < nativeUtxos.length
+      ? nativeUtxos[selectedUtxoIndex]
+      : null
+
+  const feeNum = parseInt(feeAmount, 10) || 0
+  const minFeeUtxoValue = feeNum + ISSUANCE_UTXOS_COUNT * ISSUANCE_UTXO_VALUE
+  const canBuild =
+    selectedUtxo != null &&
+    (selectedUtxo.value ?? 0) >= minFeeUtxoValue &&
+    feeNum > 0 &&
+    toAddress.trim().length > 0
+
+  const handleBuild = useCallback(async () => {
+    if (!selectedUtxo || !canBuild || !seedHex) return
+    setBuildError(null)
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+    setBuilding(true)
+    try {
+      const tx = await esplora.getTx(selectedUtxo.txid)
+      const prevout = tx.vout?.[selectedUtxo.vout]
+      if (!prevout) {
+        setBuildError(`No output at index ${selectedUtxo.vout}`)
+        return
+      }
+      if (prevout.value == null) {
+        setBuildError('Output is confidential (value not exposed)')
+        return
+      }
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const hex = await buildAndSignPrepareUtilityNftsTx({
+        feeUtxo: {
+          outpoint: { txid: selectedUtxo.txid, vout: selectedUtxo.vout },
+          prevout,
+        },
+        toAddress: toAddress.trim(),
+        feeAmount: BigInt(feeNum),
+        secretKey: secret,
+        network: P2PK_NETWORK,
+      })
+      setSignedTxHex(hex)
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBuilding(false)
+    }
+  }, [selectedUtxo, canBuild, seedHex, accountIndex, toAddress, feeNum, esplora])
+
+  const handleBuildAndBroadcast = useCallback(async () => {
+    if (!selectedUtxo || !canBuild || !seedHex) return
+    setBuildError(null)
+    setSignedTxHex(null)
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+    setBuilding(true)
+    try {
+      const tx = await esplora.getTx(selectedUtxo.txid)
+      const prevout = tx.vout?.[selectedUtxo.vout]
+      if (!prevout) {
+        setBuildError(`No output at index ${selectedUtxo.vout}`)
+        return
+      }
+      if (prevout.value == null) {
+        setBuildError('Output is confidential (value not exposed)')
+        return
+      }
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const hex = await buildAndSignPrepareUtilityNftsTx({
+        feeUtxo: {
+          outpoint: { txid: selectedUtxo.txid, vout: selectedUtxo.vout },
+          prevout,
+        },
+        toAddress: toAddress.trim(),
+        feeAmount: BigInt(feeNum),
+        secretKey: secret,
+        network: P2PK_NETWORK,
+      })
+      setSignedTxHex(hex)
+      const txidRes = await esplora.broadcastTx(hex)
+      setBroadcastTxid(txidRes)
+      onSuccess(txidRes)
+    } catch (e) {
+      if (e instanceof EsploraApiError) {
+        setBroadcastError(e.body ?? e.message)
+        setBroadcastTxid(null)
+      } else {
+        setBuildError(e instanceof Error ? e.message : String(e))
+      }
+    } finally {
+      setBuilding(false)
+    }
+  }, [selectedUtxo, canBuild, seedHex, accountIndex, toAddress, feeNum, esplora, onSuccess])
+
+  return (
+    <section className="min-w-0 max-w-4xl">
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">Step 1: Prepare 4 UTXOs</h3>
+      <div className="space-y-4 text-sm">
+        <div>
+          <p className="font-medium text-gray-700 mb-1">Fee UTXO (LBTC)</p>
+          {nativeUtxos.length === 0 ? (
+            <p className="text-gray-500">
+              No LBTC UTXOs in your account. Use Utility to create some.
+            </p>
+          ) : (
+            <select
+              className="border border-gray-300 rounded px-2 py-1.5 text-gray-900 bg-white w-full max-w-md"
+              value={selectedUtxoIndex}
+              onChange={(e) => setSelectedUtxoIndex(parseInt(e.target.value, 10))}
+            >
+              {nativeUtxos.map((u, idx) => (
+                <option key={`${u.txid}:${u.vout}`} value={idx}>
+                  {u.txid.slice(0, 16)}…:{u.vout} — {u.value ?? '?'} sats
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div>
+          <p className="font-medium text-gray-700 mb-1">Fee amount (sats)</p>
+          <input
+            type="number"
+            placeholder="e.g. 500"
+            min={1}
+            className="w-28 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
+            value={feeAmount}
+            onChange={(e) => setFeeAmount(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <p className="font-medium text-gray-700 mb-1">To address (4×100 sats + change)</p>
+          <input
+            type="text"
+            placeholder="Bech32m address"
+            className="w-full max-w-lg border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
+            value={toAddress}
+            onChange={(e) => setToAddress(e.target.value)}
+          />
+          {accountAddress && (
+            <p className="text-gray-500 mt-1">
+              Default: current account. Fee UTXO must have at least {minFeeUtxoValue} sats (fee +{' '}
+              {ISSUANCE_UTXOS_COUNT * ISSUANCE_UTXO_VALUE} for 4 outputs).
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2 items-center">
+          <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
+            {building ? 'Building…' : 'Build & Sign'}
+          </ButtonSecondary>
+          <ButtonPrimary
+            size="md"
+            disabled={!canBuild || building}
+            onClick={handleBuildAndBroadcast}
+          >
+            {building ? 'Building…' : 'Build & Broadcast'}
+          </ButtonPrimary>
+        </div>
+
+        {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
+        {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
+        {broadcastTxid && (
+          <p className="mt-2 text-green-700 flex items-center gap-1.5 flex-wrap">
+            <span>Broadcast successful. Txid:</span>
+            <a
+              href={esplora.getTxExplorerUrl(broadcastTxid)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs break-all text-green-800 hover:underline underline-offset-1"
+            >
+              {broadcastTxid}
+            </a>
+            <ButtonIconNeutral
+              onClick={() => navigator.clipboard?.writeText(broadcastTxid)}
+              title="Copy txid"
+              aria-label="Copy txid"
+            >
+              <CopyIcon className="h-4 w-4" />
+            </ButtonIconNeutral>
+          </p>
+        )}
+        {broadcastTxid && (
+          <p className="text-gray-600 mt-1">Use this tx and vouts 0,1,2,3 in Step 2.</p>
+        )}
+
+        {signedTxHex && (
+          <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
+            <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
+            <textarea
+              readOnly
+              className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded p-2 h-24"
+              value={signedTxHex}
+            />
+            <ButtonNeutral
+              size="sm"
+              className="mt-2"
+              onClick={() => navigator.clipboard?.writeText(signedTxHex)}
+            >
+              Copy hex
+            </ButtonNeutral>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
