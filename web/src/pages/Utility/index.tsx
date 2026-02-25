@@ -6,8 +6,10 @@ import { AccountSection } from './AccountSection'
 import { SplitTxBuilder } from './SplitTxBuilder'
 import { SplitAssetTxBuilder } from './SplitAssetTxBuilder'
 import { MergeTxBuilder } from './MergeTxBuilder'
+import { BurnTxBuilder } from './BurnTxBuilder'
 import type { UtilityMode } from './types'
 import { UTILITY_MODES } from './types'
+import { Select } from '../../components/Select'
 
 export type { UtilityMode }
 
@@ -66,18 +68,14 @@ export function Utility({ accountIndex }: { accountIndex: number }) {
         <label htmlFor="utility-mode" className="text-sm font-medium text-gray-700">
           Action:
         </label>
-        <select
+        <Select
           id="utility-mode"
-          className="border border-gray-300 rounded px-3 py-1.5 text-gray-900 bg-white text-sm"
           value={utilityMode}
           onChange={(e) => setUtilityMode(e.target.value as UtilityMode)}
-        >
-          {UTILITY_MODES.map(({ mode, label }) => (
-            <option key={mode} value={mode}>
-              {label}
-            </option>
-          ))}
-        </select>
+          options={UTILITY_MODES.map(({ mode, label }) => ({ value: mode, label }))}
+          widthFromLongestOption
+          maxOptionWidth="20rem"
+        />
       </div>
       {utilityMode === 'split-native' && (
         <SplitTxBuilder
@@ -113,6 +111,16 @@ export function Utility({ accountIndex }: { accountIndex: number }) {
       )}
       {utilityMode === 'merge' && (
         <MergeTxBuilder
+          accountIndex={accountIndex}
+          accountAddress={accountAddress}
+          utxos={utxos}
+          esplora={esplora}
+          seedHex={seedHex}
+          onBroadcastSuccess={refresh}
+        />
+      )}
+      {utilityMode === 'burn' && (
+        <BurnTxBuilder
           accountIndex={accountIndex}
           accountAddress={accountAddress}
           utxos={utxos}

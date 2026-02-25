@@ -12,6 +12,8 @@ import {
   ButtonNeutral,
   ButtonIconNeutral,
 } from '../../components/Button'
+import { Input } from '../../components/Input'
+import { UtxoSelect } from '../../components/UtxoSelect'
 
 export interface MergeTxBuilderProps {
   accountIndex: number
@@ -93,11 +95,12 @@ export function MergeTxBuilder({
                   const value = row.txid && row.vout !== '' ? `${row.txid}:${row.vout}` : ''
                   return (
                     <li key={row.id} className="flex gap-2 items-center flex-wrap">
-                      <select
-                        className="min-w-[200px] max-w-full border border-gray-300 rounded px-2 py-1.5 text-gray-900 bg-white text-sm font-mono"
+                      <UtxoSelect
+                        className="min-w-[200px] max-w-full font-mono text-sm"
+                        adaptiveWidth
+                        utxos={available}
                         value={value}
-                        onChange={(e) => {
-                          const v = e.target.value
+                        onChange={(v) => {
                           if (!v) {
                             clearInputRow(row.id)
                             return
@@ -106,14 +109,10 @@ export function MergeTxBuilder({
                           const vout = parseInt(voutStr, 10)
                           if (txid && !Number.isNaN(vout)) selectInputUtxo(row.id, txid, vout)
                         }}
-                      >
-                        <option value="">Select UTXO…</option>
-                        {available.map((u) => (
-                          <option key={`${u.txid}:${u.vout}`} value={`${u.txid}:${u.vout}`}>
-                            {u.txid.slice(0, 10)}… vout {u.vout} ({u.value ?? '?'} sats)
-                          </option>
-                        ))}
-                      </select>
+                        optionValueType="txid:vout"
+                        placeholder="Select UTXO…"
+                        labelSuffix="sats"
+                      />
                       {row.prevout && (
                         <span className="text-gray-600">{row.prevout.value} sats (LBTC)</span>
                       )}
@@ -137,11 +136,11 @@ export function MergeTxBuilder({
 
           <div>
             <p className="font-medium text-gray-700 mb-1">Fee (LBTC)</p>
-            <input
+            <Input
               type="number"
               placeholder="sats"
               min={0}
-              className="w-28 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
+              className="w-28"
               value={feeAmount}
               onChange={(e) => setFeeAmount(e.target.value)}
             />
@@ -175,18 +174,18 @@ export function MergeTxBuilder({
               <ul className="space-y-2">
                 {outputs.map((o, idx) => (
                   <li key={o.id} className="flex gap-2 items-center flex-wrap">
-                    <input
+                    <Input
                       type="text"
                       placeholder="address"
-                      className="flex-1 min-w-[160px] border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
+                      className="flex-1 min-w-[160px] font-mono"
                       value={o.address}
                       onChange={(e) => updateOutput(o.id, 'address', e.target.value)}
                     />
-                    <input
+                    <Input
                       type="number"
                       placeholder="sats"
                       min={1}
-                      className="w-24 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
+                      className="w-24"
                       value={o.amount}
                       onChange={(e) => updateOutput(o.id, 'amount', e.target.value)}
                     />

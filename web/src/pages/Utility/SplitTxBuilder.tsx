@@ -12,6 +12,7 @@ import {
   ButtonNeutral,
   ButtonIconNeutral,
 } from '../../components/Button'
+import { Input } from '../../components/Input'
 
 export interface SplitTxBuilderProps {
   accountIndex: number
@@ -87,18 +88,18 @@ export function SplitTxBuilder({
           <div>
             <p className="font-medium text-gray-700 mb-1">Input (OutPoint)</p>
             <div className="flex gap-2 flex-wrap items-center">
-              <input
+              <Input
                 type="text"
                 placeholder="txid"
-                className="flex-1 min-w-[200px] border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
+                className="flex-1 min-w-[200px] font-mono"
                 value={outpointTxid}
                 onChange={(e) => setOutpointTxid(e.target.value)}
               />
-              <input
+              <Input
                 type="number"
                 placeholder="vout"
                 min={0}
-                className="w-20 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
+                className="w-20"
                 value={outpointVout}
                 onChange={(e) => setOutpointVout(e.target.value)}
               />
@@ -128,11 +129,11 @@ export function SplitTxBuilder({
 
           <div>
             <p className="font-medium text-gray-700 mb-1">Fee (empty script, last output)</p>
-            <input
+            <Input
               type="number"
               placeholder="sats"
               min={0}
-              className="w-28 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
+              className="w-28"
               value={feeAmount}
               onChange={(e) => setFeeAmount(e.target.value)}
             />
@@ -168,18 +169,18 @@ export function SplitTxBuilder({
               <ul className="space-y-2">
                 {outputs.map((o, idx) => (
                   <li key={o.id} className="flex gap-2 items-center flex-wrap">
-                    <input
+                    <Input
                       type="text"
                       placeholder="address"
-                      className="flex-1 min-w-[160px] border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
+                      className="flex-1 min-w-[160px] font-mono"
                       value={o.address}
                       onChange={(e) => updateOutput(o.id, 'address', e.target.value)}
                     />
-                    <input
+                    <Input
                       type="number"
                       placeholder="sats"
                       min={1}
-                      className="w-24 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
+                      className="w-24"
                       value={o.amount}
                       onChange={(e) => updateOutput(o.id, 'amount', e.target.value)}
                     />

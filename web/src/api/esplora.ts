@@ -127,6 +127,11 @@ export class EsploraClient {
     return `${this.explorerBaseUrl}/tx/${txid.trim()}`
   }
 
+  /** URL of the asset page on the block explorer (e.g. to open in a new tab). */
+  getAssetExplorerUrl(assetId: string): string {
+    return `${this.explorerBaseUrl}/asset/${assetId.trim()}`
+  }
+
   /** Latest block hash (tip). */
   async getLatestBlockHash(): Promise<string> {
     const body = await this.get('/blocks/tip/hash')
@@ -174,6 +179,21 @@ export class EsploraClient {
       return JSON.parse(body) as EsploraTx
     } catch (e) {
       throw new EsploraApiError(`Failed to parse tx: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  /** GET /tx/:txid/outspends — spending status of all outputs. */
+  async getTxOutspends(txId: string): Promise<EsploraOutspend[]> {
+    const body = await this.get(`/tx/${txId}/outspends`)
+    try {
+      const raw = JSON.parse(body) as unknown
+      if (!Array.isArray(raw)) throw new EsploraApiError('Expected array')
+      return raw as EsploraOutspend[]
+    } catch (e) {
+      if (e instanceof EsploraApiError) throw e
+      throw new EsploraApiError(
+        `Failed to parse outspends: ${e instanceof Error ? e.message : String(e)}`
+      )
     }
   }
 
@@ -330,6 +350,15 @@ export interface EsploraTx {
   txid: string
   vout: EsploraVout[]
   vin?: unknown[]
+  [key: string]: unknown
+}
+
+/** One entry from GET /tx/:txid/outspends. */
+export interface EsploraOutspend {
+  spent: boolean
+  txid?: string
+  vin?: number
+  status?: { confirmed: boolean }
   [key: string]: unknown
 }
 

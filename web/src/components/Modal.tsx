@@ -42,7 +42,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         onClick={onClose}
       />
       <div
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white shadow-xl"
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
@@ -51,7 +51,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
           </h2>
           <button
             type="button"
-            className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="rounded-xl p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
             aria-label="Close"
             onClick={onClose}
           >

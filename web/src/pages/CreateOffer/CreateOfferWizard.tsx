@@ -1,16 +1,15 @@
 /**
- * 3-step wizard for Create Offer: Prepare → Issue Utility NFTs → Create PreLock.
- * Holds preparedTxid and issuanceTxid for passing between steps.
+ * 2-step wizard for Create Offer: Issue Utility NFTs → Create PreLock.
+ * Prepare is done outside the wizard (Borrower page "Prepare to be a borrower").
  */
 
 import { useState } from 'react'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
-import { PrepareStep } from './PrepareStep'
 import { IssueUtilityNftsStep } from './IssueUtilityNftsStep'
 import { CreatePreLockStep } from './CreatePreLockStep'
 
-export type CreateOfferStep = 1 | 2 | 3
+export type CreateOfferStep = 2 | 3
 
 export interface CreateOfferWizardProps {
   accountIndex: number
@@ -19,9 +18,13 @@ export interface CreateOfferWizardProps {
   esplora: EsploraClient
   seedHex: string
   savedPreparedTxid?: string | null
+  savedAuxiliaryAssetId?: string | null
+  savedPrepareFirstVout?: number
+  currentBlockHeight?: number | null
   onBroadcastSuccess: () => void | Promise<void>
-  onPrepareSuccess?: (txid: string) => void
   onComplete?: () => void
+  /** Called when Issue Utility NFTs step succeeds (e.g. to clear prepare state). */
+  onIssueUtilityNftsSuccess?: () => void
 }
 
 export function CreateOfferWizard({
@@ -31,27 +34,21 @@ export function CreateOfferWizard({
   esplora,
   seedHex,
   savedPreparedTxid = null,
+  savedAuxiliaryAssetId = null,
+  savedPrepareFirstVout = 0,
+  currentBlockHeight = null,
   onBroadcastSuccess,
-  onPrepareSuccess,
   onComplete,
+  onIssueUtilityNftsSuccess,
 }: CreateOfferWizardProps) {
-  const hasSavedTxid = Boolean(savedPreparedTxid?.trim())
-  const [currentStep, setCurrentStep] = useState<CreateOfferStep>(hasSavedTxid ? 2 : 1)
-  const [preparedTxid, setPreparedTxid] = useState<string | null>(savedPreparedTxid ?? null)
+  const [currentStep, setCurrentStep] = useState<CreateOfferStep>(2)
   const [issuanceTxid, setIssuanceTxid] = useState<string | null>(null)
+
+  const canShowStep3 = Boolean(issuanceTxid?.trim())
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2 items-center">
-        <button
-          type="button"
-          className={`px-3 py-1.5 rounded-md text-sm font-medium ${
-            currentStep === 1 ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'
-          }`}
-          onClick={() => setCurrentStep(1)}
-        >
-          1. Prepare 4 UTXOs
-        </button>
         <button
           type="button"
           className={`px-3 py-1.5 rounded-md text-sm font-medium ${
@@ -61,44 +58,35 @@ export function CreateOfferWizard({
         >
           2. Issue Utility NFTs
         </button>
-        <button
-          type="button"
-          className={`px-3 py-1.5 rounded-md text-sm font-medium ${
-            currentStep === 3 ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'
-          }`}
-          onClick={() => setCurrentStep(3)}
-        >
-          3. Create PreLock
-        </button>
+        {canShowStep3 && (
+          <button
+            type="button"
+            className={`px-3 py-1.5 rounded-md text-sm font-medium ${
+              currentStep === 3 ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'
+            }`}
+            onClick={() => setCurrentStep(3)}
+          >
+            3. Create PreLock
+          </button>
+        )}
       </div>
-
-      {currentStep === 1 && (
-        <PrepareStep
-          accountIndex={accountIndex}
-          accountAddress={accountAddress}
-          utxos={utxos}
-          esplora={esplora}
-          seedHex={seedHex}
-          onSuccess={(txid: string) => {
-            setPreparedTxid(txid)
-            onPrepareSuccess?.(txid)
-            void onBroadcastSuccess()
-          }}
-        />
-      )}
 
       {currentStep === 2 && (
         <IssueUtilityNftsStep
-          key={preparedTxid ?? 'step2'}
+          key="step2"
           accountIndex={accountIndex}
           accountAddress={accountAddress}
           utxos={utxos}
           esplora={esplora}
           seedHex={seedHex}
-          preparedTxid={preparedTxid}
+          preparedTxid={savedPreparedTxid}
+          storedAuxiliaryAssetId={savedAuxiliaryAssetId}
+          prepareFirstVout={savedPrepareFirstVout}
+          currentBlockHeight={currentBlockHeight}
           onSuccess={(txid: string) => {
             setIssuanceTxid(txid)
             void onBroadcastSuccess()
+            onIssueUtilityNftsSuccess?.()
           }}
         />
       )}

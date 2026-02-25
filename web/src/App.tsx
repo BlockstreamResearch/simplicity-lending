@@ -61,19 +61,6 @@ function Header({
                 className={
                   'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
                   'hover:underline focus:ring-0 focus:ring-offset-0 ' +
-                  (tab === 'utility'
-                    ? 'font-semibold text-gray-900'
-                    : 'text-gray-600 hover:text-gray-900 font-medium')
-                }
-                onClick={() => onTab('utility')}
-              >
-                Utility
-              </button>
-              <button
-                type="button"
-                className={
-                  'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
-                  'hover:underline focus:ring-0 focus:ring-offset-0 ' +
                   (tab === 'borrower'
                     ? 'font-semibold text-gray-900'
                     : 'text-gray-600 hover:text-gray-900 font-medium')
@@ -94,6 +81,19 @@ function Header({
                 onClick={() => onTab('lender')}
               >
                 Lender
+              </button>
+              <button
+                type="button"
+                className={
+                  'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
+                  'hover:underline focus:ring-0 focus:ring-offset-0 ' +
+                  (tab === 'utility'
+                    ? 'font-semibold text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900 font-medium')
+                }
+                onClick={() => onTab('utility')}
+              >
+                Utility
               </button>
             </nav>
             <AccountMenu
@@ -127,7 +127,7 @@ function AppContent({
 
       {tab === 'borrower' && <CreateOfferPage accountIndex={accountIndex} onTab={onTab} />}
 
-      {tab === 'lender' && <LenderPage onTab={onTab} />}
+      {tab === 'lender' && <LenderPage accountIndex={accountIndex} onTab={onTab} />}
     </main>
   )
 }

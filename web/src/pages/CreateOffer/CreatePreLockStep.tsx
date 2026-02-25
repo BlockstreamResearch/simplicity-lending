@@ -8,6 +8,9 @@ import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
 import { ButtonPrimary, ButtonSecondary } from '../../components/Button'
+import { Input } from '../../components/Input'
+import { UtxoSelect } from '../../components/UtxoSelect'
+import { formClassNames } from '../../components/formClassNames'
 
 export interface CreatePreLockStepProps {
   accountIndex: number
@@ -57,45 +60,42 @@ export function CreatePreLockStep({ accountAddress, utxos, issuanceTxid }: Creat
       <h3 className="text-lg font-semibold text-gray-900 mb-2">Step 3: Create PreLock</h3>
       <div className="space-y-4 text-sm">
         <div>
-          <p className="font-medium text-gray-700 mb-1">Collateral UTXO (asset to lock)</p>
+          <p className={formClassNames.label}>Collateral UTXO (asset to lock)</p>
           {assetUtxos.length === 0 ? (
             <p className="text-gray-500">No non-LBTC UTXOs. Complete Step 2 to have NFT UTXOs.</p>
           ) : (
-            <select
-              className="border border-gray-300 rounded px-2 py-1.5 text-gray-900 bg-white max-w-md"
-              value={collateralUtxoIndex}
-              onChange={(e) => setCollateralUtxoIndex(parseInt(e.target.value, 10))}
-            >
-              {assetUtxos.map((u, idx) => (
-                <option key={`${u.txid}:${u.vout}`} value={idx}>
-                  {u.txid.slice(0, 16)}…:{u.vout} — {u.value ?? '?'} (asset)
-                </option>
-              ))}
-            </select>
+            <UtxoSelect
+              className="max-w-md"
+              utxos={assetUtxos}
+              value={String(collateralUtxoIndex)}
+              onChange={(v) => setCollateralUtxoIndex(parseInt(v, 10))}
+              optionValueType="index"
+              labelSuffix="(asset)"
+            />
           )}
         </div>
 
         <div>
-          <p className="font-medium text-gray-700 mb-1">Principal asset ID (hex, big-endian)</p>
-          <input
+          <p className={formClassNames.label}>Principal asset ID (hex, big-endian)</p>
+          <Input
             type="text"
             placeholder="e.g. policy asset for LBTC"
-            className="w-full max-w-lg border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
+            className="w-full max-w-lg font-mono"
             value={principalAssetIdHex}
             onChange={(e) => setPrincipalAssetIdHex(e.target.value)}
           />
         </div>
 
         <div>
-          <p className="font-medium text-gray-700 mb-1">Issuance tx id (from Step 2)</p>
-          <input
+          <p className={formClassNames.label}>Issuance tx id (from Step 2)</p>
+          <Input
             type="text"
             placeholder="Txid from Step 2"
-            className="w-full max-w-lg border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
+            className="w-full max-w-lg font-mono"
             value={issuanceTxId}
             onChange={(e) => setIssuanceTxId(e.target.value)}
           />
-          <p className="text-gray-500 mt-1">
+          <p className={formClassNames.helper}>
             NFT outpoints: (txid, 0)=Borrower, (txid, 1)=Lender, (txid, 2)=First params, (txid,
             3)=Second params.
           </p>
@@ -103,50 +103,47 @@ export function CreatePreLockStep({ accountAddress, utxos, issuanceTxid }: Creat
 
         {NFT_VOUT_ORDER.map(({ label, vout }) => (
           <div key={vout}>
-            <p className="font-medium text-gray-700 mb-1">
+            <p className={formClassNames.label}>
               {label} (vout {vout})
             </p>
-            <p className="text-gray-500 font-mono text-xs">
+            <p className={formClassNames.helper + ' font-mono'}>
               {issuanceTxId ? `${issuanceTxId.slice(0, 20)}…:${vout}` : '—'}
             </p>
           </div>
         ))}
 
         <div>
-          <p className="font-medium text-gray-700 mb-1">Fee UTXO (LBTC)</p>
+          <p className={formClassNames.label}>Fee UTXO (LBTC)</p>
           {nativeUtxos.length === 0 ? (
             <p className="text-gray-500">No LBTC UTXOs.</p>
           ) : (
-            <select
-              className="border border-gray-300 rounded px-2 py-1.5 text-gray-900 bg-white max-w-md"
-              value={feeUtxoIndex}
-              onChange={(e) => setFeeUtxoIndex(parseInt(e.target.value, 10))}
-            >
-              {nativeUtxos.map((u, idx) => (
-                <option key={`${u.txid}:${u.vout}`} value={idx}>
-                  {u.txid.slice(0, 16)}…:{u.vout} — {u.value ?? '?'} sats
-                </option>
-              ))}
-            </select>
+            <UtxoSelect
+              className="max-w-md"
+              utxos={nativeUtxos}
+              value={String(feeUtxoIndex)}
+              onChange={(v) => setFeeUtxoIndex(parseInt(v, 10))}
+              optionValueType="index"
+              labelSuffix="sats"
+            />
           )}
         </div>
 
         <div>
-          <p className="font-medium text-gray-700 mb-1">Fee amount (sats)</p>
-          <input
+          <p className={formClassNames.label}>Fee amount (sats)</p>
+          <Input
             type="number"
             min={1}
-            className="w-28 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
+            className="w-28"
             value={feeAmount}
             onChange={(e) => setFeeAmount(e.target.value)}
           />
         </div>
 
         <div>
-          <p className="font-medium text-gray-700 mb-1">To address</p>
-          <input
+          <p className={formClassNames.label}>To address</p>
+          <Input
             type="text"
-            className="w-full max-w-lg border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
+            className="w-full max-w-lg font-mono"
             value={toAddress}
             onChange={(e) => setToAddress(e.target.value)}
           />

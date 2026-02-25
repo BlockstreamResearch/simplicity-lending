@@ -1,49 +1,113 @@
 /**
- * Lender page: balance cards (LBTC, USDT), YOUR SUPPLY table, MOST RECENT 10 SUPPLY OFFERS.
+ * Lender page: balance cards (LBTC, USDT), YOUR SUPPLY table (offers where user is lender),
+ * PENDING OFFERS YOU CAN ACCEPT. Data from Indexer API (by-script + batch for supply, fetchOffers status=pending for pending).
  */
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import type { Tab } from '../../App'
+import { useSeedHex } from '../../SeedContext'
+import { useAccountAddress } from '../../hooks/useAccountAddress'
+import {
+  fetchOffers,
+  fetchOfferIdsByScript,
+  fetchOfferDetailsBatchWithParticipants,
+  filterOffersByParticipantRole,
+} from '../../api/client'
+import { EsploraClient } from '../../api/esplora'
+import { getScriptPubkeyHexFromAddress } from '../../utility/addressP2pk'
+import { OfferTable } from '../../components/OfferTable'
+import type { OfferShort } from '../../types/offers'
 
-const MOCK_MY_SUPPLY = [
-  {
-    id: 1,
-    supplyUsdt: '50,000',
-    feeUsdt: '80',
-    collateralLbtc: '1',
-    termDays: '~15 Days',
-    termBlocks: '10,000 Blocks',
-    apr: '8.41%',
-    ltv: '55.03%',
-    status: 'Active' as const,
-  },
-]
+export function LenderPage({
+  accountIndex,
+  onTab,
+}: {
+  accountIndex: number
+  onTab: (t: Tab) => void
+}) {
+  const seedHex = useSeedHex()
+  const esplora = useMemo(() => new EsploraClient(), [])
+  const {
+    address: accountAddress,
+    loading,
+    error,
+  } = useAccountAddress({
+    seedHex,
+    accountIndex,
+    esplora,
+  })
 
-const MOCK_SUPPLY_OFFERS = [
-  {
-    address: '3456...6543',
-    supplyUsdt: '50,000',
-    feeUsdt: '80',
-    collateralLbtc: '1',
-    termDays: '~15 Days',
-    termBlocks: '10,000 Blocks',
-    apr: '8.41%',
-    ltv: '55.03%',
-  },
-  {
-    address: '3456...6543',
-    supplyUsdt: '50,000',
-    feeUsdt: '80',
-    collateralLbtc: '1',
-    termDays: '~15 Days',
-    termBlocks: '10,000 Blocks',
-    apr: '8.41%',
-    ltv: '55.03%',
-  },
-]
+  const [lendOffers, setLendOffers] = useState<OfferShort[]>([])
+  const [lendLoading, setLendLoading] = useState(true)
+  const [lendError, setLendError] = useState<string | null>(null)
+  const [pendingOffers, setPendingOffers] = useState<OfferShort[]>([])
+  const [pendingLoading, setPendingLoading] = useState(true)
+  const [pendingError, setPendingError] = useState<string | null>(null)
+  const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null)
 
-export function LenderPage({ onTab }: { onTab: (t: Tab) => void }) {
-  const [page, setPage] = useState(1)
+  const loadLendOffers = useCallback(async () => {
+    if (!accountAddress) {
+      setLendOffers([])
+      setLendLoading(false)
+      return
+    }
+    setLendLoading(true)
+    setLendError(null)
+    try {
+      const scriptPubkeyHex = await getScriptPubkeyHexFromAddress(accountAddress)
+      const ids = await fetchOfferIdsByScript(scriptPubkeyHex)
+      const [withParticipants, height] = await Promise.all([
+        ids.length === 0 ? Promise.resolve([]) : fetchOfferDetailsBatchWithParticipants(ids),
+        esplora.getLatestBlockHeight().catch(() => null),
+      ])
+      const list = filterOffersByParticipantRole(withParticipants, scriptPubkeyHex, 'lender')
+      setLendOffers(list)
+      setCurrentBlockHeight(height)
+    } catch (e) {
+      setLendError(e instanceof Error ? e.message : String(e))
+      setLendOffers([])
+    } finally {
+      setLendLoading(false)
+    }
+  }, [accountAddress, esplora])
+
+  const loadPendingOffers = useCallback(async () => {
+    setPendingLoading(true)
+    setPendingError(null)
+    try {
+      const [list, height] = await Promise.all([
+        fetchOffers({ status: 'pending', limit: 10, offset: 0 }),
+        esplora.getLatestBlockHeight().catch(() => null),
+      ])
+      setPendingOffers(list)
+      setCurrentBlockHeight((h) => h ?? height)
+    } catch (e) {
+      setPendingError(e instanceof Error ? e.message : String(e))
+      setPendingOffers([])
+    } finally {
+      setPendingLoading(false)
+    }
+  }, [esplora])
+
+  useEffect(() => {
+    loadLendOffers()
+  }, [loadLendOffers])
+
+  useEffect(() => {
+    loadPendingOffers()
+  }, [loadPendingOffers])
+
+  if (!seedHex) {
+    return <p className="text-gray-600">Connect seed to view lender offers.</p>
+  }
+
+  if (loading) {
+    return <p className="text-gray-600">Loading…</p>
+  }
+
+  if (error) {
+    return <p className="rounded-lg bg-red-50 p-4 text-red-700">{error}</p>
+  }
 
   return (
     <div className="space-y-8">
@@ -100,152 +164,29 @@ export function LenderPage({ onTab }: { onTab: (t: Tab) => void }) {
           </span>
           <h3 className="text-base font-semibold uppercase text-gray-900">YOUR SUPPLY</h3>
         </div>
-        <div className="overflow-hidden rounded-lg border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  # ID <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Supply (USDT) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Fee (USDT) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Collateral (LBTC) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Term (Blocks) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  APR <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  LTV <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Status <span className="text-gray-400">↕</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_MY_SUPPLY.map((row) => (
-                <tr key={row.id} className="border-t border-gray-200">
-                  <td className="py-2 px-3 text-sm text-gray-900">#{row.id}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.supplyUsdt}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.feeUsdt}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.collateralLbtc}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">
-                    <span className="block">{row.termDays}</span>
-                    <span className="block text-gray-500">{row.termBlocks}</span>
-                  </td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.apr}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.ltv}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-sm font-medium text-green-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden />
-                      {row.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <OfferTable
+          offers={lendOffers}
+          loading={lendLoading}
+          error={lendError}
+          currentBlockHeight={currentBlockHeight}
+          onRetry={loadLendOffers}
+          emptyMessage="No supply yet"
+        />
       </section>
 
       <section>
         <div className="mb-3 flex items-center gap-2">
           <span className="text-gray-500">★</span>
-          <h3 className="text-base font-semibold text-gray-900">MOST RECENT 10 SUPPLY OFFERS</h3>
+          <h3 className="text-base font-semibold text-gray-900">PENDING OFFERS YOU CAN ACCEPT</h3>
         </div>
-        <div className="overflow-hidden rounded-lg border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Address <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Supply (USDT) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Fee (USDT) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Collateral (LBTC) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Term (Blocks) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  APR <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  LTV <span className="text-gray-400">↕</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_SUPPLY_OFFERS.map((row, i) => (
-                <tr key={i} className="border-t border-gray-200">
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.address}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.supplyUsdt}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.feeUsdt}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.collateralLbtc}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">
-                    <span className="block">{row.termDays}</span>
-                    <span className="block text-gray-500">{row.termBlocks}</span>
-                  </td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.apr}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.ltv}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-3 flex justify-center gap-2 text-sm">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400"
-            aria-label="Previous page"
-          >
-            &lt;
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage(1)}
-            className={`rounded-lg border px-2 py-1 text-sm font-medium ${
-              page === 1
-                ? 'border-gray-800 bg-gray-800 text-white'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-400'
-            }`}
-          >
-            1
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage(2)}
-            className={`rounded-lg border px-2 py-1 text-sm font-medium ${
-              page === 2
-                ? 'border-gray-800 bg-gray-800 text-white'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-400'
-            }`}
-          >
-            2
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400"
-            aria-label="Next page"
-          >
-            &gt;
-          </button>
-        </div>
+        <OfferTable
+          offers={pendingOffers}
+          loading={pendingLoading}
+          error={pendingError}
+          currentBlockHeight={currentBlockHeight}
+          onRetry={loadPendingOffers}
+          emptyMessage="No pending offers"
+        />
       </section>
     </div>
   )

@@ -9,6 +9,19 @@ import type { EsploraVout } from '../api/esplora'
 
 export type PsetNetwork = 'mainnet' | 'testnet'
 
+/**
+ * Esplora/Blockstream API returns txid in reversed byte order (display).
+ * LWK expects txid in internal (consensus) order for OutPoint and assetIdFromIssuance.
+ * Converts 64-char hex from display to internal by reversing the 32 bytes.
+ */
+export function txidDisplayToInternal(displayTxidHex: string): string {
+  const hex = displayTxidHex.replace(/^0x/i, '').trim().toLowerCase()
+  if (hex.length !== 64) throw new Error('txid must be 64 hex chars')
+  const pairs: string[] = []
+  for (let i = 0; i < 64; i += 2) pairs.push(hex.slice(i, i + 2))
+  return pairs.reverse().join('')
+}
+
 function getScriptHexFromVout(vout: EsploraVout): string {
   const sp = vout.scriptpubkey
   const hex =
@@ -41,9 +54,20 @@ function scriptToHex(script: { bytes(): Iterable<number> | Uint8Array }): string
 
 export interface PsetBuilderApi {
   addInput(outpoint: { txid: string; vout: number }, prevout: EsploraVout): void
+  /**
+   * Add an input with asset issuance. Returns the new asset id (hex) for use in outputs.
+   */
+  addInputWithIssuance(
+    outpoint: { txid: string; vout: number },
+    prevout: EsploraVout,
+    issuanceAmount: bigint,
+    issuanceEntropyBytes: Uint8Array
+  ): string
   addOutputToAddress(address: string, amount: bigint, assetId?: string): void
   addOutputWithScript(scriptPubkeyHex: string, amount: bigint, assetId?: string): void
   addFeeOutput(amount: bigint): void
+  /** Policy asset (LBTC) hex for explicit change outputs. */
+  getPolicyAssetHex(): string
   build(): { pset: unknown; inputTxOuts: unknown[] }
 }
 
@@ -64,6 +88,8 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
     Script,
     AssetId,
     Network,
+    ContractHash,
+    assetIdFromIssuance,
   } = lwk
 
   const net = network === 'mainnet' ? Network.mainnet() : Network.testnet()
@@ -88,27 +114,62 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
       builder = builder.addInput(psetInput)
     },
 
+    addInputWithIssuance(
+      outpoint: { txid: string; vout: number },
+      prevout: EsploraVout,
+      issuanceAmount: bigint,
+      issuanceEntropyBytes: Uint8Array
+    ): string {
+      const scriptHex = getScriptHexFromVout(prevout)
+      const value = prevout.value
+      if (value == null || value < 0) throw new Error('Missing or invalid prevout value')
+      const assetHex = prevout.asset ?? policyAsset.toString()
+      const script = new Script(scriptHex)
+      const assetId = new AssetId(assetHex)
+      const txOut = TxOut.fromExplicit(script, assetId, BigInt(value))
+      inputTxOuts.push(txOut)
+
+      const op = OutPoint.fromParts(new Txid(outpoint.txid), outpoint.vout)
+      const contractHash = ContractHash.fromBytes(issuanceEntropyBytes)
+      const psetInput = PsetInputBuilder.fromPrevout(op)
+        .witnessUtxo(txOut)
+        .issuanceValueAmount(issuanceAmount)
+        .issuanceAssetEntropy(contractHash)
+        .blindedIssuance(false)
+        .build()
+      builder = builder.addInput(psetInput)
+      const newAssetId = assetIdFromIssuance(op, contractHash)
+      return newAssetId.toString()
+    },
+
     addOutputToAddress(address: string, amount: bigint, assetIdHex?: string) {
       const scriptFromAddr = getScriptForAddress(lwk, address)
       const scriptHex = scriptToHex(scriptFromAddr)
       const script = new Script(scriptHex)
-      const asset = assetIdHex ? new AssetId(assetIdHex) : new AssetId(policyAsset.toString())
+      const assetHex = assetIdHex ?? policyAsset.toString()
+      const asset = new AssetId(assetHex)
       builder = builder.addOutput(PsetOutputBuilder.newExplicit(script, amount, asset).build())
     },
 
     addOutputWithScript(scriptPubkeyHex: string, amount: bigint, assetIdHex?: string) {
       const script = new Script(scriptPubkeyHex)
-      const asset = assetIdHex ? new AssetId(assetIdHex) : new AssetId(policyAsset.toString())
+      const assetHex = assetIdHex ?? policyAsset.toString()
+      const asset = new AssetId(assetHex)
       const builtOutput = PsetOutputBuilder.newExplicit(script, amount, asset).build()
       builder = builder.addOutput(builtOutput)
     },
 
     addFeeOutput(amount: bigint) {
       const emptyScript = Script.empty()
-      const feeAsset = new AssetId(policyAsset.toString())
+      const policyHex = policyAsset.toString()
+      const feeAsset = new AssetId(policyHex)
       builder = builder.addOutput(
         PsetOutputBuilder.newExplicit(emptyScript, amount, feeAsset).build()
       )
+    },
+
+    getPolicyAssetHex(): string {
+      return policyAsset.toString()
     },
 
     build() {

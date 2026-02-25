@@ -1,34 +1,45 @@
 /**
  * Dashboard: YOUR BORROWS / YOUR SUPPLY cards and MOST RECENT 10 SUPPLY OFFERS table.
  * Borrow button → Borrower tab; Supply button → Lender tab.
+ * Offers are loaded from Indexer API (GET /offers).
  */
 
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tab } from '../../App'
-
-const MOCK_SUPPLY_OFFERS = [
-  {
-    address: '3456...6543',
-    supplyUsdt: '50,000',
-    feeUsdt: '80',
-    collateralLbtc: '1',
-    termDays: '~15 Days',
-    termBlocks: '10,000 Blocks',
-    apr: '8.41%',
-    ltv: '55.03%',
-  },
-  {
-    address: '3456...6543',
-    supplyUsdt: '50,000',
-    feeUsdt: '80',
-    collateralLbtc: '1',
-    termDays: '~15 Days',
-    termBlocks: '10,000 Blocks',
-    apr: '8.41%',
-    ltv: '55.03%',
-  },
-]
+import { fetchOffers } from '../../api/client'
+import { EsploraClient } from '../../api/esplora'
+import { OfferTable } from '../../components/OfferTable'
+import type { OfferShort } from '../../types/offers'
 
 export function Dashboard({ onTab }: { onTab: (t: Tab) => void }) {
+  const [offers, setOffers] = useState<OfferShort[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null)
+
+  const esplora = useMemo(() => new EsploraClient(), [])
+
+  const loadOffers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [list, height] = await Promise.all([
+        fetchOffers({ limit: 10, offset: 0 }),
+        esplora.getLatestBlockHeight().catch(() => null),
+      ])
+      setOffers(list)
+      setCurrentBlockHeight(height)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setOffers([])
+    } finally {
+      setLoading(false)
+    }
+  }, [esplora])
+
+  useEffect(() => {
+    loadOffers()
+  }, [loadOffers])
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -89,56 +100,20 @@ export function Dashboard({ onTab }: { onTab: (t: Tab) => void }) {
           <span className="text-gray-500">★</span>
           <h3 className="text-base font-semibold text-gray-900">MOST RECENT 10 SUPPLY OFFERS</h3>
         </div>
-        <div className="overflow-hidden rounded-lg border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Address <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Supply (USDT) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Fee (USDT) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Collateral (LBTC) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  Term (Blocks) <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  APR <span className="text-gray-400">↕</span>
-                </th>
-                <th className="py-2 px-3 text-left text-sm font-semibold text-gray-700">
-                  LTV <span className="text-gray-400">↕</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_SUPPLY_OFFERS.map((row, i) => (
-                <tr key={i} className="border-t border-gray-200">
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.address}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.supplyUsdt}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.feeUsdt}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.collateralLbtc}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">
-                    <span className="block">{row.termDays}</span>
-                    <span className="block text-gray-500">{row.termBlocks}</span>
-                  </td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.apr}</td>
-                  <td className="py-2 px-3 text-sm text-gray-900">{row.ltv}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <OfferTable
+          offers={offers}
+          loading={loading}
+          error={error}
+          currentBlockHeight={currentBlockHeight}
+          onRetry={loadOffers}
+          emptyMessage="No offers yet"
+        />
         <div className="mt-3 flex justify-center gap-2 text-sm">
           <button
             type="button"
-            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50"
             aria-label="Previous page"
+            disabled
           >
             &lt;
           </button>
@@ -147,15 +122,9 @@ export function Dashboard({ onTab }: { onTab: (t: Tab) => void }) {
           </span>
           <button
             type="button"
-            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400"
+            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50"
             aria-label="Next page"
-          >
-            2
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400"
-            aria-label="Last page"
+            disabled
           >
             &gt;
           </button>

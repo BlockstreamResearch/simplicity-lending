@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { SeedContext } from './SeedContext'
 import { parseSeedHex, deriveSecretKeyFromIndex } from './utility/seed'
+import { Input } from './components/Input'
 
 type Props = {
   seedHex: string | null
@@ -31,14 +32,14 @@ export function SeedGate({ seedHex, setSeedHex, accountIndex, children }: Props)
         <div className="w-full max-w-7xl px-8 flex flex-col items-center text-center">
           <p className="text-gray-600 mb-6">Demo signer: enter SEED_HEX (32 bytes, 64 hex chars)</p>
           <form onSubmit={handleSubmit} className="flex gap-3 mb-4 w-full max-w-md justify-center">
-            <input
+            <Input
               type="password"
               inputMode="text"
               autoComplete="off"
               placeholder="SEED_HEX"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              className="flex-1 min-w-0 px-3 py-2 font-mono text-sm border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
+              className="flex-1 min-w-0 font-mono"
             />
             <button type="submit">Continue</button>
           </form>

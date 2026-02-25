@@ -1,6 +1,6 @@
 /**
  * Step 1: Prepare 4 UTXOs for Utility NFTs issuance.
- * One fee UTXO (LBTC) → 4×100 sats to address + change + fee.
+ * One LBTC input with issuance → 4×10 of new asset to address + change + fee.
  */
 
 import { useCallback, useMemo, useState } from 'react'
@@ -16,9 +16,9 @@ import {
   ButtonIconNeutral,
   ButtonNeutral,
 } from '../../components/Button'
-
-const ISSUANCE_UTXOS_COUNT = 4
-const ISSUANCE_UTXO_VALUE = 100
+import { Input } from '../../components/Input'
+import { UtxoSelect } from '../../components/UtxoSelect'
+import { formClassNames } from '../../components/formClassNames'
 
 export interface PrepareStepProps {
   accountIndex: number
@@ -26,7 +26,9 @@ export interface PrepareStepProps {
   utxos: ScripthashUtxoEntry[]
   esplora: EsploraClient
   seedHex: string
-  onSuccess: (txid: string) => void
+  existingPreparedTxid?: string | null
+  onClearSavedPrepare?: () => void
+  onSuccess: (txid: string, auxiliaryAssetId?: string, issuanceEntropyHex?: string) => void
 }
 
 export function PrepareStep({
@@ -35,6 +37,8 @@ export function PrepareStep({
   utxos,
   esplora,
   seedHex,
+  existingPreparedTxid,
+  onClearSavedPrepare,
   onSuccess,
 }: PrepareStepProps) {
   const nativeUtxos = useMemo(() => {
@@ -57,7 +61,7 @@ export function PrepareStep({
       : null
 
   const feeNum = parseInt(feeAmount, 10) || 0
-  const minFeeUtxoValue = feeNum + ISSUANCE_UTXOS_COUNT * ISSUANCE_UTXO_VALUE
+  const minFeeUtxoValue = feeNum
   const canBuild =
     selectedUtxo != null &&
     (selectedUtxo.value ?? 0) >= minFeeUtxoValue &&
@@ -83,7 +87,7 @@ export function PrepareStep({
       }
       const seed = parseSeedHex(seedHex)
       const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const hex = await buildAndSignPrepareUtilityNftsTx({
+      const result = await buildAndSignPrepareUtilityNftsTx({
         feeUtxo: {
           outpoint: { txid: selectedUtxo.txid, vout: selectedUtxo.vout },
           prevout,
@@ -93,7 +97,7 @@ export function PrepareStep({
         secretKey: secret,
         network: P2PK_NETWORK,
       })
-      setSignedTxHex(hex)
+      setSignedTxHex(result.signedTxHex)
     } catch (e) {
       setBuildError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -121,7 +125,7 @@ export function PrepareStep({
       }
       const seed = parseSeedHex(seedHex)
       const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const hex = await buildAndSignPrepareUtilityNftsTx({
+      const result = await buildAndSignPrepareUtilityNftsTx({
         feeUtxo: {
           outpoint: { txid: selectedUtxo.txid, vout: selectedUtxo.vout },
           prevout,
@@ -131,10 +135,10 @@ export function PrepareStep({
         secretKey: secret,
         network: P2PK_NETWORK,
       })
-      setSignedTxHex(hex)
-      const txidRes = await esplora.broadcastTx(hex)
+      setSignedTxHex(result.signedTxHex)
+      const txidRes = await esplora.broadcastTx(result.signedTxHex)
       setBroadcastTxid(txidRes)
-      onSuccess(txidRes)
+      onSuccess(txidRes, result.auxiliaryAssetId, result.issuanceEntropyHex)
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(e.body ?? e.message)
@@ -147,115 +151,149 @@ export function PrepareStep({
     }
   }, [selectedUtxo, canBuild, seedHex, accountIndex, toAddress, feeNum, esplora, onSuccess])
 
+  const showAlreadyPrepared = Boolean(existingPreparedTxid?.trim())
+
   return (
     <section className="min-w-0 max-w-4xl">
       <h3 className="text-lg font-semibold text-gray-900 mb-2">Step 1: Prepare 4 UTXOs</h3>
       <div className="space-y-4 text-sm">
-        <div>
-          <p className="font-medium text-gray-700 mb-1">Fee UTXO (LBTC)</p>
-          {nativeUtxos.length === 0 ? (
-            <p className="text-gray-500">
-              No LBTC UTXOs in your account. Use Utility to create some.
+        {showAlreadyPrepared && (
+          <div className="p-4 rounded-lg border border-green-200 bg-green-50 text-green-900">
+            <p className="font-medium mb-1">Already prepared for this account</p>
+            <p className="text-green-800 mb-2">
+              Use Step 2; the 4 issuance UTXOs are vouts 0, 1, 2, 3 of this transaction.
             </p>
-          ) : (
-            <select
-              className="border border-gray-300 rounded px-2 py-1.5 text-gray-900 bg-white w-full max-w-md"
-              value={selectedUtxoIndex}
-              onChange={(e) => setSelectedUtxoIndex(parseInt(e.target.value, 10))}
-            >
-              {nativeUtxos.map((u, idx) => (
-                <option key={`${u.txid}:${u.vout}`} value={idx}>
-                  {u.txid.slice(0, 16)}…:{u.vout} — {u.value ?? '?'} sats
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        <div>
-          <p className="font-medium text-gray-700 mb-1">Fee amount (sats)</p>
-          <input
-            type="number"
-            placeholder="e.g. 500"
-            min={1}
-            className="w-28 border border-gray-300 rounded px-2 py-1.5 text-gray-900"
-            value={feeAmount}
-            onChange={(e) => setFeeAmount(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <p className="font-medium text-gray-700 mb-1">To address (4×100 sats + change)</p>
-          <input
-            type="text"
-            placeholder="Bech32m address"
-            className="w-full max-w-lg border border-gray-300 rounded px-2 py-1.5 font-mono text-gray-900"
-            value={toAddress}
-            onChange={(e) => setToAddress(e.target.value)}
-          />
-          {accountAddress && (
-            <p className="text-gray-500 mt-1">
-              Default: current account. Fee UTXO must have at least {minFeeUtxoValue} sats (fee +{' '}
-              {ISSUANCE_UTXOS_COUNT * ISSUANCE_UTXO_VALUE} for 4 outputs).
+            <p className="flex flex-wrap items-center gap-1.5 mb-3">
+              <a
+                href={esplora.getTxExplorerUrl(existingPreparedTxid!)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs break-all text-green-800 hover:underline underline-offset-1"
+              >
+                {existingPreparedTxid}
+              </a>
+              <ButtonIconNeutral
+                onClick={() => navigator.clipboard?.writeText(existingPreparedTxid!)}
+                title="Copy txid"
+                aria-label="Copy txid"
+              >
+                <CopyIcon className="h-4 w-4" />
+              </ButtonIconNeutral>
             </p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2 items-center">
-          <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-            {building ? 'Building…' : 'Build & Sign'}
-          </ButtonSecondary>
-          <ButtonPrimary
-            size="md"
-            disabled={!canBuild || building}
-            onClick={handleBuildAndBroadcast}
-          >
-            {building ? 'Building…' : 'Build & Broadcast'}
-          </ButtonPrimary>
-        </div>
-
-        {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
-        {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
-        {broadcastTxid && (
-          <p className="mt-2 text-green-700 flex items-center gap-1.5 flex-wrap">
-            <span>Broadcast successful. Txid:</span>
-            <a
-              href={esplora.getTxExplorerUrl(broadcastTxid)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-xs break-all text-green-800 hover:underline underline-offset-1"
-            >
-              {broadcastTxid}
-            </a>
-            <ButtonIconNeutral
-              onClick={() => navigator.clipboard?.writeText(broadcastTxid)}
-              title="Copy txid"
-              aria-label="Copy txid"
-            >
-              <CopyIcon className="h-4 w-4" />
-            </ButtonIconNeutral>
-          </p>
-        )}
-        {broadcastTxid && (
-          <p className="text-gray-600 mt-1">Use this tx and vouts 0,1,2,3 in Step 2.</p>
-        )}
-
-        {signedTxHex && (
-          <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
-            <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
-            <textarea
-              readOnly
-              className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded p-2 h-24"
-              value={signedTxHex}
-            />
-            <ButtonNeutral
-              size="sm"
-              className="mt-2"
-              onClick={() => navigator.clipboard?.writeText(signedTxHex)}
-            >
-              Copy hex
-            </ButtonNeutral>
+            <ButtonSecondary size="md" onClick={onClearSavedPrepare}>
+              Prepare again
+            </ButtonSecondary>
           </div>
+        )}
+
+        {!showAlreadyPrepared && (
+          <>
+            <div>
+              <p className={formClassNames.label}>Fee UTXO (LBTC)</p>
+              {nativeUtxos.length === 0 ? (
+                <p className="text-gray-500">
+                  No LBTC UTXOs in your account. Use Utility to create some.
+                </p>
+              ) : (
+                <UtxoSelect
+                  className="w-full max-w-md"
+                  utxos={nativeUtxos}
+                  value={String(selectedUtxoIndex)}
+                  onChange={(v) => setSelectedUtxoIndex(parseInt(v, 10))}
+                  optionValueType="index"
+                  labelSuffix="sats"
+                />
+              )}
+            </div>
+
+            <div>
+              <p className={formClassNames.label}>Fee amount (sats)</p>
+              <Input
+                type="number"
+                placeholder="e.g. 500"
+                min={1}
+                className="w-28"
+                value={feeAmount}
+                onChange={(e) => setFeeAmount(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <p className={formClassNames.label}>To address (4×10 new asset + change)</p>
+              <Input
+                type="text"
+                placeholder="Bech32m address"
+                className="w-full max-w-lg font-mono"
+                value={toAddress}
+                onChange={(e) => setToAddress(e.target.value)}
+              />
+              {accountAddress && (
+                <p className={formClassNames.helper}>
+                  Default: current account. Fee UTXO must have at least {minFeeUtxoValue} sats
+                  (fee). Prep creates 4×10 of a new asset to this address.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2 items-center">
+              <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
+                {building ? 'Building…' : 'Build & Sign'}
+              </ButtonSecondary>
+              <ButtonPrimary
+                size="md"
+                disabled={!canBuild || building}
+                onClick={handleBuildAndBroadcast}
+              >
+                {building ? 'Building…' : 'Build & Broadcast'}
+              </ButtonPrimary>
+            </div>
+
+            {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
+            {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
+            {broadcastTxid && (
+              <p className="mt-2 text-green-700 flex items-center gap-1.5 flex-wrap">
+                <span>Broadcast successful. Txid:</span>
+                <a
+                  href={esplora.getTxExplorerUrl(broadcastTxid)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs break-all text-green-800 hover:underline underline-offset-1"
+                >
+                  {broadcastTxid}
+                </a>
+                <ButtonIconNeutral
+                  onClick={() => navigator.clipboard?.writeText(broadcastTxid)}
+                  title="Copy txid"
+                  aria-label="Copy txid"
+                >
+                  <CopyIcon className="h-4 w-4" />
+                </ButtonIconNeutral>
+              </p>
+            )}
+            {broadcastTxid && (
+              <p className="text-gray-600 mt-1">
+                Use this tx: vouts 0,1,2,3 are the 4 UTXOs of the new asset for Step 2.
+              </p>
+            )}
+
+            {signedTxHex && (
+              <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
+                <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
+                <textarea
+                  readOnly
+                  className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded p-2 h-24"
+                  value={signedTxHex}
+                />
+                <ButtonNeutral
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => navigator.clipboard?.writeText(signedTxHex)}
+                >
+                  Copy hex
+                </ButtonNeutral>
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
