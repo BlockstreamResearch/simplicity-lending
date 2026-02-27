@@ -1,15 +1,28 @@
 /**
  * 2-step wizard for Create Offer: Issue Utility NFTs → Create PreLock.
  * Prepare is done outside the wizard (Borrower page "Prepare to be a borrower").
+ * Steps shown as pills with arrow; step 2 disabled until step 1 done; summary on step 1 when returning.
  */
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { IssueUtilityNftsStep } from './IssueUtilityNftsStep'
-import { CreatePreLockStep } from './CreatePreLockStep'
+import { FinalizeOfferStep } from './FinalizeOfferStep'
 
 export type CreateOfferStep = 2 | 3
+
+/** Summary data from step 1 (Issue Utility NFTs) for display when user returns to step 1. */
+export interface Step1Summary {
+  txid: string
+  collateralAmount: string
+  principalAmount: string
+  feeAmount: string
+  loanExpirationTime: string
+  interestPercent: string
+  toAddress: string
+}
 
 export interface CreateOfferWizardProps {
   accountIndex: number
@@ -21,10 +34,18 @@ export interface CreateOfferWizardProps {
   savedAuxiliaryAssetId?: string | null
   savedPrepareFirstVout?: number
   currentBlockHeight?: number | null
+  /** When set, wizard starts on step 2 (Create offer) with this issuance txid. */
+  initialIssuanceTxid?: string | null
   onBroadcastSuccess: () => void | Promise<void>
   onComplete?: () => void
-  /** Called when Issue Utility NFTs step succeeds (e.g. to clear prepare state). */
-  onIssueUtilityNftsSuccess?: () => void
+  /** Called when Issue Utility NFTs step succeeds; receives the issuance txid. */
+  onIssueUtilityNftsSuccess?: (issuanceTxid: string) => void
+  /** When user clicks "Start over" on step 1 summary (clear issuance and close wizard). */
+  onStartOver?: () => void
+  /** Optional control (e.g. Recover icon) shown in the same row as step pills, right-aligned. */
+  recoveryControl?: ReactNode
+  /** Optional panel (e.g. recover-by-txid form) shown below the step pills row. */
+  recoveryPanel?: ReactNode
 }
 
 export function CreateOfferWizard({
@@ -37,39 +58,68 @@ export function CreateOfferWizard({
   savedAuxiliaryAssetId = null,
   savedPrepareFirstVout = 0,
   currentBlockHeight = null,
+  initialIssuanceTxid = null,
   onBroadcastSuccess,
   onComplete,
   onIssueUtilityNftsSuccess,
+  onStartOver,
+  recoveryControl,
+  recoveryPanel,
 }: CreateOfferWizardProps) {
-  const [currentStep, setCurrentStep] = useState<CreateOfferStep>(2)
-  const [issuanceTxid, setIssuanceTxid] = useState<string | null>(null)
+  const [currentStep, setCurrentStep] = useState<CreateOfferStep>(() =>
+    initialIssuanceTxid?.trim() ? 3 : 2
+  )
+  /** Txid from completing step 1 in this session (null until then). Recovery uses initialIssuanceTxid. */
+  const [step1CompletedTxid, setStep1CompletedTxid] = useState<string | null>(null)
+  const [step1Summary, setStep1Summary] = useState<Step1Summary | null>(null)
 
-  const canShowStep3 = Boolean(issuanceTxid?.trim())
+  const effectiveIssuanceTxid = initialIssuanceTxid ?? step1CompletedTxid
+  const step1Done = Boolean(effectiveIssuanceTxid?.trim())
+
+  const handleStep1Success = (txid: string, summary: Step1Summary) => {
+    setStep1CompletedTxid(txid)
+    setStep1Summary(summary)
+    void onBroadcastSuccess()
+    onIssueUtilityNftsSuccess?.(txid)
+    setCurrentStep(3)
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-2 items-center">
-        <button
-          type="button"
-          className={`px-3 py-1.5 rounded-md text-sm font-medium ${
-            currentStep === 2 ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'
-          }`}
-          onClick={() => setCurrentStep(2)}
-        >
-          2. Issue Utility NFTs
-        </button>
-        {canShowStep3 && (
+    <div className="mx-auto max-w-lg space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            className={`px-3 py-1.5 rounded-md text-sm font-medium ${
-              currentStep === 3 ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'
+            className={`rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium transition-colors ${
+              currentStep === 2
+                ? 'border-indigo-400 bg-indigo-100 text-indigo-800'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
-            onClick={() => setCurrentStep(3)}
+            onClick={() => setCurrentStep(2)}
           >
-            3. Create PreLock
+            1. Issue Utility NFTs
           </button>
-        )}
+          <span className="text-gray-400 py-2" aria-hidden>
+            →
+          </span>
+          <button
+            type="button"
+            className={`rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium transition-colors ${
+              !step1Done
+                ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                : currentStep === 3
+                  ? 'border-indigo-400 bg-indigo-100 text-indigo-800'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+            onClick={() => step1Done && setCurrentStep(3)}
+            disabled={!step1Done}
+          >
+            2. Finalize offer
+          </button>
+        </div>
+        {recoveryControl != null ? <div className="shrink-0">{recoveryControl}</div> : null}
       </div>
+      {recoveryPanel != null ? <div>{recoveryPanel}</div> : null}
 
       {currentStep === 2 && (
         <IssueUtilityNftsStep
@@ -83,23 +133,22 @@ export function CreateOfferWizard({
           storedAuxiliaryAssetId={savedAuxiliaryAssetId}
           prepareFirstVout={savedPrepareFirstVout}
           currentBlockHeight={currentBlockHeight}
-          onSuccess={(txid: string) => {
-            setIssuanceTxid(txid)
-            void onBroadcastSuccess()
-            onIssueUtilityNftsSuccess?.()
-          }}
+          step1Summary={step1Summary}
+          issuanceTxidForSummary={effectiveIssuanceTxid}
+          onSuccess={handleStep1Success}
+          onStartOver={onStartOver}
         />
       )}
 
       {currentStep === 3 && (
-        <CreatePreLockStep
-          key={issuanceTxid ?? 'step3'}
+        <FinalizeOfferStep
+          key={effectiveIssuanceTxid ?? 'step3'}
           accountIndex={accountIndex}
           accountAddress={accountAddress}
           utxos={utxos}
           esplora={esplora}
           seedHex={seedHex}
-          issuanceTxid={issuanceTxid}
+          issuanceTxid={effectiveIssuanceTxid}
           onSuccess={() => {
             void onBroadcastSuccess()
             onComplete?.()

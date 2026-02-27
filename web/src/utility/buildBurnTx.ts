@@ -8,22 +8,10 @@ import type { EsploraVout } from '../api/esplora'
 import { createPsetBuilder } from '../tx/psetBuilder'
 import type { PsetWithExtractTx } from '../simplicity'
 import { signP2pkInputs } from './signP2pkInputs'
+import { getScriptHexFromVout } from './hex'
 
 /** OP_RETURN with data "burn" (4 bytes). Script hex: 6a 04 62 75 72 6e */
 const OP_RETURN_BURN_SCRIPT_HEX = '6a046275726e'
-
-function getScriptHexFromVout(vout: EsploraVout): string {
-  const sp = vout.scriptpubkey
-  const hex =
-    vout.scriptpubkey_hex ??
-    (typeof sp === 'string'
-      ? sp
-      : sp && typeof sp === 'object' && 'hex' in sp
-        ? (sp as { hex: string }).hex
-        : undefined)
-  if (!hex || typeof hex !== 'string') throw new Error('Missing scriptpubkey hex in vout')
-  return hex
-}
 
 export interface BurnTxAssetInput {
   outpoint: { txid: string; vout: number }

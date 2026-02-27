@@ -363,11 +363,10 @@ export interface EsploraOutspend {
 }
 
 /**
- * Convert script_pubkey (hex) to Esplora/Electrum API scripthash.
- * Same underlying hash as Rust simplicityhl_core::hash_script (SHA256 of script bytes);
- * Esplora/Electrum represent it as reversed 32-byte hash in hex (see Electrum protocol).
+ * Hash script_pubkey (hex) to 32-byte script hash (SHA256).
+ * Matches Rust hash_script; use this for PreLockArguments script hashes.
  */
-export async function scriptPubkeyToScripthash(scriptPubkeyHex: string): Promise<string> {
+export async function hashScriptPubkeyHex(scriptPubkeyHex: string): Promise<Uint8Array> {
   const hex = scriptPubkeyHex.replace(/\s/g, '').toLowerCase()
   if (hex.length % 2 !== 0) throw new EsploraApiError('script_pubkey hex must have even length')
   const bytes = new Uint8Array(hex.length / 2)
@@ -375,7 +374,17 @@ export async function scriptPubkeyToScripthash(scriptPubkeyHex: string): Promise
     bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
   }
   const hash = await crypto.subtle.digest('SHA-256', bytes)
-  const arr = new Uint8Array(hash)
+  return new Uint8Array(hash)
+}
+
+/**
+ * Convert script_pubkey (hex) to Esplora/Electrum API scripthash.
+ * Same underlying hash as Rust simplicityhl_core::hash_script (SHA256 of script bytes);
+ * Esplora/Electrum represent it as reversed 32-byte hash in hex (see Electrum protocol).
+ */
+export async function scriptPubkeyToScripthash(scriptPubkeyHex: string): Promise<string> {
+  const hashBytes = await hashScriptPubkeyHex(scriptPubkeyHex)
+  const arr = new Uint8Array(hashBytes)
   arr.reverse()
   return Array.from(arr)
     .map((b) => b.toString(16).padStart(2, '0'))

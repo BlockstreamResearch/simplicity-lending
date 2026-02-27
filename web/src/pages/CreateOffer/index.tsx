@@ -31,6 +31,9 @@ import {
   getStoredPrepareFirstVout,
   saveStoredPrepareFirstVout,
   clearStoredPrepareFirstVout,
+  getStoredIssuanceTxid,
+  saveStoredIssuanceTxid,
+  clearStoredIssuanceTxid,
 } from './borrowerStorage'
 import type { OfferShort } from '../../types/offers'
 
@@ -73,6 +76,28 @@ function SettingsIcon({ className }: { className?: string }) {
     >
       <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  )
+}
+
+/** Recover/restore icon for "Recover flow" button. */
+function RecoverIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
     </svg>
   )
 }
@@ -284,7 +309,13 @@ export function CreateOfferPage({
   const [savedPrepareFirstVout, setSavedPrepareFirstVout] = useState<number>(() =>
     getStoredPrepareFirstVout(accountIndex)
   )
+  const [savedIssuanceTxid, setSavedIssuanceTxid] = useState<string | null>(() =>
+    getStoredIssuanceTxid(accountIndex)
+  )
   const [prepareUtxosSpent, setPrepareUtxosSpent] = useState<boolean | null>(null)
+  const [importIssuanceTxid, setImportIssuanceTxid] = useState('')
+  const [importIssuanceError, setImportIssuanceError] = useState<string | null>(null)
+  const [importingIssuance, setImportingIssuance] = useState(false)
   const [borrowOffers, setBorrowOffers] = useState<OfferShort[]>([])
   const [offersLoading, setOffersLoading] = useState(true)
   const [offersError, setOffersError] = useState<string | null>(null)
@@ -320,6 +351,7 @@ export function CreateOfferPage({
     setSavedPreparedTxid(getStoredPrepareTxid(accountIndex))
     setSavedAuxiliaryAssetId(getStoredAuxiliaryAssetId(accountIndex))
     setSavedPrepareFirstVout(getStoredPrepareFirstVout(accountIndex))
+    setSavedIssuanceTxid(getStoredIssuanceTxid(accountIndex))
   }, [accountIndex])
 
   useEffect(() => {
@@ -350,6 +382,7 @@ export function CreateOfferPage({
   }, [loadBorrowOffers])
 
   const hasPrepared = Boolean(savedPreparedTxid?.trim()) && Boolean(savedAuxiliaryAssetId?.trim())
+  const canCreateOffer = hasPrepared || Boolean(savedIssuanceTxid?.trim())
 
   const handleClearPrepare = useCallback(() => {
     clearStoredPrepareTxid(accountIndex)
@@ -361,10 +394,76 @@ export function CreateOfferPage({
     setShowSettingsModal(false)
   }, [accountIndex])
 
+  const handleIssueUtilityNftsSuccess = useCallback(
+    (txid: string) => {
+      saveStoredIssuanceTxid(accountIndex, txid)
+      setSavedIssuanceTxid(txid)
+      handleClearPrepare()
+    },
+    [accountIndex, handleClearPrepare]
+  )
+
   const handlePrepareAgain = useCallback(() => {
     handleClearPrepare()
     setShowPrepareModal(true)
   }, [handleClearPrepare])
+
+  const [wizardKey, setWizardKey] = useState(0)
+  const handleStartOver = useCallback(() => {
+    clearStoredIssuanceTxid(accountIndex)
+    setSavedIssuanceTxid(null)
+    setWizardKey((k) => k + 1)
+  }, [accountIndex])
+
+  /** After step 2 (Finalize offer) broadcast success: clear used issuance txid and reset wizard so next open is step 1. */
+  const handleStep2Complete = useCallback(() => {
+    clearStoredIssuanceTxid(accountIndex)
+    setSavedIssuanceTxid(null)
+    setWizardKey((k) => k + 1)
+    setShowCreateWizard(false)
+  }, [accountIndex])
+
+  const handleRecoverTxid = useCallback(async () => {
+    const txid = importIssuanceTxid.trim()
+    if (!txid) {
+      setImportIssuanceError('Enter a txid.')
+      return
+    }
+    setImportIssuanceError(null)
+    setImportingIssuance(true)
+    try {
+      const tx = await esplora.getTx(txid)
+      if (!tx.vout || tx.vout.length < 4) {
+        setImportIssuanceError('Transaction must have at least 4 outputs (Utility NFTs).')
+        return
+      }
+      const outspends = await esplora.getTxOutspends(txid)
+      const nftVouts = [0, 1, 2, 3]
+      const anySpent = nftVouts.some((i) => outspends[i]?.spent === true)
+      if (anySpent) {
+        setImportIssuanceError(
+          "This transaction's outputs have already been spent. The flow cannot be continued."
+        )
+        return
+      }
+      saveStoredIssuanceTxid(accountIndex, txid)
+      setSavedIssuanceTxid(txid)
+      setImportIssuanceTxid('')
+      setShowRecoverPanel(false)
+    } catch (e) {
+      setImportIssuanceError(
+        e instanceof EsploraApiError
+          ? (e.body ?? e.message)
+          : e instanceof Error
+            ? e.message
+            : String(e)
+      )
+    } finally {
+      setImportingIssuance(false)
+    }
+  }, [accountIndex, esplora, importIssuanceTxid])
+
+  const [showRecoverPanel, setShowRecoverPanel] = useState(false)
 
   if (!seedHex) {
     return <p className="text-gray-600">Connect seed to create an offer.</p>
@@ -465,7 +564,7 @@ export function CreateOfferPage({
             Prepare again
           </button>
         </div>
-      ) : hasPrepared ? (
+      ) : canCreateOffer ? (
         <button
           type="button"
           onClick={() => setShowCreateWizard(true)}
@@ -562,8 +661,10 @@ export function CreateOfferPage({
         open={showCreateWizard}
         onClose={() => setShowCreateWizard(false)}
         title="Create Borrow Offer"
+        contentClassName="max-w-xl"
       >
         <CreateOfferWizard
+          key={wizardKey}
           accountIndex={accountIndex}
           accountAddress={accountAddress}
           utxos={utxos}
@@ -573,9 +674,62 @@ export function CreateOfferPage({
           savedAuxiliaryAssetId={savedAuxiliaryAssetId}
           savedPrepareFirstVout={savedPrepareFirstVout}
           currentBlockHeight={currentBlockHeight}
+          initialIssuanceTxid={savedIssuanceTxid}
           onBroadcastSuccess={refresh}
-          onComplete={() => setShowCreateWizard(false)}
-          onIssueUtilityNftsSuccess={handleClearPrepare}
+          onComplete={handleStep2Complete}
+          onIssueUtilityNftsSuccess={handleIssueUtilityNftsSuccess}
+          onStartOver={handleStartOver}
+          recoveryControl={
+            <button
+              type="button"
+              onClick={() => setShowRecoverPanel((v) => !v)}
+              className="rounded-xl border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50 hover:text-gray-700"
+              title="Recover"
+              aria-label="Recover"
+            >
+              <RecoverIcon />
+            </button>
+          }
+          recoveryPanel={
+            showRecoverPanel ? (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+                <p className="text-gray-700 mb-2">
+                  If you have an existing issuance txid (e.g. from another device), enter it to
+                  continue.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Issuance txid"
+                    className="flex-1 min-w-[200px] font-mono text-xs"
+                    value={importIssuanceTxid}
+                    onChange={(e) => {
+                      setImportIssuanceTxid(e.target.value)
+                      setImportIssuanceError(null)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={importingIssuance}
+                    onClick={() => void handleRecoverTxid()}
+                    className="rounded-lg bg-[#5F3DC4] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#4f36a8] disabled:opacity-50"
+                  >
+                    {importingIssuance ? 'Checking…' : 'Recover'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRecoverPanel(false)}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {importIssuanceError && (
+                  <p className="mt-1 text-red-600 text-xs">{importIssuanceError}</p>
+                )}
+              </div>
+            ) : null
+          }
         />
       </Modal>
     </div>

@@ -26,6 +26,15 @@ export type P2pkNetwork = 'mainnet' | 'testnet'
 /** LWK module (return type of getLwk()). Use for typing lwk argument across the app. */
 export type Lwk = Awaited<ReturnType<typeof getLwk>>
 
+/** Instance of LWK SimplicityArguments. */
+export type LwkSimplicityArguments = InstanceType<Lwk['SimplicityArguments']>
+
+/** Instance of LWK XOnlyPublicKey. */
+export type LwkXOnlyPublicKey = InstanceType<Lwk['XOnlyPublicKey']>
+
+/** Instance of LWK Script. */
+export type LwkScript = InstanceType<Lwk['Script']>
+
 /** Instance of LWK TxOut (use instead of InstanceType<Lwk['TxOut']> — TxOut has a private constructor). */
 export type LwkTxOut = ReturnType<Lwk['TxOut']['fromExplicit']>
 
@@ -39,8 +48,8 @@ export interface PsetWithExtractTx {
 
 export interface CreateP2trAddressParams {
   source: string
-  args: InstanceType<Lwk['SimplicityArguments']>
-  internalKey: InstanceType<Lwk['XOnlyPublicKey']>
+  args: LwkSimplicityArguments
+  internalKey: LwkXOnlyPublicKey
   network: P2pkNetwork
 }
 

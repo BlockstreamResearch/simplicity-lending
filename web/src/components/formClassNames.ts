@@ -22,6 +22,10 @@ export const formClassNames = {
   /** Suffix text inside wrapper (e.g. "LBTC"). */
   inputSuffix: 'shrink-0 px-3 py-2 text-sm text-gray-500',
 
+  /** Tighter vertical padding for inputs (use with compact prop). */
+  inputCompactPadding: 'py-1.5',
+  inputSuffixCompactPadding: 'py-1.5',
+
   /** Label above field. */
   label: 'block font-medium text-gray-900 text-sm mb-1',
 
@@ -37,6 +41,6 @@ export const formClassNames = {
   /** Dropdown option item. */
   dropdownItem: 'px-3 py-2 text-sm text-gray-900 hover:bg-gray-50 cursor-pointer',
 
-  /** Tooltip/popover container (for ? icon). */
-  tooltip: `${inputRadius} border border-gray-200 bg-white shadow-lg px-3 py-2 text-sm text-gray-700 max-w-xs`,
+  /** Tooltip/popover container (for ? icon). ~half form width for fewer lines. */
+  tooltip: `${inputRadius} border border-gray-200 bg-white shadow-lg px-3 py-2 text-sm text-gray-700 max-w-[16rem]`,
 } as const

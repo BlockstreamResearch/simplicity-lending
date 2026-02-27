@@ -3,7 +3,7 @@
  * Uses 4 auxiliary UTXOs (from prepare at firstVout..firstVout+3) + 1 fee UTXO; generates fresh issuance entropy.
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { EsploraApiError } from '../../api/esplora'
@@ -14,15 +14,41 @@ import {
   toBaseAmount,
   encodeFirstNFTParameters,
   encodeSecondNFTParameters,
+  decodeFirstNFTParameters,
+  decodeSecondNFTParameters,
 } from '../../utility/parametersEncoding'
 import { buildAndSignIssueUtilityNftsTx } from '../../utility/buildIssueUtilityNftsTx'
-import { ButtonPrimary, ButtonSecondary } from '../../components/Button'
+import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
 import { formClassNames } from '../../components/formClassNames'
 import { InfoTooltip } from '../../components/InfoTooltip'
+import type { Step1Summary } from './CreateOfferWizard'
 
-const ISSUANCE_UTXOS_NEEDED = 4
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  )
+}
+
+const TOKEN_DECIMALS = 1
+/** Wider tooltip on step 1 (no min-width so modal size is unchanged). */
+const STEP1_TOOLTIP_CLASS = 'max-w-[22rem]'
 
 function prepareVouts(firstVout: number): [number, number, number, number] {
   return [firstVout, firstVout + 1, firstVout + 2, firstVout + 3]
@@ -51,7 +77,13 @@ export interface IssueUtilityNftsStepProps {
   storedAuxiliaryAssetId?: string | null
   prepareFirstVout?: number
   currentBlockHeight?: number | null
-  onSuccess: (txid: string) => void
+  /** When set, show read-only summary of completed step 1 (user returned to this step). */
+  step1Summary?: Step1Summary | null
+  /** When set and step1Summary is null, fetch summary from Esplora by this txid (for recovery flow). */
+  issuanceTxidForSummary?: string | null
+  onSuccess: (txid: string, summary: Step1Summary) => void
+  /** When user clicks "Start over" on the summary view. */
+  onStartOver?: () => void
 }
 
 export function IssueUtilityNftsStep({
@@ -64,7 +96,10 @@ export function IssueUtilityNftsStep({
   storedAuxiliaryAssetId,
   prepareFirstVout = 0,
   currentBlockHeight = null,
+  step1Summary = null,
+  issuanceTxidForSummary = null,
   onSuccess,
+  onStartOver,
 }: IssueUtilityNftsStepProps) {
   const prepareVoutList = useMemo(() => prepareVouts(prepareFirstVout), [prepareFirstVout])
 
@@ -79,9 +114,7 @@ export function IssueUtilityNftsStep({
     return utxos.filter((u) => u.asset && u.asset.trim().toLowerCase() === auxiliaryAssetIdNorm)
   }, [utxos, auxiliaryAssetIdNorm])
 
-  const [manualPrepTxId, setManualPrepTxId] = useState('')
-  const effectivePrepTxid = (preparedTxid ?? '').trim() || manualPrepTxId.trim() || null
-  const hasAutoFilledPrepTxid = Boolean((preparedTxid ?? '').trim())
+  const effectivePrepTxid = (preparedTxid ?? '').trim() || null
 
   const issuanceUtxosOrdered = useMemo(() => {
     if (!effectivePrepTxid) return null
@@ -120,19 +153,80 @@ export function IssueUtilityNftsStep({
 
   const [feeUtxoIndex, setFeeUtxoIndex] = useState(0)
   const [feeAmount, setFeeAmount] = useState('')
-  const [toAddress, setToAddress] = useState(accountAddress ?? '')
   const [collateralAmount, setCollateralAmount] = useState('')
   const [principalAmount, setPrincipalAmount] = useState('')
   const [loanExpirationTime, setLoanExpirationTime] = useState('')
   const [interestPercent, setInterestPercent] = useState('')
-  const [tokensDecimals, setTokensDecimals] = useState('0')
   const [building, setBuilding] = useState(false)
   const [buildError, setBuildError] = useState<string | null>(null)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
+  const [fetchedSummary, setFetchedSummary] = useState<Step1Summary | null>(null)
+  const [summaryFetchError, setSummaryFetchError] = useState<string | null>(null)
+  const [loadingSummary, setLoadingSummary] = useState(false)
 
   const loanExpirationNum = parseInt(loanExpirationTime, 10) || 0
+
+  useEffect(() => {
+    const txid = (issuanceTxidForSummary ?? '').trim()
+    if (!txid || step1Summary != null) {
+      setFetchedSummary(null)
+      setSummaryFetchError(null)
+      setLoadingSummary(false)
+      return
+    }
+    let cancelled = false
+    setLoadingSummary(true)
+    setSummaryFetchError(null)
+    esplora
+      .getTx(txid)
+      .then((tx) => {
+        if (cancelled) return
+        const vouts = tx.vout ?? []
+        const v2 = vouts[2]
+        const v3 = vouts[3]
+        if (!v2?.value || v2.value < 0 || !v3?.value || v3.value < 0) {
+          setSummaryFetchError('Transaction missing or invalid Parameter NFT outputs.')
+          setFetchedSummary(null)
+          setLoadingSummary(false)
+          return
+        }
+        const first = decodeFirstNFTParameters(BigInt(v2.value))
+        const second = decodeSecondNFTParameters(BigInt(v3.value))
+        const collateralDec = first.collateralDec
+        const principalDec = first.principalDec
+        const collateralSat = second.collateralBaseAmount * 10 ** collateralDec
+        const principalSat = second.principalBaseAmount * 10 ** principalDec
+        setFetchedSummary({
+          txid,
+          collateralAmount: String(collateralSat),
+          principalAmount: String(principalSat),
+          feeAmount: '—',
+          loanExpirationTime: String(first.loanExpirationTime),
+          interestPercent: (first.interestRateBasisPoints / 100).toFixed(2),
+          toAddress: '',
+        })
+        setLoadingSummary(false)
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setSummaryFetchError(
+            e instanceof EsploraApiError
+              ? (e.body ?? e.message)
+              : e instanceof Error
+                ? e.message
+                : String(e)
+          )
+          setFetchedSummary(null)
+          setLoadingSummary(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [esplora, issuanceTxidForSummary, step1Summary])
+
   const endsInLabel = useMemo(
     () => formatEndsIn(loanExpirationNum, currentBlockHeight ?? null),
     [loanExpirationNum, currentBlockHeight]
@@ -149,8 +243,6 @@ export function IssueUtilityNftsStep({
       const feeNum = parseInt(feeAmount, 10) || 0
       const collateralNum = BigInt(collateralAmount || '0')
       const principalNum = BigInt(principalAmount || '0')
-      const decimals = Math.max(0, Math.min(15, parseInt(tokensDecimals, 10) || 0))
-
       const feeUtxo = nativeUtxos[feeUtxoIndex]
       if (!feeUtxo || feeNum <= 0 || (feeUtxo.value ?? 0) < feeNum) {
         setBuildError('Invalid fee UTXO or amount')
@@ -202,12 +294,12 @@ export function IssueUtilityNftsStep({
         const firstAmount = encodeFirstNFTParameters(
           percentToBasisPoints(parseFloat(interestPercent || '0')),
           loanExpirationNum,
-          decimals,
-          decimals
+          TOKEN_DECIMALS,
+          TOKEN_DECIMALS
         )
         const secondAmount = encodeSecondNFTParameters(
-          toBaseAmount(collateralNum, decimals),
-          toBaseAmount(principalNum, decimals)
+          toBaseAmount(collateralNum, TOKEN_DECIMALS),
+          toBaseAmount(principalNum, TOKEN_DECIMALS)
         )
 
         const seed = parseSeedHex(seedHex)
@@ -219,7 +311,7 @@ export function IssueUtilityNftsStep({
           issuanceEntropyBytes,
           firstParametersNftAmount: firstAmount,
           secondParametersNftAmount: secondAmount,
-          utilityNftsToAddress: toAddress.trim(),
+          utilityNftsToAddress: (accountAddress ?? '').trim(),
           feeAmount: BigInt(feeNum),
           secretKey: secret,
           network: P2PK_NETWORK,
@@ -230,7 +322,15 @@ export function IssueUtilityNftsStep({
         if (broadcast) {
           const txidRes = await esplora.broadcastTx(result.signedTxHex)
           setBroadcastTxid(txidRes)
-          onSuccess(txidRes)
+          onSuccess(txidRes, {
+            txid: txidRes,
+            collateralAmount,
+            principalAmount,
+            feeAmount,
+            loanExpirationTime,
+            interestPercent,
+            toAddress: accountAddress ?? '',
+          })
         }
       } catch (e) {
         if (e instanceof EsploraApiError) {
@@ -252,8 +352,8 @@ export function IssueUtilityNftsStep({
       principalAmount,
       interestPercent,
       loanExpirationNum,
-      tokensDecimals,
-      toAddress,
+      loanExpirationTime,
+      accountAddress,
       feeUtxoIndex,
       nativeUtxos,
       accountIndex,
@@ -269,40 +369,121 @@ export function IssueUtilityNftsStep({
     issuanceUtxosOrdered != null &&
     nativeUtxos.length > 0 &&
     feeAmount.trim() !== '' &&
-    toAddress.trim() !== '' &&
+    (accountAddress ?? '').trim() !== '' &&
     collateralAmount.trim() !== '' &&
     principalAmount.trim() !== '' &&
     loanExpirationTime.trim() !== ''
 
-  return (
-    <section className="min-w-0 max-w-4xl">
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Step 2: Issue Utility NFTs</h3>
-      <div className="space-y-4 text-sm">
-        {hasAutoFilledPrepTxid ? (
-          <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-800">
-            <p className="font-medium text-gray-700 mb-1">Prepare transaction</p>
-            <p className="font-mono text-xs break-all">
-              Txid: {preparedTxid}
-              <br />
-              Issuance UTXOs: vouts {prepareFirstVout}, {prepareFirstVout + 1},{' '}
-              {prepareFirstVout + 2}, {prepareFirstVout + 3}
-            </p>
-          </div>
-        ) : (
-          <>
-            <div>
-              <p className={formClassNames.label}>Prep issuance tx id</p>
-              <Input
-                type="text"
-                placeholder="Txid from prepare"
-                className="w-full max-w-lg font-mono"
-                value={manualPrepTxId}
-                onChange={(e) => setManualPrepTxId(e.target.value)}
-              />
-            </div>
-          </>
-        )}
+  const aprPercent = parseFloat(interestPercent || '0')
+  const principalNum = parseFloat(principalAmount || '0') || 0
+  const totalRepay = principalNum * (1 + aprPercent / 100)
 
+  const displaySummary = step1Summary ?? fetchedSummary
+  if (displaySummary) {
+    const txidShort =
+      displaySummary.txid.length <= 20
+        ? displaySummary.txid
+        : `${displaySummary.txid.slice(0, 10)}…${displaySummary.txid.slice(-8)}`
+    return (
+      <section className="min-w-0 max-w-lg">
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm">
+          <h3 className="font-semibold text-gray-900 mb-3">Issue Utility NFTs — summary</h3>
+          <p className="font-medium text-gray-700 mb-1">Transaction</p>
+          <div className="flex items-center gap-2 mb-3">
+            <a
+              href={esplora.getTxExplorerUrl(displaySummary.txid)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs text-[#5F3DC4] hover:underline truncate min-w-0"
+              title={displaySummary.txid}
+            >
+              {txidShort}
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(displaySummary.txid)
+              }}
+              className="shrink-0 rounded p-1 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+              title="Copy txid"
+              aria-label="Copy txid"
+            >
+              <CopyIcon />
+            </button>
+          </div>
+          <p className="font-medium text-gray-700 mb-2">Offer parameters used</p>
+          <table className="text-gray-700 w-full text-sm">
+            <tbody>
+              <tr>
+                <td className="py-0.5 pr-2 text-gray-600">Collateral</td>
+                <td className="py-0.5">{displaySummary.collateralAmount} sat LBTC</td>
+              </tr>
+              <tr>
+                <td className="py-0.5 pr-2 text-gray-600">Borrow</td>
+                <td className="py-0.5">{displaySummary.principalAmount} sat ASSET</td>
+              </tr>
+              <tr>
+                <td className="py-0.5 pr-2 text-gray-600">Duration (block)</td>
+                <td className="py-0.5">
+                  {(() => {
+                    const blockNum = parseInt(displaySummary.loanExpirationTime, 10)
+                    const endsIn =
+                      !Number.isNaN(blockNum) && currentBlockHeight != null
+                        ? formatEndsIn(blockNum, currentBlockHeight)
+                        : ''
+                    return endsIn
+                      ? `block ${displaySummary.loanExpirationTime} (${endsIn})`
+                      : `block ${displaySummary.loanExpirationTime}`
+                  })()}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-0.5 pr-2 text-gray-600">Interest</td>
+                <td className="py-0.5">{displaySummary.interestPercent}%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {onStartOver && (
+          <div className="mt-3">
+            <ButtonSecondary size="md" onClick={onStartOver}>
+              Start flow from the beginning
+            </ButtonSecondary>
+          </div>
+        )}
+      </section>
+    )
+  }
+  if (issuanceTxidForSummary?.trim() && loadingSummary) {
+    return (
+      <section className="min-w-0 max-w-lg">
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          Loading summary…
+        </div>
+      </section>
+    )
+  }
+  if (issuanceTxidForSummary?.trim() && summaryFetchError) {
+    return (
+      <section className="min-w-0 max-w-lg">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-medium mb-1">Could not load summary</p>
+          <p className="text-sm">{summaryFetchError}</p>
+        </div>
+        {onStartOver && (
+          <div className="mt-3">
+            <ButtonSecondary size="md" onClick={onStartOver}>
+              Start flow from the beginning
+            </ButtonSecondary>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  return (
+    <section className="min-w-0 max-w-lg">
+      <div className="space-y-4 text-sm">
         {someMissing && (
           <p className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800">
             Not all 4 UTXOs from the prepare tx were found (missing vouts: {missingVouts.join(', ')}
@@ -310,135 +491,190 @@ export function IssueUtilityNftsStep({
           </p>
         )}
 
-        {auxiliaryAssetIdNorm && (
-          <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-800">
-            <p className="font-medium text-gray-700 mb-1">Auxiliary asset</p>
-            <p className="font-mono text-xs break-all mb-1">AssetId: {storedAuxiliaryAssetId}</p>
-            <p className="text-gray-600">
-              Found {auxiliaryUtxos.length} UTXO(s) (need {ISSUANCE_UTXOS_NEEDED}).
-            </p>
-            {issuanceUtxosOrdered && (
-              <p className="text-green-700 mt-1">Ready to issue Utility NFTs.</p>
-            )}
-          </div>
-        )}
-
-        <div>
-          <p className={formClassNames.label}>Fee UTXO (LBTC)</p>
-          {nativeUtxos.length === 0 ? (
-            <p className="text-gray-500">No LBTC UTXOs.</p>
-          ) : (
-            <UtxoSelect
-              className="max-w-md"
-              utxos={nativeUtxos}
-              value={String(feeUtxoIndex)}
-              onChange={(v) => setFeeUtxoIndex(parseInt(v, 10))}
-              optionValueType="index"
-              labelSuffix="sats"
-            />
-          )}
-        </div>
-
-        <div>
-          <p className={formClassNames.label}>
-            <span className="inline-flex items-center gap-1">
-              Fee amount (sats)
-              <InfoTooltip
-                content="Fee paid in LBTC from the selected fee UTXO."
-                aria-label="Fee amount help"
-              />
-            </span>
-          </p>
-          <Input
-            type="number"
-            min={1}
-            className="w-28"
-            value={feeAmount}
-            onChange={(e) => setFeeAmount(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <p className={formClassNames.label}>To address (NFTs and change)</p>
-          <Input
-            type="text"
-            className="w-full max-w-lg font-mono"
-            value={toAddress}
-            onChange={(e) => setToAddress(e.target.value)}
-          />
-        </div>
-
-        <p className={formClassNames.label + ' mt-4'}>Offer parameters</p>
-        <div className="grid gap-2 max-w-md">
+        <p className={formClassNames.label}>Offer parameters</p>
+        <div className="space-y-4">
           <div>
-            <label className={formClassNames.label}>Collateral amount</label>
+            <label className={formClassNames.label}>
+              <span className="inline-flex items-center gap-1">
+                Collateral
+                <InfoTooltip
+                  content="Collateral amount in satoshis (LBTC)."
+                  aria-label="Collateral help"
+                  contentClassName={STEP1_TOOLTIP_CLASS}
+                />
+              </span>
+            </label>
             <Input
               type="number"
               min={0}
               className="w-full"
+              compact
               value={collateralAmount}
               onChange={(e) => setCollateralAmount(e.target.value)}
+              suffix="sat LBTC"
             />
           </div>
           <div>
-            <label className={formClassNames.label}>Principal amount</label>
+            <label className={formClassNames.label}>
+              <span className="inline-flex items-center gap-1">
+                Borrow
+                <InfoTooltip
+                  content="Principal to borrow in satoshis (ASSET)."
+                  aria-label="Borrow help"
+                  contentClassName={STEP1_TOOLTIP_CLASS}
+                />
+              </span>
+            </label>
             <Input
               type="number"
               min={0}
               className="w-full"
+              compact
               value={principalAmount}
               onChange={(e) => setPrincipalAmount(e.target.value)}
+              suffix="sat ASSET"
             />
           </div>
           <div>
-            <label className={formClassNames.label}>Offer end (block height)</label>
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                type="number"
-                min={0}
-                className="w-full flex-1 min-w-0"
-                value={loanExpirationTime}
-                onChange={(e) => setLoanExpirationTime(e.target.value)}
-              />
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <label className={formClassNames.label + ' mb-0'}>
+                <span className="inline-flex items-center gap-1">
+                  Duration / Term (blocks)
+                  <InfoTooltip
+                    content="Block height at which the offer expires."
+                    aria-label="Duration help"
+                    contentClassName={STEP1_TOOLTIP_CLASS}
+                  />
+                </span>
+              </label>
               {currentBlockHeight != null && (
                 <button
                   type="button"
                   onClick={() => setLoanExpirationTime(String(currentBlockHeight))}
-                  className="text-xs text-indigo-600 hover:underline"
+                  className="text-xs text-indigo-600 hover:underline bg-transparent border-none p-0 cursor-pointer"
                 >
-                  Use current ({currentBlockHeight})
+                  current
                 </button>
               )}
             </div>
-            {endsInLabel && <p className={formClassNames.helper}>Ends in {endsInLabel}</p>}
+            <div className="space-y-1">
+              <Input
+                type="number"
+                min={0}
+                className="w-full"
+                compact
+                value={loanExpirationTime}
+                onChange={(e) => setLoanExpirationTime(e.target.value)}
+              />
+              {endsInLabel && <p className={formClassNames.helper}>Ends in {endsInLabel}</p>}
+            </div>
           </div>
           <div>
-            <label className={formClassNames.label}>Interest rate (%)</label>
+            <label className={formClassNames.label}>
+              <span className="inline-flex items-center gap-1">
+                Interest rate (%)
+                <InfoTooltip
+                  content="Annual percentage rate for the loan (e.g. 3.45)."
+                  aria-label="Interest help"
+                  contentClassName={STEP1_TOOLTIP_CLASS}
+                />
+              </span>
+            </label>
             <Input
               type="number"
               min={0}
               max={100}
               step={0.01}
-              placeholder="e.g. 5"
+              placeholder="e.g. 3.45"
               className="w-full"
+              compact
               value={interestPercent}
-              onChange={(e) => setInterestPercent(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className={formClassNames.label}>Token decimals (0–15)</label>
-            <Input
-              type="number"
-              min={0}
-              max={15}
-              className="w-20"
-              value={tokensDecimals}
-              onChange={(e) => setTokensDecimals(e.target.value)}
+              onChange={(e) => {
+                const raw = e.target.value.replace(',', '.')
+                const m = raw.match(/^\d*\.?\d{0,2}/)
+                setInterestPercent(m ? m[0] : interestPercent)
+              }}
             />
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 items-center mt-4">
+        <div>
+          <p className={formClassNames.label}>Transaction details</p>
+          <div className="space-y-4">
+            <div>
+              <label className={formClassNames.label}>Fee UTXO (LBTC)</label>
+              {nativeUtxos.length === 0 ? (
+                <p className="text-gray-500">No LBTC UTXOs.</p>
+              ) : (
+                <UtxoSelect
+                  className="max-w-full"
+                  utxos={nativeUtxos}
+                  value={String(feeUtxoIndex)}
+                  onChange={(v) => setFeeUtxoIndex(parseInt(v, 10))}
+                  optionValueType="index"
+                  labelSuffix="sats"
+                />
+              )}
+            </div>
+            <div>
+              <label className={formClassNames.label}>
+                <span className="inline-flex items-center gap-1">
+                  Fee amount
+                  <InfoTooltip
+                    content="Fee paid in satoshis from the selected fee UTXO."
+                    aria-label="Fee amount help"
+                    contentClassName={STEP1_TOOLTIP_CLASS}
+                  />
+                </span>
+              </label>
+              <Input
+                type="number"
+                min={1}
+                className="w-full"
+                compact
+                value={feeAmount}
+                onChange={(e) => setFeeAmount(e.target.value)}
+                suffix="sat LBTC"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <h4 className="font-semibold text-gray-900 mb-2">Offer summary</h4>
+          <table className="text-sm text-gray-700 w-full">
+            <tbody>
+              <tr>
+                <td className="py-0.5 pr-2 text-gray-600">Collateral</td>
+                <td className="py-0.5">{collateralAmount || '0'} sat LBTC</td>
+              </tr>
+              <tr>
+                <td className="py-0.5 pr-2 text-gray-600">Borrow</td>
+                <td className="py-0.5">{principalAmount || '0'} sat ASSET</td>
+              </tr>
+              <tr>
+                <td className="py-0.5 pr-2 text-gray-600">Offer ends</td>
+                <td className="py-0.5">
+                  block {loanExpirationTime || '—'}
+                  {endsInLabel && ` (${endsInLabel})`}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-0.5 pr-2 text-gray-600">Total to repay</td>
+                <td className="py-0.5">
+                  {totalRepay.toLocaleString(undefined, { maximumFractionDigits: 2 })} sat ASSET
+                  {principalAmount && interestPercent && (
+                    <span className="text-gray-500 ml-1">
+                      (principal + {interestPercent}% interest)
+                    </span>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-wrap gap-2 items-center">
           <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
             {building ? 'Building…' : 'Build & Sign'}
           </ButtonSecondary>
@@ -457,9 +693,21 @@ export function IssueUtilityNftsStep({
           <p className="text-green-700">Broadcast successful. Txid: {broadcastTxid}</p>
         )}
         {signedTxHex && !broadcastTxid && (
-          <p className="text-gray-600 mt-2">
-            Signed transaction ready. Copy and broadcast via explorer if needed.
-          </p>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 mt-2">
+            <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
+            <textarea
+              readOnly
+              className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded-xl p-2 h-24"
+              value={signedTxHex}
+            />
+            <ButtonNeutral
+              size="sm"
+              className="mt-2"
+              onClick={() => navigator.clipboard?.writeText(signedTxHex)}
+            >
+              Copy hex
+            </ButtonNeutral>
+          </div>
         )}
       </div>
     </section>

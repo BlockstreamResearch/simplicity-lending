@@ -10,19 +10,7 @@ import type { EsploraVout } from '../api/esplora'
 import { createPsetBuilder } from '../tx/psetBuilder'
 import type { PsetWithExtractTx } from '../simplicity'
 import { signP2pkInputs } from './signP2pkInputs'
-
-function getScriptHexFromVout(vout: EsploraVout): string {
-  const sp = vout.scriptpubkey
-  const hex =
-    vout.scriptpubkey_hex ??
-    (typeof sp === 'string'
-      ? sp
-      : sp && typeof sp === 'object' && 'hex' in sp
-        ? (sp as { hex: string }).hex
-        : undefined)
-  if (!hex || typeof hex !== 'string') throw new Error('Missing scriptpubkey hex in vout')
-  return hex
-}
+import { getScriptHexFromVout } from './hex'
 
 export interface IssuanceUtxo {
   outpoint: { txid: string; vout: number }

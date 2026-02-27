@@ -7,19 +7,7 @@
 import type { Lwk, LwkTxOut } from '../simplicity'
 import type { EsploraVout } from '../api/esplora'
 import type { PsetNetwork } from '../tx/psetBuilder'
-
-function getScriptHexFromVout(vout: EsploraVout): string {
-  const sp = vout.scriptpubkey
-  const hex =
-    vout.scriptpubkey_hex ??
-    (typeof sp === 'string'
-      ? sp
-      : sp && typeof sp === 'object' && 'hex' in sp
-        ? (sp as { hex: string }).hex
-        : undefined)
-  if (!hex || typeof hex !== 'string') throw new Error('Missing scriptpubkey hex in vout')
-  return hex
-}
+import { getScriptHexFromVout } from './hex'
 
 /**
  * Create one LWK TxOut from prevout. Call twice when you need two separate instances for

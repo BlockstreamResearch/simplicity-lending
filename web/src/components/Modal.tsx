@@ -10,9 +10,11 @@ export interface ModalProps {
   onClose: () => void
   title: string
   children: React.ReactNode
+  /** Optional class for the content card (e.g. max-w-lg to narrow). */
+  contentClassName?: string
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, children, contentClassName }: ModalProps) {
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -42,7 +44,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         onClick={onClose}
       />
       <div
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl"
+        className={`relative w-full ${contentClassName ?? 'max-w-2xl'} max-h-[90vh] overflow-x-hidden overflow-y-auto rounded-xl bg-white shadow-xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">

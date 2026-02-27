@@ -4,8 +4,7 @@
  */
 
 import { getSource, getLwk, createP2trAddress, type P2pkNetwork } from '../simplicity'
-
-export type { P2pkNetwork }
+import { bytesToHex } from './hex'
 
 /** Network used for P2PK (Utility page, split tx). */
 export const P2PK_NETWORK: P2pkNetwork = 'testnet'
@@ -53,17 +52,39 @@ export async function getP2pkAddressFromSecret(
 }
 
 /**
+ * Get P2TR address for the P2PK Simplicity program from x-only public key (32 bytes).
+ * Mirrors Rust: get_p2pk_address(&borrower_x_only_public_key, network).
+ */
+export async function getP2pkAddressFromPublicKey(
+  xOnlyPublicKey: Uint8Array,
+  network: P2pkNetwork
+): Promise<string> {
+  if (xOnlyPublicKey.length !== 32) throw new Error('Expected 32-byte x-only public key')
+  const lwk = await getLwk()
+  const SimplicityArguments = lwk.SimplicityArguments
+  const SimplicityTypedValue = lwk.SimplicityTypedValue
+  const internalKey = lwk.XOnlyPublicKey.fromBytes(xOnlyPublicKey)
+  const internalKeyHex = bytesToHex(xOnlyPublicKey)
+  const args = new SimplicityArguments().addValue(
+    'PUBLIC_KEY',
+    SimplicityTypedValue.fromU256Hex(internalKeyHex)
+  )
+  return createP2trAddress({
+    source: getSource('p2pk'),
+    args,
+    internalKey,
+    network,
+  })
+}
+
+/**
  * Get script_pubkey (hex) for an Elements/Liquid address using LWK.
- * Uses the unconfidential address so the script matches what Esplora indexes
- * (Esplora scripthash is keyed by the revealed P2TR script, not the blinded output).
+ * Uses the unconfidential address so the script matches what Esplora indexes.
  */
 export async function getScriptPubkeyHexFromAddress(address: string): Promise<string> {
   const lwk = await getLwk()
   const addr = new lwk.Address(address)
   const unconf = addr.toUnconfidential()
   const script = unconf.scriptPubkey()
-  const bytes = script.bytes()
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  return bytesToHex(script.bytes())
 }

@@ -4,8 +4,9 @@
  */
 
 import { getLwk } from '../simplicity'
-import type { Lwk } from '../simplicity'
+import type { Lwk, LwkScript } from '../simplicity'
 import type { EsploraVout } from '../api/esplora'
+import { getScriptHexFromVout, bytesToHex } from '../utility/hex'
 
 export type PsetNetwork = 'mainnet' | 'testnet'
 
@@ -22,34 +23,13 @@ export function txidDisplayToInternal(displayTxidHex: string): string {
   return pairs.reverse().join('')
 }
 
-function getScriptHexFromVout(vout: EsploraVout): string {
-  const sp = vout.scriptpubkey
-  const hex =
-    vout.scriptpubkey_hex ??
-    (typeof sp === 'string'
-      ? sp
-      : sp && typeof sp === 'object' && 'hex' in sp
-        ? (sp as { hex: string }).hex
-        : undefined)
-  if (!hex || typeof hex !== 'string') throw new Error('Missing scriptpubkey hex in vout')
-  return hex
-}
-
-function getScriptForAddress(lwk: Lwk, address: string): InstanceType<Lwk['Script']> {
+function getScriptForAddress(lwk: Lwk, address: string): LwkScript {
   const addr = new lwk.Address(address)
   let script = addr.scriptPubkey()
   if (script == null) script = addr.toUnconfidential().scriptPubkey()
   if (script == null)
     throw new Error(`Address has no scriptPubkey (null from LWK): ${address.slice(0, 50)}...`)
   return script
-}
-
-/** Get script pubkey hex from LWK Script (bytes to hex). Avoids passing Address-derived Script into PsetOutputBuilder. */
-function scriptToHex(script: { bytes(): Iterable<number> | Uint8Array }): string {
-  const bytes = script.bytes()
-  return Array.from(bytes)
-    .map((b) => (Number(b) & 0xff).toString(16).padStart(2, '0'))
-    .join('')
 }
 
 export interface PsetBuilderApi {
@@ -144,7 +124,7 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
 
     addOutputToAddress(address: string, amount: bigint, assetIdHex?: string) {
       const scriptFromAddr = getScriptForAddress(lwk, address)
-      const scriptHex = scriptToHex(scriptFromAddr)
+      const scriptHex = bytesToHex(scriptFromAddr.bytes())
       const script = new Script(scriptHex)
       const assetHex = assetIdHex ?? policyAsset.toString()
       const asset = new AssetId(assetHex)

@@ -36,6 +36,12 @@ function simplicitySourcesPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Vitest extension (see vitest.config reference or run vitest for tests)
+  // @ts-expect-error - Vite's UserConfigExport doesn't include Vitest's 'test'
+  test: {
+    include: ['src/**/*.test.ts'],
+    globals: true,
+  },
   plugins: [
     react(),
     simplicitySourcesPlugin(),

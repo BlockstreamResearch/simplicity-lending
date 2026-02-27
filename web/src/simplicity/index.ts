@@ -11,7 +11,10 @@ export type {
   P2pkNetwork,
   CreateP2trAddressParams,
   Lwk,
+  LwkScript,
+  LwkSimplicityArguments,
   LwkTxOut,
   LwkTransaction,
+  LwkXOnlyPublicKey,
   PsetWithExtractTx,
 } from './lwk'
