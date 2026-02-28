@@ -38,6 +38,27 @@ export type LwkScript = InstanceType<Lwk['Script']>
 /** Instance of LWK TxOut (use instead of InstanceType<Lwk['TxOut']> — TxOut has a private constructor). */
 export type LwkTxOut = ReturnType<Lwk['TxOut']['fromExplicit']>
 
+/** Array of LWK TxOut (e.g. for getSighashAll / finalizeTransaction prevouts). */
+export type LwkTxOutArray = LwkTxOut[]
+
+/** Instance of LWK SimplicityProgram. */
+export type LwkSimplicityProgram = InstanceType<Lwk['SimplicityProgram']>
+
+/** Instance of LWK SimplicityTypedValue. */
+export type LwkSimplicityTypedValue = InstanceType<Lwk['SimplicityTypedValue']>
+
+/** Instance of LWK SimplicityWitnessValues. */
+export type LwkSimplicityWitnessValues = InstanceType<Lwk['SimplicityWitnessValues']>
+
+/** Instance of LWK SimplicityType (for parsing type strings). */
+export type LwkSimplicityType = InstanceType<Lwk['SimplicityType']>
+
+/** Instance of LWK Keypair. */
+export type LwkKeypair = InstanceType<Lwk['Keypair']>
+
+/** LWK Network (return type of Network.mainnet() / Network.testnet()). */
+export type LwkNetwork = ReturnType<Lwk['Network']['mainnet']>
+
 /** LWK transaction type (first argument of getSighashAll / return of finalizeTransaction). */
 export type LwkTransaction = Parameters<InstanceType<Lwk['SimplicityProgram']>['getSighashAll']>[0]
 

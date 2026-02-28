@@ -3,7 +3,7 @@
  * Thin wrapper over buildAndSignP2pkTx.
  */
 
-import { buildAndSignP2pkTx } from '../../utility/buildP2pkTx'
+import { buildAndSignP2pkTx } from '../p2pk/buildP2pkTx'
 import type { P2pkNetwork } from '../../simplicity'
 import type { EsploraVout } from '../../api/esplora'
 import type { Outpoint } from './types'

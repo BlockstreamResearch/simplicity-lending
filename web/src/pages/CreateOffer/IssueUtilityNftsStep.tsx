@@ -17,7 +17,8 @@ import {
   decodeFirstNFTParameters,
   decodeSecondNFTParameters,
 } from '../../utility/parametersEncoding'
-import { buildAndSignIssueUtilityNftsTx } from '../../utility/buildIssueUtilityNftsTx'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { buildIssueUtilityNftsTx, finalizeIssueUtilityNftsTx } from '../../tx/issueUtilityNfts/buildIssueUtilityNftsTx'
 import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
@@ -159,6 +160,9 @@ export function IssueUtilityNftsStep({
   const [interestPercent, setInterestPercent] = useState('')
   const [building, setBuilding] = useState(false)
   const [buildError, setBuildError] = useState<string | null>(null)
+  const [builtIssueTx, setBuiltIssueTx] = useState<Awaited<
+    ReturnType<typeof buildIssueUtilityNftsTx>
+  > | null>(null)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
@@ -302,10 +306,7 @@ export function IssueUtilityNftsStep({
           toBaseAmount(principalNum, TOKEN_DECIMALS)
         )
 
-        const seed = parseSeedHex(seedHex)
-        const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-
-        const result = await buildAndSignIssueUtilityNftsTx({
+        const built = await buildIssueUtilityNftsTx({
           issuanceUtxos,
           feeUtxo: { outpoint: { txid: feeUtxo.txid, vout: feeUtxo.vout }, prevout: feePrevout },
           issuanceEntropyBytes,
@@ -313,14 +314,21 @@ export function IssueUtilityNftsStep({
           secondParametersNftAmount: secondAmount,
           utilityNftsToAddress: (accountAddress ?? '').trim(),
           feeAmount: BigInt(feeNum),
-          secretKey: secret,
           network: P2PK_NETWORK,
         })
-
-        setSignedTxHex(result.signedTxHex)
+        setBuiltIssueTx(built)
 
         if (broadcast) {
-          const txidRes = await esplora.broadcastTx(result.signedTxHex)
+          const seed = parseSeedHex(seedHex)
+          const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+          const signedTxHex = await finalizeIssueUtilityNftsTx({
+            pset: built.pset as PsetWithExtractTx,
+            prevouts: built.prevouts,
+            secretKey: secret,
+            network: P2PK_NETWORK,
+          })
+          setSignedTxHex(signedTxHex)
+          const txidRes = await esplora.broadcastTx(signedTxHex)
           setBroadcastTxid(txidRes)
           onSuccess(txidRes, {
             txid: txidRes,
@@ -362,8 +370,78 @@ export function IssueUtilityNftsStep({
     ]
   )
 
+  const handleSign = useCallback(async () => {
+    if (!builtIssueTx || !seedHex) return
+    setBuildError(null)
+    setBuilding(true)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const signedTxHex = await finalizeIssueUtilityNftsTx({
+        pset: builtIssueTx.pset as PsetWithExtractTx,
+        prevouts: builtIssueTx.prevouts,
+        secretKey: secret,
+        network: P2PK_NETWORK,
+      })
+      setSignedTxHex(signedTxHex)
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBuilding(false)
+    }
+  }, [builtIssueTx, seedHex, accountIndex])
+
+  const handleSignAndBroadcast = useCallback(async () => {
+    if (!builtIssueTx || !seedHex) return
+    setBuildError(null)
+    setBroadcastError(null)
+    setBuilding(true)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const signedTxHex = await finalizeIssueUtilityNftsTx({
+        pset: builtIssueTx.pset as PsetWithExtractTx,
+        prevouts: builtIssueTx.prevouts,
+        secretKey: secret,
+        network: P2PK_NETWORK,
+      })
+      setSignedTxHex(signedTxHex)
+      const txidRes = await esplora.broadcastTx(signedTxHex)
+      setBroadcastTxid(txidRes)
+      onSuccess(txidRes, {
+        txid: txidRes,
+        collateralAmount,
+        principalAmount,
+        feeAmount,
+        loanExpirationTime,
+        interestPercent,
+        toAddress: accountAddress ?? '',
+      })
+    } catch (e) {
+      if (e instanceof EsploraApiError) {
+        setBroadcastError(e.body ?? e.message)
+      } else {
+        setBuildError(e instanceof Error ? e.message : String(e))
+      }
+    } finally {
+      setBuilding(false)
+    }
+  }, [
+    builtIssueTx,
+    seedHex,
+    accountIndex,
+    collateralAmount,
+    principalAmount,
+    feeAmount,
+    loanExpirationTime,
+    interestPercent,
+    accountAddress,
+    esplora,
+    onSuccess,
+  ])
+
   const handleBuild = () => runBuild(false)
-  const handleBuildAndBroadcast = () => runBuild(true)
+  const handleBuildAndBroadcast = () => void handleSignAndBroadcast()
 
   const canBuild =
     issuanceUtxosOrdered != null &&
@@ -676,16 +754,27 @@ export function IssueUtilityNftsStep({
 
         <div className="flex flex-wrap gap-2 items-center">
           <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-            {building ? 'Building…' : 'Build & Sign'}
+            {building ? 'Building…' : 'Build'}
+          </ButtonSecondary>
+          <ButtonSecondary
+            size="md"
+            disabled={!builtIssueTx || building}
+            onClick={() => void handleSign()}
+          >
+            {building ? 'Signing…' : 'Sign'}
           </ButtonSecondary>
           <ButtonPrimary
             size="md"
-            disabled={!canBuild || building}
-            onClick={handleBuildAndBroadcast}
+            disabled={!builtIssueTx || building}
+            onClick={() => void handleBuildAndBroadcast()}
           >
-            {building ? 'Building…' : 'Build & Broadcast'}
+            {building ? 'Signing…' : 'Sign & Broadcast'}
           </ButtonPrimary>
         </div>
+
+        {builtIssueTx && !signedTxHex && !broadcastTxid && (
+          <p className="text-blue-700 text-sm mt-1">Transaction built. Click Sign or Sign & Broadcast.</p>
+        )}
 
         {buildError && <p className="text-red-600">{buildError}</p>}
         {broadcastError && <p className="text-red-600">{broadcastError}</p>}

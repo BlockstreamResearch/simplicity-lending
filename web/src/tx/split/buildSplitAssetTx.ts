@@ -4,12 +4,12 @@
  * Signs both P2PK inputs via signP2pkInputs.
  */
 
-import { getLwk } from '../simplicity'
-import type { P2pkNetwork } from '../simplicity'
-import type { EsploraVout } from '../api/esplora'
-import { createPsetBuilder } from '../tx/psetBuilder'
-import type { PsetWithExtractTx } from '../simplicity'
-import { signP2pkInputs } from './signP2pkInputs'
+import { getLwk } from '../../simplicity'
+import type { P2pkNetwork } from '../../simplicity'
+import type { EsploraVout } from '../../api/esplora'
+import { createPsetBuilder } from '../psetBuilder'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { signP2pkInputs } from '../../utility/signP2pkInputs'
 
 export interface BuildSplitAssetTxParams {
   /** Fee input: LBTC UTXO (outpoint + prevout). */
@@ -24,19 +24,31 @@ export interface BuildSplitAssetTxParams {
   changeLbtc: { address: string; amount: bigint } | null
   /** Fee amount in sats (LBTC). */
   feeAmount: bigint
+  network: P2pkNetwork
+}
+
+export interface BuildSplitAssetTxResult {
+  pset: unknown
+  unsignedTxHex: string
+  prevouts: EsploraVout[]
+}
+
+export interface FinalizeSplitAssetTxParams {
+  pset: PsetWithExtractTx
+  prevouts: EsploraVout[]
   secretKey: Uint8Array
   network: P2pkNetwork
 }
 
 /**
- * Build PSET with two inputs (fee then asset), asset outputs, changes, fee.
- * Sign input 0 then input 1; return signed tx hex.
+ * Build split-asset PSET (no signing). Returns pset, unsignedTxHex, prevouts for finalize.
  */
-export async function buildAndSignSplitAssetTx(params: BuildSplitAssetTxParams): Promise<string> {
+export async function buildSplitAssetTx(
+  params: BuildSplitAssetTxParams
+): Promise<BuildSplitAssetTxResult> {
   const network: 'mainnet' | 'testnet' = params.network === 'mainnet' ? 'mainnet' : 'testnet'
   const api = await createPsetBuilder(network)
 
-  // Input 0: fee (LBTC), Input 1: asset
   api.addInput(params.feeInput.outpoint, params.feeInput.prevout)
   api.addInput(params.assetInput.outpoint, params.assetInput.prevout)
 
@@ -55,13 +67,44 @@ export async function buildAndSignSplitAssetTx(params: BuildSplitAssetTxParams):
   api.addFeeOutput(params.feeAmount)
 
   const { pset } = api.build()
+  const prevouts = [params.feeInput.prevout, params.assetInput.prevout]
+  const unsignedTxHex = (pset as PsetWithExtractTx).extractTx().toString()
+  return { pset, unsignedTxHex, prevouts }
+}
 
+/**
+ * Finalize (sign) split-asset PSET and return signed tx hex.
+ */
+export async function finalizeSplitAssetTx(
+  params: FinalizeSplitAssetTxParams
+): Promise<string> {
+  const network: 'mainnet' | 'testnet' = params.network === 'mainnet' ? 'mainnet' : 'testnet'
   const lwk = await getLwk()
   return signP2pkInputs({
     lwk,
     network,
-    pset: pset as PsetWithExtractTx,
+    pset: params.pset,
     secretKey: params.secretKey,
-    prevouts: [params.feeInput.prevout, params.assetInput.prevout],
+    prevouts: params.prevouts,
+  })
+}
+
+export interface BuildAndSignSplitAssetTxParams extends BuildSplitAssetTxParams {
+  secretKey: Uint8Array
+}
+
+/**
+ * Build PSET with two inputs (fee then asset), asset outputs, changes, fee.
+ * Sign input 0 then input 1; return signed tx hex.
+ */
+export async function buildAndSignSplitAssetTx(
+  params: BuildAndSignSplitAssetTxParams
+): Promise<string> {
+  const built = await buildSplitAssetTx(params)
+  return finalizeSplitAssetTx({
+    pset: built.pset as PsetWithExtractTx,
+    prevouts: built.prevouts,
+    secretKey: params.secretKey,
+    network: params.network,
   })
 }

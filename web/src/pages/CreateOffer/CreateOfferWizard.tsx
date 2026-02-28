@@ -4,7 +4,7 @@
  * Steps shown as pills with arrow; step 2 disabled until step 1 done; summary on step 1 when returning.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
@@ -12,6 +12,9 @@ import { IssueUtilityNftsStep } from './IssueUtilityNftsStep'
 import { FinalizeOfferStep } from './FinalizeOfferStep'
 
 export type CreateOfferStep = 2 | 3
+
+const POLL_INTERVAL_MS = 2000
+const WAIT_FOR_TX_TIMEOUT_MS = 60_000
 
 /** Summary data from step 1 (Issue Utility NFTs) for display when user returns to step 1. */
 export interface Step1Summary {
@@ -72,6 +75,11 @@ export function CreateOfferWizard({
   /** Txid from completing step 1 in this session (null until then). Recovery uses initialIssuanceTxid. */
   const [step1CompletedTxid, setStep1CompletedTxid] = useState<string | null>(null)
   const [step1Summary, setStep1Summary] = useState<Step1Summary | null>(null)
+  /** When set, we're waiting for this tx to appear in Esplora before switching to step 3. */
+  const [waitingForTxInEsplora, setWaitingForTxInEsplora] = useState<{
+    txid: string
+    summary: Step1Summary
+  } | null>(null)
 
   const effectiveIssuanceTxid = initialIssuanceTxid ?? step1CompletedTxid
   const step1Done = Boolean(effectiveIssuanceTxid?.trim())
@@ -81,8 +89,43 @@ export function CreateOfferWizard({
     setStep1Summary(summary)
     void onBroadcastSuccess()
     onIssueUtilityNftsSuccess?.(txid)
-    setCurrentStep(3)
+    setWaitingForTxInEsplora({ txid, summary })
   }
+
+  useEffect(() => {
+    const pending = waitingForTxInEsplora
+    if (!pending?.txid?.trim() || !esplora) return
+
+    let cancelled = false
+    const startedAt = Date.now()
+
+    const poll = () => {
+      if (cancelled) return
+      if (Date.now() - startedAt > WAIT_FOR_TX_TIMEOUT_MS) {
+        setWaitingForTxInEsplora(null)
+        setCurrentStep(3)
+        return
+      }
+      esplora
+        .getTx(pending.txid)
+        .then(() => {
+          if (!cancelled) {
+            setWaitingForTxInEsplora(null)
+            setCurrentStep(3)
+          }
+        })
+        .catch(() => {
+          /* ignore; will retry on next interval */
+        })
+    }
+
+    poll()
+    const intervalId = setInterval(poll, POLL_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
+  }, [waitingForTxInEsplora, esplora])
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -121,7 +164,26 @@ export function CreateOfferWizard({
       </div>
       {recoveryPanel != null ? <div>{recoveryPanel}</div> : null}
 
-      {currentStep === 2 && (
+      {waitingForTxInEsplora != null && (
+        <div
+          className="flex flex-col items-center justify-center gap-4 rounded-xl border border-gray-200 bg-gray-50/80 py-12 px-6"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="h-10 w-10 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"
+            aria-hidden
+          />
+          <p className="text-center text-sm font-medium text-gray-700">
+            Transaction broadcast. Waiting for it to appear in the network…
+          </p>
+          <p className="font-mono text-xs text-gray-500">
+            {waitingForTxInEsplora.txid.slice(0, 8)}…
+          </p>
+        </div>
+      )}
+
+      {waitingForTxInEsplora == null && currentStep === 2 && (
         <IssueUtilityNftsStep
           key="step2"
           accountIndex={accountIndex}
@@ -140,7 +202,7 @@ export function CreateOfferWizard({
         />
       )}
 
-      {currentStep === 3 && (
+      {waitingForTxInEsplora == null && currentStep === 3 && (
         <FinalizeOfferStep
           key={effectiveIssuanceTxid ?? 'step3'}
           accountIndex={accountIndex}

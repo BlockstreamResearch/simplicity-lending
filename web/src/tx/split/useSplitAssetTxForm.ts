@@ -6,7 +6,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
 import { EsploraApiError, type EsploraClient, type EsploraVout } from '../../api/esplora'
-import { buildAndSignSplitAssetTx } from '../../utility/buildSplitAssetTx'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { buildSplitAssetTx, finalizeSplitAssetTx } from './buildSplitAssetTx'
 import type { TxOutputRow } from './types'
 
 export interface UseSplitAssetTxFormParams {
@@ -50,11 +51,14 @@ export interface UseSplitAssetTxFormResult {
   updateOutput: (id: number, field: 'address' | 'amount', value: string) => void
   moveOutput: (index: number, dir: 1 | -1) => void
   buildError: string | null
+  /** Set after Build (unsigned). Sign / Sign & Broadcast use this. */
+  builtSplitAssetTx: Awaited<ReturnType<typeof buildSplitAssetTx>> | null
   signedTxHex: string | null
   building: boolean
   broadcastTxid: string | null
   broadcastError: string | null
   handleBuild: () => Promise<void>
+  handleSign: () => Promise<void>
   handleBuildAndBroadcast: () => Promise<void>
   handleClear: () => void
   feeValue: number
@@ -103,6 +107,9 @@ export function useSplitAssetTxForm({
   const [outputs, setOutputs] = useState<TxOutputRow[]>([])
   const [nextId, setNextId] = useState(0)
   const [buildError, setBuildError] = useState<string | null>(null)
+  const [builtSplitAssetTx, setBuiltSplitAssetTx] = useState<Awaited<
+    ReturnType<typeof buildSplitAssetTx>
+  > | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
@@ -121,6 +128,7 @@ export function useSplitAssetTxForm({
     setOutputs([])
     setNextId(0)
     setBuildError(null)
+    setBuiltSplitAssetTx(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
     setBroadcastError(null)
@@ -241,20 +249,19 @@ export function useSplitAssetTxForm({
     outputs.every((o) => o.address.trim() !== '' && (parseInt(o.amount, 10) || 0) > 0)
 
   const handleBuild = useCallback(async () => {
-    if (!seedHex || !accountAddress || !loadedPrevoutFee || !loadedPrevoutAsset || !canBuild) return
+    if (!accountAddress || !loadedPrevoutFee || !loadedPrevoutAsset || !canBuild) return
     setBuildError(null)
+    setBuiltSplitAssetTx(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
     setBroadcastError(null)
     setBuilding(true)
     try {
-      const seed = parseSeedHex(seedHex)
-      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
       const txidFee = outpointFeeTxid.trim()
       const voutFee = parseInt(outpointFeeVout.trim(), 10)
       const txidAsset = outpointAssetTxid.trim()
       const voutAsset = parseInt(outpointAssetVout.trim(), 10)
-      const hex = await buildAndSignSplitAssetTx({
+      const result = await buildSplitAssetTx({
         feeInput: {
           outpoint: { txid: txidFee, vout: voutFee },
           prevout: loadedPrevoutFee,
@@ -271,18 +278,15 @@ export function useSplitAssetTxForm({
           changeAsset > 0 ? { address: accountAddress, amount: BigInt(changeAsset) } : null,
         changeLbtc: changeLbtc > 0 ? { address: accountAddress, amount: BigInt(changeLbtc) } : null,
         feeAmount: BigInt(feeNum),
-        secretKey: secret,
         network: P2PK_NETWORK,
       })
-      setSignedTxHex(hex)
+      setBuiltSplitAssetTx(result)
     } catch (e) {
       setBuildError(e instanceof Error ? e.message : String(e))
     } finally {
       setBuilding(false)
     }
   }, [
-    seedHex,
-    accountIndex,
     accountAddress,
     loadedPrevoutFee,
     loadedPrevoutAsset,
@@ -297,8 +301,29 @@ export function useSplitAssetTxForm({
     feeNum,
   ])
 
+  const handleSign = useCallback(async () => {
+    if (!builtSplitAssetTx || !seedHex || !accountAddress) return
+    setBuildError(null)
+    setBuilding(true)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const hex = await finalizeSplitAssetTx({
+        pset: builtSplitAssetTx.pset as PsetWithExtractTx,
+        prevouts: builtSplitAssetTx.prevouts,
+        secretKey: secret,
+        network: P2PK_NETWORK,
+      })
+      setSignedTxHex(hex)
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBuilding(false)
+    }
+  }, [builtSplitAssetTx, seedHex, accountAddress, accountIndex])
+
   const handleBuildAndBroadcast = useCallback(async () => {
-    if (!seedHex || !accountAddress || !loadedPrevoutFee || !loadedPrevoutAsset || !canBuild) return
+    if (!builtSplitAssetTx || !seedHex || !accountAddress || !canBuild) return
     setBuildError(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
@@ -307,27 +332,9 @@ export function useSplitAssetTxForm({
     try {
       const seed = parseSeedHex(seedHex)
       const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const txidFee = outpointFeeTxid.trim()
-      const voutFee = parseInt(outpointFeeVout.trim(), 10)
-      const txidAsset = outpointAssetTxid.trim()
-      const voutAsset = parseInt(outpointAssetVout.trim(), 10)
-      const hex = await buildAndSignSplitAssetTx({
-        feeInput: {
-          outpoint: { txid: txidFee, vout: voutFee },
-          prevout: loadedPrevoutFee,
-        },
-        assetInput: {
-          outpoint: { txid: txidAsset, vout: voutAsset },
-          prevout: loadedPrevoutAsset,
-        },
-        outputs: outputs.map((o) => ({
-          address: o.address.trim(),
-          amount: BigInt(parseInt(o.amount, 10) || 0),
-        })),
-        changeAsset:
-          changeAsset > 0 ? { address: accountAddress, amount: BigInt(changeAsset) } : null,
-        changeLbtc: changeLbtc > 0 ? { address: accountAddress, amount: BigInt(changeLbtc) } : null,
-        feeAmount: BigInt(feeNum),
+      const hex = await finalizeSplitAssetTx({
+        pset: builtSplitAssetTx.pset as PsetWithExtractTx,
+        prevouts: builtSplitAssetTx.prevouts,
         secretKey: secret,
         network: P2PK_NETWORK,
       })
@@ -347,21 +354,12 @@ export function useSplitAssetTxForm({
       setBuilding(false)
     }
   }, [
+    builtSplitAssetTx,
     seedHex,
     accountIndex,
     accountAddress,
-    loadedPrevoutFee,
-    loadedPrevoutAsset,
     canBuild,
     onBroadcastSuccess,
-    outpointFeeTxid,
-    outpointFeeVout,
-    outpointAssetTxid,
-    outpointAssetVout,
-    outputs,
-    changeAsset,
-    changeLbtc,
-    feeNum,
     esplora,
   ])
 
@@ -388,11 +386,13 @@ export function useSplitAssetTxForm({
     updateOutput,
     moveOutput,
     buildError,
+    builtSplitAssetTx,
     signedTxHex,
     building,
     broadcastTxid,
     broadcastError,
     handleBuild,
+    handleSign,
     handleBuildAndBroadcast,
     handleClear,
     feeValue,

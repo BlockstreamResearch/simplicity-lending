@@ -57,11 +57,13 @@ export function MergeTxBuilder({
     updateOutput,
     moveOutput,
     buildError,
+    builtMergeTx,
     signedTxHex,
     building,
     broadcastTxid,
     broadcastError,
     handleBuild,
+    handleSign,
     handleBuildAndBroadcast,
     handleClear,
     totalInputValue,
@@ -223,19 +225,29 @@ export function MergeTxBuilder({
 
           <div className="flex flex-wrap gap-2 items-center">
             <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-              {building ? 'Building…' : 'Build & Sign'}
+              {building ? 'Building…' : 'Build'}
+            </ButtonSecondary>
+            <ButtonSecondary
+              size="md"
+              disabled={!builtMergeTx || building}
+              onClick={handleSign}
+            >
+              {building ? 'Signing…' : 'Sign'}
             </ButtonSecondary>
             <ButtonPrimary
               size="md"
-              disabled={!canBuild || building}
+              disabled={!builtMergeTx || building}
               onClick={handleBuildAndBroadcast}
             >
-              {building ? 'Building…' : 'Build & Broadcast'}
+              {building ? 'Signing…' : 'Sign & Broadcast'}
             </ButtonPrimary>
             <ButtonNeutral size="md" disabled={building} onClick={handleClear}>
               Clear
             </ButtonNeutral>
           </div>
+          {builtMergeTx && !signedTxHex && !broadcastTxid && (
+            <p className="text-blue-700 text-sm mt-1">Transaction built. Click Sign or Sign & Broadcast.</p>
+          )}
           {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
           {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
           {broadcastTxid && (

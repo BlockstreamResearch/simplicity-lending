@@ -5,12 +5,18 @@
  * 4 NFT outputs + 4 return outputs + optional change + fee output.
  */
 
-import type { P2pkNetwork } from './addressP2pk'
-import type { EsploraVout } from '../api/esplora'
-import { createPsetBuilder } from '../tx/psetBuilder'
-import type { PsetWithExtractTx } from '../simplicity'
-import { signP2pkInputs } from './signP2pkInputs'
-import { getScriptHexFromVout } from './hex'
+import type { P2pkNetwork } from '../../simplicity'
+import type { EsploraVout } from '../../api/esplora'
+import { createPsetBuilder } from '../psetBuilder'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { signP2pkInputs } from '../../utility/signP2pkInputs'
+import { getScriptHexFromVout } from '../../utility/hex'
+
+/** Number of NFT outputs (vout 0..3). The 4 return auxiliary UTXOs follow at vout 4..7. */
+export const ISSUANCE_TX_NUM_NFT_OUTPUTS = 4
+
+/** First vout of the 4 return (reusable) auxiliary UTXOs in the Issue Utility NFTs tx. */
+export const ISSUANCE_TX_FIRST_RETURN_VOUT = ISSUANCE_TX_NUM_NFT_OUTPUTS
 
 export interface IssuanceUtxo {
   outpoint: { txid: string; vout: number }
@@ -27,18 +33,26 @@ export interface BuildIssueUtilityNftsTxParams {
   /** Address receiving the 4 NFT outputs (Borrower, Lender, First Params, Second Params). */
   utilityNftsToAddress: string
   feeAmount: bigint
-  secretKey: Uint8Array
   network: P2pkNetwork
 }
 
 export interface BuildIssueUtilityNftsTxResult {
-  signedTxHex: string
+  pset: unknown
+  unsignedTxHex: string
+  prevouts: EsploraVout[]
+}
+
+export interface FinalizeIssueUtilityNftsTxParams {
+  pset: PsetWithExtractTx
+  prevouts: EsploraVout[]
+  secretKey: Uint8Array
+  network: P2pkNetwork
 }
 
 /**
- * Build and sign the Issue Utility NFTs tx; returns signed tx hex.
+ * Build Issue Utility NFTs PSET (no signing). Returns pset, unsignedTxHex, prevouts.
  */
-export async function buildAndSignIssueUtilityNftsTx(
+export async function buildIssueUtilityNftsTx(
   params: BuildIssueUtilityNftsTxParams
 ): Promise<BuildIssueUtilityNftsTxResult> {
   const {
@@ -49,7 +63,6 @@ export async function buildAndSignIssueUtilityNftsTx(
     secondParametersNftAmount,
     utilityNftsToAddress,
     feeAmount,
-    secretKey,
     network,
   } = params
 
@@ -62,7 +75,6 @@ export async function buildAndSignIssueUtilityNftsTx(
   const networkKey = network === 'mainnet' ? 'mainnet' : 'testnet'
   const api = await createPsetBuilder(networkKey)
 
-  // Inputs: 4 with issuance (same entropy), then fee
   const borrowerAssetId = api.addInputWithIssuance(
     issuanceUtxos[0].outpoint,
     issuanceUtxos[0].prevout,
@@ -89,14 +101,13 @@ export async function buildAndSignIssueUtilityNftsTx(
   )
   api.addInput(feeUtxo.outpoint, feeUtxo.prevout)
 
-  // Outputs: 4 NFTs, 4 return, change (if any), fee
   api.addOutputToAddress(utilityNftsToAddress, 1n, borrowerAssetId)
   api.addOutputToAddress(utilityNftsToAddress, 1n, lenderAssetId)
   api.addOutputToAddress(utilityNftsToAddress, firstParametersNftAmount, firstParamsAssetId)
   api.addOutputToAddress(utilityNftsToAddress, secondParametersNftAmount, secondParamsAssetId)
 
   const policyAssetHex = api.getPolicyAssetHex()
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < ISSUANCE_TX_NUM_NFT_OUTPUTS; i++) {
     const v = issuanceUtxos[i]!.prevout
     const scriptHex = getScriptHexFromVout(v)
     const value = BigInt(v.value ?? 0)
@@ -119,16 +130,48 @@ export async function buildAndSignIssueUtilityNftsTx(
     issuanceUtxos[3].prevout,
     feeUtxo.prevout,
   ]
+  const unsignedTxHex = (pset as PsetWithExtractTx).extractTx().toString()
+  return { pset, unsignedTxHex, prevouts }
+}
 
-  const { getLwk } = await import('../simplicity')
+/**
+ * Finalize (sign) Issue Utility NFTs PSET and return signed tx hex.
+ */
+export async function finalizeIssueUtilityNftsTx(
+  params: FinalizeIssueUtilityNftsTxParams
+): Promise<string> {
+  const networkKey = params.network === 'mainnet' ? 'mainnet' : 'testnet'
+  const { getLwk } = await import('../../simplicity')
   const lwk = await getLwk()
-  const signedTxHex = signP2pkInputs({
+  return signP2pkInputs({
     lwk,
     network: networkKey,
-    pset: pset as PsetWithExtractTx,
-    secretKey,
-    prevouts,
+    pset: params.pset,
+    secretKey: params.secretKey,
+    prevouts: params.prevouts,
   })
+}
 
+export interface BuildAndSignIssueUtilityNftsTxParams extends BuildIssueUtilityNftsTxParams {
+  secretKey: Uint8Array
+}
+
+export interface BuildAndSignIssueUtilityNftsTxResult {
+  signedTxHex: string
+}
+
+/**
+ * Build and sign the Issue Utility NFTs tx; returns signed tx hex.
+ */
+export async function buildAndSignIssueUtilityNftsTx(
+  params: BuildAndSignIssueUtilityNftsTxParams
+): Promise<BuildAndSignIssueUtilityNftsTxResult> {
+  const built = await buildIssueUtilityNftsTx(params)
+  const signedTxHex = await finalizeIssueUtilityNftsTx({
+    pset: built.pset as PsetWithExtractTx,
+    prevouts: built.prevouts,
+    secretKey: params.secretKey,
+    network: params.network,
+  })
   return { signedTxHex }
 }

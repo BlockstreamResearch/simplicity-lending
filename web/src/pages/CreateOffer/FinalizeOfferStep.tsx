@@ -18,7 +18,8 @@ import { buildLendingParamsFromParameterNFTs } from '../../utility/parametersEnc
 import { buildPreLockArguments } from '../../utility/preLockArguments'
 import { hexToBytes32, normalizeHex, assetIdDisplayToInternal } from '../../utility/hex'
 import { computePreLockCovenantHashes } from '../../utility/preLockCovenants'
-import { buildAndSignPreLockCreationTx } from '../../utility/buildPreLockCreationTx'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { buildPreLockCreationTx, finalizePreLockCreationTx } from '../../tx/preLockCreation/buildPreLockCreationTx'
 import { ButtonPrimary, ButtonSecondary } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
@@ -66,6 +67,9 @@ export function FinalizeOfferStep({
   const [loadingIssuance, setLoadingIssuance] = useState(false)
   const [issuanceLoadError, setIssuanceLoadError] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
+  const [builtPreLockTx, setBuiltPreLockTx] = useState<Awaited<
+    ReturnType<typeof buildPreLockCreationTx>
+  > | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
@@ -131,10 +135,10 @@ export function FinalizeOfferStep({
   }, [utxos])
 
   const handleBuild = useCallback(
-    async (broadcast: boolean) => {
+    async () => {
       setBuildError(null)
       setStubMessage(null)
-      setBroadcastError(null)
+      setBuiltPreLockTx(null)
       setSignedTxHex(null)
       setBroadcastTxid(null)
       const principalHex = normalizeHex(principalAssetIdHex)
@@ -177,7 +181,7 @@ export function FinalizeOfferStep({
         return
       }
       if (!seedHex) {
-        setBuildError('Seed is required.')
+        setBuildError('Seed is required for borrower pubkey derivation.')
         return
       }
 
@@ -251,7 +255,7 @@ export function FinalizeOfferStep({
           return
         }
 
-        const result = await buildAndSignPreLockCreationTx({
+        const result = await buildPreLockCreationTx({
           collateralUtxo: {
             outpoint: { txid: collateralUtxo.txid, vout: collateralUtxo.vout },
             prevout: collateralPrevout,
@@ -280,22 +284,13 @@ export function FinalizeOfferStep({
           preLockScriptPubkeyHex: covenantResult.preLockScriptPubkeyHex,
           utilityNftsOutputScriptHex: covenantResult.utilityNftsOutputScriptHex,
           feeAmount: BigInt(feeNum),
-          secretKey,
           network: P2PK_NETWORK,
         })
 
-        setSignedTxHex(result.signedTxHex)
-
-        if (broadcast) {
-          const txid = await esplora.broadcastTx(result.signedTxHex)
-          setBroadcastTxid(txid)
-          onSuccess()
-        }
+        setBuiltPreLockTx(result)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        if (e instanceof EsploraApiError) {
-          setBroadcastError(e.body ?? e.message)
-        } else if (
+        if (
           msg.includes('Backend or WASM') ||
           msg.includes('require Simplicity') ||
           msg.includes('async LWK')
@@ -320,13 +315,51 @@ export function FinalizeOfferStep({
       collateralUtxoIndex,
       feeUtxoIndex,
       feeAmount,
-      nativeUtxos,
-      feeUtxoIndex,
       seedHex,
       accountIndex,
       esplora,
-      onSuccess,
     ]
+  )
+
+  const handleSignAndBroadcast = useCallback(
+    async (broadcast: boolean) => {
+      if (!builtPreLockTx) {
+        setBuildError('Build the transaction first (click Build).')
+        return
+      }
+      if (!seedHex) {
+        setBuildError('Seed is required to sign.')
+        return
+      }
+      setBuildError(null)
+      setBroadcastError(null)
+      setBuilding(true)
+      try {
+        const secretKey = deriveSecretKeyFromIndex(parseSeedHex(seedHex), accountIndex)
+        const { signedTxHex: hex } = await finalizePreLockCreationTx({
+          pset: builtPreLockTx.pset as PsetWithExtractTx,
+          prevouts: builtPreLockTx.prevouts,
+          secretKey,
+          network: P2PK_NETWORK,
+        })
+        setSignedTxHex(hex)
+        if (broadcast) {
+          const txid = await esplora.broadcastTx(hex)
+          setBroadcastTxid(txid)
+          onSuccess()
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (e instanceof EsploraApiError) {
+          setBroadcastError(e.body ?? e.message)
+        } else {
+          setBuildError(msg)
+        }
+      } finally {
+        setBuilding(false)
+      }
+    },
+    [builtPreLockTx, seedHex, accountIndex, esplora, onSuccess]
   )
 
   return (
@@ -434,13 +467,33 @@ export function FinalizeOfferStep({
         </div>
 
         <div className="flex flex-wrap gap-2 items-center mt-4">
-          <ButtonSecondary size="md" disabled={building} onClick={() => void handleBuild(false)}>
-            Build & Sign
+          <ButtonSecondary size="md" disabled={building} onClick={() => void handleBuild()}>
+            Build
           </ButtonSecondary>
-          <ButtonPrimary size="md" disabled={building} onClick={() => void handleBuild(true)}>
-            Build & Broadcast
+          <ButtonSecondary
+            size="md"
+            disabled={building || !builtPreLockTx}
+            onClick={() => void handleSignAndBroadcast(false)}
+          >
+            Sign
+          </ButtonSecondary>
+          <ButtonPrimary
+            size="md"
+            disabled={building || !builtPreLockTx}
+            onClick={() => void handleSignAndBroadcast(true)}
+          >
+            Sign & Broadcast
           </ButtonPrimary>
         </div>
+
+        {builtPreLockTx && !signedTxHex && (
+          <div className="mt-2 p-3 bg-blue-50 text-blue-800 rounded border border-blue-200 text-sm">
+            <p className="font-medium">Transaction built. Click Sign or Sign & Broadcast.</p>
+            <p className="mt-1 font-mono text-xs break-all opacity-80">
+              Unsigned tx: {builtPreLockTx.unsignedTxHex.slice(0, 64)}…
+            </p>
+          </div>
+        )}
 
         {signedTxHex && (
           <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">

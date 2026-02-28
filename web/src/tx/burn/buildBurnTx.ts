@@ -3,12 +3,12 @@
  * One LBTC fee UTXO for fee (and optional change). Mirrors burn logic in cancellation.rs.
  */
 
-import type { P2pkNetwork } from './addressP2pk'
-import type { EsploraVout } from '../api/esplora'
-import { createPsetBuilder } from '../tx/psetBuilder'
-import type { PsetWithExtractTx } from '../simplicity'
-import { signP2pkInputs } from './signP2pkInputs'
-import { getScriptHexFromVout } from './hex'
+import type { P2pkNetwork } from '../../simplicity'
+import type { EsploraVout } from '../../api/esplora'
+import { createPsetBuilder } from '../psetBuilder'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { signP2pkInputs } from '../../utility/signP2pkInputs'
+import { getScriptHexFromVout } from '../../utility/hex'
 
 /** OP_RETURN with data "burn" (4 bytes). Script hex: 6a 04 62 75 72 6e */
 const OP_RETURN_BURN_SCRIPT_HEX = '6a046275726e'
@@ -24,15 +24,27 @@ export interface BuildBurnTxParams {
   /** LBTC UTXO for fee (and change). */
   feeUtxo: { outpoint: { txid: string; vout: number }; prevout: EsploraVout }
   feeAmount: bigint
+  network: P2pkNetwork
+}
+
+export interface BuildBurnTxResult {
+  pset: unknown
+  unsignedTxHex: string
+  prevouts: EsploraVout[]
+}
+
+export interface FinalizeBurnTxParams {
+  pset: PsetWithExtractTx
+  prevouts: EsploraVout[]
   secretKey: Uint8Array
   network: P2pkNetwork
 }
 
 /**
- * Build PSET: for each asset input add input + burn output; add fee input, optional change, fee output. Sign and return signed tx hex.
+ * Build burn PSET (no signing). Returns pset, unsignedTxHex, prevouts for finalize.
  */
-export async function buildAndSignBurnTx(params: BuildBurnTxParams): Promise<string> {
-  const { assetInputs, feeUtxo, feeAmount, secretKey, network } = params
+export async function buildBurnTx(params: BuildBurnTxParams): Promise<BuildBurnTxResult> {
+  const { assetInputs, feeUtxo, feeAmount, network } = params
 
   const feeValue = BigInt(feeUtxo.prevout.value ?? 0)
   if (feeValue < feeAmount) {
@@ -59,16 +71,40 @@ export async function buildAndSignBurnTx(params: BuildBurnTxParams): Promise<str
   api.addFeeOutput(feeAmount)
 
   const { pset } = api.build()
-
   const prevouts: EsploraVout[] = [...assetInputs.map((i) => i.prevout), feeUtxo.prevout]
+  const unsignedTxHex = (pset as PsetWithExtractTx).extractTx().toString()
+  return { pset, unsignedTxHex, prevouts }
+}
 
-  const { getLwk } = await import('../simplicity')
+/**
+ * Finalize (sign) burn PSET and return signed tx hex.
+ */
+export async function finalizeBurnTx(params: FinalizeBurnTxParams): Promise<string> {
+  const networkKey = params.network === 'mainnet' ? 'mainnet' : 'testnet'
+  const { getLwk } = await import('../../simplicity')
   const lwk = await getLwk()
   return signP2pkInputs({
     lwk,
     network: networkKey,
-    pset: pset as PsetWithExtractTx,
-    secretKey,
-    prevouts,
+    pset: params.pset,
+    secretKey: params.secretKey,
+    prevouts: params.prevouts,
+  })
+}
+
+export interface BuildAndSignBurnTxParams extends BuildBurnTxParams {
+  secretKey: Uint8Array
+}
+
+/**
+ * Build PSET: for each asset input add input + burn output; add fee input, optional change, fee output. Sign and return signed tx hex.
+ */
+export async function buildAndSignBurnTx(params: BuildAndSignBurnTxParams): Promise<string> {
+  const built = await buildBurnTx(params)
+  return finalizeBurnTx({
+    pset: built.pset as PsetWithExtractTx,
+    prevouts: built.prevouts,
+    secretKey: params.secretKey,
+    network: params.network,
   })
 }

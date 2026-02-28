@@ -51,6 +51,8 @@ export interface OfferTableProps {
   currentBlockHeight: number | null
   onRetry?: () => void
   emptyMessage?: string
+  /** When set, rows are clickable and this is called with the offer. */
+  onOfferClick?: (offer: OfferShort) => void
 }
 
 export function OfferTable({
@@ -60,6 +62,7 @@ export function OfferTable({
   currentBlockHeight,
   onRetry,
   emptyMessage = 'No offers yet',
+  onOfferClick,
 }: OfferTableProps) {
   const esplora = useMemo(() => new EsploraClient(), [])
 
@@ -131,7 +134,31 @@ export function OfferTable({
                 const interestPercent = (offer.interest_rate / 100).toFixed(2)
                 const statusLabel = offer.status.charAt(0).toUpperCase() + offer.status.slice(1)
                 return (
-                  <tr key={offer.id} className="border-t border-gray-200">
+                  <tr
+                    key={offer.id}
+                    className={`border-t border-gray-200 ${onOfferClick != null ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                    role={onOfferClick != null ? 'button' : undefined}
+                    tabIndex={onOfferClick != null ? 0 : undefined}
+                    onClick={
+                      onOfferClick != null
+                        ? (e) => {
+                            const target = e.target as HTMLElement
+                            if (target.closest('a')) return
+                            onOfferClick(offer)
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      onOfferClick != null
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              onOfferClick(offer)
+                            }
+                          }
+                        : undefined
+                    }
+                  >
                     <td className="py-2 px-3 text-sm font-mono text-gray-900">
                       {shortId(offer.id)}
                     </td>

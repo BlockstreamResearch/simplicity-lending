@@ -71,11 +71,13 @@ export function BurnTxBuilder({
     feeAmount,
     setFeeAmount,
     buildError,
+    builtBurnTx,
     signedTxHex,
     building,
     broadcastTxid,
     broadcastError,
     handleBuild,
+    handleSign,
     handleBuildAndBroadcast,
     handleClear,
     canBuild,
@@ -189,19 +191,30 @@ export function BurnTxBuilder({
 
               <div className="flex flex-wrap gap-2 items-center">
                 <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-                  {building ? 'Building…' : 'Build & Sign'}
+                  {building ? 'Building…' : 'Build'}
+                </ButtonSecondary>
+                <ButtonSecondary
+                  size="md"
+                  disabled={!builtBurnTx || building}
+                  onClick={handleSign}
+                >
+                  {building ? 'Signing…' : 'Sign'}
                 </ButtonSecondary>
                 <ButtonPrimary
                   size="md"
-                  disabled={!canBuild || building}
+                  disabled={!builtBurnTx || building}
                   onClick={handleBuildAndBroadcast}
                 >
-                  {building ? 'Building…' : 'Build & Broadcast'}
+                  {building ? 'Signing…' : 'Sign & Broadcast'}
                 </ButtonPrimary>
                 <ButtonNeutral size="md" disabled={building} onClick={handleClear}>
                   Clear
                 </ButtonNeutral>
               </div>
+
+              {builtBurnTx && !signedTxHex && !broadcastTxid && (
+                <p className="text-blue-700 text-sm">Transaction built. Click Sign or Sign & Broadcast.</p>
+              )}
 
               {buildError && <p className="text-red-600">{buildError}</p>}
               {broadcastError && <p className="text-red-600">{broadcastError}</p>}

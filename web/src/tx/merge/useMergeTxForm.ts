@@ -12,7 +12,8 @@ import {
   type EsploraVout,
   type ScripthashUtxoEntry,
 } from '../../api/esplora'
-import { buildAndSignMergeTx } from '../../utility/buildMergeTx'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { buildMergeTx, finalizeMergeTx } from './buildMergeTx'
 import type { TxOutputRow } from '../split/types'
 
 export interface MergeInputRow {
@@ -56,11 +57,14 @@ export interface UseMergeTxFormResult {
   updateOutput: (id: number, field: 'address' | 'amount', value: string) => void
   moveOutput: (index: number, dir: 1 | -1) => void
   buildError: string | null
+  /** Set after Build (unsigned). Sign / Sign & Broadcast use this. */
+  builtMergeTx: Awaited<ReturnType<typeof buildMergeTx>> | null
   signedTxHex: string | null
   building: boolean
   broadcastTxid: string | null
   broadcastError: string | null
   handleBuild: () => Promise<void>
+  handleSign: () => Promise<void>
   handleBuildAndBroadcast: () => Promise<void>
   handleClear: () => void
   totalInputValue: number
@@ -92,6 +96,9 @@ export function useMergeTxForm({
   const [outputs, setOutputs] = useState<TxOutputRow[]>([])
   const [nextOutputId, setNextOutputId] = useState(0)
   const [buildError, setBuildError] = useState<string | null>(null)
+  const [builtMergeTx, setBuiltMergeTx] = useState<Awaited<
+    ReturnType<typeof buildMergeTx>
+  > | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
@@ -104,6 +111,7 @@ export function useMergeTxForm({
     setOutputs([])
     setNextOutputId(0)
     setBuildError(null)
+    setBuiltMergeTx(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
     setBroadcastError(null)
@@ -284,7 +292,7 @@ export function useMergeTxForm({
     outputs.every((o) => o.address.trim() !== '' && (parseInt(o.amount, 10) || 0) > 0)
 
   const handleBuild = useCallback(async () => {
-    if (!seedHex || !accountAddress || !canBuild) return
+    if (!accountAddress || !canBuild) return
     const inputs = inputRows
       .filter((r) => r.prevout != null)
       .map((r) => ({
@@ -293,20 +301,39 @@ export function useMergeTxForm({
       }))
     if (inputs.length === 0) return
     setBuildError(null)
+    setBuiltMergeTx(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
     setBroadcastError(null)
     setBuilding(true)
     try {
-      const seed = parseSeedHex(seedHex)
-      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const hex = await buildAndSignMergeTx({
+      const result = await buildMergeTx({
         inputs,
         outputs: outputs.map((o) => ({
           address: o.address.trim(),
           amount: BigInt(parseInt(o.amount, 10) || 0),
         })),
         feeAmount: BigInt(feeNum),
+        network: P2PK_NETWORK,
+      })
+      setBuiltMergeTx(result)
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBuilding(false)
+    }
+  }, [accountAddress, canBuild, inputRows, outputs, feeNum])
+
+  const handleSign = useCallback(async () => {
+    if (!builtMergeTx || !seedHex || !accountAddress) return
+    setBuildError(null)
+    setBuilding(true)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const hex = await finalizeMergeTx({
+        pset: builtMergeTx.pset as PsetWithExtractTx,
+        prevouts: builtMergeTx.prevouts,
         secretKey: secret,
         network: P2PK_NETWORK,
       })
@@ -316,17 +343,10 @@ export function useMergeTxForm({
     } finally {
       setBuilding(false)
     }
-  }, [seedHex, accountAddress, accountIndex, canBuild, inputRows, outputs, feeNum])
+  }, [builtMergeTx, seedHex, accountAddress, accountIndex])
 
   const handleBuildAndBroadcast = useCallback(async () => {
-    if (!seedHex || !accountAddress || !canBuild) return
-    const inputs = inputRows
-      .filter((r) => r.prevout != null)
-      .map((r) => ({
-        outpoint: { txid: r.txid.trim(), vout: parseInt(r.vout.trim(), 10) },
-        prevout: r.prevout!,
-      }))
-    if (inputs.length === 0) return
+    if (!builtMergeTx || !seedHex || !accountAddress || !canBuild) return
     setBuildError(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
@@ -335,13 +355,9 @@ export function useMergeTxForm({
     try {
       const seed = parseSeedHex(seedHex)
       const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const hex = await buildAndSignMergeTx({
-        inputs,
-        outputs: outputs.map((o) => ({
-          address: o.address.trim(),
-          amount: BigInt(parseInt(o.amount, 10) || 0),
-        })),
-        feeAmount: BigInt(feeNum),
+      const hex = await finalizeMergeTx({
+        pset: builtMergeTx.pset as PsetWithExtractTx,
+        prevouts: builtMergeTx.prevouts,
         secretKey: secret,
         network: P2PK_NETWORK,
       })
@@ -361,13 +377,11 @@ export function useMergeTxForm({
       setBuilding(false)
     }
   }, [
+    builtMergeTx,
     seedHex,
     accountAddress,
     accountIndex,
     canBuild,
-    inputRows,
-    outputs,
-    feeNum,
     esplora,
     onBroadcastSuccess,
   ])
@@ -390,11 +404,13 @@ export function useMergeTxForm({
     updateOutput,
     moveOutput,
     buildError,
+    builtMergeTx,
     signedTxHex,
     building,
     broadcastTxid,
     broadcastError,
     handleBuild,
+    handleSign,
     handleBuildAndBroadcast,
     handleClear,
     totalInputValue,

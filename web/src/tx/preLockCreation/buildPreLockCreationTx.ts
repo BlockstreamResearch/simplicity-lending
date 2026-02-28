@@ -6,12 +6,12 @@
  * All 6 inputs are P2PK, signed with signP2pkInputs.
  */
 
-import type { EsploraVout } from '../api/esplora'
-import { createPsetBuilder } from '../tx/psetBuilder'
-import type { PsetWithExtractTx, P2pkNetwork } from '../simplicity'
-import { signP2pkInputs } from './signP2pkInputs'
-import type { PreLockArguments } from './preLockArguments'
-import { getScriptHexFromVout, bytesToHex } from './hex'
+import type { EsploraVout } from '../../api/esplora'
+import { createPsetBuilder } from '../psetBuilder'
+import type { PsetWithExtractTx, P2pkNetwork } from '../../simplicity'
+import { signP2pkInputs } from '../../utility/signP2pkInputs'
+import type { PreLockArguments } from '../../utility/preLockArguments'
+import { getScriptHexFromVout, bytesToHex } from '../../utility/hex'
 
 /** OP_RETURN with 64 bytes: borrower_pub_key (32) || principal_asset_id (32). */
 function buildOpReturn64ScriptHex(
@@ -43,18 +43,30 @@ export interface BuildPreLockCreationTxParams {
   preLockScriptPubkeyHex: string
   utilityNftsOutputScriptHex: string
   feeAmount: bigint
-  secretKey: Uint8Array
   network: P2pkNetwork
 }
 
 export interface BuildPreLockCreationTxResult {
+  pset: unknown
+  unsignedTxHex: string
+  prevouts: EsploraVout[]
+}
+
+export interface FinalizePreLockCreationTxParams {
+  pset: PsetWithExtractTx
+  prevouts: EsploraVout[]
+  secretKey: Uint8Array
+  network: P2pkNetwork
+}
+
+export interface FinalizePreLockCreationTxResult {
   signedTxHex: string
 }
 
 /**
- * Build and sign the PreLock creation tx; returns signed tx hex.
+ * Build (unsigned) PreLock creation tx. Returns PSET, unsigned hex, and prevouts for finalize.
  */
-export async function buildAndSignPreLockCreationTx(
+export async function buildPreLockCreationTx(
   params: BuildPreLockCreationTxParams
 ): Promise<BuildPreLockCreationTxResult> {
   const {
@@ -68,7 +80,6 @@ export async function buildAndSignPreLockCreationTx(
     preLockScriptPubkeyHex,
     utilityNftsOutputScriptHex,
     feeAmount,
-    secretKey,
     network,
   } = params
 
@@ -119,42 +130,37 @@ export async function buildAndSignPreLockCreationTx(
     throw new Error('Borrower and Lender NFT prevouts must have value 1')
   }
 
-  const txidForLwk = (txid: string) => {
-    console.log('txid', txid.trim())
-    return txid.trim()
-  }
+  const txidTrim = (txid: string) => txid.trim()
   api.addInput(
-    { txid: txidForLwk(collateralUtxo.outpoint.txid), vout: collateralUtxo.outpoint.vout },
+    { txid: txidTrim(collateralUtxo.outpoint.txid), vout: collateralUtxo.outpoint.vout },
     collateralUtxo.prevout
   )
   api.addInput(
     {
-      txid: txidForLwk(firstParametersNftUtxo.outpoint.txid),
+      txid: txidTrim(firstParametersNftUtxo.outpoint.txid),
       vout: firstParametersNftUtxo.outpoint.vout,
     },
     firstParametersNftUtxo.prevout
   )
   api.addInput(
     {
-      txid: txidForLwk(secondParametersNftUtxo.outpoint.txid),
+      txid: txidTrim(secondParametersNftUtxo.outpoint.txid),
       vout: secondParametersNftUtxo.outpoint.vout,
     },
     secondParametersNftUtxo.prevout
   )
   api.addInput(
-    { txid: txidForLwk(borrowerNftUtxo.outpoint.txid), vout: borrowerNftUtxo.outpoint.vout },
+    { txid: txidTrim(borrowerNftUtxo.outpoint.txid), vout: borrowerNftUtxo.outpoint.vout },
     borrowerNftUtxo.prevout
   )
   api.addInput(
-    { txid: txidForLwk(lenderNftUtxo.outpoint.txid), vout: lenderNftUtxo.outpoint.vout },
+    { txid: txidTrim(lenderNftUtxo.outpoint.txid), vout: lenderNftUtxo.outpoint.vout },
     lenderNftUtxo.prevout
   )
   api.addInput(
-    { txid: txidForLwk(feeUtxo.outpoint.txid), vout: feeUtxo.outpoint.vout },
+    { txid: txidTrim(feeUtxo.outpoint.txid), vout: feeUtxo.outpoint.vout },
     feeUtxo.prevout
   )
-
-  console.log('preLockScriptPubkeyHex', preLockScriptPubkeyHex)
 
   // Output 0: PreLock + collateral
   api.addOutputWithScript(preLockScriptPubkeyHex, collateralAmount, collateralAssetHex)
@@ -194,15 +200,43 @@ export async function buildAndSignPreLockCreationTx(
     feeUtxo.prevout,
   ]
 
-  const { getLwk } = await import('../simplicity')
+  const unsignedTxHex = (pset as PsetWithExtractTx).extractTx().toString()
+  return { pset, unsignedTxHex, prevouts }
+}
+
+/**
+ * Finalize (sign) a PreLock creation PSET. All 6 inputs are P2PK.
+ */
+export async function finalizePreLockCreationTx(
+  params: FinalizePreLockCreationTxParams
+): Promise<FinalizePreLockCreationTxResult> {
+  const { pset, prevouts, secretKey, network } = params
+  const networkKey: 'mainnet' | 'testnet' = network === 'mainnet' ? 'mainnet' : 'testnet'
+  const { getLwk } = await import('../../simplicity')
   const lwk = await getLwk()
   const signedTxHex = signP2pkInputs({
     lwk,
     network: networkKey,
-    pset: pset as PsetWithExtractTx,
+    pset,
     secretKey,
     prevouts,
   })
-
   return { signedTxHex }
+}
+
+/**
+ * Build and sign the PreLock creation tx; returns signed tx hex.
+ * Wrapper: buildPreLockCreationTx + finalizePreLockCreationTx.
+ */
+export async function buildAndSignPreLockCreationTx(
+  params: BuildPreLockCreationTxParams & { secretKey: Uint8Array }
+): Promise<FinalizePreLockCreationTxResult> {
+  const { secretKey, ...buildParams } = params
+  const { pset, prevouts } = await buildPreLockCreationTx(buildParams)
+  return finalizePreLockCreationTx({
+    pset: pset as PsetWithExtractTx,
+    prevouts,
+    secretKey,
+    network: buildParams.network,
+  })
 }

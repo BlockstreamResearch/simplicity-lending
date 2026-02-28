@@ -12,7 +12,8 @@ import {
   type EsploraVout,
   type ScripthashUtxoEntry,
 } from '../../api/esplora'
-import { buildAndSignBurnTx } from '../../utility/buildBurnTx'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { buildBurnTx, finalizeBurnTx } from './buildBurnTx'
 
 function utxoKey(txid: string, vout: number): string {
   return `${txid}:${vout}`
@@ -48,11 +49,14 @@ export interface UseBurnTxFormResult {
   feeAmount: string
   setFeeAmount: (s: string) => void
   buildError: string | null
+  /** Set after Build (unsigned). Sign / Sign & Broadcast use this. */
+  builtBurnTx: Awaited<ReturnType<typeof buildBurnTx>> | null
   signedTxHex: string | null
   building: boolean
   broadcastTxid: string | null
   broadcastError: string | null
   handleBuild: () => Promise<void>
+  handleSign: () => Promise<void>
   handleBuildAndBroadcast: () => Promise<void>
   handleClear: () => void
   canBuild: boolean
@@ -81,6 +85,9 @@ export function useBurnTxForm({
   const [feeUtxoIndex, setFeeUtxoIndex] = useState(0)
   const [feeAmount, setFeeAmount] = useState('')
   const [buildError, setBuildError] = useState<string | null>(null)
+  const [builtBurnTx, setBuiltBurnTx] = useState<Awaited<
+    ReturnType<typeof buildBurnTx>
+  > | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
@@ -140,6 +147,7 @@ export function useBurnTxForm({
     setSelectedRows([])
     setFeeAmount('')
     setBuildError(null)
+    setBuiltBurnTx(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
     setBroadcastError(null)
@@ -158,7 +166,7 @@ export function useBurnTxForm({
     (feeUtxo.value ?? 0) >= feeNum
 
   const handleBuild = useCallback(async () => {
-    if (!seedHex || !accountAddress || !canBuild) return
+    if (!accountAddress || !canBuild) return
     const assetInputs = selectedRows
       .filter((r) => r.prevout != null)
       .map((r) => ({
@@ -173,17 +181,44 @@ export function useBurnTxForm({
     if (!feePrevout) return
 
     setBuildError(null)
+    setBuiltBurnTx(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
     setBroadcastError(null)
     setBuilding(true)
     try {
-      const seed = parseSeedHex(seedHex)
-      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const hex = await buildAndSignBurnTx({
+      const result = await buildBurnTx({
         assetInputs,
         feeUtxo: { outpoint: { txid: fee.txid, vout: fee.vout }, prevout: feePrevout },
         feeAmount: BigInt(feeNum),
+        network: P2PK_NETWORK,
+      })
+      setBuiltBurnTx(result)
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBuilding(false)
+    }
+  }, [
+    accountAddress,
+    canBuild,
+    selectedRows,
+    feeUtxoIndex,
+    nativeUtxos,
+    feeNum,
+    loadPrevout,
+  ])
+
+  const handleSign = useCallback(async () => {
+    if (!builtBurnTx || !seedHex || !accountAddress) return
+    setBuildError(null)
+    setBuilding(true)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const hex = await finalizeBurnTx({
+        pset: builtBurnTx.pset as PsetWithExtractTx,
+        prevouts: builtBurnTx.prevouts,
         secretKey: secret,
         network: P2PK_NETWORK,
       })
@@ -193,20 +228,10 @@ export function useBurnTxForm({
     } finally {
       setBuilding(false)
     }
-  }, [
-    seedHex,
-    accountAddress,
-    accountIndex,
-    canBuild,
-    selectedRows,
-    feeUtxoIndex,
-    nativeUtxos,
-    feeNum,
-    loadPrevout,
-  ])
+  }, [builtBurnTx, seedHex, accountAddress, accountIndex])
 
   const handleBuildAndBroadcast = useCallback(async () => {
-    if (!seedHex || !accountAddress || !canBuild) return
+    if (!builtBurnTx || !seedHex || !accountAddress || !canBuild) return
     const assetInputs = selectedRows
       .filter((r) => r.prevout != null)
       .map((r) => ({
@@ -228,14 +253,14 @@ export function useBurnTxForm({
     try {
       const seed = parseSeedHex(seedHex)
       const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const hex = await buildAndSignBurnTx({
-        assetInputs,
-        feeUtxo: { outpoint: { txid: fee.txid, vout: fee.vout }, prevout: feePrevout },
-        feeAmount: BigInt(feeNum),
+      const hex = await finalizeBurnTx({
+        pset: builtBurnTx.pset as PsetWithExtractTx,
+        prevouts: builtBurnTx.prevouts,
         secretKey: secret,
         network: P2PK_NETWORK,
       })
       const txidRes = await esplora.broadcastTx(hex)
+      setSignedTxHex(hex)
       setBroadcastTxid(txidRes)
       setBroadcastError(null)
       onBroadcastSuccess?.()
@@ -250,6 +275,7 @@ export function useBurnTxForm({
       setBuilding(false)
     }
   }, [
+    builtBurnTx,
     seedHex,
     accountAddress,
     accountIndex,
@@ -274,11 +300,13 @@ export function useBurnTxForm({
     feeAmount,
     setFeeAmount,
     buildError,
+    builtBurnTx,
     signedTxHex,
     building,
     broadcastTxid,
     broadcastError,
     handleBuild,
+    handleSign,
     handleBuildAndBroadcast,
     handleClear,
     canBuild,

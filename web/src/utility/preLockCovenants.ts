@@ -13,7 +13,7 @@ import {
   buildLendingArguments,
   buildScriptAuthArguments,
   buildPreLockArguments as buildPreLockSimplicityArgs,
-} from './covenantArgs'
+} from '../simplicity/covenants'
 import { buildPreLockArguments as buildPreLockArgumentsObj } from './preLockArguments'
 import type { LendingParams } from './preLockArguments'
 

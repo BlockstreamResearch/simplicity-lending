@@ -35,6 +35,7 @@ import {
   saveStoredIssuanceTxid,
   clearStoredIssuanceTxid,
 } from './borrowerStorage'
+import { ISSUANCE_TX_FIRST_RETURN_VOUT } from '../../tx/issueUtilityNfts/buildIssueUtilityNftsTx'
 import type { OfferShort } from '../../types/offers'
 
 function WalletIcon({ className }: { className?: string }) {
@@ -398,9 +399,12 @@ export function CreateOfferPage({
     (txid: string) => {
       saveStoredIssuanceTxid(accountIndex, txid)
       setSavedIssuanceTxid(txid)
-      handleClearPrepare()
+      savePrepareTxid(accountIndex, txid)
+      saveStoredPrepareFirstVout(accountIndex, ISSUANCE_TX_FIRST_RETURN_VOUT)
+      setSavedPreparedTxid(txid)
+      setSavedPrepareFirstVout(ISSUANCE_TX_FIRST_RETURN_VOUT)
     },
-    [accountIndex, handleClearPrepare]
+    [accountIndex]
   )
 
   const handlePrepareAgain = useCallback(() => {

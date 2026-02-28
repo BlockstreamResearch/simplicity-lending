@@ -89,11 +89,13 @@ export function SplitAssetTxBuilder({
     updateOutput,
     moveOutput,
     buildError,
+    builtSplitAssetTx,
     signedTxHex,
     building,
     broadcastTxid,
     broadcastError,
     handleBuild,
+    handleSign,
     handleBuildAndBroadcast,
     handleClear,
     feeValue,
@@ -296,19 +298,29 @@ export function SplitAssetTxBuilder({
 
           <div className="flex flex-wrap gap-2 items-center">
             <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-              {building ? 'Building…' : 'Build & Sign'}
+              {building ? 'Building…' : 'Build'}
+            </ButtonSecondary>
+            <ButtonSecondary
+              size="md"
+              disabled={!builtSplitAssetTx || building}
+              onClick={handleSign}
+            >
+              {building ? 'Signing…' : 'Sign'}
             </ButtonSecondary>
             <ButtonPrimary
               size="md"
-              disabled={!canBuild || building}
+              disabled={!builtSplitAssetTx || building}
               onClick={handleBuildAndBroadcast}
             >
-              {building ? 'Building…' : 'Build & Broadcast'}
+              {building ? 'Signing…' : 'Sign & Broadcast'}
             </ButtonPrimary>
             <ButtonNeutral size="md" disabled={building} onClick={handleClear}>
               Clear
             </ButtonNeutral>
           </div>
+          {builtSplitAssetTx && !signedTxHex && !broadcastTxid && (
+            <p className="text-blue-700 text-sm mt-1">Transaction built. Click Sign or Sign & Broadcast.</p>
+          )}
           {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
           {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
           {broadcastTxid && (

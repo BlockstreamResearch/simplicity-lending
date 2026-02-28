@@ -16,6 +16,7 @@ import {
 import { EsploraClient } from '../../api/esplora'
 import { getScriptPubkeyHexFromAddress } from '../../utility/addressP2pk'
 import { OfferTable } from '../../components/OfferTable'
+import { AcceptOfferModal } from './AcceptOfferModal'
 import type { OfferShort } from '../../types/offers'
 
 export function LenderPage({
@@ -29,6 +30,7 @@ export function LenderPage({
   const esplora = useMemo(() => new EsploraClient(), [])
   const {
     address: accountAddress,
+    utxos,
     loading,
     error,
   } = useAccountAddress({
@@ -44,6 +46,8 @@ export function LenderPage({
   const [pendingLoading, setPendingLoading] = useState(true)
   const [pendingError, setPendingError] = useState<string | null>(null)
   const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null)
+  const [selectedOffer, setSelectedOffer] = useState<OfferShort | null>(null)
+  const [acceptModalOpen, setAcceptModalOpen] = useState(false)
 
   const loadLendOffers = useCallback(async () => {
     if (!accountAddress) {
@@ -186,8 +190,28 @@ export function LenderPage({
           currentBlockHeight={currentBlockHeight}
           onRetry={loadPendingOffers}
           emptyMessage="No pending offers"
+          onOfferClick={(offer) => {
+            setSelectedOffer(offer)
+            setAcceptModalOpen(true)
+          }}
         />
       </section>
+
+      {selectedOffer && (
+        <AcceptOfferModal
+          offer={selectedOffer}
+          utxos={utxos}
+          esplora={esplora}
+          open={acceptModalOpen}
+          onClose={() => {
+            setAcceptModalOpen(false)
+            setSelectedOffer(null)
+          }}
+          currentBlockHeight={currentBlockHeight}
+          seedHex={seedHex ?? undefined}
+          accountIndex={accountIndex}
+        />
+      )}
     </div>
   )
 }

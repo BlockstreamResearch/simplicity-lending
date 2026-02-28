@@ -8,7 +8,8 @@ import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
 import { EsploraApiError, type EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
-import { buildAndSignPrepareUtilityNftsTx } from '../../utility/buildPrepareUtilityNftsTx'
+import type { PsetWithExtractTx } from '../../simplicity'
+import { buildPrepareUtilityNftsTx, finalizePrepareUtilityNftsTx } from '../../tx/prepareUtilityNfts/buildPrepareUtilityNftsTx'
 import { CopyIcon } from '../../components/CopyIcon'
 import {
   ButtonPrimary,
@@ -51,6 +52,9 @@ export function PrepareStep({
   const [toAddress, setToAddress] = useState(accountAddress ?? '')
   const [building, setBuilding] = useState(false)
   const [buildError, setBuildError] = useState<string | null>(null)
+  const [builtPrepareTx, setBuiltPrepareTx] = useState<Awaited<
+    ReturnType<typeof buildPrepareUtilityNftsTx>
+  > | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
@@ -69,45 +73,9 @@ export function PrepareStep({
     toAddress.trim().length > 0
 
   const handleBuild = useCallback(async () => {
-    if (!selectedUtxo || !canBuild || !seedHex) return
+    if (!selectedUtxo || !canBuild) return
     setBuildError(null)
-    setBroadcastTxid(null)
-    setBroadcastError(null)
-    setBuilding(true)
-    try {
-      const tx = await esplora.getTx(selectedUtxo.txid)
-      const prevout = tx.vout?.[selectedUtxo.vout]
-      if (!prevout) {
-        setBuildError(`No output at index ${selectedUtxo.vout}`)
-        return
-      }
-      if (prevout.value == null) {
-        setBuildError('Output is confidential (value not exposed)')
-        return
-      }
-      const seed = parseSeedHex(seedHex)
-      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const result = await buildAndSignPrepareUtilityNftsTx({
-        feeUtxo: {
-          outpoint: { txid: selectedUtxo.txid, vout: selectedUtxo.vout },
-          prevout,
-        },
-        toAddress: toAddress.trim(),
-        feeAmount: BigInt(feeNum),
-        secretKey: secret,
-        network: P2PK_NETWORK,
-      })
-      setSignedTxHex(result.signedTxHex)
-    } catch (e) {
-      setBuildError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBuilding(false)
-    }
-  }, [selectedUtxo, canBuild, seedHex, accountIndex, toAddress, feeNum, esplora])
-
-  const handleBuildAndBroadcast = useCallback(async () => {
-    if (!selectedUtxo || !canBuild || !seedHex) return
-    setBuildError(null)
+    setBuiltPrepareTx(null)
     setSignedTxHex(null)
     setBroadcastTxid(null)
     setBroadcastError(null)
@@ -123,22 +91,64 @@ export function PrepareStep({
         setBuildError('Output is confidential (value not exposed)')
         return
       }
-      const seed = parseSeedHex(seedHex)
-      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-      const result = await buildAndSignPrepareUtilityNftsTx({
+      const result = await buildPrepareUtilityNftsTx({
         feeUtxo: {
           outpoint: { txid: selectedUtxo.txid, vout: selectedUtxo.vout },
           prevout,
         },
         toAddress: toAddress.trim(),
         feeAmount: BigInt(feeNum),
+        network: P2PK_NETWORK,
+      })
+      setBuiltPrepareTx(result)
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBuilding(false)
+    }
+  }, [selectedUtxo, canBuild, toAddress, feeNum, esplora])
+
+  const handleSign = useCallback(async () => {
+    if (!builtPrepareTx || !seedHex) return
+    setBuildError(null)
+    setBuilding(true)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const hex = await finalizePrepareUtilityNftsTx({
+        pset: builtPrepareTx.pset as PsetWithExtractTx,
+        prevouts: builtPrepareTx.prevouts,
         secretKey: secret,
         network: P2PK_NETWORK,
       })
-      setSignedTxHex(result.signedTxHex)
-      const txidRes = await esplora.broadcastTx(result.signedTxHex)
+      setSignedTxHex(hex)
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBuilding(false)
+    }
+  }, [builtPrepareTx, seedHex, accountIndex])
+
+  const handleBuildAndBroadcast = useCallback(async () => {
+    if (!builtPrepareTx || !seedHex || !selectedUtxo || !canBuild) return
+    setBuildError(null)
+    setSignedTxHex(null)
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+    setBuilding(true)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secret = deriveSecretKeyFromIndex(seed, accountIndex)
+      const hex = await finalizePrepareUtilityNftsTx({
+        pset: builtPrepareTx.pset as PsetWithExtractTx,
+        prevouts: builtPrepareTx.prevouts,
+        secretKey: secret,
+        network: P2PK_NETWORK,
+      })
+      const txidRes = await esplora.broadcastTx(hex)
       setBroadcastTxid(txidRes)
-      onSuccess(txidRes, result.auxiliaryAssetId, result.issuanceEntropyHex)
+      setSignedTxHex(hex)
+      onSuccess(txidRes, builtPrepareTx.auxiliaryAssetId, builtPrepareTx.issuanceEntropyHex)
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(e.body ?? e.message)
@@ -149,7 +159,7 @@ export function PrepareStep({
     } finally {
       setBuilding(false)
     }
-  }, [selectedUtxo, canBuild, seedHex, accountIndex, toAddress, feeNum, esplora, onSuccess])
+  }, [builtPrepareTx, seedHex, accountIndex, selectedUtxo, canBuild, esplora, onSuccess])
 
   const showAlreadyPrepared = Boolean(existingPreparedTxid?.trim())
 
@@ -237,16 +247,27 @@ export function PrepareStep({
 
             <div className="flex flex-wrap gap-2 items-center">
               <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-                {building ? 'Building…' : 'Build & Sign'}
+                {building ? 'Building…' : 'Build'}
+              </ButtonSecondary>
+              <ButtonSecondary
+                size="md"
+                disabled={!builtPrepareTx || building}
+                onClick={handleSign}
+              >
+                {building ? 'Signing…' : 'Sign'}
               </ButtonSecondary>
               <ButtonPrimary
                 size="md"
-                disabled={!canBuild || building}
+                disabled={!builtPrepareTx || building}
                 onClick={handleBuildAndBroadcast}
               >
-                {building ? 'Building…' : 'Build & Broadcast'}
+                {building ? 'Signing…' : 'Sign & Broadcast'}
               </ButtonPrimary>
             </div>
+
+            {builtPrepareTx && !signedTxHex && !broadcastTxid && (
+              <p className="text-blue-700 text-sm">Transaction built. Click Sign or Sign & Broadcast.</p>
+            )}
 
             {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
             {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
