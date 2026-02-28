@@ -6,6 +6,7 @@ import { AccountSection } from './AccountSection'
 import { SplitTxBuilder } from './SplitTxBuilder'
 import { SplitAssetTxBuilder } from './SplitAssetTxBuilder'
 import { MergeTxBuilder } from './MergeTxBuilder'
+import { MergeAssetTxBuilder } from './MergeAssetTxBuilder'
 import { BurnTxBuilder } from './BurnTxBuilder'
 import type { UtilityMode } from './types'
 import { UTILITY_MODES } from './types'
@@ -111,6 +112,16 @@ export function Utility({ accountIndex }: { accountIndex: number }) {
       )}
       {utilityMode === 'merge' && (
         <MergeTxBuilder
+          accountIndex={accountIndex}
+          accountAddress={accountAddress}
+          utxos={utxos}
+          esplora={esplora}
+          seedHex={seedHex}
+          onBroadcastSuccess={refresh}
+        />
+      )}
+      {utilityMode === 'merge-asset' && (
+        <MergeAssetTxBuilder
           accountIndex={accountIndex}
           accountAddress={accountAddress}
           utxos={utxos}

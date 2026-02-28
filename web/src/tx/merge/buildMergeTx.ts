@@ -26,6 +26,8 @@ export interface BuildMergeTxParams {
   outputs: MergeTxOutput[]
   feeAmount: bigint
   network: P2pkNetwork
+  /** When set (e.g. Merge Asset), this input pays the fee in LBTC; added after inputs. */
+  feeInput?: MergeTxInput
 }
 
 export interface BuildMergeTxResult {
@@ -43,12 +45,14 @@ export interface FinalizeMergeTxParams {
 
 /**
  * Build merge PSET (no signing). Returns pset, unsignedTxHex, prevouts for finalize.
+ * If feeInput is provided, it is added as the last input and pays the fee output.
  */
 export async function buildMergeTx(params: BuildMergeTxParams): Promise<BuildMergeTxResult> {
   const network: 'mainnet' | 'testnet' = params.network === 'mainnet' ? 'mainnet' : 'testnet'
   const api = await createPsetBuilder(network)
 
-  for (const inp of params.inputs) {
+  const allInputs = params.feeInput != null ? [...params.inputs, params.feeInput] : params.inputs
+  for (const inp of allInputs) {
     api.addInput(inp.outpoint, inp.prevout)
   }
   for (const o of params.outputs) {
@@ -57,7 +61,7 @@ export async function buildMergeTx(params: BuildMergeTxParams): Promise<BuildMer
   api.addFeeOutput(params.feeAmount)
 
   const { pset } = api.build()
-  const prevouts = params.inputs.map((inp) => inp.prevout)
+  const prevouts = allInputs.map((inp) => inp.prevout)
   const unsignedTxHex = (pset as PsetWithExtractTx).extractTx().toString()
   return { pset, unsignedTxHex, prevouts }
 }

@@ -1,9 +1,10 @@
 /**
- * Merge tx builder: multiple inputs, one or more outputs, fee.
+ * Merge Asset tx builder: multiple inputs (same asset), outputs in that asset, fee in LBTC.
+ * After first UTXO is selected, only UTXOs of that asset are shown.
  */
 
 import { useRef, useEffect } from 'react'
-import { useMergeTxForm } from '../../tx/merge/useMergeTxForm'
+import { useMergeAssetTxForm } from '../../tx/merge/useMergeAssetTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { PostBroadcastModal } from '../../components/PostBroadcastModal'
@@ -12,25 +13,29 @@ import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
 
-export interface MergeTxBuilderProps {
+function shortAssetId(assetId: string, head = 8, tail = 4): string {
+  if (assetId.length <= head + tail) return assetId
+  return `${assetId.slice(0, head)}…${assetId.slice(-tail)}`
+}
+
+export interface MergeAssetTxBuilderProps {
   accountIndex: number
   accountAddress: string | null
   utxos: ScripthashUtxoEntry[]
   esplora: EsploraClient
   seedHex: string | null
-  /** Called after a successful broadcast (e.g. to refresh UTXOs). */
   onBroadcastSuccess?: () => void
 }
 
-export function MergeTxBuilder({
+export function MergeAssetTxBuilder({
   accountIndex,
   accountAddress,
   utxos,
   esplora,
   seedHex,
   onBroadcastSuccess,
-}: MergeTxBuilderProps) {
-  const form = useMergeTxForm({
+}: MergeAssetTxBuilderProps) {
+  const form = useMergeAssetTxForm({
     esplora,
     accountAddress,
     seedHex,
@@ -45,8 +50,12 @@ export function MergeTxBuilder({
     inputRows,
     addInputRow,
     removeInputRow,
+    selectedAssetId,
+    feeUtxoIndex,
+    setFeeUtxoIndex,
     feeAmount,
     setFeeAmount,
+    nativeUtxos,
     outputs,
     addOutput,
     removeOutput,
@@ -87,24 +96,31 @@ export function MergeTxBuilder({
         open={broadcastTxid != null}
         onClose={handlePostBroadcastClose}
         txid={broadcastTxid}
-        successMessage={getBroadcastSuccessMessage('merge')}
+        successMessage={getBroadcastSuccessMessage('merge_asset')}
         esplora={esplora}
       />
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Merge LBTC</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">Merge Asset</h3>
       {!seedHex ? (
         <p className="text-gray-600">Connect seed to build a transaction.</p>
       ) : (
         <div className="space-y-4 text-sm">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="font-medium text-gray-700">Inputs (LBTC only, from your UTXOs)</p>
+              <p className="font-medium text-gray-700">Inputs (same asset, from your UTXOs)</p>
               <button type="button" className="text-blue-600 hover:underline" onClick={addInputRow}>
                 + Add input
               </button>
             </div>
+            {selectedAssetId != null && (
+              <p className="text-gray-600 mb-1 text-xs">
+                Merging asset: <span className="font-mono">{shortAssetId(selectedAssetId)}</span> —
+                only UTXOs of this asset can be added.
+              </p>
+            )}
             {inputRows.length === 0 ? (
               <p className="text-gray-500">
-                Add at least one input and select a UTXO from the list.
+                Add at least one input and select a UTXO. Then only UTXOs of that asset will be
+                shown.
               </p>
             ) : (
               <ul className="space-y-2">
@@ -129,10 +145,10 @@ export function MergeTxBuilder({
                         }}
                         optionValueType="txid:vout"
                         placeholder="Select UTXO…"
-                        labelSuffix="sats"
+                        labelSuffix="(asset)"
                       />
                       {row.prevout && (
-                        <span className="text-gray-600">{row.prevout.value} sats (LBTC)</span>
+                        <span className="text-gray-600">{row.prevout.value} (asset)</span>
                       )}
                       {row.loadError && (
                         <span className="text-red-600 text-xs">{row.loadError}</span>
@@ -153,27 +169,43 @@ export function MergeTxBuilder({
           </div>
 
           <div>
-            <p className="font-medium text-gray-700 mb-1">Fee (LBTC)</p>
+            <p className="font-medium text-gray-700 mb-1">Fee UTXO (LBTC)</p>
+            {nativeUtxos.length === 0 ? (
+              <p className="text-gray-500">No LBTC UTXOs for fee.</p>
+            ) : (
+              <UtxoSelect
+                className="max-w-md"
+                utxos={nativeUtxos}
+                value={String(feeUtxoIndex)}
+                onChange={(v) => setFeeUtxoIndex(parseInt(v, 10))}
+                optionValueType="index"
+                labelSuffix="sats"
+              />
+            )}
+          </div>
+
+          <div>
+            <p className="font-medium text-gray-700 mb-1">Fee amount (sats)</p>
             <Input
               type="number"
               placeholder="sats"
-              min={0}
+              min={1}
               className="w-28"
               value={feeAmount}
               onChange={(e) => setFeeAmount(e.target.value)}
             />
           </div>
 
-          {inputRows.some((r) => r.prevout != null) && (
+          {inputRows.some((r) => r.prevout != null) && selectedAssetId != null && (
             <div className="p-2 bg-gray-50 rounded border border-gray-200">
               <p className="font-medium text-gray-700 mb-1">Summary</p>
               <p className="text-gray-800 font-mono">
-                Total in: {totalInputValue} − fee {parseInt(feeAmount, 10) || 0} − outputs{' '}
-                {outputsSum} = change {changeAmount}
+                Total in (asset): {totalInputValue} − outputs {outputsSum} = change {changeAmount}{' '}
+                (asset). Fee: {parseInt(feeAmount, 10) || 0} sats (LBTC).
               </p>
               {changeAmount < 0 && (
                 <p className="text-red-600 text-xs mt-1">
-                  Reduce outputs or fee so change is non-negative.
+                  Reduce outputs so change is non-negative.
                 </p>
               )}
             </div>
@@ -181,13 +213,13 @@ export function MergeTxBuilder({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="font-medium text-gray-700">Outputs</p>
+              <p className="font-medium text-gray-700">Outputs (in selected asset)</p>
               <button type="button" className="text-blue-600 hover:underline" onClick={addOutput}>
                 + Add output
               </button>
             </div>
             {outputs.length === 0 ? (
-              <p className="text-gray-500">Add at least one output (native LBTC).</p>
+              <p className="text-gray-500">Add at least one output in the selected asset.</p>
             ) : (
               <ul className="space-y-2">
                 {outputs.map((o, idx) => (
@@ -201,7 +233,7 @@ export function MergeTxBuilder({
                     />
                     <Input
                       type="number"
-                      placeholder="sats"
+                      placeholder="amount"
                       min={1}
                       className="w-24"
                       value={o.amount}

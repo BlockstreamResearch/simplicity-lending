@@ -10,6 +10,7 @@ export type BroadcastMessageKey =
   | 'issue_utility_nfts'
   | 'burn'
   | 'merge'
+  | 'merge_asset'
   | 'split'
   | 'split_asset'
 
@@ -20,7 +21,8 @@ export const BROADCAST_SUCCESS_MESSAGES: Record<BroadcastMessageKey, string> = {
   prepare: 'Prepare transaction successfully broadcast.',
   issue_utility_nfts: 'Utility NFTs issued. Transaction successfully broadcast.',
   burn: 'Burn transaction successfully broadcast.',
-  merge: 'Merge transaction successfully broadcast.',
+  merge: 'Merge LBTC transaction successfully broadcast.',
+  merge_asset: 'Merge asset transaction successfully broadcast.',
   split: 'Split transaction successfully broadcast.',
   split_asset: 'Split asset transaction successfully broadcast.',
 }
