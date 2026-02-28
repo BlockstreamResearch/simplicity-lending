@@ -6,12 +6,12 @@
 import { useSplitAssetTxForm } from '../../tx/split/useSplitAssetTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
-import { CopyIcon } from '../../components/CopyIcon'
+import { PostBroadcastModal } from '../../components/PostBroadcastModal'
+import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import {
   ButtonPrimary,
   ButtonSecondary,
   ButtonNeutral,
-  ButtonIconNeutral,
 } from '../../components/Button'
 import { Input } from '../../components/Input'
 
@@ -63,7 +63,6 @@ export function SplitAssetTxBuilder({
     outpointAssetVout: outpointAssetVoutProp,
     setOutpointAssetTxid: setOutpointAssetTxidProp,
     setOutpointAssetVout: setOutpointAssetVoutProp,
-    onBroadcastSuccess,
   })
 
   const {
@@ -98,6 +97,7 @@ export function SplitAssetTxBuilder({
     handleSign,
     handleBuildAndBroadcast,
     handleClear,
+    clearBroadcastState,
     feeValue,
     assetValue,
     outputsSum,
@@ -106,8 +106,20 @@ export function SplitAssetTxBuilder({
     canBuild,
   } = form
 
+  const handlePostBroadcastClose = () => {
+    clearBroadcastState()
+    onBroadcastSuccess?.()
+  }
+
   return (
     <section className="min-w-0 max-w-4xl mt-6">
+      <PostBroadcastModal
+        open={broadcastTxid != null}
+        onClose={handlePostBroadcastClose}
+        txid={broadcastTxid}
+        successMessage={getBroadcastSuccessMessage('split_asset')}
+        esplora={esplora}
+      />
       <h3 className="text-lg font-semibold text-gray-900 mb-2">Split asset</h3>
       {!seedHex ? (
         <p className="text-gray-600">Connect seed to build a transaction.</p>
@@ -323,26 +335,6 @@ export function SplitAssetTxBuilder({
           )}
           {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
           {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
-          {broadcastTxid && (
-            <p className="mt-2 text-green-700 flex items-center gap-1.5 flex-wrap">
-              <span>Broadcast successful. Txid:</span>
-              <a
-                href={esplora.getTxExplorerUrl(broadcastTxid)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-xs break-all text-green-800 hover:underline underline-offset-1"
-              >
-                {broadcastTxid}
-              </a>
-              <ButtonIconNeutral
-                onClick={() => navigator.clipboard?.writeText(broadcastTxid)}
-                title="Copy txid"
-                aria-label="Copy txid"
-              >
-                <CopyIcon className="h-4 w-4" />
-              </ButtonIconNeutral>
-            </p>
-          )}
           {signedTxHex && (
             <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
               <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>

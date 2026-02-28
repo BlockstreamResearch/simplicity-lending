@@ -33,7 +33,6 @@ export interface UseBurnTxFormParams {
   seedHex: string | null
   accountIndex: number
   utxos: ScripthashUtxoEntry[]
-  onBroadcastSuccess?: () => void
 }
 
 export interface UseBurnTxFormResult {
@@ -59,6 +58,7 @@ export interface UseBurnTxFormResult {
   handleSign: () => Promise<void>
   handleBuildAndBroadcast: () => Promise<void>
   handleClear: () => void
+  clearBroadcastState: () => void
   canBuild: boolean
 }
 
@@ -68,7 +68,6 @@ export function useBurnTxForm({
   seedHex,
   accountIndex,
   utxos,
-  onBroadcastSuccess,
 }: UseBurnTxFormParams): UseBurnTxFormResult {
   const assetUtxos = useMemo(() => {
     const policyId = POLICY_ASSET_ID[P2PK_NETWORK]
@@ -263,7 +262,6 @@ export function useBurnTxForm({
       setSignedTxHex(hex)
       setBroadcastTxid(txidRes)
       setBroadcastError(null)
-      onBroadcastSuccess?.()
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(e.body ?? e.message)
@@ -286,8 +284,12 @@ export function useBurnTxForm({
     feeNum,
     loadPrevout,
     esplora,
-    onBroadcastSuccess,
   ])
+
+  const clearBroadcastState = useCallback(() => {
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+  }, [])
 
   return {
     assetUtxos,
@@ -309,6 +311,7 @@ export function useBurnTxForm({
     handleSign,
     handleBuildAndBroadcast,
     handleClear,
+    clearBroadcastState,
     canBuild,
   }
 }

@@ -5,12 +5,12 @@
 import { useMemo } from 'react'
 import { useBurnTxForm } from '../../tx/burn/useBurnTxForm'
 import type { EsploraClient, ScripthashUtxoEntry } from '../../api/esplora'
-import { CopyIcon } from '../../components/CopyIcon'
+import { PostBroadcastModal } from '../../components/PostBroadcastModal'
+import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import {
   ButtonPrimary,
   ButtonSecondary,
   ButtonNeutral,
-  ButtonIconNeutral,
 } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
@@ -57,7 +57,6 @@ export function BurnTxBuilder({
     seedHex,
     accountIndex,
     utxos,
-    onBroadcastSuccess,
   })
 
   const {
@@ -80,6 +79,7 @@ export function BurnTxBuilder({
     handleSign,
     handleBuildAndBroadcast,
     handleClear,
+    clearBroadcastState,
     canBuild,
   } = form
 
@@ -99,8 +99,20 @@ export function BurnTxBuilder({
     if (txid && !Number.isNaN(vout)) addSelectedUtxo(txid, vout)
   }
 
+  const handlePostBroadcastClose = () => {
+    clearBroadcastState()
+    onBroadcastSuccess?.()
+  }
+
   return (
     <section className="min-w-0 max-w-4xl mt-6">
+      <PostBroadcastModal
+        open={broadcastTxid != null}
+        onClose={handlePostBroadcastClose}
+        txid={broadcastTxid}
+        successMessage={getBroadcastSuccessMessage('burn')}
+        esplora={esplora}
+      />
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900">Burn</h3>
@@ -218,26 +230,6 @@ export function BurnTxBuilder({
 
               {buildError && <p className="text-red-600">{buildError}</p>}
               {broadcastError && <p className="text-red-600">{broadcastError}</p>}
-              {broadcastTxid && (
-                <p className="text-green-700 flex items-center gap-1.5 flex-wrap">
-                  <span>Broadcast successful. Txid:</span>
-                  <a
-                    href={esplora.getTxExplorerUrl(broadcastTxid)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-xs break-all text-green-800 hover:underline underline-offset-1"
-                  >
-                    {broadcastTxid}
-                  </a>
-                  <ButtonIconNeutral
-                    onClick={() => navigator.clipboard?.writeText(broadcastTxid)}
-                    title="Copy txid"
-                    aria-label="Copy txid"
-                  >
-                    <CopyIcon className="h-4 w-4" />
-                  </ButtonIconNeutral>
-                </p>
-              )}
               {signedTxHex && !broadcastTxid && (
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
                   <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>

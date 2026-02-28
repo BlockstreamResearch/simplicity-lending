@@ -24,8 +24,6 @@ export interface UseSplitAssetTxFormParams {
   outpointAssetVout?: string
   setOutpointAssetTxid?: (s: string) => void
   setOutpointAssetVout?: (s: string) => void
-  /** Called after a successful broadcast (e.g. to refresh UTXOs). */
-  onBroadcastSuccess?: () => void
 }
 
 export interface UseSplitAssetTxFormResult {
@@ -61,6 +59,7 @@ export interface UseSplitAssetTxFormResult {
   handleSign: () => Promise<void>
   handleBuildAndBroadcast: () => Promise<void>
   handleClear: () => void
+  clearBroadcastState: () => void
   feeValue: number
   assetValue: number
   outputsSum: number
@@ -82,7 +81,6 @@ export function useSplitAssetTxForm({
   outpointAssetVout: outpointAssetVoutProp,
   setOutpointAssetTxid: setOutpointAssetTxidProp,
   setOutpointAssetVout: setOutpointAssetVoutProp,
-  onBroadcastSuccess,
 }: UseSplitAssetTxFormParams): UseSplitAssetTxFormResult {
   const [internalFeeTxid, setInternalFeeTxid] = useState('')
   const [internalFeeVout, setInternalFeeVout] = useState('')
@@ -342,7 +340,6 @@ export function useSplitAssetTxForm({
       const txidRes = await esplora.broadcastTx(hex)
       setBroadcastTxid(txidRes)
       setBroadcastError(null)
-      onBroadcastSuccess?.()
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(e.body ?? e.message)
@@ -359,9 +356,13 @@ export function useSplitAssetTxForm({
     accountIndex,
     accountAddress,
     canBuild,
-    onBroadcastSuccess,
     esplora,
   ])
+
+  const clearBroadcastState = useCallback(() => {
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+  }, [])
 
   return {
     outpointFeeTxid,
@@ -395,6 +396,7 @@ export function useSplitAssetTxForm({
     handleSign,
     handleBuildAndBroadcast,
     handleClear,
+    clearBroadcastState,
     feeValue,
     assetValue,
     outputsSum,

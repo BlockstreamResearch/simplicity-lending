@@ -35,6 +35,11 @@ function getScriptForAddress(lwk: Lwk, address: string): LwkScript {
 export interface PsetBuilderApi {
   addInput(outpoint: { txid: string; vout: number }, prevout: EsploraVout): void
   /**
+   * Add an input with sequence that enables tx-level nLockTime (for Lending liquidation: covenant checks nLockTime).
+   * Call setFallbackLocktimeHeight(height) before build() to set the absolute block height.
+   */
+  addInputWithLocktimeSequence(outpoint: { txid: string; vout: number }, prevout: EsploraVout): void
+  /**
    * Add an input with asset issuance. Returns the new asset id (hex) for use in outputs.
    */
   addInputWithIssuance(
@@ -48,6 +53,8 @@ export interface PsetBuilderApi {
   addFeeOutput(amount: bigint): void
   /** Policy asset (LBTC) hex for explicit change outputs. */
   getPolicyAssetHex(): string
+  /** Set fallback locktime: tx is valid only when block height >= height. Call before build(). */
+  setFallbackLocktimeHeight(height: number): void
   build(): { pset: unknown; inputTxOuts: unknown[] }
 }
 
@@ -69,6 +76,8 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
     AssetId,
     Network,
     ContractHash,
+    LockTime,
+    TxSequence,
     assetIdFromIssuance,
   } = lwk
 
@@ -77,6 +86,7 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
 
   let builder = PsetBuilder.newV2()
   const inputTxOuts: unknown[] = []
+  let fallbackLocktimeHeight: number | null = null
 
   return {
     addInput(outpoint: { txid: string; vout: number }, prevout: EsploraVout) {
@@ -91,6 +101,30 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
 
       const op = OutPoint.fromParts(new Txid(outpoint.txid), outpoint.vout)
       const psetInput = PsetInputBuilder.fromPrevout(op).witnessUtxo(txOut).build()
+      builder = builder.addInput(psetInput)
+    },
+
+    addInputWithLocktimeSequence(
+      outpoint: { txid: string; vout: number },
+      prevout: EsploraVout
+    ) {
+      const scriptHex = getScriptHexFromVout(prevout)
+      const value = prevout.value
+      if (value == null || value < 0) throw new Error('Missing or invalid prevout value')
+      const assetHex = prevout.asset ?? policyAsset.toString()
+      const script = new Script(scriptHex)
+      const assetId = new AssetId(assetHex)
+      const txOut = TxOut.fromExplicit(script, assetId, BigInt(value))
+      inputTxOuts.push(txOut)
+
+      const op = OutPoint.fromParts(new Txid(outpoint.txid), outpoint.vout)
+      const seq =
+        (TxSequence as { enableLocktimeNoRbf?: () => unknown }).enableLocktimeNoRbf?.() ??
+        (TxSequence as { enable_locktime_no_rbf?: () => unknown }).enable_locktime_no_rbf?.()
+      const psetInput =
+        seq != null && typeof (seq as { to_consensus_u32?: unknown }).to_consensus_u32 === 'function'
+          ? PsetInputBuilder.fromPrevout(op).witnessUtxo(txOut).sequence(seq as Parameters<ReturnType<typeof PsetInputBuilder.fromPrevout>['sequence']>[0]).build()
+          : PsetInputBuilder.fromPrevout(op).witnessUtxo(txOut).build()
       builder = builder.addInput(psetInput)
     },
 
@@ -152,7 +186,14 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
       return policyAsset.toString()
     },
 
+    setFallbackLocktimeHeight(height: number) {
+      fallbackLocktimeHeight = height
+    },
+
     build() {
+      if (fallbackLocktimeHeight != null) {
+        builder = builder.setFallbackLocktime(LockTime.from_height(fallbackLocktimeHeight))
+      }
       const pset = builder.build()
       return { pset, inputTxOuts }
     },

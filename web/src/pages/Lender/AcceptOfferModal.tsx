@@ -6,6 +6,8 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { Modal } from '../../components/Modal'
+import { BroadcastStatusContent } from '../../components/PostBroadcastModal'
+import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import { InfoTooltip } from '../../components/InfoTooltip'
 import { CopyIcon } from '../../components/CopyIcon'
 import { Input } from '../../components/Input'
@@ -252,13 +254,26 @@ export function AcceptOfferModal({
     void navigator.clipboard.writeText(text)
   }
 
+  const handleClose = () => {
+    setBroadcastTxid(null)
+    onClose()
+  }
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title={`${principalLabel} Supply Offer`}
       contentClassName="max-w-xl"
     >
+      {broadcastTxid ? (
+        <BroadcastStatusContent
+          txid={broadcastTxid}
+          successMessage={getBroadcastSuccessMessage('accept_offer')}
+          esplora={esplora}
+          onClose={handleClose}
+        />
+      ) : (
       <div className="space-y-6">
         {/* Supply UTXO */}
         <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
@@ -447,12 +462,6 @@ export function AcceptOfferModal({
             <p className="mt-1 font-mono text-xs break-all">Raw hex: {signedTxHex.slice(0, 120)}…</p>
           </div>
         )}
-        {broadcastTxid && (
-          <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
-            <p className="font-medium">Offer accepted and broadcasted.</p>
-            <p className="mt-1 font-mono text-xs break-all">Txid: {broadcastTxid}</p>
-          </div>
-        )}
         {unsignedTxHex && !signedTxHex && (
           <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
             <p className="font-medium">Transaction built (unsigned).</p>
@@ -465,6 +474,7 @@ export function AcceptOfferModal({
           </p>
         )}
       </div>
+      )}
     </Modal>
   )
 }

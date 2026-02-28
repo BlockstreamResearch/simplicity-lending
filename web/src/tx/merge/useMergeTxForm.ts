@@ -31,8 +31,6 @@ export interface UseMergeTxFormParams {
   accountIndex: number
   /** Account UTXOs; only native (LBTC) are offered in input dropdowns. */
   utxos: ScripthashUtxoEntry[]
-  /** Called after a successful broadcast (e.g. to refresh UTXOs). */
-  onBroadcastSuccess?: () => void
 }
 
 export interface UseMergeTxFormResult {
@@ -67,6 +65,7 @@ export interface UseMergeTxFormResult {
   handleSign: () => Promise<void>
   handleBuildAndBroadcast: () => Promise<void>
   handleClear: () => void
+  clearBroadcastState: () => void
   totalInputValue: number
   outputsSum: number
   changeAmount: number
@@ -83,7 +82,6 @@ export function useMergeTxForm({
   seedHex,
   accountIndex,
   utxos,
-  onBroadcastSuccess,
 }: UseMergeTxFormParams): UseMergeTxFormResult {
   const nativeUtxos = useMemo(() => {
     const policyId = POLICY_ASSET_ID[P2PK_NETWORK]
@@ -365,7 +363,6 @@ export function useMergeTxForm({
       const txidRes = await esplora.broadcastTx(hex)
       setBroadcastTxid(txidRes)
       setBroadcastError(null)
-      onBroadcastSuccess?.()
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(e.body ?? e.message)
@@ -383,8 +380,12 @@ export function useMergeTxForm({
     accountIndex,
     canBuild,
     esplora,
-    onBroadcastSuccess,
   ])
+
+  const clearBroadcastState = useCallback(() => {
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+  }, [])
 
   return {
     nativeUtxos,
@@ -413,6 +414,7 @@ export function useMergeTxForm({
     handleSign,
     handleBuildAndBroadcast,
     handleClear,
+    clearBroadcastState,
     totalInputValue,
     outputsSum,
     changeAmount,

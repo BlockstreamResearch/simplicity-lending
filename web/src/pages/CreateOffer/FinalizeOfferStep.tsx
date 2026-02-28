@@ -33,6 +33,8 @@ export interface FinalizeOfferStepProps {
   seedHex: string
   issuanceTxid: string | null
   onSuccess: () => void
+  /** When provided, called with txid after broadcast instead of onSuccess; parent shows post-broadcast modal and calls onSuccess when modal closes. */
+  onBroadcastTxid?: (txid: string) => void
 }
 
 /** Order in Issue Utility NFTs tx: vout 0=Borrower, 1=Lender, 2=First params, 3=Second params. */
@@ -51,6 +53,7 @@ export function FinalizeOfferStep({
   seedHex,
   accountIndex,
   onSuccess,
+  onBroadcastTxid,
 }: FinalizeOfferStepProps) {
   const [collateralUtxoIndex, setCollateralUtxoIndex] = useState(0)
   const [principalAssetIdHex, setPrincipalAssetIdHex] = useState('')
@@ -346,7 +349,11 @@ export function FinalizeOfferStep({
         if (broadcast) {
           const txid = await esplora.broadcastTx(hex)
           setBroadcastTxid(txid)
-          onSuccess()
+          if (onBroadcastTxid) {
+            onBroadcastTxid(txid)
+          } else {
+            onSuccess()
+          }
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -359,7 +366,7 @@ export function FinalizeOfferStep({
         setBuilding(false)
       }
     },
-    [builtPreLockTx, seedHex, accountIndex, esplora, onSuccess]
+    [builtPreLockTx, seedHex, accountIndex, esplora, onSuccess, onBroadcastTxid]
   )
 
   return (

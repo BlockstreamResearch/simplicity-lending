@@ -17,6 +17,7 @@ import { EsploraClient } from '../../api/esplora'
 import { getScriptPubkeyHexFromAddress } from '../../utility/addressP2pk'
 import { OfferTable } from '../../components/OfferTable'
 import { AcceptOfferModal } from './AcceptOfferModal'
+import { LiquidationModal } from './LiquidationModal'
 import type { OfferShort } from '../../types/offers'
 
 export function LenderPage({
@@ -48,6 +49,8 @@ export function LenderPage({
   const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null)
   const [selectedOffer, setSelectedOffer] = useState<OfferShort | null>(null)
   const [acceptModalOpen, setAcceptModalOpen] = useState(false)
+  const [liquidationOffer, setLiquidationOffer] = useState<OfferShort | null>(null)
+  const [liquidationModalOpen, setLiquidationModalOpen] = useState(false)
 
   const loadLendOffers = useCallback(async () => {
     if (!accountAddress) {
@@ -175,6 +178,14 @@ export function LenderPage({
           currentBlockHeight={currentBlockHeight}
           onRetry={loadLendOffers}
           emptyMessage="No supply yet"
+          onOfferClick={(offer) => {
+            const expired =
+              currentBlockHeight != null && offer.loan_expiration_time <= currentBlockHeight
+            if (expired) {
+              setLiquidationOffer(offer)
+              setLiquidationModalOpen(true)
+            }
+          }}
         />
       </section>
 
@@ -210,6 +221,24 @@ export function LenderPage({
           currentBlockHeight={currentBlockHeight}
           seedHex={seedHex ?? undefined}
           accountIndex={accountIndex}
+        />
+      )}
+
+      {liquidationOffer && (
+        <LiquidationModal
+          offer={liquidationOffer}
+          utxos={utxos}
+          esplora={esplora}
+          open={liquidationModalOpen}
+          onClose={() => {
+            setLiquidationModalOpen(false)
+            setLiquidationOffer(null)
+          }}
+          currentBlockHeight={currentBlockHeight}
+          accountAddress={accountAddress}
+          seedHex={seedHex ?? undefined}
+          accountIndex={accountIndex}
+          onSuccess={loadLendOffers}
         />
       )}
     </div>

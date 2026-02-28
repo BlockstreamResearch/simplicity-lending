@@ -20,8 +20,6 @@ export interface UseSplitTxFormParams {
   /** Setters are used by the parent (e.g. when user selects a UTXO); hook only reads values. */
   setOutpointTxid: (s: string) => void
   setOutpointVout: (s: string) => void
-  /** Called after a successful broadcast (e.g. to refresh UTXOs). */
-  onBroadcastSuccess?: () => void
 }
 
 export interface UseSplitTxFormResult {
@@ -44,6 +42,7 @@ export interface UseSplitTxFormResult {
   handleBuild: () => Promise<void>
   handleBuildAndBroadcast: () => Promise<void>
   handleClear: () => void
+  clearBroadcastState: () => void
   inputValue: number
   feeNum: number
   outputsSum: number
@@ -61,7 +60,6 @@ export function useSplitTxForm({
   outpointVout,
   setOutpointTxid,
   setOutpointVout,
-  onBroadcastSuccess,
 }: UseSplitTxFormParams): UseSplitTxFormResult {
   const [loadedPrevout, setLoadedPrevout] = useState<EsploraVout | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -231,7 +229,6 @@ export function useSplitTxForm({
       const txidRes = await esplora.broadcastTx(hex)
       setBroadcastTxid(txidRes)
       setBroadcastError(null)
-      onBroadcastSuccess?.()
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(e.body ?? e.message)
@@ -248,7 +245,6 @@ export function useSplitTxForm({
     accountAddress,
     loadedPrevout,
     canBuild,
-    onBroadcastSuccess,
     outpointTxid,
     outpointVout,
     outputs,
@@ -256,6 +252,11 @@ export function useSplitTxForm({
     changeAmount,
     esplora,
   ])
+
+  const clearBroadcastState = useCallback(() => {
+    setBroadcastTxid(null)
+    setBroadcastError(null)
+  }, [])
 
   return {
     loadedPrevout,
@@ -277,6 +278,7 @@ export function useSplitTxForm({
     handleBuild,
     handleBuildAndBroadcast,
     handleClear,
+    clearBroadcastState,
     inputValue,
     feeNum,
     outputsSum,

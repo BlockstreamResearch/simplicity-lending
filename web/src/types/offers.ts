@@ -32,3 +32,35 @@ export interface OfferShort {
 export interface OfferWithParticipants extends OfferShort {
   participants: ParticipantDto[]
 }
+
+/** UTXO type from indexer (offer_utxos.utxo_type). */
+export type OfferUtxoType =
+  | 'pre_lock'
+  | 'lending'
+  | 'cancellation'
+  | 'repayment'
+  | 'liquidation'
+  | 'claim'
+
+/** Offer UTXO from GET /offers/:id/utxos. */
+export interface OfferUtxo {
+  offer_id: string
+  txid: string
+  vout: number
+  utxo_type: OfferUtxoType
+  created_at_height: number
+  spent_txid: string | null
+  spent_at_height: number | null
+}
+
+/** Participant UTXO from GET /offers/:id/participants or /participants/history. Tracks current position of Borrower/Lender NFT. */
+export interface OfferParticipant {
+  offer_id: string
+  participant_type: ParticipantType
+  script_pubkey: string
+  txid: string
+  vout: number
+  created_at_height: number
+  spent_txid: string | null
+  spent_at_height: number | null
+}

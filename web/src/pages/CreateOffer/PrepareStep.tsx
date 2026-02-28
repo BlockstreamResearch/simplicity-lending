@@ -10,6 +10,8 @@ import { EsploraApiError, type EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import type { PsetWithExtractTx } from '../../simplicity'
 import { buildPrepareUtilityNftsTx, finalizePrepareUtilityNftsTx } from '../../tx/prepareUtilityNfts/buildPrepareUtilityNftsTx'
+import { BroadcastStatusContent } from '../../components/PostBroadcastModal'
+import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import { CopyIcon } from '../../components/CopyIcon'
 import {
   ButtonPrimary,
@@ -148,7 +150,6 @@ export function PrepareStep({
       const txidRes = await esplora.broadcastTx(hex)
       setBroadcastTxid(txidRes)
       setSignedTxHex(hex)
-      onSuccess(txidRes, builtPrepareTx.auxiliaryAssetId, builtPrepareTx.issuanceEntropyHex)
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(e.body ?? e.message)
@@ -159,9 +160,31 @@ export function PrepareStep({
     } finally {
       setBuilding(false)
     }
-  }, [builtPrepareTx, seedHex, accountIndex, selectedUtxo, canBuild, esplora, onSuccess])
+  }, [builtPrepareTx, seedHex, accountIndex, selectedUtxo, canBuild, esplora])
 
   const showAlreadyPrepared = Boolean(existingPreparedTxid?.trim())
+
+  const handlePostBroadcastClose = () => {
+    onSuccess(
+      broadcastTxid!,
+      builtPrepareTx?.auxiliaryAssetId,
+      builtPrepareTx?.issuanceEntropyHex
+    )
+    setBroadcastTxid(null)
+  }
+
+  if (broadcastTxid) {
+    return (
+      <section className="min-w-0 max-w-4xl">
+        <BroadcastStatusContent
+          txid={broadcastTxid}
+          successMessage={getBroadcastSuccessMessage('prepare')}
+          esplora={esplora}
+          onClose={handlePostBroadcastClose}
+        />
+      </section>
+    )
+  }
 
   return (
     <section className="min-w-0 max-w-4xl">
@@ -271,31 +294,6 @@ export function PrepareStep({
 
             {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
             {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
-            {broadcastTxid && (
-              <p className="mt-2 text-green-700 flex items-center gap-1.5 flex-wrap">
-                <span>Broadcast successful. Txid:</span>
-                <a
-                  href={esplora.getTxExplorerUrl(broadcastTxid)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs break-all text-green-800 hover:underline underline-offset-1"
-                >
-                  {broadcastTxid}
-                </a>
-                <ButtonIconNeutral
-                  onClick={() => navigator.clipboard?.writeText(broadcastTxid)}
-                  title="Copy txid"
-                  aria-label="Copy txid"
-                >
-                  <CopyIcon className="h-4 w-4" />
-                </ButtonIconNeutral>
-              </p>
-            )}
-            {broadcastTxid && (
-              <p className="text-gray-600 mt-1">
-                Use this tx: vouts 0,1,2,3 are the 4 UTXOs of the new asset for Step 2.
-              </p>
-            )}
 
             {signedTxHex && (
               <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">

@@ -1,6 +1,8 @@
 import type {
+  OfferParticipant,
   OfferShort,
   OfferStatus,
+  OfferUtxo,
   OfferWithParticipants,
   ParticipantDto,
   ParticipantType,
@@ -146,4 +148,64 @@ export async function fetchOfferDetailsBatchWithParticipants(
   await throwIfNotOk(res)
   const data: unknown[] = await res.json()
   return data.map((row) => normalizeOfferWithParticipants(row as Record<string, unknown>))
+}
+
+function normalizeOfferUtxo(raw: Record<string, unknown>): OfferUtxo {
+  return {
+    offer_id: String(raw.offer_id ?? ''),
+    txid: String(raw.txid ?? ''),
+    vout: Number(raw.vout ?? 0),
+    utxo_type: (raw.utxo_type as OfferUtxo['utxo_type']) ?? 'pre_lock',
+    created_at_height: Number(raw.created_at_height ?? 0),
+    spent_txid: raw.spent_txid != null ? String(raw.spent_txid) : null,
+    spent_at_height: raw.spent_at_height != null ? Number(raw.spent_at_height) : null,
+  }
+}
+
+/** Fetch UTXO history for an offer (GET /offers/:id/utxos). Used e.g. to get Lending UTXO for liquidation. */
+export async function fetchOfferUtxos(offerId: string): Promise<OfferUtxo[]> {
+  const res = await fetch(`${API_BASE}/offers/${encodeURIComponent(offerId)}/utxos`)
+  await throwIfNotOk(res)
+  const data: unknown[] = await res.json()
+  return data.map((row) => normalizeOfferUtxo(row as Record<string, unknown>))
+}
+
+function normalizeOfferParticipant(raw: Record<string, unknown>): OfferParticipant {
+  const pt = raw.participant_type
+  const participantType: ParticipantType =
+    pt === 'lender' ? 'lender' : pt === 'borrower' ? 'borrower' : 'borrower'
+  return {
+    offer_id: String(raw.offer_id ?? ''),
+    participant_type: participantType,
+    script_pubkey: String(raw.script_pubkey ?? ''),
+    txid: String(raw.txid ?? ''),
+    vout: Number(raw.vout ?? 0),
+    created_at_height: Number(raw.created_at_height ?? 0),
+    spent_txid: raw.spent_txid != null ? String(raw.spent_txid) : null,
+    spent_at_height: raw.spent_at_height != null ? Number(raw.spent_at_height) : null,
+  }
+}
+
+/** Fetch participant movement history (GET /offers/:id/participants/history). Used to get current Lender/Borrower NFT (txid, vout) from indexer. */
+export async function fetchOfferParticipantsHistory(
+  offerId: string
+): Promise<OfferParticipant[]> {
+  const res = await fetch(
+    `${API_BASE}/offers/${encodeURIComponent(offerId)}/participants/history`
+  )
+  await throwIfNotOk(res)
+  const data: unknown[] = await res.json()
+  return data.map((row) => normalizeOfferParticipant(row as Record<string, unknown>))
+}
+
+/** Current Lender NFT = unspent participant with participant_type 'lender', latest by created_at_height. */
+export function getCurrentLenderParticipant(
+  history: OfferParticipant[]
+): OfferParticipant | null {
+  const unspentLenders = history.filter(
+    (p) => p.participant_type === 'lender' && p.spent_txid == null
+  )
+  if (unspentLenders.length === 0) return null
+  unspentLenders.sort((a, b) => b.created_at_height - a.created_at_height)
+  return unspentLenders[0] ?? null
 }

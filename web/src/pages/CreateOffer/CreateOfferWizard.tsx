@@ -4,17 +4,16 @@
  * Steps shown as pills with arrow; step 2 disabled until step 1 done; summary on step 1 when returning.
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
+import { PostBroadcastModal } from '../../components/PostBroadcastModal'
+import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import { IssueUtilityNftsStep } from './IssueUtilityNftsStep'
 import { FinalizeOfferStep } from './FinalizeOfferStep'
 
 export type CreateOfferStep = 2 | 3
-
-const POLL_INTERVAL_MS = 2000
-const WAIT_FOR_TX_TIMEOUT_MS = 60_000
 
 /** Summary data from step 1 (Issue Utility NFTs) for display when user returns to step 1. */
 export interface Step1Summary {
@@ -75,11 +74,10 @@ export function CreateOfferWizard({
   /** Txid from completing step 1 in this session (null until then). Recovery uses initialIssuanceTxid. */
   const [step1CompletedTxid, setStep1CompletedTxid] = useState<string | null>(null)
   const [step1Summary, setStep1Summary] = useState<Step1Summary | null>(null)
-  /** When set, we're waiting for this tx to appear in Esplora before switching to step 3. */
-  const [waitingForTxInEsplora, setWaitingForTxInEsplora] = useState<{
-    txid: string
-    summary: Step1Summary
-  } | null>(null)
+  /** Post-broadcast modal for step 1 (Issue Utility NFTs). When closed, advance to step 3. */
+  const [postBroadcastStep1Txid, setPostBroadcastStep1Txid] = useState<string | null>(null)
+  /** Post-broadcast modal for step 3 (Finalize offer). When closed, call onSuccess/onComplete. */
+  const [postBroadcastStep3Txid, setPostBroadcastStep3Txid] = useState<string | null>(null)
 
   const effectiveIssuanceTxid = initialIssuanceTxid ?? step1CompletedTxid
   const step1Done = Boolean(effectiveIssuanceTxid?.trim())
@@ -89,43 +87,19 @@ export function CreateOfferWizard({
     setStep1Summary(summary)
     void onBroadcastSuccess()
     onIssueUtilityNftsSuccess?.(txid)
-    setWaitingForTxInEsplora({ txid, summary })
+    setPostBroadcastStep1Txid(txid)
   }
 
-  useEffect(() => {
-    const pending = waitingForTxInEsplora
-    if (!pending?.txid?.trim() || !esplora) return
+  const handlePostBroadcastStep1Close = () => {
+    setPostBroadcastStep1Txid(null)
+    setCurrentStep(3)
+  }
 
-    let cancelled = false
-    const startedAt = Date.now()
-
-    const poll = () => {
-      if (cancelled) return
-      if (Date.now() - startedAt > WAIT_FOR_TX_TIMEOUT_MS) {
-        setWaitingForTxInEsplora(null)
-        setCurrentStep(3)
-        return
-      }
-      esplora
-        .getTx(pending.txid)
-        .then(() => {
-          if (!cancelled) {
-            setWaitingForTxInEsplora(null)
-            setCurrentStep(3)
-          }
-        })
-        .catch(() => {
-          /* ignore; will retry on next interval */
-        })
-    }
-
-    poll()
-    const intervalId = setInterval(poll, POLL_INTERVAL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(intervalId)
-    }
-  }, [waitingForTxInEsplora, esplora])
+  const handlePostBroadcastStep3Close = () => {
+    setPostBroadcastStep3Txid(null)
+    void onBroadcastSuccess()
+    onComplete?.()
+  }
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -164,26 +138,23 @@ export function CreateOfferWizard({
       </div>
       {recoveryPanel != null ? <div>{recoveryPanel}</div> : null}
 
-      {waitingForTxInEsplora != null && (
-        <div
-          className="flex flex-col items-center justify-center gap-4 rounded-xl border border-gray-200 bg-gray-50/80 py-12 px-6"
-          role="status"
-          aria-live="polite"
-        >
-          <div
-            className="h-10 w-10 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"
-            aria-hidden
-          />
-          <p className="text-center text-sm font-medium text-gray-700">
-            Transaction broadcast. Waiting for it to appear in the network…
-          </p>
-          <p className="font-mono text-xs text-gray-500">
-            {waitingForTxInEsplora.txid.slice(0, 8)}…
-          </p>
-        </div>
-      )}
+      <PostBroadcastModal
+        open={postBroadcastStep1Txid != null}
+        onClose={handlePostBroadcastStep1Close}
+        txid={postBroadcastStep1Txid}
+        successMessage={getBroadcastSuccessMessage('issue_utility_nfts')}
+        esplora={esplora}
+      />
 
-      {waitingForTxInEsplora == null && currentStep === 2 && (
+      <PostBroadcastModal
+        open={postBroadcastStep3Txid != null}
+        onClose={handlePostBroadcastStep3Close}
+        txid={postBroadcastStep3Txid}
+        successMessage={getBroadcastSuccessMessage('create_offer')}
+        esplora={esplora}
+      />
+
+      {currentStep === 2 && (
         <IssueUtilityNftsStep
           key="step2"
           accountIndex={accountIndex}
@@ -202,7 +173,7 @@ export function CreateOfferWizard({
         />
       )}
 
-      {waitingForTxInEsplora == null && currentStep === 3 && (
+      {currentStep === 3 && (
         <FinalizeOfferStep
           key={effectiveIssuanceTxid ?? 'step3'}
           accountIndex={accountIndex}
@@ -211,10 +182,8 @@ export function CreateOfferWizard({
           esplora={esplora}
           seedHex={seedHex}
           issuanceTxid={effectiveIssuanceTxid}
-          onSuccess={() => {
-            void onBroadcastSuccess()
-            onComplete?.()
-          }}
+          onSuccess={handlePostBroadcastStep3Close}
+          onBroadcastTxid={setPostBroadcastStep3Txid}
         />
       )}
     </div>
