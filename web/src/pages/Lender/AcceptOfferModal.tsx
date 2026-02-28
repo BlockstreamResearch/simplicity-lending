@@ -19,6 +19,7 @@ import type { EsploraClient } from '../../api/esplora'
 import { EsploraApiError } from '../../api/esplora'
 import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
+import { normalizeHex } from '../../utility/hex'
 import { buildAcceptOfferTx } from '../../tx/acceptOffer/buildAcceptOfferTx'
 import { finalizeAcceptOfferTx } from '../../tx/acceptOffer/finalizeAcceptOfferTx'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
@@ -36,10 +37,6 @@ function formatSats(amount: bigint | number): string {
   const n = Number(amount)
   if (Number.isSafeInteger(n)) return n.toLocaleString()
   return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-}
-
-function normalizeAssetHex(hex: string): string {
-  return (hex ?? '').trim().toLowerCase().replace(/^0x/, '')
 }
 
 export interface AcceptOfferModalProps {
@@ -60,10 +57,10 @@ function getSupplyUtxos(
   principalAssetHex: string,
   principalAmount: bigint
 ): ScripthashUtxoEntry[] {
-  const assetNorm = normalizeAssetHex(principalAssetHex)
+  const assetNorm = normalizeHex(principalAssetHex)
   const amountNum = Number(principalAmount)
   return utxos.filter((u) => {
-    const uAsset = normalizeAssetHex(u.asset ?? '')
+    const uAsset = normalizeHex(u.asset ?? '')
     if (uAsset !== assetNorm) return false
     const val = u.value ?? 0
     if (val !== amountNum) return false

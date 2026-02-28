@@ -1,5 +1,5 @@
 export { buildP2pkArguments, buildP2pkWitness } from './p2pk'
-export { buildAssetAuthArguments } from './assetAuth'
+export { buildAssetAuthArguments, buildAssetAuthWitness } from './assetAuth'
 export { buildScriptAuthArguments, buildScriptAuthWitness } from './scriptAuth'
 export {
   buildLendingArguments,

@@ -18,6 +18,7 @@ import { getScriptPubkeyHexFromAddress } from '../../utility/addressP2pk'
 import { OfferTable } from '../../components/OfferTable'
 import { AcceptOfferModal } from './AcceptOfferModal'
 import { LiquidationModal } from './LiquidationModal'
+import { ClaimModal } from './ClaimModal'
 import type { OfferShort } from '../../types/offers'
 
 export function LenderPage({
@@ -51,6 +52,8 @@ export function LenderPage({
   const [acceptModalOpen, setAcceptModalOpen] = useState(false)
   const [liquidationOffer, setLiquidationOffer] = useState<OfferShort | null>(null)
   const [liquidationModalOpen, setLiquidationModalOpen] = useState(false)
+  const [claimOffer, setClaimOffer] = useState<OfferShort | null>(null)
+  const [claimModalOpen, setClaimModalOpen] = useState(false)
 
   const loadLendOffers = useCallback(async () => {
     if (!accountAddress) {
@@ -181,7 +184,10 @@ export function LenderPage({
           onOfferClick={(offer) => {
             const expired =
               currentBlockHeight != null && offer.loan_expiration_time <= currentBlockHeight
-            if (expired) {
+            if (offer.status === 'repaid') {
+              setClaimOffer(offer)
+              setClaimModalOpen(true)
+            } else if (expired) {
               setLiquidationOffer(offer)
               setLiquidationModalOpen(true)
             }
@@ -235,6 +241,23 @@ export function LenderPage({
             setLiquidationOffer(null)
           }}
           currentBlockHeight={currentBlockHeight}
+          accountAddress={accountAddress}
+          seedHex={seedHex ?? undefined}
+          accountIndex={accountIndex}
+          onSuccess={loadLendOffers}
+        />
+      )}
+
+      {claimOffer && (
+        <ClaimModal
+          offer={claimOffer}
+          utxos={utxos}
+          esplora={esplora}
+          open={claimModalOpen}
+          onClose={() => {
+            setClaimModalOpen(false)
+            setClaimOffer(null)
+          }}
           accountAddress={accountAddress}
           seedHex={seedHex ?? undefined}
           accountIndex={accountIndex}

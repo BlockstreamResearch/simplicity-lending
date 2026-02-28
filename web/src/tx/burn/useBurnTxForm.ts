@@ -15,10 +15,7 @@ import {
 import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import type { PsetWithExtractTx } from '../../simplicity'
 import { buildBurnTx, finalizeBurnTx } from './buildBurnTx'
-
-function utxoKey(txid: string, vout: number): string {
-  return `${txid}:${vout}`
-}
+import { utxoKey } from '../../utility/utxoKey'
 
 export interface BurnSelectedRow {
   id: number

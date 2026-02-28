@@ -203,3 +203,15 @@ export function getCurrentLenderParticipant(history: OfferParticipant[]): OfferP
   unspentLenders.sort((a, b) => b.created_at_height - a.created_at_height)
   return unspentLenders[0] ?? null
 }
+
+/** Current Borrower NFT = unspent participant with participant_type 'borrower', latest by created_at_height. */
+export function getCurrentBorrowerParticipant(
+  history: OfferParticipant[]
+): OfferParticipant | null {
+  const unspentBorrowers = history.filter(
+    (p) => p.participant_type === 'borrower' && p.spent_txid == null
+  )
+  if (unspentBorrowers.length === 0) return null
+  unspentBorrowers.sort((a, b) => b.created_at_height - a.created_at_height)
+  return unspentBorrowers[0] ?? null
+}

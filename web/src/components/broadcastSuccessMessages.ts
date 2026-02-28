@@ -4,6 +4,8 @@
 
 export type BroadcastMessageKey =
   | 'liquidation'
+  | 'repayment'
+  | 'claim'
   | 'accept_offer'
   | 'create_offer'
   | 'prepare'
@@ -16,6 +18,8 @@ export type BroadcastMessageKey =
 
 export const BROADCAST_SUCCESS_MESSAGES: Record<BroadcastMessageKey, string> = {
   liquidation: 'Liquidation transaction successfully broadcast.',
+  repayment: 'Repayment transaction successfully broadcast. Collateral returned to you.',
+  claim: 'Principal claimed. Transaction successfully broadcast.',
   accept_offer: 'Offer accepted. Transaction successfully broadcast.',
   create_offer: 'Offer created. Transaction successfully broadcast.',
   prepare: 'Prepare transaction successfully broadcast.',

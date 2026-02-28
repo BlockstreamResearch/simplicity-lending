@@ -16,6 +16,7 @@ import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import type { PsetWithExtractTx } from '../../simplicity'
 import { buildMergeTx, finalizeMergeTx } from './buildMergeTx'
 import type { TxOutputRow } from '../split/types'
+import { utxoKey } from '../../utility/utxoKey'
 
 export interface MergeInputRow {
   id: number
@@ -71,10 +72,6 @@ export interface UseMergeTxFormResult {
   outputsSum: number
   changeAmount: number
   canBuild: boolean
-}
-
-function utxoKey(txid: string, vout: number): string {
-  return `${txid}:${vout}`
 }
 
 export function useMergeTxForm({

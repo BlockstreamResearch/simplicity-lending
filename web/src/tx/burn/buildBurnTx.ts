@@ -9,9 +9,7 @@ import { createPsetBuilder } from '../psetBuilder'
 import type { PsetWithExtractTx } from '../../simplicity'
 import { signP2pkInputs } from '../../utility/signP2pkInputs'
 import { getScriptHexFromVout } from '../../utility/hex'
-
-/** OP_RETURN with data "burn" (4 bytes). Script hex: 6a 04 62 75 72 6e */
-const OP_RETURN_BURN_SCRIPT_HEX = '6a046275726e'
+import { OP_RETURN_BURN_SCRIPT_HEX } from '../../utility/esploraPrevout'
 
 export interface BurnTxAssetInput {
   outpoint: { txid: string; vout: number }

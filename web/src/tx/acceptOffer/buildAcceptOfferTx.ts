@@ -13,7 +13,13 @@ import type { PreLockArguments } from '../../utility/preLockArguments'
 import type { P2pkNetwork, PsetWithExtractTx } from '../../simplicity'
 import { createPsetBuilder } from '../psetBuilder'
 import { getLwk, getSource, createP2trAddress } from '../../simplicity'
-import { getScriptHexFromVout, hexToBytes32, assetIdDisplayToInternal } from '../../utility/hex'
+import {
+  getScriptHexFromVout,
+  hexToBytes32,
+  assetIdDisplayToInternal,
+  normalizeHex,
+} from '../../utility/hex'
+import { requireVout, requireAssetHex, requireValue } from '../../utility/esploraPrevout'
 import {
   getP2pkAddressFromPublicKey,
   getScriptPubkeyHexFromAddress,
@@ -54,35 +60,11 @@ export interface BuildAcceptOfferTxResult {
   prevouts: EsploraVout[]
 }
 
-function normalizeHex64(hex: string): string {
-  return hex.trim().toLowerCase().replace(/^0x/, '')
-}
-
-function requireVout(tx: EsploraTx, vout: number, label: string): EsploraVout {
-  const out = tx.vout?.[vout]
-  if (!out) throw new Error(`${label} vout ${vout} missing in offer creation tx`)
-  return out
-}
-
-function requireAssetHexDisplay(vout: EsploraVout, label: string): string {
-  const hex = (vout.asset ?? '').trim().toLowerCase().replace(/^0x/, '')
-  if (!hex || hex.length !== 64) {
-    throw new Error(`${label} prevout must have explicit 32-byte asset (64 hex chars)`)
-  }
-  return hex
-}
-
-function requireValue(vout: EsploraVout, label: string): bigint {
-  const n = vout.value
-  if (typeof n !== 'number' || n < 0) throw new Error(`${label} prevout must have explicit value`)
-  return BigInt(n)
-}
-
 function parseOpReturn64(scriptHex: string): {
   borrowerPubKey: Uint8Array
   principalAssetId: Uint8Array
 } {
-  const hex = normalizeHex64(scriptHex).replace(/\s/g, '')
+  const hex = normalizeHex(scriptHex).replace(/\s/g, '')
   if (!hex.startsWith('6a40')) {
     throw new Error('Offer creation OP_RETURN must start with 6a40 (OP_RETURN + push 64)')
   }
@@ -103,35 +85,45 @@ export async function buildAcceptOfferTx(
 
   // Offer creation tx vouts (by convention used in web builders):
   // 0=PreLock, 1=First params NFT, 2=Second params NFT, 3=Borrower NFT, 4=Lender NFT, 5=OP_RETURN.
-  const preLockPrevout = requireVout(offerCreationTx, 0, 'PreLock')
-  const firstParamsPrevout = requireVout(offerCreationTx, 1, 'First parameters NFT')
-  const secondParamsPrevout = requireVout(offerCreationTx, 2, 'Second parameters NFT')
-  const borrowerNftPrevout = requireVout(offerCreationTx, 3, 'Borrower NFT')
-  const lenderNftPrevout = requireVout(offerCreationTx, 4, 'Lender NFT')
-  const opReturnPrevout = requireVout(offerCreationTx, 5, 'OP_RETURN')
+  const preLockPrevout = requireVout(offerCreationTx, 0, 'PreLock', 'offer creation tx')
+  const firstParamsPrevout = requireVout(
+    offerCreationTx,
+    1,
+    'First parameters NFT',
+    'offer creation tx'
+  )
+  const secondParamsPrevout = requireVout(
+    offerCreationTx,
+    2,
+    'Second parameters NFT',
+    'offer creation tx'
+  )
+  const borrowerNftPrevout = requireVout(offerCreationTx, 3, 'Borrower NFT', 'offer creation tx')
+  const lenderNftPrevout = requireVout(offerCreationTx, 4, 'Lender NFT', 'offer creation tx')
+  const opReturnPrevout = requireVout(offerCreationTx, 5, 'OP_RETURN', 'offer creation tx')
 
-  const preLockAssetHex = requireAssetHexDisplay(preLockPrevout, 'PreLock')
+  const preLockAssetHex = requireAssetHex(preLockPrevout, 'PreLock')
   const preLockValue = requireValue(preLockPrevout, 'PreLock')
-  const principalAssetHex = requireAssetHexDisplay(principalUtxo.prevout, 'Principal')
+  const principalAssetHex = requireAssetHex(principalUtxo.prevout, 'Principal')
   const principalValue = requireValue(principalUtxo.prevout, 'Principal')
-  const firstParamsAssetHex = requireAssetHexDisplay(firstParamsPrevout, 'First parameters NFT')
+  const firstParamsAssetHex = requireAssetHex(firstParamsPrevout, 'First parameters NFT')
   const firstParamsValue = requireValue(firstParamsPrevout, 'First parameters NFT')
-  const secondParamsAssetHex = requireAssetHexDisplay(secondParamsPrevout, 'Second parameters NFT')
+  const secondParamsAssetHex = requireAssetHex(secondParamsPrevout, 'Second parameters NFT')
   const secondParamsValue = requireValue(secondParamsPrevout, 'Second parameters NFT')
-  const borrowerNftAssetHex = requireAssetHexDisplay(borrowerNftPrevout, 'Borrower NFT')
+  const borrowerNftAssetHex = requireAssetHex(borrowerNftPrevout, 'Borrower NFT')
   const borrowerNftValue = requireValue(borrowerNftPrevout, 'Borrower NFT')
-  const lenderNftAssetHex = requireAssetHexDisplay(lenderNftPrevout, 'Lender NFT')
+  const lenderNftAssetHex = requireAssetHex(lenderNftPrevout, 'Lender NFT')
   const lenderNftValue = requireValue(lenderNftPrevout, 'Lender NFT')
-  const feeAssetHex = requireAssetHexDisplay(feeUtxo.prevout, 'Fee')
+  const feeAssetHex = requireAssetHex(feeUtxo.prevout, 'Fee')
   const feeValue = requireValue(feeUtxo.prevout, 'Fee')
 
-  if (normalizeHex64(offer.collateral_asset) !== preLockAssetHex) {
+  if (normalizeHex(offer.collateral_asset) !== preLockAssetHex) {
     throw new Error('PreLock asset does not match offer collateral asset')
   }
   if (preLockValue !== offer.collateral_amount) {
     throw new Error('PreLock value does not match offer collateral amount')
   }
-  if (normalizeHex64(offer.principal_asset) !== principalAssetHex) {
+  if (normalizeHex(offer.principal_asset) !== principalAssetHex) {
     throw new Error('Principal UTXO asset does not match offer principal asset')
   }
   if (principalValue !== offer.principal_amount) {
@@ -248,7 +240,7 @@ export async function buildAcceptOfferTx(
   })
   const expectedPreLockScriptHex = await getScriptPubkeyHexFromAddress(preLockAddress)
   const actualPreLockScriptHex = getScriptHexFromVout(preLockPrevout)
-  if (normalizeHex64(actualPreLockScriptHex) !== normalizeHex64(expectedPreLockScriptHex)) {
+  if (normalizeHex(actualPreLockScriptHex) !== normalizeHex(expectedPreLockScriptHex)) {
     throw new Error('PreLock prevout script does not match expected PreLock covenant script')
   }
 
@@ -258,7 +250,7 @@ export async function buildAcceptOfferTx(
   const networkKey: 'mainnet' | 'testnet' = network === 'mainnet' ? 'mainnet' : 'testnet'
   const api = await createPsetBuilder(networkKey)
   const policyAssetHex = api.getPolicyAssetHex()
-  if (normalizeHex64(policyAssetHex) !== normalizeHex64(feeAssetHex)) {
+  if (normalizeHex(policyAssetHex) !== normalizeHex(feeAssetHex)) {
     throw new Error('Fee UTXO must be policy asset (LBTC)')
   }
 

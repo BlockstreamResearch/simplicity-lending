@@ -18,10 +18,7 @@ import { buildMergeTx, finalizeMergeTx } from './buildMergeTx'
 import type { MergeTxOutput } from './buildMergeTx'
 import type { TxOutputRow } from '../split/types'
 import type { MergeInputRow } from './useMergeTxForm'
-
-function utxoKey(txid: string, vout: number): string {
-  return `${txid}:${vout}`
-}
+import { utxoKey } from '../../utility/utxoKey'
 
 function sameAsset(a: string | undefined, b: string | undefined): boolean {
   return (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase()

@@ -16,6 +16,7 @@ import {
 import { EsploraClient, EsploraApiError } from '../../api/esplora'
 import { getScriptPubkeyHexFromAddress } from '../../utility/addressP2pk'
 import { CreateOfferWizard } from './CreateOfferWizard'
+import { RepaymentModal } from './RepaymentModal'
 import { PrepareStep } from './PrepareStep'
 import { Modal } from '../../components/Modal'
 import { Input } from '../../components/Input'
@@ -321,6 +322,7 @@ export function CreateOfferPage({
   const [offersLoading, setOffersLoading] = useState(true)
   const [offersError, setOffersError] = useState<string | null>(null)
   const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null)
+  const [repaymentOffer, setRepaymentOffer] = useState<OfferShort | null>(null)
 
   const loadBorrowOffers = useCallback(async () => {
     if (!accountAddress) {
@@ -552,6 +554,11 @@ export function CreateOfferPage({
           currentBlockHeight={currentBlockHeight}
           onRetry={loadBorrowOffers}
           emptyMessage="No borrows yet"
+          onOfferClick={(offer) => {
+            if (offer.status === 'active') {
+              setRepaymentOffer(offer)
+            }
+          }}
         />
       </section>
 
@@ -611,6 +618,23 @@ export function CreateOfferPage({
           onClose={() => setShowPrepareModal(false)}
         />
       </Modal>
+
+      {repaymentOffer != null && (
+        <RepaymentModal
+          offer={repaymentOffer}
+          utxos={utxos}
+          esplora={esplora}
+          open={true}
+          onClose={() => setRepaymentOffer(null)}
+          accountAddress={accountAddress}
+          seedHex={seedHex}
+          accountIndex={accountIndex}
+          onSuccess={() => {
+            loadBorrowOffers()
+            setRepaymentOffer(null)
+          }}
+        />
+      )}
 
       <Modal
         open={showSettingsModal}

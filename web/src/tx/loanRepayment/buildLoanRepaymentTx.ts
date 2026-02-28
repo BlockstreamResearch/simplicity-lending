@@ -1,9 +1,10 @@
 /**
- * Build (unsigned) Loan Liquidation transaction: spend Lending covenant + 3 NFT UTXOs + fee.
- * Mirrors crates/contracts/src/sdk/lending/loan_liquidation.rs.
+ * Build (unsigned) Loan Repayment transaction: spend Lending covenant + 3 NFT UTXOs + principal UTXO(s) + fee.
+ * Mirrors crates/contracts/src/sdk/lending/loan_repayment.rs; web extends to multiple principal inputs + principal change.
  *
- * Input order: 0=Lending (with height locktime), 1=FirstParams NFT, 2=SecondParams NFT, 3=Lender NFT, 4=Fee.
- * Output order: Collateral to lender, FirstParams burn, SecondParams burn, Lender NFT burn, [change], fee.
+ * Input order: 0=Lending, 1=FirstParams NFT, 2=SecondParams NFT, 3=Borrower NFT, 4..K+3=Principal UTXOs, K+4=Fee.
+ * Output order: Collateral to borrower, Principal (exact principal_with_interest) to AssetAuth (lender), 3 burns, [principal change], [fee change], fee.
+ * No locktime.
  */
 
 import type { EsploraTx, EsploraVout } from '../../api/esplora'
@@ -22,34 +23,37 @@ import {
 import { hashScriptPubkeyHex } from '../../api/esplora'
 import { buildLendingArguments, buildAssetAuthArguments } from '../../simplicity/covenants'
 import { getTaprootUnspendableInternalKey } from '../../utility/taprootUnspendableKey'
+import { calculatePrincipalWithInterest } from './principalWithInterest'
 
-export interface LoanLiquidationUtxo {
+export interface LoanRepaymentPrincipalUtxo {
   outpoint: { txid: string; vout: number }
   prevout: EsploraVout
 }
 
-export interface BuildLoanLiquidationTxParams {
-  /** Lending creation tx (accept-offer tx). Vouts: 0=Lending, 2=FirstParams, 3=SecondParams; vout 4=Borrower NFT (asset only). */
+export interface BuildLoanRepaymentTxParams {
+  /** Lending creation tx (accept-offer tx). Vouts: 0=Lending, 2=FirstParams, 3=SecondParams, 4=Borrower NFT, 5=Lender NFT (asset only). */
   lendingTx: EsploraTx
-  /** Current Lender NFT UTXO (from indexer participants — may have moved since accept-offer). */
-  lenderNftUtxo: LoanLiquidationUtxo
+  /** Current Borrower NFT UTXO (from indexer participants). */
+  borrowerNftUtxo: { outpoint: { txid: string; vout: number }; prevout: EsploraVout }
+  /** Principal UTXOs (principal asset). Sum must be >= principal_with_interest. */
+  principalUtxos: LoanRepaymentPrincipalUtxo[]
   /** Fee UTXO (LBTC). */
-  feeUtxo: LoanLiquidationUtxo
+  feeUtxo: { outpoint: { txid: string; vout: number }; prevout: EsploraVout }
   feeAmount: bigint
-  /** Collateral destination script (hex). Typically lender's P2PK script. */
+  /** Collateral destination script (hex). Typically borrower's address. */
   collateralOutputScriptHex: string
+  /** Principal change script (hex). Where to send principal excess. */
+  principalChangeScriptHex: string
   offer: OfferShort
   network: P2pkNetwork
 }
 
-export interface BuildLoanLiquidationTxResult {
+export interface BuildLoanRepaymentTxResult {
   pset: unknown
   unsignedTxHex: string
-  /** Prevouts in input order (5): Lending, FirstParams, SecondParams, LenderNFT, Fee. */
+  /** Prevouts in input order: Lending, FirstParams, SecondParams, Borrower NFT, ...principalUtxos, Fee. */
   prevouts: EsploraVout[]
-  /** For finalization: Lending covenant script hash (ScriptAuth for the 3 NFT inputs). */
   lendingCovHash: Uint8Array
-  /** For finalization: Lending program args (rebuilt for witness). */
   lendingArgs: {
     collateralAssetId: Uint8Array
     principalAssetId: Uint8Array
@@ -67,26 +71,34 @@ export interface BuildLoanLiquidationTxResult {
   }
 }
 
-export async function buildLoanLiquidationTx(
-  params: BuildLoanLiquidationTxParams
-): Promise<BuildLoanLiquidationTxResult> {
+export async function buildLoanRepaymentTx(
+  params: BuildLoanRepaymentTxParams
+): Promise<BuildLoanRepaymentTxResult> {
   const {
     lendingTx,
-    lenderNftUtxo,
+    borrowerNftUtxo,
+    principalUtxos,
     feeUtxo,
     feeAmount,
     collateralOutputScriptHex,
+    principalChangeScriptHex,
     offer,
     network,
   } = params
 
+  if (principalUtxos.length === 0) throw new Error('At least one principal UTXO is required')
   if (feeAmount <= 0n) throw new Error('Fee amount must be at least 1')
 
-  // Lending creation tx vouts: 0=Lending, 2=First params, 3=Second params, 4=Borrower NFT (asset id only). Lender NFT from lenderNftUtxo (indexer).
+  const principalWithInterest = calculatePrincipalWithInterest(
+    offer.principal_amount,
+    offer.interest_rate
+  )
+
   const lendingPrevout = requireVout(lendingTx, 0, 'Lending', 'lending tx')
   const firstParamsPrevout = requireVout(lendingTx, 2, 'First parameters NFT', 'lending tx')
   const secondParamsPrevout = requireVout(lendingTx, 3, 'Second parameters NFT', 'lending tx')
-  const lenderNftPrevout = lenderNftUtxo.prevout
+  const borrowerNftPrevout = borrowerNftUtxo.prevout
+  const lenderNftPrevout = requireVout(lendingTx, 5, 'Lender NFT', 'lending tx')
 
   const lendingAssetHex = requireAssetHex(lendingPrevout, 'Lending')
   const lendingValue = requireValue(lendingPrevout, 'Lending')
@@ -94,10 +106,26 @@ export async function buildLoanLiquidationTx(
   const firstParamsValue = requireValue(firstParamsPrevout, 'First parameters NFT')
   const secondParamsAssetHex = requireAssetHex(secondParamsPrevout, 'Second parameters NFT')
   const secondParamsValue = requireValue(secondParamsPrevout, 'Second parameters NFT')
+  const borrowerNftAssetHex = requireAssetHex(borrowerNftPrevout, 'Borrower NFT')
+  const borrowerNftValue = requireValue(borrowerNftPrevout, 'Borrower NFT')
   const lenderNftAssetHex = requireAssetHex(lenderNftPrevout, 'Lender NFT')
-  const lenderNftValue = requireValue(lenderNftPrevout, 'Lender NFT')
   const feeAssetHex = requireAssetHex(feeUtxo.prevout, 'Fee')
   const feeValue = requireValue(feeUtxo.prevout, 'Fee')
+
+  const principalAssetHex = normalizeAssetHex(offer.principal_asset)
+  let principalSum = 0n
+  for (const u of principalUtxos) {
+    const ah = normalizeAssetHex(u.prevout.asset ?? '')
+    if (ah !== principalAssetHex) {
+      throw new Error('Principal UTXO asset does not match offer principal asset')
+    }
+    principalSum += requireValue(u.prevout, 'Principal')
+  }
+  if (principalSum < principalWithInterest) {
+    throw new Error(
+      `Principal UTXOs sum ${principalSum} is less than principal+interest ${principalWithInterest}`
+    )
+  }
 
   if (normalizeAssetHex(offer.collateral_asset) !== normalizeAssetHex(lendingAssetHex)) {
     throw new Error('Lending UTXO asset does not match offer collateral asset')
@@ -105,16 +133,10 @@ export async function buildLoanLiquidationTx(
   if (lendingValue !== offer.collateral_amount) {
     throw new Error('Lending UTXO value does not match offer collateral amount')
   }
-  if (lenderNftValue !== 1n) {
-    throw new Error('Lender NFT prevout must have value 1')
-  }
+  if (borrowerNftValue !== 1n) throw new Error('Borrower NFT prevout must have value 1')
   if (feeValue < feeAmount) {
     throw new Error(`Fee UTXO value ${feeValue} is less than fee ${feeAmount}`)
   }
-
-  // Borrower NFT asset from same tx (vout 4) for Lending args
-  const borrowerNftPrevout = requireVout(lendingTx, 4, 'Borrower NFT', 'lending tx')
-  const borrowerNftAssetHex = requireAssetHex(borrowerNftPrevout, 'Borrower NFT')
 
   const lendingParams = {
     collateralAmount: offer.collateral_amount,
@@ -132,7 +154,6 @@ export async function buildLoanLiquidationTx(
   const firstParametersNftAssetId = assetIdDisplayToInternal(firstParamsAssetHex)
   const secondParametersNftAssetId = assetIdDisplayToInternal(secondParamsAssetHex)
 
-  // Lender principal covenant hash (AssetAuth for lender NFT burn) - same as in accept-offer
   const assetAuthArgs = buildAssetAuthArguments(lwk, {
     assetId: lenderNftAssetId,
     assetAmount: 1,
@@ -175,17 +196,25 @@ export async function buildLoanLiquidationTx(
   }
 
   const txid = lendingTx.txid.trim()
-  // All inputs need sequence enabling locktime so nLockTime is enforced (mirrors pst.rs ENABLE_LOCKTIME_NO_RBF for every input).
-  api.addInputWithLocktimeSequence({ txid, vout: 0 }, lendingPrevout)
-  api.addInputWithLocktimeSequence({ txid, vout: 2 }, firstParamsPrevout)
-  api.addInputWithLocktimeSequence({ txid, vout: 3 }, secondParamsPrevout)
-  api.addInputWithLocktimeSequence(lenderNftUtxo.outpoint, lenderNftPrevout)
-  api.addInputWithLocktimeSequence(feeUtxo.outpoint, feeUtxo.prevout)
+  api.addInput({ txid, vout: 0 }, lendingPrevout)
+  api.addInput({ txid, vout: 2 }, firstParamsPrevout)
+  api.addInput({ txid, vout: 3 }, secondParamsPrevout)
+  api.addInput(borrowerNftUtxo.outpoint, borrowerNftPrevout)
+  for (const u of principalUtxos) {
+    api.addInput(u.outpoint, u.prevout)
+  }
+  api.addInput(feeUtxo.outpoint, feeUtxo.prevout)
 
   api.addOutputWithScript(collateralOutputScriptHex, lendingValue, lendingAssetHex)
+  api.addOutputWithScript(principalAuthScriptHex, principalWithInterest, principalAssetHex)
   api.addOutputWithScript(OP_RETURN_BURN_SCRIPT_HEX, firstParamsValue, firstParamsAssetHex)
   api.addOutputWithScript(OP_RETURN_BURN_SCRIPT_HEX, secondParamsValue, secondParamsAssetHex)
-  api.addOutputWithScript(OP_RETURN_BURN_SCRIPT_HEX, lenderNftValue, lenderNftAssetHex)
+  api.addOutputWithScript(OP_RETURN_BURN_SCRIPT_HEX, borrowerNftValue, borrowerNftAssetHex)
+
+  const principalChange = principalSum - principalWithInterest
+  if (principalChange > 0n) {
+    api.addOutputWithScript(principalChangeScriptHex, principalChange, principalAssetHex)
+  }
 
   const totalLbtcLeft = feeValue - feeAmount
   if (totalLbtcLeft > 0n) {
@@ -193,7 +222,6 @@ export async function buildLoanLiquidationTx(
   }
   api.addFeeOutput(feeAmount)
 
-  api.setFallbackLocktimeHeight(offer.loan_expiration_time)
   const { pset } = api.build()
   const unsignedTxHex = (pset as PsetWithExtractTx).extractTx().toString()
 
@@ -201,7 +229,8 @@ export async function buildLoanLiquidationTx(
     lendingPrevout,
     firstParamsPrevout,
     secondParamsPrevout,
-    lenderNftPrevout,
+    borrowerNftPrevout,
+    ...principalUtxos.map((u) => u.prevout),
     feeUtxo.prevout,
   ]
 
