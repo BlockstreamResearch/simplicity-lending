@@ -14,7 +14,10 @@ import type { P2pkNetwork, PsetWithExtractTx } from '../../simplicity'
 import { createPsetBuilder } from '../psetBuilder'
 import { getLwk, getSource, createP2trAddress } from '../../simplicity'
 import { getScriptHexFromVout, hexToBytes32, assetIdDisplayToInternal } from '../../utility/hex'
-import { getP2pkAddressFromPublicKey, getScriptPubkeyHexFromAddress } from '../../utility/addressP2pk'
+import {
+  getP2pkAddressFromPublicKey,
+  getScriptPubkeyHexFromAddress,
+} from '../../utility/addressP2pk'
 import {
   buildAssetAuthArguments,
   buildLendingArguments,
@@ -75,13 +78,17 @@ function requireValue(vout: EsploraVout, label: string): bigint {
   return BigInt(n)
 }
 
-function parseOpReturn64(scriptHex: string): { borrowerPubKey: Uint8Array; principalAssetId: Uint8Array } {
+function parseOpReturn64(scriptHex: string): {
+  borrowerPubKey: Uint8Array
+  principalAssetId: Uint8Array
+} {
   const hex = normalizeHex64(scriptHex).replace(/\s/g, '')
   if (!hex.startsWith('6a40')) {
     throw new Error('Offer creation OP_RETURN must start with 6a40 (OP_RETURN + push 64)')
   }
   const dataHex = hex.slice(4)
-  if (dataHex.length !== 128) throw new Error('Offer creation OP_RETURN must contain exactly 64 bytes')
+  if (dataHex.length !== 128)
+    throw new Error('Offer creation OP_RETURN must contain exactly 64 bytes')
   const data = hexToBytes32(dataHex.slice(0, 64))
   const principal = hexToBytes32(dataHex.slice(64))
   return { borrowerPubKey: data, principalAssetId: principal }

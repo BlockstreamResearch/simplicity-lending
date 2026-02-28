@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
 import { EsploraApiError, type EsploraClient, type EsploraVout } from '../../api/esplora'
+import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import type { PsetWithExtractTx } from '../../simplicity'
 import { buildSplitAssetTx, finalizeSplitAssetTx } from './buildSplitAssetTx'
 import type { TxOutputRow } from './types'
@@ -342,7 +343,7 @@ export function useSplitAssetTxForm({
       setBroadcastError(null)
     } catch (e) {
       if (e instanceof EsploraApiError) {
-        setBroadcastError(e.body ?? e.message)
+        setBroadcastError(formatBroadcastError(e.body ?? e.message))
         setBroadcastTxid(null)
       } else {
         setBuildError(e instanceof Error ? e.message : String(e))
@@ -350,14 +351,7 @@ export function useSplitAssetTxForm({
     } finally {
       setBuilding(false)
     }
-  }, [
-    builtSplitAssetTx,
-    seedHex,
-    accountIndex,
-    accountAddress,
-    canBuild,
-    esplora,
-  ])
+  }, [builtSplitAssetTx, seedHex, accountIndex, accountAddress, canBuild, esplora])
 
   const clearBroadcastState = useCallback(() => {
     setBroadcastTxid(null)

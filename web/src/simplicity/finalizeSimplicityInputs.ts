@@ -35,9 +35,7 @@ export interface SigningInputDescriptor {
 
 export type SimplicityInputDescriptor = CovenantInputDescriptor | SigningInputDescriptor
 
-function isSigningDescriptor(
-  d: SimplicityInputDescriptor
-): d is SigningInputDescriptor {
+function isSigningDescriptor(d: SimplicityInputDescriptor): d is SigningInputDescriptor {
   return 'sign' in d && typeof (d as SigningInputDescriptor).sign === 'function'
 }
 
@@ -77,8 +75,7 @@ export async function finalizeSimplicityInputs(
 
   const lwk = await getLwk()
   const { Network, SimplicityLogLevel } = lwk
-  const net: LwkNetwork =
-    network === 'mainnet' ? Network.mainnet() : Network.testnet()
+  const net: LwkNetwork = network === 'mainnet' ? Network.mainnet() : Network.testnet()
 
   let tx: LwkTransaction = pset.extractTx()
 

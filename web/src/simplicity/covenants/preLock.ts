@@ -71,7 +71,10 @@ export interface BuildPreLockWitnessParams {
  * Build PreLock witness. PATH = Left(()) for LendingCreation, Right(signature) for PreLockCancellation.
  * Type PATH is Either<(), Signature>.
  */
-export function buildPreLockWitness(lwk: Lwk, params: BuildPreLockWitnessParams): LwkSimplicityWitnessValues {
+export function buildPreLockWitness(
+  lwk: Lwk,
+  params: BuildPreLockWitnessParams
+): LwkSimplicityWitnessValues {
   const { SimplicityType, SimplicityTypedValue, SimplicityWitnessValues } = lwk
 
   const pathType = new SimplicityType('Either<(), Signature>')
@@ -79,10 +82,7 @@ export function buildPreLockWitness(lwk: Lwk, params: BuildPreLockWitnessParams)
   const pathValue =
     params.branch === 'LendingCreation'
       ? new SimplicityTypedValue('Left(())', pathType)
-      : new SimplicityTypedValue(
-          `Right(${params.cancellationSignatureHex ?? ''})`,
-          pathType
-        )
+      : new SimplicityTypedValue(`Right(${params.cancellationSignatureHex ?? ''})`, pathType)
 
   let witness = new SimplicityWitnessValues()
   const next = witness.addValue('PATH', pathValue)

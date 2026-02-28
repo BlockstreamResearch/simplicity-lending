@@ -4,7 +4,10 @@
 
 import type { Lwk, LwkSimplicityArguments, LwkSimplicityWitnessValues } from '../lwk'
 
-export function buildP2pkArguments(lwk: Lwk, params: { publicKeyHex: string }): LwkSimplicityArguments {
+export function buildP2pkArguments(
+  lwk: Lwk,
+  params: { publicKeyHex: string }
+): LwkSimplicityArguments {
   const SimplicityArguments = lwk.SimplicityArguments
   const SimplicityTypedValue = lwk.SimplicityTypedValue
   return new SimplicityArguments().addValue(
@@ -13,7 +16,10 @@ export function buildP2pkArguments(lwk: Lwk, params: { publicKeyHex: string }): 
   )
 }
 
-export function buildP2pkWitness(lwk: Lwk, params: { signatureHex: string }): LwkSimplicityWitnessValues {
+export function buildP2pkWitness(
+  lwk: Lwk,
+  params: { signatureHex: string }
+): LwkSimplicityWitnessValues {
   const SimplicityWitnessValues = lwk.SimplicityWitnessValues
   const SimplicityTypedValue = lwk.SimplicityTypedValue
   const w = new SimplicityWitnessValues()

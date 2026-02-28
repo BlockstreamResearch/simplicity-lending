@@ -2,16 +2,13 @@
  * Merge tx builder: multiple inputs, one or more outputs, fee.
  */
 
+import { useRef, useEffect } from 'react'
 import { useMergeTxForm } from '../../tx/merge/useMergeTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { PostBroadcastModal } from '../../components/PostBroadcastModal'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
-import {
-  ButtonPrimary,
-  ButtonSecondary,
-  ButtonNeutral,
-} from '../../components/Button'
+import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
 
@@ -76,6 +73,13 @@ export function MergeTxBuilder({
     clearBroadcastState()
     onBroadcastSuccess?.()
   }
+
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (buildError || broadcastError || signedTxHex) {
+      bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [buildError, broadcastError, signedTxHex])
 
   return (
     <section className="min-w-0 max-w-4xl mt-6">
@@ -239,11 +243,7 @@ export function MergeTxBuilder({
             <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
               {building ? 'Building…' : 'Build'}
             </ButtonSecondary>
-            <ButtonSecondary
-              size="md"
-              disabled={!builtMergeTx || building}
-              onClick={handleSign}
-            >
+            <ButtonSecondary size="md" disabled={!builtMergeTx || building} onClick={handleSign}>
               {building ? 'Signing…' : 'Sign'}
             </ButtonSecondary>
             <ButtonPrimary
@@ -258,7 +258,9 @@ export function MergeTxBuilder({
             </ButtonNeutral>
           </div>
           {builtMergeTx && !signedTxHex && !broadcastTxid && (
-            <p className="text-blue-700 text-sm mt-1">Transaction built. Click Sign or Sign & Broadcast.</p>
+            <p className="text-blue-700 text-sm mt-1">
+              Transaction built. Click Sign or Sign & Broadcast.
+            </p>
           )}
           {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
           {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
@@ -279,6 +281,7 @@ export function MergeTxBuilder({
               </ButtonNeutral>
             </div>
           )}
+          <div ref={bottomAnchorRef} aria-hidden="true" />
         </div>
       )}
     </section>

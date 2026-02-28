@@ -12,6 +12,7 @@ import {
   type EsploraVout,
   type ScripthashUtxoEntry,
 } from '../../api/esplora'
+import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import type { PsetWithExtractTx } from '../../simplicity'
 import { buildBurnTx, finalizeBurnTx } from './buildBurnTx'
 
@@ -84,9 +85,9 @@ export function useBurnTxForm({
   const [feeUtxoIndex, setFeeUtxoIndex] = useState(0)
   const [feeAmount, setFeeAmount] = useState('')
   const [buildError, setBuildError] = useState<string | null>(null)
-  const [builtBurnTx, setBuiltBurnTx] = useState<Awaited<
-    ReturnType<typeof buildBurnTx>
-  > | null>(null)
+  const [builtBurnTx, setBuiltBurnTx] = useState<Awaited<ReturnType<typeof buildBurnTx>> | null>(
+    null
+  )
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
@@ -198,15 +199,7 @@ export function useBurnTxForm({
     } finally {
       setBuilding(false)
     }
-  }, [
-    accountAddress,
-    canBuild,
-    selectedRows,
-    feeUtxoIndex,
-    nativeUtxos,
-    feeNum,
-    loadPrevout,
-  ])
+  }, [accountAddress, canBuild, selectedRows, feeUtxoIndex, nativeUtxos, feeNum, loadPrevout])
 
   const handleSign = useCallback(async () => {
     if (!builtBurnTx || !seedHex || !accountAddress) return
@@ -264,7 +257,7 @@ export function useBurnTxForm({
       setBroadcastError(null)
     } catch (e) {
       if (e instanceof EsploraApiError) {
-        setBroadcastError(e.body ?? e.message)
+        setBroadcastError(formatBroadcastError(e.body ?? e.message))
         setBroadcastTxid(null)
       } else {
         setBuildError(e instanceof Error ? e.message : String(e))
@@ -281,7 +274,6 @@ export function useBurnTxForm({
     selectedRows,
     feeUtxoIndex,
     nativeUtxos,
-    feeNum,
     loadPrevout,
     esplora,
   ])

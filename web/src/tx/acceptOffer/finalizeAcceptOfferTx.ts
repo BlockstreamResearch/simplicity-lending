@@ -75,10 +75,26 @@ export async function finalizeAcceptOfferTx(
 
   const descriptors = [
     { program: preLockProgram, internalKey: taprootUnspendableKey, witnessValues: preLockWitness },
-    { program: scriptAuthProgram, internalKey: scriptAuthInternalKey, witnessValues: scriptAuthWitness },
-    { program: scriptAuthProgram, internalKey: scriptAuthInternalKey, witnessValues: scriptAuthWitness },
-    { program: scriptAuthProgram, internalKey: scriptAuthInternalKey, witnessValues: scriptAuthWitness },
-    { program: scriptAuthProgram, internalKey: scriptAuthInternalKey, witnessValues: scriptAuthWitness },
+    {
+      program: scriptAuthProgram,
+      internalKey: scriptAuthInternalKey,
+      witnessValues: scriptAuthWitness,
+    },
+    {
+      program: scriptAuthProgram,
+      internalKey: scriptAuthInternalKey,
+      witnessValues: scriptAuthWitness,
+    },
+    {
+      program: scriptAuthProgram,
+      internalKey: scriptAuthInternalKey,
+      witnessValues: scriptAuthWitness,
+    },
+    {
+      program: scriptAuthProgram,
+      internalKey: scriptAuthInternalKey,
+      witnessValues: scriptAuthWitness,
+    },
     {
       program: p2pkProgram,
       internalKey: p2pkInternalKey,

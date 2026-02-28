@@ -2,16 +2,12 @@
  * Burn tx builder: select ASSET UTXOs (no LBTC), each is burned (OP_RETURN); one fee UTXO.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useRef, useEffect } from 'react'
 import { useBurnTxForm } from '../../tx/burn/useBurnTxForm'
 import type { EsploraClient, ScripthashUtxoEntry } from '../../api/esplora'
 import { PostBroadcastModal } from '../../components/PostBroadcastModal'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
-import {
-  ButtonPrimary,
-  ButtonSecondary,
-  ButtonNeutral,
-} from '../../components/Button'
+import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
 import { formClassNames } from '../../components/formClassNames'
@@ -103,6 +99,13 @@ export function BurnTxBuilder({
     clearBroadcastState()
     onBroadcastSuccess?.()
   }
+
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (buildError || broadcastError || signedTxHex) {
+      bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [buildError, broadcastError, signedTxHex])
 
   return (
     <section className="min-w-0 max-w-4xl mt-6">
@@ -205,11 +208,7 @@ export function BurnTxBuilder({
                 <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
                   {building ? 'Building…' : 'Build'}
                 </ButtonSecondary>
-                <ButtonSecondary
-                  size="md"
-                  disabled={!builtBurnTx || building}
-                  onClick={handleSign}
-                >
+                <ButtonSecondary size="md" disabled={!builtBurnTx || building} onClick={handleSign}>
                   {building ? 'Signing…' : 'Sign'}
                 </ButtonSecondary>
                 <ButtonPrimary
@@ -225,7 +224,9 @@ export function BurnTxBuilder({
               </div>
 
               {builtBurnTx && !signedTxHex && !broadcastTxid && (
-                <p className="text-blue-700 text-sm">Transaction built. Click Sign or Sign & Broadcast.</p>
+                <p className="text-blue-700 text-sm">
+                  Transaction built. Click Sign or Sign & Broadcast.
+                </p>
               )}
 
               {buildError && <p className="text-red-600">{buildError}</p>}
@@ -247,6 +248,7 @@ export function BurnTxBuilder({
                   </ButtonNeutral>
                 </div>
               )}
+              <div ref={bottomAnchorRef} aria-hidden="true" />
             </>
           )}
         </div>

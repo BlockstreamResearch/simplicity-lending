@@ -104,10 +104,7 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
       builder = builder.addInput(psetInput)
     },
 
-    addInputWithLocktimeSequence(
-      outpoint: { txid: string; vout: number },
-      prevout: EsploraVout
-    ) {
+    addInputWithLocktimeSequence(outpoint: { txid: string; vout: number }, prevout: EsploraVout) {
       const scriptHex = getScriptHexFromVout(prevout)
       const value = prevout.value
       if (value == null || value < 0) throw new Error('Missing or invalid prevout value')
@@ -122,8 +119,14 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
         (TxSequence as { enableLocktimeNoRbf?: () => unknown }).enableLocktimeNoRbf?.() ??
         (TxSequence as { enable_locktime_no_rbf?: () => unknown }).enable_locktime_no_rbf?.()
       const psetInput =
-        seq != null && typeof (seq as { to_consensus_u32?: unknown }).to_consensus_u32 === 'function'
-          ? PsetInputBuilder.fromPrevout(op).witnessUtxo(txOut).sequence(seq as Parameters<ReturnType<typeof PsetInputBuilder.fromPrevout>['sequence']>[0]).build()
+        seq != null &&
+        typeof (seq as { to_consensus_u32?: unknown }).to_consensus_u32 === 'function'
+          ? PsetInputBuilder.fromPrevout(op)
+              .witnessUtxo(txOut)
+              .sequence(
+                seq as Parameters<ReturnType<typeof PsetInputBuilder.fromPrevout>['sequence']>[0]
+              )
+              .build()
           : PsetInputBuilder.fromPrevout(op).witnessUtxo(txOut).build()
       builder = builder.addInput(psetInput)
     },

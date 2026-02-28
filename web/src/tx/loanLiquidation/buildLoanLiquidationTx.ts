@@ -71,7 +71,8 @@ function requireVout(tx: EsploraTx, vout: number, label: string): EsploraVout {
 
 function requireAssetHex(vout: EsploraVout, label: string): string {
   const hex = (vout.asset ?? '').trim().toLowerCase().replace(/^0x/, '')
-  if (!hex || hex.length !== 64) throw new Error(`${label} must have explicit 32-byte asset (64 hex)`)
+  if (!hex || hex.length !== 64)
+    throw new Error(`${label} must have explicit 32-byte asset (64 hex)`)
   return hex
 }
 
@@ -88,8 +89,15 @@ function normalizeAssetHex(hex: string): string {
 export async function buildLoanLiquidationTx(
   params: BuildLoanLiquidationTxParams
 ): Promise<BuildLoanLiquidationTxResult> {
-  const { lendingTx, lenderNftUtxo, feeUtxo, feeAmount, collateralOutputScriptHex, offer, network } =
-    params
+  const {
+    lendingTx,
+    lenderNftUtxo,
+    feeUtxo,
+    feeAmount,
+    collateralOutputScriptHex,
+    offer,
+    network,
+  } = params
 
   if (feeAmount <= 0n) throw new Error('Fee amount must be at least 1')
 
@@ -200,11 +208,7 @@ export async function buildLoanLiquidationTx(
 
   const totalLbtcLeft = feeValue - feeAmount
   if (totalLbtcLeft > 0n) {
-    api.addOutputWithScript(
-      getScriptHexFromVout(feeUtxo.prevout),
-      totalLbtcLeft,
-      policyAssetHex
-    )
+    api.addOutputWithScript(getScriptHexFromVout(feeUtxo.prevout), totalLbtcLeft, policyAssetHex)
   }
   api.addFeeOutput(feeAmount)
 

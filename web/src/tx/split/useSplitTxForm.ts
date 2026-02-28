@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { P2PK_NETWORK } from '../../utility/addressP2pk'
 import { EsploraApiError, type EsploraClient, type EsploraVout } from '../../api/esplora'
+import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import { buildSplitTx } from './buildSplitTx'
 import { computeChange, canBuildSplit } from './validation'
 import type { TxOutputRow } from './types'
@@ -231,7 +232,7 @@ export function useSplitTxForm({
       setBroadcastError(null)
     } catch (e) {
       if (e instanceof EsploraApiError) {
-        setBroadcastError(e.body ?? e.message)
+        setBroadcastError(formatBroadcastError(e.body ?? e.message))
         setBroadcastTxid(null)
       } else {
         setBuildError(e instanceof Error ? e.message : String(e))

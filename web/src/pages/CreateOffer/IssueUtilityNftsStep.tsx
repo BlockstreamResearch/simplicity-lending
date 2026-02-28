@@ -3,10 +3,11 @@
  * Uses 4 auxiliary UTXOs (from prepare at firstVout..firstVout+3) + 1 fee UTXO; generates fresh issuance entropy.
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { EsploraApiError } from '../../api/esplora'
+import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import {
@@ -18,7 +19,10 @@ import {
   decodeSecondNFTParameters,
 } from '../../utility/parametersEncoding'
 import type { PsetWithExtractTx } from '../../simplicity'
-import { buildIssueUtilityNftsTx, finalizeIssueUtilityNftsTx } from '../../tx/issueUtilityNfts/buildIssueUtilityNftsTx'
+import {
+  buildIssueUtilityNftsTx,
+  finalizeIssueUtilityNftsTx,
+} from '../../tx/issueUtilityNfts/buildIssueUtilityNftsTx'
 import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
@@ -169,6 +173,13 @@ export function IssueUtilityNftsStep({
   const [fetchedSummary, setFetchedSummary] = useState<Step1Summary | null>(null)
   const [summaryFetchError, setSummaryFetchError] = useState<string | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
+
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (buildError || broadcastError || signedTxHex || broadcastTxid) {
+      bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [buildError, broadcastError, signedTxHex, broadcastTxid])
 
   const loanExpirationNum = parseInt(loanExpirationTime, 10) || 0
 
@@ -342,7 +353,7 @@ export function IssueUtilityNftsStep({
         }
       } catch (e) {
         if (e instanceof EsploraApiError) {
-          setBroadcastError(e.body ?? e.message)
+          setBroadcastError(formatBroadcastError(e.body ?? e.message))
         } else {
           setBuildError(e instanceof Error ? e.message : String(e))
         }
@@ -419,7 +430,7 @@ export function IssueUtilityNftsStep({
       })
     } catch (e) {
       if (e instanceof EsploraApiError) {
-        setBroadcastError(e.body ?? e.message)
+        setBroadcastError(formatBroadcastError(e.body ?? e.message))
       } else {
         setBuildError(e instanceof Error ? e.message : String(e))
       }
@@ -773,7 +784,9 @@ export function IssueUtilityNftsStep({
         </div>
 
         {builtIssueTx && !signedTxHex && !broadcastTxid && (
-          <p className="text-blue-700 text-sm mt-1">Transaction built. Click Sign or Sign & Broadcast.</p>
+          <p className="text-blue-700 text-sm mt-1">
+            Transaction built. Click Sign or Sign & Broadcast.
+          </p>
         )}
 
         {buildError && <p className="text-red-600">{buildError}</p>}
@@ -798,6 +811,7 @@ export function IssueUtilityNftsStep({
             </ButtonNeutral>
           </div>
         )}
+        <div ref={bottomAnchorRef} aria-hidden="true" />
       </div>
     </section>
   )

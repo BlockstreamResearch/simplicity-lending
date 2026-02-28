@@ -3,16 +3,13 @@
  * outputs in asset, two change outputs.
  */
 
+import { useRef, useEffect } from 'react'
 import { useSplitAssetTxForm } from '../../tx/split/useSplitAssetTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { PostBroadcastModal } from '../../components/PostBroadcastModal'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
-import {
-  ButtonPrimary,
-  ButtonSecondary,
-  ButtonNeutral,
-} from '../../components/Button'
+import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 
 export interface SplitAssetTxBuilderProps {
@@ -110,6 +107,13 @@ export function SplitAssetTxBuilder({
     clearBroadcastState()
     onBroadcastSuccess?.()
   }
+
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (buildError || broadcastError || signedTxHex) {
+      bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [buildError, broadcastError, signedTxHex])
 
   return (
     <section className="min-w-0 max-w-4xl mt-6">
@@ -331,7 +335,9 @@ export function SplitAssetTxBuilder({
             </ButtonNeutral>
           </div>
           {builtSplitAssetTx && !signedTxHex && !broadcastTxid && (
-            <p className="text-blue-700 text-sm mt-1">Transaction built. Click Sign or Sign & Broadcast.</p>
+            <p className="text-blue-700 text-sm mt-1">
+              Transaction built. Click Sign or Sign & Broadcast.
+            </p>
           )}
           {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
           {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
@@ -352,6 +358,7 @@ export function SplitAssetTxBuilder({
               </ButtonNeutral>
             </div>
           )}
+          <div ref={bottomAnchorRef} aria-hidden="true" />
         </div>
       )}
     </section>

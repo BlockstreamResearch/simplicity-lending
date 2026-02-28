@@ -75,9 +75,7 @@ export async function buildSplitAssetTx(
 /**
  * Finalize (sign) split-asset PSET and return signed tx hex.
  */
-export async function finalizeSplitAssetTx(
-  params: FinalizeSplitAssetTxParams
-): Promise<string> {
+export async function finalizeSplitAssetTx(params: FinalizeSplitAssetTxParams): Promise<string> {
   const network: 'mainnet' | 'testnet' = params.network === 'mainnet' ? 'mainnet' : 'testnet'
   const lwk = await getLwk()
   return signP2pkInputs({

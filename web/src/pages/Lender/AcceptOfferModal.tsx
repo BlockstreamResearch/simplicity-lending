@@ -4,7 +4,7 @@
  * Transaction details: Fee UTXO (LBTC) + Fee amount.
  */
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { Modal } from '../../components/Modal'
 import { BroadcastStatusContent } from '../../components/PostBroadcastModal'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
@@ -16,6 +16,8 @@ import { formClassNames } from '../../components/formClassNames'
 import type { OfferShort } from '../../types/offers'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import type { EsploraClient } from '../../api/esplora'
+import { EsploraApiError } from '../../api/esplora'
+import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
 import { buildAcceptOfferTx } from '../../tx/acceptOffer/buildAcceptOfferTx'
 import { finalizeAcceptOfferTx } from '../../tx/acceptOffer/finalizeAcceptOfferTx'
@@ -85,7 +87,9 @@ export function AcceptOfferModal({
   const [supplyUtxoIndex, setSupplyUtxoIndex] = useState(0)
   const [building, setBuilding] = useState(false)
   const [buildError, setBuildError] = useState<string | null>(null)
-  const [builtTx, setBuiltTx] = useState<Awaited<ReturnType<typeof buildAcceptOfferTx>> | null>(null)
+  const [builtTx, setBuiltTx] = useState<Awaited<ReturnType<typeof buildAcceptOfferTx>> | null>(
+    null
+  )
   const [unsignedTxHex, setUnsignedTxHex] = useState<string | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
@@ -235,7 +239,11 @@ export function AcceptOfferModal({
       const txid = await esplora.broadcastTx(signedTxHex)
       setBroadcastTxid(txid)
     } catch (e) {
-      setBuildError(e instanceof Error ? e.message : String(e))
+      if (e instanceof EsploraApiError) {
+        setBuildError(formatBroadcastError(e.body ?? e.message))
+      } else {
+        setBuildError(e instanceof Error ? e.message : String(e))
+      }
     } finally {
       setBuilding(false)
     }
@@ -244,6 +252,13 @@ export function AcceptOfferModal({
   const principalLabel = shortId(offer.principal_asset, 4).toUpperCase()
   const collateralExplorerUrl = esplora.getAssetExplorerUrl(offer.collateral_asset)
   const principalExplorerUrl = esplora.getAssetExplorerUrl(offer.principal_asset)
+
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (buildError || signedTxHex || unsignedTxHex) {
+      bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [buildError, signedTxHex, unsignedTxHex])
 
   const interestRatePercent = (offer.interest_rate / 100).toFixed(2)
   const totalToRepay = useMemo(() => {
@@ -274,206 +289,205 @@ export function AcceptOfferModal({
           onClose={handleClose}
         />
       ) : (
-      <div className="space-y-6">
-        {/* Supply UTXO */}
-        <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
-          <h3 className="mb-2 text-base font-semibold text-gray-900">Supply UTXO</h3>
-          {supplyUtxos.length === 0 ? (
-            <p className="text-sm text-gray-700">
-              For this offer you need {formatSats(offer.principal_amount)} of asset{' '}
-              {shortId(offer.principal_asset)} (even satoshis).
-            </p>
-          ) : supplyUtxos.length === 1 ? (
-            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
-              <span className="font-mono text-xs text-gray-900">
-                {shortId(supplyUtxos[0].txid, 6)}
-              </span>
-              <span className="text-gray-700"> : {supplyUtxos[0].vout} — </span>
-              <span className="tabular-nums text-gray-900">
-                {formatSats(supplyUtxos[0].value ?? 0)} sats
-              </span>
-            </div>
-          ) : (
-            <>
-              <UtxoSelect
-                className="max-w-full"
-                utxos={supplyUtxos}
-                value={String(Math.min(supplyUtxoIndex, supplyUtxos.length - 1))}
-                onChange={(v) => setSupplyUtxoIndex(parseInt(v, 10))}
-                optionValueType="index"
-                labelSuffix="sats"
-              />
-            </>
-          )}
-        </div>
-
-        {/* Loan Info */}
-        <div>
-          <div className="mb-3 flex items-center gap-2">
-            <h3 className="text-sm font-semibold uppercase text-gray-700">Loan info</h3>
-            <InfoTooltip content="Offer parameters: collateral, principal, term, interest, total to repay." />
-          </div>
-          <div className="space-y-3 text-sm">
-            <div>
-              <p className="mb-1 text-gray-500">Collateral Asset</p>
-              <div className="flex items-center gap-1">
-                <a
-                  href={collateralExplorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs text-gray-800 underline"
-                >
-                  {shortId(offer.collateral_asset, 10, 10)}
-                </a>
-                <button
-                  type="button"
-                  onClick={() => copyAssetId(offer.collateral_asset)}
-                  title="Copy asset ID"
-                  className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                  aria-label="Copy asset ID"
-                >
-                  <CopyIcon className="h-4 w-4" />
-                </button>
+        <div className="space-y-6">
+          {/* Supply UTXO */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+            <h3 className="mb-2 text-base font-semibold text-gray-900">Supply UTXO</h3>
+            {supplyUtxos.length === 0 ? (
+              <p className="text-sm text-gray-700">
+                For this offer you need {formatSats(offer.principal_amount)} of asset{' '}
+                {shortId(offer.principal_asset)} (even satoshis).
+              </p>
+            ) : supplyUtxos.length === 1 ? (
+              <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+                <span className="font-mono text-xs text-gray-900">
+                  {shortId(supplyUtxos[0].txid, 6)}
+                </span>
+                <span className="text-gray-700"> : {supplyUtxos[0].vout} — </span>
+                <span className="tabular-nums text-gray-900">
+                  {formatSats(supplyUtxos[0].value ?? 0)} sats
+                </span>
               </div>
-            </div>
-            <div>
-              <p className="mb-1 text-gray-500">Principal Asset</p>
-              <div className="flex items-center gap-1">
-                <a
-                  href={principalExplorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs text-gray-800 underline"
-                >
-                  {shortId(offer.principal_asset, 10, 10)}
-                </a>
-                <button
-                  type="button"
-                  onClick={() => copyAssetId(offer.principal_asset)}
-                  title="Copy asset ID"
-                  className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                  aria-label="Copy asset ID"
-                >
-                  <CopyIcon className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 pt-1">
-              <div>
-                <p className="text-gray-500">Collateral</p>
-                <p className="font-medium text-gray-900">
-                  {formatSats(offer.collateral_amount)}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Borrow</p>
-                <p className="font-medium text-gray-900">
-                  {formatSats(offer.principal_amount)}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Interest Rate</p>
-                <p className="font-medium text-gray-900">{interestRatePercent}%</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Total to repay</p>
-                <p className="font-medium text-gray-900">
-                  {formatSats(totalToRepay)}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Term (blocks)</p>
-                <p className="font-medium text-gray-900">
-                  {termDays != null ? `~${termDays} days` : '—'}
-                  <span className="block text-gray-500">
-                    {offer.loan_expiration_time.toLocaleString()} blocks
-                  </span>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Transaction Details */}
-        <div>
-          <div className="mb-3 flex items-center gap-2">
-            <h3 className="text-sm font-semibold uppercase text-gray-700">Transaction details</h3>
-            <InfoTooltip content="Fee is paid in LBTC. Select a UTXO and amount for the transaction fee." />
-          </div>
-          <div className="space-y-4">
-            <div>
-              <p className={formClassNames.label}>Fee UTXO (LBTC)</p>
-              {nativeUtxos.length === 0 ? (
-                <p className="text-gray-500">No LBTC UTXOs.</p>
-              ) : (
+            ) : (
+              <>
                 <UtxoSelect
-                  className="max-w-md"
-                  utxos={nativeUtxos}
-                  value={String(feeUtxoIndex)}
-                  onChange={(v) => setFeeUtxoIndex(parseInt(v, 10))}
+                  className="max-w-full"
+                  utxos={supplyUtxos}
+                  value={String(Math.min(supplyUtxoIndex, supplyUtxos.length - 1))}
+                  onChange={(v) => setSupplyUtxoIndex(parseInt(v, 10))}
                   optionValueType="index"
                   labelSuffix="sats"
                 />
-              )}
-            </div>
-            <div>
-              <p className={formClassNames.label}>Fee amount (sats)</p>
-              <Input
-                type="number"
-                min={1}
-                className="w-28"
-                value={feeAmount}
-                onChange={(e) => setFeeAmount(e.target.value)}
-              />
-            </div>
+              </>
+            )}
           </div>
-        </div>
 
-        <div className="flex flex-wrap gap-2 items-center">
-          <button
-            type="button"
-            disabled={supplyUtxos.length === 0 || building}
-            onClick={() => void handleBuild()}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {building ? 'Working…' : 'Build'}
-          </button>
-          <button
-            type="button"
-            disabled={!builtTx || building}
-            onClick={() => void handleSign()}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {building ? 'Working…' : 'Sign'}
-          </button>
-          <button
-            type="button"
-            disabled={!signedTxHex || building}
-            onClick={() => void handleAcceptOffer()}
-            className="flex-1 min-w-[180px] rounded-lg bg-[#5F3DC4] px-4 py-3 text-sm font-medium text-white hover:bg-[#4f36a8] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {building ? 'Working…' : 'Accept Offer'}
-          </button>
-        </div>
+          {/* Loan Info */}
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold uppercase text-gray-700">Loan info</h3>
+              <InfoTooltip content="Offer parameters: collateral, principal, term, interest, total to repay." />
+            </div>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="mb-1 text-gray-500">Collateral Asset</p>
+                <div className="flex items-center gap-1">
+                  <a
+                    href={collateralExplorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs text-gray-800 underline"
+                  >
+                    {shortId(offer.collateral_asset, 10, 10)}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => copyAssetId(offer.collateral_asset)}
+                    title="Copy asset ID"
+                    className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    aria-label="Copy asset ID"
+                  >
+                    <CopyIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-gray-500">Principal Asset</p>
+                <div className="flex items-center gap-1">
+                  <a
+                    href={principalExplorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs text-gray-800 underline"
+                  >
+                    {shortId(offer.principal_asset, 10, 10)}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => copyAssetId(offer.principal_asset)}
+                    title="Copy asset ID"
+                    className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    aria-label="Copy asset ID"
+                  >
+                    <CopyIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 pt-1">
+                <div>
+                  <p className="text-gray-500">Collateral</p>
+                  <p className="font-medium text-gray-900">{formatSats(offer.collateral_amount)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Borrow</p>
+                  <p className="font-medium text-gray-900">{formatSats(offer.principal_amount)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Interest Rate</p>
+                  <p className="font-medium text-gray-900">{interestRatePercent}%</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Total to repay</p>
+                  <p className="font-medium text-gray-900">{formatSats(totalToRepay)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Term (blocks)</p>
+                  <p className="font-medium text-gray-900">
+                    {termDays != null ? `~${termDays} days` : '—'}
+                    <span className="block text-gray-500">
+                      {offer.loan_expiration_time.toLocaleString()} blocks
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        {signedTxHex && (
-          <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
-            <p className="font-medium">Transaction signed.</p>
-            <p className="mt-1 font-mono text-xs break-all">Raw hex: {signedTxHex.slice(0, 120)}…</p>
+          {/* Transaction Details */}
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold uppercase text-gray-700">Transaction details</h3>
+              <InfoTooltip content="Fee is paid in LBTC. Select a UTXO and amount for the transaction fee." />
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className={formClassNames.label}>Fee UTXO (LBTC)</p>
+                {nativeUtxos.length === 0 ? (
+                  <p className="text-gray-500">No LBTC UTXOs.</p>
+                ) : (
+                  <UtxoSelect
+                    className="max-w-md"
+                    utxos={nativeUtxos}
+                    value={String(feeUtxoIndex)}
+                    onChange={(v) => setFeeUtxoIndex(parseInt(v, 10))}
+                    optionValueType="index"
+                    labelSuffix="sats"
+                  />
+                )}
+              </div>
+              <div>
+                <p className={formClassNames.label}>Fee amount (sats)</p>
+                <Input
+                  type="number"
+                  min={1}
+                  className="w-28"
+                  value={feeAmount}
+                  onChange={(e) => setFeeAmount(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
-        )}
-        {unsignedTxHex && !signedTxHex && (
-          <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
-            <p className="font-medium">Transaction built (unsigned).</p>
-            <p className="mt-1 font-mono text-xs break-all">Raw hex: {unsignedTxHex.slice(0, 120)}…</p>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              disabled={supplyUtxos.length === 0 || building}
+              onClick={() => void handleBuild()}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {building ? 'Working…' : 'Build'}
+            </button>
+            <button
+              type="button"
+              disabled={!builtTx || building}
+              onClick={() => void handleSign()}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {building ? 'Working…' : 'Sign'}
+            </button>
+            <button
+              type="button"
+              disabled={!signedTxHex || building}
+              onClick={() => void handleAcceptOffer()}
+              className="flex-1 min-w-[180px] rounded-lg bg-[#5F3DC4] px-4 py-3 text-sm font-medium text-white hover:bg-[#4f36a8] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {building ? 'Working…' : 'Accept Offer'}
+            </button>
           </div>
-        )}
-        {buildError && (
-          <p className="mt-2 p-3 bg-red-50 text-red-800 rounded border border-red-200 text-sm">
-            {buildError}
-          </p>
-        )}
-      </div>
+
+          {signedTxHex && (
+            <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
+              <p className="font-medium">Transaction signed.</p>
+              <p className="mt-1 font-mono text-xs break-all">
+                Raw hex: {signedTxHex.slice(0, 120)}…
+              </p>
+            </div>
+          )}
+          {unsignedTxHex && !signedTxHex && (
+            <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
+              <p className="font-medium">Transaction built (unsigned).</p>
+              <p className="mt-1 font-mono text-xs break-all">
+                Raw hex: {unsignedTxHex.slice(0, 120)}…
+              </p>
+            </div>
+          )}
+          {buildError && (
+            <p className="mt-2 p-3 bg-red-50 text-red-800 rounded border border-red-200 text-sm">
+              {buildError}
+            </p>
+          )}
+          <div ref={bottomAnchorRef} aria-hidden="true" />
+        </div>
       )}
     </Modal>
   )

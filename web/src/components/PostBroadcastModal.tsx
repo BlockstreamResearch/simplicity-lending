@@ -41,7 +41,10 @@ export function BroadcastStatusContent({
       esplora
         .getTx(txid)
         .then(() => {
-          if (!cancelled) setPhase('success')
+          if (!cancelled) {
+            clearInterval(intervalId)
+            setPhase('success')
+          }
         })
         .catch(() => {
           /* ignore; will retry on next interval */

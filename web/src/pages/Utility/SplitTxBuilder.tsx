@@ -2,16 +2,13 @@
  * Split transaction builder UI: outpoint, Load, prevout, fee, change, outputs list, Build & Sign.
  */
 
+import { useRef, useEffect } from 'react'
 import { useSplitTxForm } from '../../tx/split/useSplitTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { PostBroadcastModal } from '../../components/PostBroadcastModal'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
-import {
-  ButtonPrimary,
-  ButtonSecondary,
-  ButtonNeutral,
-} from '../../components/Button'
+import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 
 export interface SplitTxBuilderProps {
@@ -82,6 +79,13 @@ export function SplitTxBuilder({
     clearBroadcastState()
     onBroadcastSuccess?.()
   }
+
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (buildError || broadcastError || signedTxHex) {
+      bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [buildError, broadcastError, signedTxHex])
 
   return (
     <section className="min-w-0 max-w-4xl mt-10">
@@ -273,6 +277,7 @@ export function SplitTxBuilder({
               </ButtonNeutral>
             </div>
           )}
+          <div ref={bottomAnchorRef} aria-hidden="true" />
         </div>
       )}
     </section>

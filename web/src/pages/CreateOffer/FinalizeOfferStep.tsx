@@ -3,23 +3,23 @@
  * NFT outpoints from Step 1 (Issue Utility NFTs): same txid, vout 0=Borrower, 1=Lender, 2=First params, 3=Second params.
  */
 
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import type { EsploraTx } from '../../api/esplora'
 import { EsploraApiError } from '../../api/esplora'
-import {
-  P2PK_NETWORK,
-  POLICY_ASSET_ID,
-  getP2pkAddressFromSecret,
-} from '../../utility/addressP2pk'
+import { formatBroadcastError } from '../../utils/parseBroadcastError'
+import { P2PK_NETWORK, POLICY_ASSET_ID, getP2pkAddressFromSecret } from '../../utility/addressP2pk'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { buildLendingParamsFromParameterNFTs } from '../../utility/parametersEncoding'
 import { buildPreLockArguments } from '../../utility/preLockArguments'
 import { hexToBytes32, normalizeHex, assetIdDisplayToInternal } from '../../utility/hex'
 import { computePreLockCovenantHashes } from '../../utility/preLockCovenants'
 import type { PsetWithExtractTx } from '../../simplicity'
-import { buildPreLockCreationTx, finalizePreLockCreationTx } from '../../tx/preLockCreation/buildPreLockCreationTx'
+import {
+  buildPreLockCreationTx,
+  finalizePreLockCreationTx,
+} from '../../tx/preLockCreation/buildPreLockCreationTx'
 import { ButtonPrimary, ButtonSecondary } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
@@ -76,6 +76,13 @@ export function FinalizeOfferStep({
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
+
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (buildError || broadcastError || signedTxHex) {
+      bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [buildError, broadcastError, signedTxHex])
 
   useEffect(() => {
     const txid = issuanceTxId.trim()
@@ -137,192 +144,189 @@ export function FinalizeOfferStep({
     return utxos.filter((u) => !u.asset || u.asset.trim().toLowerCase() === policyId)
   }, [utxos])
 
-  const handleBuild = useCallback(
-    async () => {
-      setBuildError(null)
-      setStubMessage(null)
-      setBuiltPreLockTx(null)
-      setSignedTxHex(null)
-      setBroadcastTxid(null)
-      const principalHex = normalizeHex(principalAssetIdHex)
-      if (principalHex.length !== 64) {
-        setBuildError('Principal asset ID must be 64 hex chars (32 bytes).')
+  const handleBuild = useCallback(async () => {
+    setBuildError(null)
+    setStubMessage(null)
+    setBuiltPreLockTx(null)
+    setSignedTxHex(null)
+    setBroadcastTxid(null)
+    const principalHex = normalizeHex(principalAssetIdHex)
+    if (principalHex.length !== 64) {
+      setBuildError('Principal asset ID must be 64 hex chars (32 bytes).')
+      return
+    }
+    if (!toAddress.trim()) {
+      setBuildError('To address is required.')
+      return
+    }
+    if (!lendingParams || !issuanceTx?.vout?.length) {
+      setBuildError('Load issuance tx first (enter txid and wait for loading).')
+      return
+    }
+    const collateralUtxo = nativeUtxos[collateralUtxoIndex]
+    if (!collateralUtxo) {
+      setBuildError('Select a collateral UTXO (LBTC).')
+      return
+    }
+    if (collateralUtxoIndex === feeUtxoIndex) {
+      setBuildError('Collateral and Fee must be different UTXOs.')
+      return
+    }
+    const collateralValue = BigInt(collateralUtxo.value ?? 0)
+    if (collateralValue < lendingParams.collateralAmount) {
+      setBuildError(
+        `Collateral UTXO value ${collateralValue} is less than required ${lendingParams.collateralAmount}.`
+      )
+      return
+    }
+    const feeNum = parseInt(feeAmount, 10) || 0
+    if (feeNum <= 0) {
+      setBuildError('Fee amount must be at least 1.')
+      return
+    }
+    const feeUtxo = nativeUtxos[feeUtxoIndex]
+    if (!feeUtxo || BigInt(feeUtxo.value ?? 0) < BigInt(feeNum)) {
+      setBuildError('Fee UTXO has insufficient value.')
+      return
+    }
+    if (!seedHex) {
+      setBuildError('Seed is required for borrower pubkey derivation.')
+      return
+    }
+
+    setBuilding(true)
+    try {
+      const secretKey = deriveSecretKeyFromIndex(parseSeedHex(seedHex), accountIndex)
+      const { internalKeyHex } = await getP2pkAddressFromSecret(secretKey, P2PK_NETWORK)
+      const borrowerPubKey = hexToBytes32(internalKeyHex)
+
+      const vout = issuanceTx.vout!
+      const policyAssetHex = POLICY_ASSET_ID[P2PK_NETWORK]
+      const collateralAssetId = assetIdDisplayToInternal(policyAssetHex)
+      const hexTo32 = (h: string) => {
+        const n = normalizeHex(h)
+        if (n.length !== 64) throw new Error('Expected 64 hex chars')
+        return assetIdDisplayToInternal(n)
+      }
+      const principalAssetId = assetIdDisplayToInternal(principalHex)
+      const borrowerNftAssetId = hexTo32(String(vout[0]?.asset ?? ''))
+      const lenderNftAssetId = hexTo32(String(vout[1]?.asset ?? ''))
+      const firstParamsNftAssetId = hexTo32(String(vout[2]?.asset ?? ''))
+      const secondParamsNftAssetId = hexTo32(String(vout[3]?.asset ?? ''))
+
+      const covenantResult = await computePreLockCovenantHashes({
+        collateralAssetId,
+        principalAssetId,
+        borrowerNftAssetId,
+        lenderNftAssetId,
+        firstParametersNftAssetId: firstParamsNftAssetId,
+        secondParametersNftAssetId: secondParamsNftAssetId,
+        lendingParams,
+        borrowerPubKey,
+        network: P2PK_NETWORK,
+      })
+
+      const preLockArguments = buildPreLockArguments({
+        collateralAssetId,
+        principalAssetId,
+        borrowerNftAssetId,
+        lenderNftAssetId,
+        firstParametersNftAssetId: firstParamsNftAssetId,
+        secondParametersNftAssetId: secondParamsNftAssetId,
+        lendingCovHash: covenantResult.lendingCovHash,
+        parametersNftOutputScriptHash: covenantResult.parametersNftOutputScriptHash,
+        borrowerNftOutputScriptHash: covenantResult.borrowerP2trScriptHash,
+        principalOutputScriptHash: covenantResult.borrowerP2trScriptHash,
+        borrowerPubKey,
+        lendingParams,
+      })
+
+      const issuanceTxidTrimmed = issuanceTxId.trim()
+      const v0 = vout[0]
+      const v1 = vout[1]
+      const v2 = vout[2]
+      const v3 = vout[3]
+      if (!v0 || !v1 || !v2 || !v3) {
+        setBuildError('Issuance tx must have vouts 0–3.')
         return
       }
-      if (!toAddress.trim()) {
-        setBuildError('To address is required.')
+
+      const collateralTx = await esplora.getTx(collateralUtxo.txid)
+      const collateralPrevout = collateralTx.vout?.[collateralUtxo.vout]
+      if (!collateralPrevout) {
+        setBuildError('Collateral UTXO prevout not found.')
         return
       }
-      if (!lendingParams || !issuanceTx?.vout?.length) {
-        setBuildError('Load issuance tx first (enter txid and wait for loading).')
+      const feeTx = await esplora.getTx(feeUtxo.txid)
+      const feePrevout = feeTx.vout?.[feeUtxo.vout]
+      if (!feePrevout) {
+        setBuildError('Fee UTXO prevout not found.')
         return
       }
-      const collateralUtxo = nativeUtxos[collateralUtxoIndex]
-      if (!collateralUtxo) {
-        setBuildError('Select a collateral UTXO (LBTC).')
-        return
-      }
-      if (collateralUtxoIndex === feeUtxoIndex) {
-        setBuildError('Collateral and Fee must be different UTXOs.')
-        return
-      }
-      const collateralValue = BigInt(collateralUtxo.value ?? 0)
-      if (collateralValue < lendingParams.collateralAmount) {
-        setBuildError(
-          `Collateral UTXO value ${collateralValue} is less than required ${lendingParams.collateralAmount}.`
+
+      const result = await buildPreLockCreationTx({
+        collateralUtxo: {
+          outpoint: { txid: collateralUtxo.txid, vout: collateralUtxo.vout },
+          prevout: collateralPrevout,
+        },
+        firstParametersNftUtxo: {
+          outpoint: { txid: issuanceTxidTrimmed, vout: 2 },
+          prevout: v2,
+        },
+        secondParametersNftUtxo: {
+          outpoint: { txid: issuanceTxidTrimmed, vout: 3 },
+          prevout: v3,
+        },
+        borrowerNftUtxo: {
+          outpoint: { txid: issuanceTxidTrimmed, vout: 0 },
+          prevout: v0,
+        },
+        lenderNftUtxo: {
+          outpoint: { txid: issuanceTxidTrimmed, vout: 1 },
+          prevout: v1,
+        },
+        feeUtxo: {
+          outpoint: { txid: feeUtxo.txid, vout: feeUtxo.vout },
+          prevout: feePrevout,
+        },
+        preLockArguments,
+        preLockScriptPubkeyHex: covenantResult.preLockScriptPubkeyHex,
+        utilityNftsOutputScriptHex: covenantResult.utilityNftsOutputScriptHex,
+        feeAmount: BigInt(feeNum),
+        network: P2PK_NETWORK,
+      })
+
+      setBuiltPreLockTx(result)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (
+        msg.includes('Backend or WASM') ||
+        msg.includes('require Simplicity') ||
+        msg.includes('async LWK')
+      ) {
+        setStubMessage(
+          'PreLock creation requires LWK Simplicity (WASM). Use the CLI or ensure lwk_web is loaded.'
         )
-        return
+      } else {
+        setBuildError(msg)
       }
-      const feeNum = parseInt(feeAmount, 10) || 0
-      if (feeNum <= 0) {
-        setBuildError('Fee amount must be at least 1.')
-        return
-      }
-      const feeUtxo = nativeUtxos[feeUtxoIndex]
-      if (!feeUtxo || BigInt(feeUtxo.value ?? 0) < BigInt(feeNum)) {
-        setBuildError('Fee UTXO has insufficient value.')
-        return
-      }
-      if (!seedHex) {
-        setBuildError('Seed is required for borrower pubkey derivation.')
-        return
-      }
-
-      setBuilding(true)
-      try {
-        const secretKey = deriveSecretKeyFromIndex(parseSeedHex(seedHex), accountIndex)
-        const { internalKeyHex } = await getP2pkAddressFromSecret(secretKey, P2PK_NETWORK)
-        const borrowerPubKey = hexToBytes32(internalKeyHex)
-
-        const vout = issuanceTx.vout!
-        const policyAssetHex = POLICY_ASSET_ID[P2PK_NETWORK]
-        const collateralAssetId = assetIdDisplayToInternal(policyAssetHex)
-        const hexTo32 = (h: string) => {
-          const n = normalizeHex(h)
-          if (n.length !== 64) throw new Error('Expected 64 hex chars')
-          return assetIdDisplayToInternal(n)
-        }
-        const principalAssetId = assetIdDisplayToInternal(principalHex)
-        const borrowerNftAssetId = hexTo32(String(vout[0]?.asset ?? ''))
-        const lenderNftAssetId = hexTo32(String(vout[1]?.asset ?? ''))
-        const firstParamsNftAssetId = hexTo32(String(vout[2]?.asset ?? ''))
-        const secondParamsNftAssetId = hexTo32(String(vout[3]?.asset ?? ''))
-
-        const covenantResult = await computePreLockCovenantHashes({
-          collateralAssetId,
-          principalAssetId,
-          borrowerNftAssetId,
-          lenderNftAssetId,
-          firstParametersNftAssetId: firstParamsNftAssetId,
-          secondParametersNftAssetId: secondParamsNftAssetId,
-          lendingParams,
-          borrowerPubKey,
-          network: P2PK_NETWORK,
-        })
-
-        const preLockArguments = buildPreLockArguments({
-          collateralAssetId,
-          principalAssetId,
-          borrowerNftAssetId,
-          lenderNftAssetId,
-          firstParametersNftAssetId: firstParamsNftAssetId,
-          secondParametersNftAssetId: secondParamsNftAssetId,
-          lendingCovHash: covenantResult.lendingCovHash,
-          parametersNftOutputScriptHash: covenantResult.parametersNftOutputScriptHash,
-          borrowerNftOutputScriptHash: covenantResult.borrowerP2trScriptHash,
-          principalOutputScriptHash: covenantResult.borrowerP2trScriptHash,
-          borrowerPubKey,
-          lendingParams,
-        })
-
-        const issuanceTxidTrimmed = issuanceTxId.trim()
-        const v0 = vout[0]
-        const v1 = vout[1]
-        const v2 = vout[2]
-        const v3 = vout[3]
-        if (!v0 || !v1 || !v2 || !v3) {
-          setBuildError('Issuance tx must have vouts 0–3.')
-          return
-        }
-
-        const collateralTx = await esplora.getTx(collateralUtxo.txid)
-        const collateralPrevout = collateralTx.vout?.[collateralUtxo.vout]
-        if (!collateralPrevout) {
-          setBuildError('Collateral UTXO prevout not found.')
-          return
-        }
-        const feeTx = await esplora.getTx(feeUtxo.txid)
-        const feePrevout = feeTx.vout?.[feeUtxo.vout]
-        if (!feePrevout) {
-          setBuildError('Fee UTXO prevout not found.')
-          return
-        }
-
-        const result = await buildPreLockCreationTx({
-          collateralUtxo: {
-            outpoint: { txid: collateralUtxo.txid, vout: collateralUtxo.vout },
-            prevout: collateralPrevout,
-          },
-          firstParametersNftUtxo: {
-            outpoint: { txid: issuanceTxidTrimmed, vout: 2 },
-            prevout: v2,
-          },
-          secondParametersNftUtxo: {
-            outpoint: { txid: issuanceTxidTrimmed, vout: 3 },
-            prevout: v3,
-          },
-          borrowerNftUtxo: {
-            outpoint: { txid: issuanceTxidTrimmed, vout: 0 },
-            prevout: v0,
-          },
-          lenderNftUtxo: {
-            outpoint: { txid: issuanceTxidTrimmed, vout: 1 },
-            prevout: v1,
-          },
-          feeUtxo: {
-            outpoint: { txid: feeUtxo.txid, vout: feeUtxo.vout },
-            prevout: feePrevout,
-          },
-          preLockArguments,
-          preLockScriptPubkeyHex: covenantResult.preLockScriptPubkeyHex,
-          utilityNftsOutputScriptHex: covenantResult.utilityNftsOutputScriptHex,
-          feeAmount: BigInt(feeNum),
-          network: P2PK_NETWORK,
-        })
-
-        setBuiltPreLockTx(result)
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        if (
-          msg.includes('Backend or WASM') ||
-          msg.includes('require Simplicity') ||
-          msg.includes('async LWK')
-        ) {
-          setStubMessage(
-            'PreLock creation requires LWK Simplicity (WASM). Use the CLI or ensure lwk_web is loaded.'
-          )
-        } else {
-          setBuildError(msg)
-        }
-      } finally {
-        setBuilding(false)
-      }
-    },
-    [
-      principalAssetIdHex,
-      toAddress,
-      lendingParams,
-      issuanceTx,
-      issuanceTxId,
-      nativeUtxos,
-      collateralUtxoIndex,
-      feeUtxoIndex,
-      feeAmount,
-      seedHex,
-      accountIndex,
-      esplora,
-    ]
-  )
+    } finally {
+      setBuilding(false)
+    }
+  }, [
+    principalAssetIdHex,
+    toAddress,
+    lendingParams,
+    issuanceTx,
+    issuanceTxId,
+    nativeUtxos,
+    collateralUtxoIndex,
+    feeUtxoIndex,
+    feeAmount,
+    seedHex,
+    accountIndex,
+    esplora,
+  ])
 
   const handleSignAndBroadcast = useCallback(
     async (broadcast: boolean) => {
@@ -358,7 +362,7 @@ export function FinalizeOfferStep({
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         if (e instanceof EsploraApiError) {
-          setBroadcastError(e.body ?? e.message)
+          setBroadcastError(formatBroadcastError(e.body ?? e.message))
         } else {
           setBuildError(msg)
         }
@@ -529,6 +533,7 @@ export function FinalizeOfferStep({
             {stubMessage}
           </p>
         )}
+        <div ref={bottomAnchorRef} aria-hidden="true" />
       </div>
     </section>
   )

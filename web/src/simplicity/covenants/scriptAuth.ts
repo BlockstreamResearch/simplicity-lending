@@ -24,6 +24,9 @@ export function buildScriptAuthWitness(
   const SimplicityWitnessValues = lwk.SimplicityWitnessValues
   const SimplicityTypedValue = lwk.SimplicityTypedValue
   const w = new SimplicityWitnessValues()
-  const next = w.addValue('INPUT_SCRIPT_INDEX', SimplicityTypedValue.fromU32(params.inputScriptIndex))
+  const next = w.addValue(
+    'INPUT_SCRIPT_INDEX',
+    SimplicityTypedValue.fromU32(params.inputScriptIndex)
+  )
   return (next as LwkSimplicityWitnessValues) ?? w
 }

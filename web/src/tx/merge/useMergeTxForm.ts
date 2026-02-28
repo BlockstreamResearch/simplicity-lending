@@ -12,6 +12,7 @@ import {
   type EsploraVout,
   type ScripthashUtxoEntry,
 } from '../../api/esplora'
+import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import type { PsetWithExtractTx } from '../../simplicity'
 import { buildMergeTx, finalizeMergeTx } from './buildMergeTx'
 import type { TxOutputRow } from '../split/types'
@@ -94,9 +95,9 @@ export function useMergeTxForm({
   const [outputs, setOutputs] = useState<TxOutputRow[]>([])
   const [nextOutputId, setNextOutputId] = useState(0)
   const [buildError, setBuildError] = useState<string | null>(null)
-  const [builtMergeTx, setBuiltMergeTx] = useState<Awaited<
-    ReturnType<typeof buildMergeTx>
-  > | null>(null)
+  const [builtMergeTx, setBuiltMergeTx] = useState<Awaited<ReturnType<typeof buildMergeTx>> | null>(
+    null
+  )
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
@@ -365,7 +366,7 @@ export function useMergeTxForm({
       setBroadcastError(null)
     } catch (e) {
       if (e instanceof EsploraApiError) {
-        setBroadcastError(e.body ?? e.message)
+        setBroadcastError(formatBroadcastError(e.body ?? e.message))
         setBroadcastTxid(null)
       } else {
         setBuildError(e instanceof Error ? e.message : String(e))
@@ -373,14 +374,7 @@ export function useMergeTxForm({
     } finally {
       setBuilding(false)
     }
-  }, [
-    builtMergeTx,
-    seedHex,
-    accountAddress,
-    accountIndex,
-    canBuild,
-    esplora,
-  ])
+  }, [builtMergeTx, seedHex, accountAddress, accountIndex, canBuild, esplora])
 
   const clearBroadcastState = useCallback(() => {
     setBroadcastTxid(null)

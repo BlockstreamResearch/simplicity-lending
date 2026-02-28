@@ -187,21 +187,15 @@ function normalizeOfferParticipant(raw: Record<string, unknown>): OfferParticipa
 }
 
 /** Fetch participant movement history (GET /offers/:id/participants/history). Used to get current Lender/Borrower NFT (txid, vout) from indexer. */
-export async function fetchOfferParticipantsHistory(
-  offerId: string
-): Promise<OfferParticipant[]> {
-  const res = await fetch(
-    `${API_BASE}/offers/${encodeURIComponent(offerId)}/participants/history`
-  )
+export async function fetchOfferParticipantsHistory(offerId: string): Promise<OfferParticipant[]> {
+  const res = await fetch(`${API_BASE}/offers/${encodeURIComponent(offerId)}/participants/history`)
   await throwIfNotOk(res)
   const data: unknown[] = await res.json()
   return data.map((row) => normalizeOfferParticipant(row as Record<string, unknown>))
 }
 
 /** Current Lender NFT = unspent participant with participant_type 'lender', latest by created_at_height. */
-export function getCurrentLenderParticipant(
-  history: OfferParticipant[]
-): OfferParticipant | null {
+export function getCurrentLenderParticipant(history: OfferParticipant[]): OfferParticipant | null {
   const unspentLenders = history.filter(
     (p) => p.participant_type === 'lender' && p.spent_txid == null
   )

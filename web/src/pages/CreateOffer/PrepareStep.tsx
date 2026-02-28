@@ -3,13 +3,17 @@
  * One LBTC input with issuance → 4×10 of new asset to address + change + fee.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { P2PK_NETWORK, POLICY_ASSET_ID } from '../../utility/addressP2pk'
 import { EsploraApiError, type EsploraClient } from '../../api/esplora'
+import { formatBroadcastError } from '../../utils/parseBroadcastError'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import type { PsetWithExtractTx } from '../../simplicity'
-import { buildPrepareUtilityNftsTx, finalizePrepareUtilityNftsTx } from '../../tx/prepareUtilityNfts/buildPrepareUtilityNftsTx'
+import {
+  buildPrepareUtilityNftsTx,
+  finalizePrepareUtilityNftsTx,
+} from '../../tx/prepareUtilityNfts/buildPrepareUtilityNftsTx'
 import { BroadcastStatusContent } from '../../components/PostBroadcastModal'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import { CopyIcon } from '../../components/CopyIcon'
@@ -60,6 +64,13 @@ export function PrepareStep({
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
+
+  const bottomAnchorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (buildError || broadcastError || signedTxHex) {
+      bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [buildError, broadcastError, signedTxHex])
 
   const selectedUtxo =
     nativeUtxos.length > 0 && selectedUtxoIndex >= 0 && selectedUtxoIndex < nativeUtxos.length
@@ -152,7 +163,7 @@ export function PrepareStep({
       setSignedTxHex(hex)
     } catch (e) {
       if (e instanceof EsploraApiError) {
-        setBroadcastError(e.body ?? e.message)
+        setBroadcastError(formatBroadcastError(e.body ?? e.message))
         setBroadcastTxid(null)
       } else {
         setBuildError(e instanceof Error ? e.message : String(e))
@@ -165,11 +176,7 @@ export function PrepareStep({
   const showAlreadyPrepared = Boolean(existingPreparedTxid?.trim())
 
   const handlePostBroadcastClose = () => {
-    onSuccess(
-      broadcastTxid!,
-      builtPrepareTx?.auxiliaryAssetId,
-      builtPrepareTx?.issuanceEntropyHex
-    )
+    onSuccess(broadcastTxid!, builtPrepareTx?.auxiliaryAssetId, builtPrepareTx?.issuanceEntropyHex)
     setBroadcastTxid(null)
   }
 
@@ -289,7 +296,9 @@ export function PrepareStep({
             </div>
 
             {builtPrepareTx && !signedTxHex && !broadcastTxid && (
-              <p className="text-blue-700 text-sm">Transaction built. Click Sign or Sign & Broadcast.</p>
+              <p className="text-blue-700 text-sm">
+                Transaction built. Click Sign or Sign & Broadcast.
+              </p>
             )}
 
             {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
@@ -312,6 +321,7 @@ export function PrepareStep({
                 </ButtonNeutral>
               </div>
             )}
+            <div ref={bottomAnchorRef} aria-hidden="true" />
           </>
         )}
       </div>
