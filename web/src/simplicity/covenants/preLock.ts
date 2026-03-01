@@ -82,7 +82,10 @@ export function buildPreLockWitness(
   const pathValue =
     params.branch === 'LendingCreation'
       ? new SimplicityTypedValue('Left(())', pathType)
-      : new SimplicityTypedValue(`Right(${params.cancellationSignatureHex ?? ''})`, pathType)
+      : new SimplicityTypedValue(
+          `Right(0x${params.cancellationSignatureHex ?? ''})`,
+          pathType
+        )
 
   let witness = new SimplicityWitnessValues()
   const next = witness.addValue('PATH', pathValue)

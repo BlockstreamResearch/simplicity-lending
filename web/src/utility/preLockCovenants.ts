@@ -3,6 +3,7 @@
  * Implemented with LWK: getSource, createP2trAddress, getScriptPubkeyHexFromAddress, hashScriptPubkeyHex.
  */
 
+import type { EsploraTx } from '../api/esplora'
 import { getSource, getLwk, createP2trAddress } from '../simplicity'
 import type { P2pkNetwork } from '../simplicity'
 import { getScriptPubkeyHexFromAddress, getP2pkAddressFromPublicKey } from './addressP2pk'
@@ -15,7 +16,10 @@ import {
   buildPreLockArguments as buildPreLockSimplicityArgs,
 } from '../simplicity/covenants'
 import { buildPreLockArguments as buildPreLockArgumentsObj } from './preLockArguments'
-import type { LendingParams } from './preLockArguments'
+import type { LendingParams, PreLockArguments } from './preLockArguments'
+import { getScriptHexFromVout, parseOpReturn64, assetIdDisplayToInternal } from './hex'
+import { requireVout, requireAssetHex } from './esploraPrevout'
+import type { OfferShort } from '../types/offers'
 
 export interface ComputePreLockCovenantHashesParams {
   collateralAssetId: Uint8Array
@@ -43,6 +47,10 @@ export interface PreLockCovenantHashes {
   preLockScriptPubkeyHex: string
   /** Script pubkey hex for the 4 NFT outputs (outputs 1–4). */
   utilityNftsOutputScriptHex: string
+  /** Script pubkey hex for Lending covenant output (for Accept Offer). */
+  lendingScriptPubkeyHex: string
+  /** Script pubkey hex for parameters NFT outputs (ScriptAuth over Lending). */
+  parametersNftScriptPubkeyHex: string
 }
 
 /**
@@ -151,5 +159,98 @@ export async function computePreLockCovenantHashes(
     utilityNftsOutputScriptPubkey: new Uint8Array(0),
     preLockScriptPubkeyHex,
     utilityNftsOutputScriptHex,
+    lendingScriptPubkeyHex: lendingScriptHex,
+    parametersNftScriptPubkeyHex: parametersNftScriptHex,
+  }
+}
+
+/**
+ * Build PreLock arguments (and lending covenant hash) from an offer and its creation tx.
+ * Use for both Accept Offer (validate PreLock + get lendingCovHash) and Cancel Offer (spend PreLock).
+ */
+export async function buildPreLockArgumentsFromOfferCreation(
+  offer: OfferShort,
+  offerCreationTx: EsploraTx,
+  network: P2pkNetwork
+): Promise<{
+  preLockArguments: PreLockArguments
+  lendingCovHash: Uint8Array
+  lendingScriptPubkeyHex: string
+  parametersNftScriptPubkeyHex: string
+  borrowerScriptPubkeyHex: string
+}> {
+  const opReturnPrevout = requireVout(offerCreationTx, 5, 'OP_RETURN', 'offer creation tx')
+  const { borrowerPubKey, principalAssetId } = parseOpReturn64(
+    getScriptHexFromVout(opReturnPrevout)
+  )
+  const firstParamsPrevout = requireVout(
+    offerCreationTx,
+    1,
+    'First parameters NFT',
+    'offer creation tx'
+  )
+  const secondParamsPrevout = requireVout(
+    offerCreationTx,
+    2,
+    'Second parameters NFT',
+    'offer creation tx'
+  )
+  const borrowerNftPrevout = requireVout(offerCreationTx, 3, 'Borrower NFT', 'offer creation tx')
+  const lenderNftPrevout = requireVout(offerCreationTx, 4, 'Lender NFT', 'offer creation tx')
+
+  const firstParamsAssetHex = requireAssetHex(firstParamsPrevout, 'First parameters NFT')
+  const secondParamsAssetHex = requireAssetHex(secondParamsPrevout, 'Second parameters NFT')
+  const borrowerNftAssetHex = requireAssetHex(borrowerNftPrevout, 'Borrower NFT')
+  const lenderNftAssetHex = requireAssetHex(lenderNftPrevout, 'Lender NFT')
+
+  const lendingParams: LendingParams = {
+    collateralAmount: offer.collateral_amount,
+    principalAmount: offer.principal_amount,
+    loanExpirationTime: offer.loan_expiration_time,
+    principalInterestRate: offer.interest_rate,
+  }
+
+  const collateralAssetId = assetIdDisplayToInternal(offer.collateral_asset)
+  const borrowerNftAssetId = assetIdDisplayToInternal(borrowerNftAssetHex)
+  const lenderNftAssetId = assetIdDisplayToInternal(lenderNftAssetHex)
+  const firstParametersNftAssetId = assetIdDisplayToInternal(firstParamsAssetHex)
+  const secondParametersNftAssetId = assetIdDisplayToInternal(secondParamsAssetHex)
+
+  const hashes = await computePreLockCovenantHashes({
+    collateralAssetId,
+    principalAssetId,
+    borrowerNftAssetId,
+    lenderNftAssetId,
+    firstParametersNftAssetId,
+    secondParametersNftAssetId,
+    lendingParams,
+    borrowerPubKey,
+    network,
+  })
+
+  const borrowerAddress = await getP2pkAddressFromPublicKey(borrowerPubKey, network)
+  const borrowerScriptPubkeyHex = await getScriptPubkeyHexFromAddress(borrowerAddress)
+
+  const preLockArguments = buildPreLockArgumentsObj({
+    collateralAssetId,
+    principalAssetId,
+    borrowerNftAssetId,
+    lenderNftAssetId,
+    firstParametersNftAssetId,
+    secondParametersNftAssetId,
+    lendingCovHash: hashes.lendingCovHash,
+    parametersNftOutputScriptHash: hashes.parametersNftOutputScriptHash,
+    borrowerNftOutputScriptHash: hashes.borrowerP2trScriptHash,
+    principalOutputScriptHash: hashes.borrowerP2trScriptHash,
+    borrowerPubKey,
+    lendingParams,
+  })
+
+  return {
+    preLockArguments,
+    lendingCovHash: hashes.lendingCovHash,
+    lendingScriptPubkeyHex: hashes.lendingScriptPubkeyHex,
+    parametersNftScriptPubkeyHex: hashes.parametersNftScriptPubkeyHex,
+    borrowerScriptPubkeyHex,
   }
 }

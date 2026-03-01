@@ -10,13 +10,16 @@ import { useSeedHex } from '../../SeedContext'
 import { useAccountAddress } from '../../hooks/useAccountAddress'
 import {
   fetchOfferIdsByScript,
+  fetchOfferIdsByBorrowerPubkey,
   fetchOfferDetailsBatchWithParticipants,
   filterOffersByParticipantRole,
 } from '../../api/client'
 import { EsploraClient, EsploraApiError } from '../../api/esplora'
-import { getScriptPubkeyHexFromAddress } from '../../utility/addressP2pk'
+import { getScriptPubkeyHexFromAddress, getP2pkAddressFromSecret, P2PK_NETWORK } from '../../utility/addressP2pk'
+import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { CreateOfferWizard } from './CreateOfferWizard'
 import { RepaymentModal } from './RepaymentModal'
+import { CancelOfferModal } from './CancelOfferModal'
 import { PrepareStep } from './PrepareStep'
 import { Modal } from '../../components/Modal'
 import { Input } from '../../components/Input'
@@ -323,6 +326,7 @@ export function CreateOfferPage({
   const [offersError, setOffersError] = useState<string | null>(null)
   const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null)
   const [repaymentOffer, setRepaymentOffer] = useState<OfferShort | null>(null)
+  const [cancelOffer, setCancelOffer] = useState<OfferShort | null>(null)
 
   const loadBorrowOffers = useCallback(async () => {
     if (!accountAddress) {
@@ -334,12 +338,36 @@ export function CreateOfferPage({
     setOffersError(null)
     try {
       const scriptPubkeyHex = await getScriptPubkeyHexFromAddress(accountAddress)
-      const ids = await fetchOfferIdsByScript(scriptPubkeyHex)
+      let idsByBorrowerPubkey: string[] = []
+      if (seedHex) {
+        try {
+          const seed = parseSeedHex(seedHex)
+          const secretKey = deriveSecretKeyFromIndex(seed, accountIndex)
+          const { internalKeyHex } = await getP2pkAddressFromSecret(secretKey, P2PK_NETWORK)
+          idsByBorrowerPubkey = await fetchOfferIdsByBorrowerPubkey(internalKeyHex)
+        } catch {
+          idsByBorrowerPubkey = []
+        }
+      }
+      const idsByScript = await fetchOfferIdsByScript(scriptPubkeyHex)
+      const allIds = [...new Set([...idsByScript, ...idsByBorrowerPubkey])]
       const [withParticipants, height] = await Promise.all([
-        ids.length === 0 ? Promise.resolve([]) : fetchOfferDetailsBatchWithParticipants(ids),
+        allIds.length === 0 ? Promise.resolve([]) : fetchOfferDetailsBatchWithParticipants(allIds),
         esplora.getLatestBlockHeight().catch(() => null),
       ])
-      const list = filterOffersByParticipantRole(withParticipants, scriptPubkeyHex, 'borrower')
+      const listByScript = filterOffersByParticipantRole(
+        withParticipants,
+        scriptPubkeyHex,
+        'borrower'
+      )
+      const setByScriptIds = new Set(listByScript.map((o) => o.id))
+      const listPendingByPubkey = withParticipants.filter(
+        (o) => idsByBorrowerPubkey.includes(o.id) && !setByScriptIds.has(o.id)
+      )
+      const listPendingAsShort: OfferShort[] = listPendingByPubkey.map(
+        ({ participants: _p, ...offer }) => offer
+      )
+      const list = [...listByScript, ...listPendingAsShort]
       setBorrowOffers(list)
       setCurrentBlockHeight(height)
     } catch (e) {
@@ -348,7 +376,7 @@ export function CreateOfferPage({
     } finally {
       setOffersLoading(false)
     }
-  }, [accountAddress, esplora])
+  }, [accountAddress, accountIndex, seedHex, esplora])
 
   useEffect(() => {
     setSavedPreparedTxid(getStoredPrepareTxid(accountIndex))
@@ -557,6 +585,8 @@ export function CreateOfferPage({
           onOfferClick={(offer) => {
             if (offer.status === 'active') {
               setRepaymentOffer(offer)
+            } else if (offer.status === 'pending') {
+              setCancelOffer(offer)
             }
           }}
         />
@@ -632,6 +662,23 @@ export function CreateOfferPage({
           onSuccess={() => {
             loadBorrowOffers()
             setRepaymentOffer(null)
+          }}
+        />
+      )}
+
+      {cancelOffer != null && (
+        <CancelOfferModal
+          offer={cancelOffer}
+          utxos={utxos}
+          esplora={esplora}
+          open={true}
+          onClose={() => setCancelOffer(null)}
+          accountAddress={accountAddress}
+          seedHex={seedHex}
+          accountIndex={accountIndex}
+          onSuccess={() => {
+            loadBorrowOffers()
+            setCancelOffer(null)
           }}
         />
       )}

@@ -161,6 +161,7 @@ export function PrepareStep({
       const txidRes = await esplora.broadcastTx(hex)
       setBroadcastTxid(txidRes)
       setSignedTxHex(hex)
+      onSuccess(txidRes, builtPrepareTx.auxiliaryAssetId, builtPrepareTx.issuanceEntropyHex)
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(formatBroadcastError(e.body ?? e.message))
@@ -171,7 +172,7 @@ export function PrepareStep({
     } finally {
       setBuilding(false)
     }
-  }, [builtPrepareTx, seedHex, accountIndex, selectedUtxo, canBuild, esplora])
+  }, [builtPrepareTx, seedHex, accountIndex, selectedUtxo, canBuild, esplora, onSuccess])
 
   const showAlreadyPrepared = Boolean(existingPreparedTxid?.trim())
 

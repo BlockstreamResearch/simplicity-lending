@@ -68,3 +68,23 @@ export function getScriptHexFromVout(vout: EsploraVout): string {
   if (!hex || typeof hex !== 'string') throw new Error('Missing scriptpubkey hex in vout')
   return hex
 }
+
+/**
+ * Parse OP_RETURN with 64-byte push (6a40 + 64 bytes hex = 128 chars).
+ * Returns borrower_pubkey (32 bytes) and principal_asset_id (32 bytes) from offer creation tx.
+ */
+export function parseOpReturn64(scriptHex: string): {
+  borrowerPubKey: Uint8Array
+  principalAssetId: Uint8Array
+} {
+  const hex = normalizeHex(scriptHex).replace(/\s/g, '')
+  if (!hex.startsWith('6a40')) {
+    throw new Error('Offer creation OP_RETURN must start with 6a40 (OP_RETURN + push 64)')
+  }
+  const dataHex = hex.slice(4)
+  if (dataHex.length !== 128)
+    throw new Error('Offer creation OP_RETURN must contain exactly 64 bytes')
+  const data = hexToBytes32(dataHex.slice(0, 64))
+  const principal = hexToBytes32(dataHex.slice(64))
+  return { borrowerPubKey: data, principalAssetId: principal }
+}

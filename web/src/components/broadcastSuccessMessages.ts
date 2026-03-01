@@ -8,6 +8,7 @@ export type BroadcastMessageKey =
   | 'claim'
   | 'accept_offer'
   | 'create_offer'
+  | 'cancel_offer'
   | 'prepare'
   | 'issue_utility_nfts'
   | 'burn'
@@ -22,6 +23,7 @@ export const BROADCAST_SUCCESS_MESSAGES: Record<BroadcastMessageKey, string> = {
   claim: 'Principal claimed. Transaction successfully broadcast.',
   accept_offer: 'Offer accepted. Transaction successfully broadcast.',
   create_offer: 'Offer created. Transaction successfully broadcast.',
+  cancel_offer: 'Offer cancelled. Collateral returned to you.',
   prepare: 'Prepare transaction successfully broadcast.',
   issue_utility_nfts: 'Utility NFTs issued. Transaction successfully broadcast.',
   burn: 'Burn transaction successfully broadcast.',
