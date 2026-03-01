@@ -5,6 +5,8 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { Modal } from '../../components/Modal'
+import { TxActionButtons } from '../../components/TxActionButtons'
+import { TxStatusBlock } from '../../components/TxStatusBlock'
 import { BroadcastStatusContent } from '../../components/PostBroadcastModal'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import { InfoTooltip } from '../../components/InfoTooltip'
@@ -16,7 +18,11 @@ import type { ScripthashUtxoEntry } from '../../api/esplora'
 import type { EsploraClient } from '../../api/esplora'
 import { EsploraApiError } from '../../api/esplora'
 import { formatBroadcastError } from '../../utils/parseBroadcastError'
-import { P2PK_NETWORK, POLICY_ASSET_ID, getScriptPubkeyHexFromAddress } from '../../utility/addressP2pk'
+import {
+  P2PK_NETWORK,
+  POLICY_ASSET_ID,
+  getScriptPubkeyHexFromAddress,
+} from '../../utility/addressP2pk'
 import {
   buildPreLockCancellationTx,
   type BuildPreLockCancellationTxResult,
@@ -242,12 +248,7 @@ export function CancelOfferModal({
   }
 
   return (
-    <Modal
-      open={open}
-      onClose={handleClose}
-      title="Cancel offer"
-      contentClassName="max-w-xl"
-    >
+    <Modal open={open} onClose={handleClose} title="Cancel offer" contentClassName="max-w-xl">
       {broadcastTxid ? (
         <BroadcastStatusContent
           txid={broadcastTxid}
@@ -258,8 +259,8 @@ export function CancelOfferModal({
       ) : (
         <div className="space-y-6">
           <p className="text-sm text-gray-600">
-            Cancel this pending offer and get your locked collateral back. Collateral will be sent to
-            the destination address below (default: your address).
+            Cancel this pending offer and get your locked collateral back. Collateral will be sent
+            to the destination address below (default: your address).
           </p>
 
           {!creationTx && !creationTxError && (
@@ -323,50 +324,22 @@ export function CancelOfferModal({
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 items-center">
-                <button
-                  type="button"
-                  disabled={nativeUtxos.length === 0 || building}
-                  onClick={() => void handleBuild()}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {building ? 'Working…' : 'Build'}
-                </button>
-                <button
-                  type="button"
-                  disabled={!builtTx || building}
-                  onClick={() => void handleSign()}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {building ? 'Working…' : 'Sign'}
-                </button>
-                <button
-                  type="button"
-                  disabled={!signedTxHex || building}
-                  onClick={() => void handleBroadcast()}
-                  className="flex-1 min-w-[180px] rounded-lg bg-[#5F3DC4] px-4 py-3 text-sm font-medium text-white hover:bg-[#4f36a8] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {building ? 'Working…' : 'Cancel offer'}
-                </button>
-              </div>
+              <TxActionButtons
+                building={building}
+                hasBuiltTx={!!builtTx}
+                hasSignedTx={!!signedTxHex}
+                onBuild={() => void handleBuild()}
+                onSign={() => void handleSign()}
+                onSignAndBroadcast={() => void handleBroadcast()}
+                broadcastButtonLabel="Cancel offer"
+                canBuild={nativeUtxos.length > 0}
+              />
 
-              {builtTx && !signedTxHex && (
-                <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
-                  <p className="font-medium">Transaction built (unsigned).</p>
-                  <p className="mt-1 text-sm">Click Sign then Cancel offer to broadcast.</p>
-                </div>
-              )}
-              {signedTxHex && (
-                <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
-                  <p className="font-medium">Transaction signed.</p>
-                  <p className="mt-1 text-sm">Click Cancel offer to broadcast.</p>
-                </div>
-              )}
-              {buildError && (
-                <p className="mt-2 p-3 bg-red-50 text-red-800 rounded border border-red-200 text-sm">
-                  {buildError}
-                </p>
-              )}
+              <TxStatusBlock
+                unsignedTxHex={builtTx?.unsignedTxHex ?? null}
+                signedTxHex={signedTxHex}
+                error={buildError}
+              />
               <div ref={bottomAnchorRef} aria-hidden="true" />
             </>
           )}

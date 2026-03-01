@@ -7,6 +7,7 @@
 import { useMemo } from 'react'
 import { EsploraClient } from '../api/esplora'
 import type { OfferShort } from '../types/offers'
+import { OfferStatusBadge } from './OfferStatusBadge'
 
 const BLOCKS_PER_DAY_LIQUID = 1440
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER
@@ -132,7 +133,6 @@ export function OfferTable({
               offers.map((offer) => {
                 const expiry = formatExpiryTime(offer.loan_expiration_time, currentBlockHeight)
                 const interestPercent = (offer.interest_rate / 100).toFixed(2)
-                const statusLabel = offer.status.charAt(0).toUpperCase() + offer.status.slice(1)
                 return (
                   <tr
                     key={offer.id}
@@ -195,7 +195,13 @@ export function OfferTable({
                         <span className="block text-gray-500">{expiry.inTimeStr}</span>
                       )}
                     </td>
-                    <td className="py-2 px-3 text-sm text-gray-900">{statusLabel}</td>
+                    <td className="py-2 px-3 text-sm text-gray-900">
+                      <OfferStatusBadge
+                        status={offer.status}
+                        loanExpirationTime={offer.loan_expiration_time}
+                        currentBlockHeight={currentBlockHeight}
+                      />
+                    </td>
                   </tr>
                 )
               })}

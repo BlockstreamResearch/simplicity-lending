@@ -6,8 +6,9 @@ import { useMemo, useRef, useEffect } from 'react'
 import { useBurnTxForm } from '../../tx/burn/useBurnTxForm'
 import type { EsploraClient, ScripthashUtxoEntry } from '../../api/esplora'
 import { PostBroadcastModal } from '../../components/PostBroadcastModal'
+import { TxActionButtons } from '../../components/TxActionButtons'
+import { TxStatusBlock } from '../../components/TxStatusBlock'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
-import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
 import { formClassNames } from '../../components/formClassNames'
@@ -205,49 +206,26 @@ export function BurnTxBuilder({
               </div>
 
               <div className="flex flex-wrap gap-2 items-center">
-                <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-                  {building ? 'Building…' : 'Build'}
-                </ButtonSecondary>
-                <ButtonSecondary size="md" disabled={!builtBurnTx || building} onClick={handleSign}>
-                  {building ? 'Signing…' : 'Sign'}
-                </ButtonSecondary>
-                <ButtonPrimary
-                  size="md"
-                  disabled={!builtBurnTx || building}
-                  onClick={handleBuildAndBroadcast}
-                >
-                  {building ? 'Signing…' : 'Sign & Broadcast'}
-                </ButtonPrimary>
-                <ButtonNeutral size="md" disabled={building} onClick={handleClear}>
-                  Clear
-                </ButtonNeutral>
+                <TxActionButtons
+                  building={building}
+                  hasBuiltTx={!!builtBurnTx}
+                  hasSignedTx={!!signedTxHex}
+                  onBuild={handleBuild}
+                  onSign={handleSign}
+                  onSignAndBroadcast={handleBuildAndBroadcast}
+                  broadcastButtonLabel="Sign & Broadcast"
+                  canBuild={canBuild}
+                  showClear
+                  onClear={handleClear}
+                  thirdButtonRequiresOnlyBuilt
+                />
               </div>
 
-              {builtBurnTx && !signedTxHex && !broadcastTxid && (
-                <p className="text-blue-700 text-sm">
-                  Transaction built. Click Sign or Sign & Broadcast.
-                </p>
-              )}
-
-              {buildError && <p className="text-red-600">{buildError}</p>}
-              {broadcastError && <p className="text-red-600">{broadcastError}</p>}
-              {signedTxHex && !broadcastTxid && (
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                  <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
-                  <textarea
-                    readOnly
-                    className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded-xl p-2 h-24"
-                    value={signedTxHex}
-                  />
-                  <ButtonNeutral
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => navigator.clipboard?.writeText(signedTxHex)}
-                  >
-                    Copy hex
-                  </ButtonNeutral>
-                </div>
-              )}
+              <TxStatusBlock
+                unsignedTxHex={builtBurnTx?.unsignedTxHex ?? null}
+                signedTxHex={signedTxHex}
+                error={buildError || broadcastError || undefined}
+              />
               <div ref={bottomAnchorRef} aria-hidden="true" />
             </>
           )}

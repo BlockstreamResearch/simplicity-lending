@@ -130,43 +130,6 @@ export function LenderPage({
         <span>Back to Dashboard</span>
       </button>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-100 text-xs font-medium text-teal-700">
-              L
-            </span>
-            <h2 className="text-base font-semibold text-gray-900">LBTC</h2>
-          </div>
-          <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-sm uppercase text-gray-500">COMPLETE BALANCE LBTC</span>
-            <span className="text-sm font-medium text-green-600">24H +2.3%</span>
-          </div>
-          <p className="mb-1 text-2xl font-bold text-gray-900">0.00</p>
-          <p className="mb-4 text-sm text-gray-500">$0.00 USD</p>
-          <p className="text-sm text-gray-500">
-            <span className="uppercase">LOAN COLLATERAL:</span>{' '}
-            <span className="text-gray-600">0 LBTC</span>
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-700">
-              U
-            </span>
-            <h2 className="text-base font-semibold text-gray-900">USDT</h2>
-          </div>
-          <div className="mb-2 text-sm uppercase text-gray-500">COMPLETE BALANCE USDT</div>
-          <p className="mb-1 text-2xl font-bold text-gray-900">60,000.00</p>
-          <p className="mb-4 text-sm text-gray-500">$59,914.89 USD</p>
-          <p className="text-sm text-gray-500">
-            <span className="uppercase">SUPPLIED:</span>{' '}
-            <span className="text-gray-600">50,000 USDT</span>
-          </p>
-        </div>
-      </div>
-
       <section>
         <div className="mb-3 flex items-center gap-2">
           <span className="text-gray-500" aria-hidden>

@@ -20,7 +20,8 @@ import {
   buildPreLockCreationTx,
   finalizePreLockCreationTx,
 } from '../../tx/preLockCreation/buildPreLockCreationTx'
-import { ButtonPrimary, ButtonSecondary } from '../../components/Button'
+import { TxActionButtons } from '../../components/TxActionButtons'
+import { TxStatusBlock } from '../../components/TxStatusBlock'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
 import { formClassNames } from '../../components/formClassNames'
@@ -74,7 +75,6 @@ export function FinalizeOfferStep({
     ReturnType<typeof buildPreLockCreationTx>
   > | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
-  const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
 
   const bottomAnchorRef = useRef<HTMLDivElement>(null)
@@ -149,7 +149,6 @@ export function FinalizeOfferStep({
     setStubMessage(null)
     setBuiltPreLockTx(null)
     setSignedTxHex(null)
-    setBroadcastTxid(null)
     const principalHex = normalizeHex(principalAssetIdHex)
     if (principalHex.length !== 64) {
       setBuildError('Principal asset ID must be 64 hex chars (32 bytes).')
@@ -352,7 +351,6 @@ export function FinalizeOfferStep({
         setSignedTxHex(hex)
         if (broadcast) {
           const txid = await esplora.broadcastTx(hex)
-          setBroadcastTxid(txid)
           if (onBroadcastTxid) {
             onBroadcastTxid(txid)
           } else {
@@ -372,6 +370,32 @@ export function FinalizeOfferStep({
     },
     [builtPreLockTx, seedHex, accountIndex, esplora, onSuccess, onBroadcastTxid]
   )
+
+  const handleBroadcast = useCallback(async () => {
+    if (!signedTxHex) {
+      setBuildError('Sign the transaction first.')
+      return
+    }
+    setBuildError(null)
+    setBroadcastError(null)
+    setBuilding(true)
+    try {
+      const txid = await esplora.broadcastTx(signedTxHex)
+      if (onBroadcastTxid) {
+        onBroadcastTxid(txid)
+      } else {
+        onSuccess()
+      }
+    } catch (e) {
+      if (e instanceof EsploraApiError) {
+        setBroadcastError(formatBroadcastError(e.body ?? e.message))
+      } else {
+        setBuildError(e instanceof Error ? e.message : String(e))
+      }
+    } finally {
+      setBuilding(false)
+    }
+  }, [signedTxHex, esplora, onSuccess, onBroadcastTxid])
 
   return (
     <section className="min-w-0 max-w-4xl">
@@ -478,56 +502,22 @@ export function FinalizeOfferStep({
         </div>
 
         <div className="flex flex-wrap gap-2 items-center mt-4">
-          <ButtonSecondary size="md" disabled={building} onClick={() => void handleBuild()}>
-            Build
-          </ButtonSecondary>
-          <ButtonSecondary
-            size="md"
-            disabled={building || !builtPreLockTx}
-            onClick={() => void handleSignAndBroadcast(false)}
-          >
-            Sign
-          </ButtonSecondary>
-          <ButtonPrimary
-            size="md"
-            disabled={building || !builtPreLockTx}
-            onClick={() => void handleSignAndBroadcast(true)}
-          >
-            Sign & Broadcast
-          </ButtonPrimary>
+          <TxActionButtons
+            building={building}
+            hasBuiltTx={!!builtPreLockTx}
+            hasSignedTx={!!signedTxHex}
+            onBuild={() => void handleBuild()}
+            onSign={() => void handleSignAndBroadcast(false)}
+            onSignAndBroadcast={handleBroadcast}
+            broadcastButtonLabel="Sign & Broadcast"
+          />
         </div>
 
-        {builtPreLockTx && !signedTxHex && (
-          <div className="mt-2 p-3 bg-blue-50 text-blue-800 rounded border border-blue-200 text-sm">
-            <p className="font-medium">Transaction built. Click Sign or Sign & Broadcast.</p>
-            <p className="mt-1 font-mono text-xs break-all opacity-80">
-              Unsigned tx: {builtPreLockTx.unsignedTxHex.slice(0, 64)}…
-            </p>
-          </div>
-        )}
-
-        {signedTxHex && (
-          <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
-            <p className="font-medium">Transaction signed.</p>
-            {broadcastTxid ? (
-              <p className="mt-1 font-mono text-xs break-all">Broadcast txid: {broadcastTxid}</p>
-            ) : (
-              <p className="mt-1 font-mono text-xs break-all">
-                Raw hex: {signedTxHex.slice(0, 80)}…
-              </p>
-            )}
-          </div>
-        )}
-        {buildError && (
-          <p className="mt-2 p-3 bg-red-50 text-red-800 rounded border border-red-200 text-sm">
-            {buildError}
-          </p>
-        )}
-        {broadcastError && (
-          <p className="mt-2 p-3 bg-red-50 text-red-800 rounded border border-red-200 text-sm">
-            Broadcast failed: {broadcastError}
-          </p>
-        )}
+        <TxStatusBlock
+          unsignedTxHex={builtPreLockTx?.unsignedTxHex ?? null}
+          signedTxHex={signedTxHex}
+          error={buildError || broadcastError || undefined}
+        />
         {stubMessage && (
           <p className="mt-2 p-3 bg-amber-50 text-amber-800 rounded border border-amber-200 text-sm">
             {stubMessage}

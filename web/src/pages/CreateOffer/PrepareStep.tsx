@@ -15,14 +15,11 @@ import {
   finalizePrepareUtilityNftsTx,
 } from '../../tx/prepareUtilityNfts/buildPrepareUtilityNftsTx'
 import { BroadcastStatusContent } from '../../components/PostBroadcastModal'
+import { TxActionButtons } from '../../components/TxActionButtons'
+import { TxStatusBlock } from '../../components/TxStatusBlock'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import { CopyIcon } from '../../components/CopyIcon'
-import {
-  ButtonPrimary,
-  ButtonSecondary,
-  ButtonIconNeutral,
-  ButtonNeutral,
-} from '../../components/Button'
+import { ButtonSecondary, ButtonIconNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
 import { formClassNames } from '../../components/formClassNames'
@@ -161,7 +158,6 @@ export function PrepareStep({
       const txidRes = await esplora.broadcastTx(hex)
       setBroadcastTxid(txidRes)
       setSignedTxHex(hex)
-      onSuccess(txidRes, builtPrepareTx.auxiliaryAssetId, builtPrepareTx.issuanceEntropyHex)
     } catch (e) {
       if (e instanceof EsploraApiError) {
         setBroadcastError(formatBroadcastError(e.body ?? e.message))
@@ -172,7 +168,7 @@ export function PrepareStep({
     } finally {
       setBuilding(false)
     }
-  }, [builtPrepareTx, seedHex, accountIndex, selectedUtxo, canBuild, esplora, onSuccess])
+  }, [builtPrepareTx, seedHex, accountIndex, selectedUtxo, canBuild, esplora])
 
   const showAlreadyPrepared = Boolean(existingPreparedTxid?.trim())
 
@@ -277,51 +273,24 @@ export function PrepareStep({
             </div>
 
             <div className="flex flex-wrap gap-2 items-center">
-              <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-                {building ? 'Building…' : 'Build'}
-              </ButtonSecondary>
-              <ButtonSecondary
-                size="md"
-                disabled={!builtPrepareTx || building}
-                onClick={handleSign}
-              >
-                {building ? 'Signing…' : 'Sign'}
-              </ButtonSecondary>
-              <ButtonPrimary
-                size="md"
-                disabled={!builtPrepareTx || building}
-                onClick={handleBuildAndBroadcast}
-              >
-                {building ? 'Signing…' : 'Sign & Broadcast'}
-              </ButtonPrimary>
+              <TxActionButtons
+                building={building}
+                hasBuiltTx={!!builtPrepareTx}
+                hasSignedTx={!!signedTxHex}
+                onBuild={handleBuild}
+                onSign={handleSign}
+                onSignAndBroadcast={handleBuildAndBroadcast}
+                broadcastButtonLabel="Sign & Broadcast"
+                canBuild={canBuild}
+                thirdButtonRequiresOnlyBuilt
+              />
             </div>
 
-            {builtPrepareTx && !signedTxHex && !broadcastTxid && (
-              <p className="text-blue-700 text-sm">
-                Transaction built. Click Sign or Sign & Broadcast.
-              </p>
-            )}
-
-            {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
-            {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
-
-            {signedTxHex && (
-              <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
-                <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
-                <textarea
-                  readOnly
-                  className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded p-2 h-24"
-                  value={signedTxHex}
-                />
-                <ButtonNeutral
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => navigator.clipboard?.writeText(signedTxHex)}
-                >
-                  Copy hex
-                </ButtonNeutral>
-              </div>
-            )}
+            <TxStatusBlock
+              unsignedTxHex={builtPrepareTx?.unsignedTxHex ?? null}
+              signedTxHex={signedTxHex}
+              error={buildError || broadcastError || undefined}
+            />
             <div ref={bottomAnchorRef} aria-hidden="true" />
           </>
         )}

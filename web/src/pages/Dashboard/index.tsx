@@ -6,16 +6,89 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tab } from '../../App'
-import { fetchOffers } from '../../api/client'
+import { useSeedHex } from '../../SeedContext'
+import {
+  fetchOfferIdsByBorrowerPubkey,
+  fetchOfferIdsByScript,
+  fetchOfferDetailsBatchWithParticipants,
+  fetchOffers,
+  filterOffersByParticipantRole,
+} from '../../api/client'
 import { EsploraClient } from '../../api/esplora'
 import { OfferTable } from '../../components/OfferTable'
 import type { OfferShort } from '../../types/offers'
+import { getScriptPubkeyHexFromAddress, getP2pkAddressFromSecret, P2PK_NETWORK } from '../../utility/addressP2pk'
+import { POLICY_ASSET_ID } from '../../utility/addressP2pk'
+import { deriveSecretKeyFromIndex, parseSeedHex } from '../../utility/seed'
 
-export function Dashboard({ onTab }: { onTab: (t: Tab) => void }) {
+interface BorrowStats {
+  lockedLbtc: bigint
+  activeDeals: number
+  pendingDeals: number
+}
+
+interface SupplyStats {
+  activeOffers: number
+  waitingLiquidation: number
+}
+
+const ZERO_BORROW_STATS: BorrowStats = {
+  lockedLbtc: 0n,
+  activeDeals: 0,
+  pendingDeals: 0,
+}
+
+const ZERO_SUPPLY_STATS: SupplyStats = {
+  activeOffers: 0,
+  waitingLiquidation: 0,
+}
+
+function formatBigint(value: bigint): string {
+  const s = value.toString()
+  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+function StatValue({
+  loading,
+  value,
+  emphasize = false,
+}: {
+  loading: boolean
+  value: string | number
+  emphasize?: boolean
+}) {
+  if (loading) {
+    return <div className="mt-2 h-9 w-28 animate-pulse rounded-lg bg-gray-200" aria-hidden="true" />
+  }
+  return (
+    <p
+      className={
+        emphasize
+          ? 'mt-1 text-3xl md:text-4xl font-bold leading-tight text-gray-900'
+          : 'mt-1 text-2xl md:text-3xl font-semibold leading-tight text-gray-900'
+      }
+    >
+      {value}
+    </p>
+  )
+}
+
+export function Dashboard({
+  onTab,
+  accountIndex,
+}: {
+  onTab: (t: Tab) => void
+  accountIndex: number
+}) {
+  const seedHex = useSeedHex()
   const [offers, setOffers] = useState<OfferShort[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState<string | null>(null)
   const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null)
+  const [borrowStats, setBorrowStats] = useState<BorrowStats>(ZERO_BORROW_STATS)
+  const [supplyStats, setSupplyStats] = useState<SupplyStats>(ZERO_SUPPLY_STATS)
 
   const esplora = useMemo(() => new EsploraClient(), [])
 
@@ -37,58 +110,172 @@ export function Dashboard({ onTab }: { onTab: (t: Tab) => void }) {
     }
   }, [esplora])
 
+  const loadStats = useCallback(async () => {
+    if (!seedHex) {
+      setBorrowStats(ZERO_BORROW_STATS)
+      setSupplyStats(ZERO_SUPPLY_STATS)
+      setStatsError(null)
+      setStatsLoading(false)
+      return
+    }
+    setStatsLoading(true)
+    setStatsError(null)
+    try {
+      const seed = parseSeedHex(seedHex)
+      const secretKey = deriveSecretKeyFromIndex(seed, accountIndex)
+      const { address, internalKeyHex } = await getP2pkAddressFromSecret(secretKey, P2PK_NETWORK)
+      const scriptPubkeyHex = await getScriptPubkeyHexFromAddress(address)
+
+      const [idsByScript, idsByBorrowerPubkey] = await Promise.all([
+        fetchOfferIdsByScript(scriptPubkeyHex),
+        fetchOfferIdsByBorrowerPubkey(internalKeyHex),
+      ])
+
+      const allBorrowerIds = [...new Set([...idsByScript, ...idsByBorrowerPubkey])]
+      const [scriptOffersWithParticipants, borrowerOffersWithParticipants] = await Promise.all([
+        idsByScript.length === 0 ? Promise.resolve([]) : fetchOfferDetailsBatchWithParticipants(idsByScript),
+        allBorrowerIds.length === 0
+          ? Promise.resolve([])
+          : fetchOfferDetailsBatchWithParticipants(allBorrowerIds),
+      ])
+
+      const borrowerOffersByScript = filterOffersByParticipantRole(
+        borrowerOffersWithParticipants,
+        scriptPubkeyHex,
+        'borrower'
+      )
+      const borrowerOffersByScriptIds = new Set(borrowerOffersByScript.map((o) => o.id))
+      const borrowerPendingByPubkey = borrowerOffersWithParticipants.filter(
+        (o) => idsByBorrowerPubkey.includes(o.id) && !borrowerOffersByScriptIds.has(o.id)
+      )
+      const borrowerPendingAsShort: OfferShort[] = borrowerPendingByPubkey.map(
+        (offerWithParticipants) => {
+          const { participants, ...offer } = offerWithParticipants
+          void participants
+          return offer
+        }
+      )
+      const allBorrowerOffers = [...borrowerOffersByScript, ...borrowerPendingAsShort]
+
+      const lenderOffers = filterOffersByParticipantRole(
+        scriptOffersWithParticipants,
+        scriptPubkeyHex,
+        'lender'
+      )
+
+      const policyAssetId = POLICY_ASSET_ID[P2PK_NETWORK].trim().toLowerCase()
+      const activeBorrowOffers = allBorrowerOffers.filter((o) => o.status === 'active')
+      const lockedLbtc = activeBorrowOffers.reduce((sum, offer) => {
+        const isLbtc = offer.collateral_asset.trim().toLowerCase() === policyAssetId
+        return isLbtc ? sum + offer.collateral_amount : sum
+      }, 0n)
+      const pendingDeals = allBorrowerOffers.filter((o) => o.status === 'pending').length
+
+      const activeLenderOffers = lenderOffers.filter((o) => o.status === 'active')
+      const waitingLiquidation =
+        currentBlockHeight == null
+          ? 0
+          : activeLenderOffers.filter((o) => o.loan_expiration_time <= currentBlockHeight).length
+      const activeOffers = activeLenderOffers.length - waitingLiquidation
+
+      setBorrowStats({
+        lockedLbtc,
+        activeDeals: activeBorrowOffers.length,
+        pendingDeals,
+      })
+      setSupplyStats({
+        activeOffers,
+        waitingLiquidation,
+      })
+    } catch (e) {
+      setStatsError(e instanceof Error ? e.message : String(e))
+      setBorrowStats(ZERO_BORROW_STATS)
+      setSupplyStats(ZERO_SUPPLY_STATS)
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [seedHex, accountIndex, currentBlockHeight])
+
   useEffect(() => {
     loadOffers()
   }, [loadOffers])
+
+  useEffect(() => {
+    loadStats()
+  }, [loadStats])
+
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-sm font-medium text-gray-600">
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+          <div className="mb-5 flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-sm font-semibold text-indigo-700">
               B
             </span>
-            <h2 className="text-base font-semibold text-gray-900">YOUR BORROWS</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800">
+              Your Borrows
+            </h2>
           </div>
-          <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-sm text-gray-500">COMPLETE BALANCE LBTC</span>
-            <span className="text-sm font-medium text-green-600">24H +2.3%</span>
+          <div className="mb-7 space-y-4">
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">LBTC Locked</p>
+              <StatValue
+                loading={statsLoading}
+                value={`${formatBigint(borrowStats.lockedLbtc)} sats`}
+                emphasize
+              />
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Active Deals</p>
+              <StatValue loading={statsLoading} value={borrowStats.activeDeals} />
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Pending Deals</p>
+              <StatValue loading={statsLoading} value={borrowStats.pendingDeals} />
+            </div>
           </div>
-          <p className="mb-1 text-2xl font-bold text-gray-900">0.00</p>
-          <p className="mb-4 text-sm text-gray-500">$0.00 USD</p>
-          <ul className="mb-6 space-y-1 text-sm text-gray-600">
-            <li>LBTC Locked: 0 LBTC</li>
-            <li>Number of Active Deals: 0</li>
-            <li>Number of Pending Deals: 0</li>
-          </ul>
+          {statsError && (
+            <p className="mb-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {statsError}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => onTab('borrower')}
-            className="w-full rounded-lg bg-[#5F3DC4] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#4f36a8]"
+            className="w-full rounded-xl bg-[#5F3DC4] px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#4f36a8] hover:shadow-sm"
           >
             Borrow
           </button>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-sm font-medium text-gray-600">
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+          <div className="mb-5 flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-sm font-semibold text-indigo-700">
               S
             </span>
-            <h2 className="text-base font-semibold text-gray-900">YOUR SUPPLY</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-800">
+              Your Supply
+            </h2>
           </div>
-          <div className="mb-2 text-sm text-gray-500">COMPLETE BALANCE USDT</div>
-          <p className="mb-1 text-2xl font-bold text-gray-900">60,000.00</p>
-          <p className="mb-4 text-sm text-gray-500">$59,914.89 USD</p>
-          <ul className="mb-6 space-y-1 text-sm text-gray-600">
-            <li>USDT Supplied: 50,000 USDT</li>
-            <li>Number of Active Deals: 1</li>
-            <li>Number of Deals Expecting Liquidation: 0</li>
-          </ul>
+          <div className="mb-7 space-y-4">
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Active Offers</p>
+              <StatValue loading={statsLoading} value={supplyStats.activeOffers} emphasize />
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Expecting Liquidation</p>
+              <StatValue loading={statsLoading} value={supplyStats.waitingLiquidation} />
+            </div>
+          </div>
+          {statsError && (
+            <p className="mb-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {statsError}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => onTab('lender')}
-            className="w-full rounded-lg bg-[#5F3DC4] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#4f36a8]"
+            className="w-full rounded-xl bg-[#5F3DC4] px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#4f36a8] hover:shadow-sm"
           >
             Supply
           </button>
@@ -97,8 +284,12 @@ export function Dashboard({ onTab }: { onTab: (t: Tab) => void }) {
 
       <section>
         <div className="mb-3 flex items-center gap-2">
-          <span className="text-gray-500">★</span>
-          <h3 className="text-base font-semibold text-gray-900">MOST RECENT 10 SUPPLY OFFERS</h3>
+          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+            Recent
+          </span>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-800">
+            Most Recent 10 Supply Offers
+          </h3>
         </div>
         <OfferTable
           offers={offers}
@@ -111,18 +302,18 @@ export function Dashboard({ onTab }: { onTab: (t: Tab) => void }) {
         <div className="mt-3 flex justify-center gap-2 text-sm">
           <button
             type="button"
-            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50"
+            className="rounded-xl border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50"
             aria-label="Previous page"
             disabled
           >
             &lt;
           </button>
-          <span className="rounded-lg border border-gray-300 bg-gray-800 px-2 py-1 text-sm font-medium text-white">
+          <span className="rounded-xl border border-[#5F3DC4] bg-[#5F3DC4] px-2.5 py-1.5 text-sm font-semibold text-white">
             1
           </span>
           <button
             type="button"
-            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50"
+            className="rounded-xl border border-gray-300 bg-white px-2.5 py-1.5 text-sm font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50"
             aria-label="Next page"
             disabled
           >

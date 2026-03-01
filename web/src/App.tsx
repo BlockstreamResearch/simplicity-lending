@@ -121,7 +121,7 @@ function AppContent({
 }) {
   return (
     <main className="max-w-7xl mx-auto px-8 py-8">
-      {tab === 'dashboard' && <Dashboard onTab={onTab} />}
+      {tab === 'dashboard' && <Dashboard onTab={onTab} accountIndex={accountIndex} />}
 
       {tab === 'utility' && <Utility accountIndex={accountIndex} />}
 

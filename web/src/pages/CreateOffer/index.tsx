@@ -15,7 +15,11 @@ import {
   filterOffersByParticipantRole,
 } from '../../api/client'
 import { EsploraClient, EsploraApiError } from '../../api/esplora'
-import { getScriptPubkeyHexFromAddress, getP2pkAddressFromSecret, P2PK_NETWORK } from '../../utility/addressP2pk'
+import {
+  getScriptPubkeyHexFromAddress,
+  getP2pkAddressFromSecret,
+  P2PK_NETWORK,
+} from '../../utility/addressP2pk'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { CreateOfferWizard } from './CreateOfferWizard'
 import { RepaymentModal } from './RepaymentModal'
@@ -364,9 +368,11 @@ export function CreateOfferPage({
       const listPendingByPubkey = withParticipants.filter(
         (o) => idsByBorrowerPubkey.includes(o.id) && !setByScriptIds.has(o.id)
       )
-      const listPendingAsShort: OfferShort[] = listPendingByPubkey.map(
-        ({ participants: _p, ...offer }) => offer
-      )
+      const listPendingAsShort: OfferShort[] = listPendingByPubkey.map((offerWithParticipants) => {
+        const { participants, ...offer } = offerWithParticipants
+        void participants
+        return offer
+      })
       const list = [...listByScript, ...listPendingAsShort]
       setBorrowOffers(list)
       setCurrentBlockHeight(height)
@@ -521,43 +527,6 @@ export function CreateOfferPage({
         <span aria-hidden>&lt;</span>
         <span>Back to Dashboard</span>
       </button>
-
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-xs font-medium text-green-700">
-              L
-            </span>
-            <h2 className="text-base font-semibold text-gray-900">LBTC</h2>
-          </div>
-          <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-sm text-gray-500">COMPLETE BALANCE LBTC</span>
-            <span className="text-sm font-medium text-green-600">24H +2.3%</span>
-          </div>
-          <p className="mb-1 text-2xl font-bold text-gray-900">7.00976</p>
-          <p className="mb-4 text-sm text-gray-500">$792,852.21 USD</p>
-          <p className="text-sm text-gray-500">
-            <span className="uppercase">LBTC LOCKED:</span>{' '}
-            <span className="text-gray-600">3 LBTC</span>
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-100 text-xs font-medium text-pink-700">
-              U
-            </span>
-            <h2 className="text-base font-semibold text-gray-900">USDT</h2>
-          </div>
-          <div className="mb-2 text-sm text-gray-500">COMPLETE BALANCE USDT</div>
-          <p className="mb-1 text-2xl font-bold text-gray-900">50,000.00</p>
-          <p className="mb-4 text-sm text-gray-500">$49,929.07 USD</p>
-          <p className="text-sm text-gray-500">
-            <span className="uppercase">BORROWED:</span>{' '}
-            <span className="text-gray-600">50,000 USDT</span>
-          </p>
-        </div>
-      </div>
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-2">

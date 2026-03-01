@@ -105,8 +105,13 @@ export async function buildAcceptOfferTx(
     throw new Error(`Fee UTXO value ${feeValue} is less than fee ${feeAmount}`)
   }
 
-  const { preLockArguments, lendingCovHash, lendingScriptPubkeyHex, parametersNftScriptPubkeyHex, borrowerScriptPubkeyHex } =
-    await buildPreLockArgumentsFromOfferCreation(offer, offerCreationTx, network)
+  const {
+    preLockArguments,
+    lendingCovHash,
+    lendingScriptPubkeyHex,
+    parametersNftScriptPubkeyHex,
+    borrowerScriptPubkeyHex,
+  } = await buildPreLockArgumentsFromOfferCreation(offer, offerCreationTx, network)
 
   const principalInternalFromOffer = assetIdDisplayToInternal(offer.principal_asset)
   for (let i = 0; i < 32; i++) {

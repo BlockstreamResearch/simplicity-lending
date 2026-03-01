@@ -7,6 +7,7 @@ import { useSplitTxForm } from '../../tx/split/useSplitTxForm'
 import type { EsploraClient } from '../../api/esplora'
 import type { ScripthashUtxoEntry } from '../../api/esplora'
 import { PostBroadcastModal } from '../../components/PostBroadcastModal'
+import { TxStatusBlock } from '../../components/TxStatusBlock'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
 import { Input } from '../../components/Input'
@@ -258,25 +259,10 @@ export function SplitTxBuilder({
               Clear
             </ButtonNeutral>
           </div>
-          {buildError && <p className="text-red-600 mt-2">{buildError}</p>}
-          {broadcastError && <p className="text-red-600 mt-2">{broadcastError}</p>}
-          {signedTxHex && (
-            <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
-              <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
-              <textarea
-                readOnly
-                className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded p-2 h-24"
-                value={signedTxHex}
-              />
-              <ButtonNeutral
-                size="sm"
-                className="mt-2"
-                onClick={() => navigator.clipboard?.writeText(signedTxHex)}
-              >
-                Copy hex
-              </ButtonNeutral>
-            </div>
-          )}
+          <TxStatusBlock
+            signedTxHex={signedTxHex}
+            error={buildError || broadcastError || undefined}
+          />
           <div ref={bottomAnchorRef} aria-hidden="true" />
         </div>
       )}

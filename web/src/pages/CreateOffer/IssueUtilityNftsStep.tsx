@@ -23,7 +23,9 @@ import {
   buildIssueUtilityNftsTx,
   finalizeIssueUtilityNftsTx,
 } from '../../tx/issueUtilityNfts/buildIssueUtilityNftsTx'
-import { ButtonPrimary, ButtonSecondary, ButtonNeutral } from '../../components/Button'
+import { TxActionButtons } from '../../components/TxActionButtons'
+import { TxStatusBlock } from '../../components/TxStatusBlock'
+import { ButtonSecondary } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { UtxoSelect } from '../../components/UtxoSelect'
 import { formClassNames } from '../../components/formClassNames'
@@ -169,17 +171,16 @@ export function IssueUtilityNftsStep({
   > | null>(null)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
   const [signedTxHex, setSignedTxHex] = useState<string | null>(null)
-  const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null)
   const [fetchedSummary, setFetchedSummary] = useState<Step1Summary | null>(null)
   const [summaryFetchError, setSummaryFetchError] = useState<string | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
 
   const bottomAnchorRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (buildError || broadcastError || signedTxHex || broadcastTxid) {
+    if (buildError || broadcastError || builtIssueTx || signedTxHex) {
       bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
-  }, [buildError, broadcastError, signedTxHex, broadcastTxid])
+  }, [buildError, broadcastError, builtIssueTx, signedTxHex])
 
   const loanExpirationNum = parseInt(loanExpirationTime, 10) || 0
 
@@ -340,7 +341,6 @@ export function IssueUtilityNftsStep({
           })
           setSignedTxHex(signedTxHex)
           const txidRes = await esplora.broadcastTx(signedTxHex)
-          setBroadcastTxid(txidRes)
           onSuccess(txidRes, {
             txid: txidRes,
             collateralAmount,
@@ -418,7 +418,6 @@ export function IssueUtilityNftsStep({
       })
       setSignedTxHex(signedTxHex)
       const txidRes = await esplora.broadcastTx(signedTxHex)
-      setBroadcastTxid(txidRes)
       onSuccess(txidRes, {
         txid: txidRes,
         collateralAmount,
@@ -762,55 +761,25 @@ export function IssueUtilityNftsStep({
             </tbody>
           </table>
         </div>
-
         <div className="flex flex-wrap gap-2 items-center">
-          <ButtonSecondary size="md" disabled={!canBuild || building} onClick={handleBuild}>
-            {building ? 'Building…' : 'Build'}
-          </ButtonSecondary>
-          <ButtonSecondary
-            size="md"
-            disabled={!builtIssueTx || building}
-            onClick={() => void handleSign()}
-          >
-            {building ? 'Signing…' : 'Sign'}
-          </ButtonSecondary>
-          <ButtonPrimary
-            size="md"
-            disabled={!builtIssueTx || building}
-            onClick={() => void handleBuildAndBroadcast()}
-          >
-            {building ? 'Signing…' : 'Sign & Broadcast'}
-          </ButtonPrimary>
+          <TxActionButtons
+            building={building}
+            hasBuiltTx={!!builtIssueTx}
+            hasSignedTx={!!signedTxHex}
+            onBuild={handleBuild}
+            onSign={() => void handleSign()}
+            onSignAndBroadcast={handleBuildAndBroadcast}
+            broadcastButtonLabel="Sign & Broadcast"
+            canBuild={canBuild}
+            thirdButtonRequiresOnlyBuilt
+          />
         </div>
 
-        {builtIssueTx && !signedTxHex && !broadcastTxid && (
-          <p className="text-blue-700 text-sm mt-1">
-            Transaction built. Click Sign or Sign & Broadcast.
-          </p>
-        )}
-
-        {buildError && <p className="text-red-600">{buildError}</p>}
-        {broadcastError && <p className="text-red-600">{broadcastError}</p>}
-        {broadcastTxid && (
-          <p className="text-green-700">Broadcast successful. Txid: {broadcastTxid}</p>
-        )}
-        {signedTxHex && !broadcastTxid && (
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 mt-2">
-            <p className="font-medium text-gray-700 mb-1">Signed transaction (hex)</p>
-            <textarea
-              readOnly
-              className="w-full font-mono text-xs text-gray-900 bg-white border border-gray-200 rounded-xl p-2 h-24"
-              value={signedTxHex}
-            />
-            <ButtonNeutral
-              size="sm"
-              className="mt-2"
-              onClick={() => navigator.clipboard?.writeText(signedTxHex)}
-            >
-              Copy hex
-            </ButtonNeutral>
-          </div>
-        )}
+        <TxStatusBlock
+          unsignedTxHex={builtIssueTx?.unsignedTxHex ?? null}
+          signedTxHex={signedTxHex}
+          error={buildError || broadcastError || undefined}
+        />
         <div ref={bottomAnchorRef} aria-hidden="true" />
       </div>
     </section>

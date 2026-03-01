@@ -6,6 +6,8 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { Modal } from '../../components/Modal'
+import { TxActionButtons } from '../../components/TxActionButtons'
+import { TxStatusBlock } from '../../components/TxStatusBlock'
 import { BroadcastStatusContent } from '../../components/PostBroadcastModal'
 import { getBroadcastSuccessMessage } from '../../components/broadcastSuccessMessages'
 import { InfoTooltip } from '../../components/InfoTooltip'
@@ -436,53 +438,23 @@ export function AcceptOfferModal({
           </div>
 
           <div className="flex flex-wrap gap-2 items-center">
-            <button
-              type="button"
-              disabled={supplyUtxos.length === 0 || building}
-              onClick={() => void handleBuild()}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {building ? 'Working…' : 'Build'}
-            </button>
-            <button
-              type="button"
-              disabled={!builtTx || building}
-              onClick={() => void handleSign()}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {building ? 'Working…' : 'Sign'}
-            </button>
-            <button
-              type="button"
-              disabled={!signedTxHex || building}
-              onClick={() => void handleAcceptOffer()}
-              className="flex-1 min-w-[180px] rounded-lg bg-[#5F3DC4] px-4 py-3 text-sm font-medium text-white hover:bg-[#4f36a8] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {building ? 'Working…' : 'Accept Offer'}
-            </button>
+            <TxActionButtons
+              building={building}
+              hasBuiltTx={!!builtTx}
+              hasSignedTx={!!signedTxHex}
+              onBuild={() => void handleBuild()}
+              onSign={() => void handleSign()}
+              onSignAndBroadcast={() => void handleAcceptOffer()}
+              broadcastButtonLabel="Accept Offer"
+              canBuild={supplyUtxos.length > 0}
+            />
           </div>
 
-          {signedTxHex && (
-            <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
-              <p className="font-medium">Transaction signed.</p>
-              <p className="mt-1 font-mono text-xs break-all">
-                Raw hex: {signedTxHex.slice(0, 120)}…
-              </p>
-            </div>
-          )}
-          {unsignedTxHex && !signedTxHex && (
-            <div className="mt-2 p-3 bg-green-50 text-green-800 rounded border border-green-200 text-sm">
-              <p className="font-medium">Transaction built (unsigned).</p>
-              <p className="mt-1 font-mono text-xs break-all">
-                Raw hex: {unsignedTxHex.slice(0, 120)}…
-              </p>
-            </div>
-          )}
-          {buildError && (
-            <p className="mt-2 p-3 bg-red-50 text-red-800 rounded border border-red-200 text-sm">
-              {buildError}
-            </p>
-          )}
+          <TxStatusBlock
+            unsignedTxHex={unsignedTxHex}
+            signedTxHex={signedTxHex}
+            error={buildError}
+          />
           <div ref={bottomAnchorRef} aria-hidden="true" />
         </div>
       )}

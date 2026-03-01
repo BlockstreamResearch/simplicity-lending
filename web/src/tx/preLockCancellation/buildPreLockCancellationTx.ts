@@ -150,11 +150,7 @@ export async function buildPreLockCancellationTx(
 
   const totalLbtcLeft = feeValue - feeAmount
   if (totalLbtcLeft > 0n) {
-    api.addOutputWithScript(
-      getScriptHexFromVout(feeUtxo.prevout),
-      totalLbtcLeft,
-      policyAssetHex
-    )
+    api.addOutputWithScript(getScriptHexFromVout(feeUtxo.prevout), totalLbtcLeft, policyAssetHex)
   }
   api.addFeeOutput(feeAmount)
 
