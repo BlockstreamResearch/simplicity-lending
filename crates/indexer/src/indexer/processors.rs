@@ -26,11 +26,15 @@ pub async fn process_block(
     let txids = client.get_block_txids(&block_hash).await?;
     let tx_count = txids.len();
 
-    let mut sql_tx = db.begin().await?;
+    let mut txs: Vec<Transaction> = Vec::with_capacity(txids.len());
 
     for txid in txids {
-        let tx = client.get_tx_by_id(txid).await?;
+        txs.push(client.get_tx_by_id(txid).await?);
+    }
 
+    let mut sql_tx = db.begin().await?;
+
+    for tx in txs {
         process_tx(&mut sql_tx, &tx, cache, block_height).await?;
     }
 

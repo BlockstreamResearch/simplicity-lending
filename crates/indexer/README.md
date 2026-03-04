@@ -85,7 +85,7 @@ esplora:
   timeout: 10
 indexer:
   interval: 10000
-  start_height: 2309541
+  last_indexed_height: 2309541
 ```
 
 > [!TIP]

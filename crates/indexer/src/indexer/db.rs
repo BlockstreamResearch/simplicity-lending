@@ -247,21 +247,20 @@ pub async fn spend_participant_utxo(
     Ok(())
 }
 
-#[tracing::instrument(name = "Getting start indexing block height", skip(db))]
-pub async fn get_starting_height(db: &PgPool, config_height: u64) -> u64 {
+#[tracing::instrument(name = "Getting last indexed block height", skip(db))]
+pub async fn get_last_indexed_height(db: &PgPool, config_height: u64) -> Result<u64, sqlx::Error> {
     let row = sqlx::query!("SELECT last_indexed_height FROM sync_state WHERE id = 1")
         .fetch_optional(db)
-        .await
-        .unwrap_or(None);
+        .await?;
 
     match row {
-        Some(r) => r.last_indexed_height as u64,
+        Some(r) => Ok(r.last_indexed_height as u64),
         None => {
             tracing::info!(
                 "No sync state found in DB, starting from config: {}",
                 config_height
             );
-            config_height
+            Ok(config_height)
         }
     }
 }
@@ -275,7 +274,7 @@ pub async fn get_offer_participant_asset_id(
     sql_tx: &mut DbTx<'_>,
     offer_id: Uuid,
     participant_type: ParticipantType,
-) -> anyhow::Result<Vec<u8>> {
+) -> Result<Vec<u8>, sqlx::Error> {
     let offer_row = sqlx::query!(
         r#"SELECT borrower_nft_asset_id, lender_nft_asset_id FROM offers WHERE id = $1"#,
         offer_id

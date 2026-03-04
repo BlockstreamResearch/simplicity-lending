@@ -60,7 +60,7 @@ impl OfferModel {
 
         Self {
             id: Uuid::new_v4(),
-            borrower_pubkey: pre_lock_args.collateral_asset_id().to_vec(),
+            borrower_pubkey: pre_lock_args.borrower_pub_key().to_vec(),
             collateral_asset_id: pre_lock_args.collateral_asset_id().to_vec(),
             principal_asset_id: pre_lock_args.principal_asset_id().to_vec(),
             first_parameters_nft_asset_id: pre_lock_args.first_parameters_nft_asset_id().to_vec(),

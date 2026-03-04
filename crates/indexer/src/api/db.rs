@@ -56,10 +56,10 @@ pub async fn fetch_offers_full_info_filtered(
     query_builder.push(" ORDER BY created_at_height DESC ");
 
     query_builder.push(" LIMIT ");
-    query_builder.push_bind(filters.limit.unwrap_or(50));
+    query_builder.push_bind(filters.limit.unwrap_or(50) as i64);
 
     query_builder.push(" OFFSET ");
-    query_builder.push_bind(filters.offset.unwrap_or(0));
+    query_builder.push_bind(filters.offset.unwrap_or(0) as i64);
 
     let query = query_builder.build_query_as::<OfferModel>();
     let rows = query.fetch_all(db).await?;
@@ -111,10 +111,10 @@ pub async fn fetch_offers_short_info_filtered(
     query_builder.push(" ORDER BY created_at_height DESC ");
 
     query_builder.push(" LIMIT ");
-    query_builder.push_bind(filters.limit.unwrap_or(50));
+    query_builder.push_bind(filters.limit.unwrap_or(50) as i64);
 
     query_builder.push(" OFFSET ");
-    query_builder.push_bind(filters.offset.unwrap_or(0));
+    query_builder.push_bind(filters.offset.unwrap_or(0) as i64);
 
     let query = query_builder.build_query_as::<OfferModelShort>();
     let rows = query.fetch_all(db).await?;
