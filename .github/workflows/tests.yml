@@ -46,17 +46,29 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
 
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli
-          --version=${{ env.SQLX_VERSION }}
-          --features ${{ env.SQLX_FEATURES }}
-          --no-default-features
-          --locked
-
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          cache-on-failure: true  
+          cache-on-failure: true
+
+      - name: Cache sqlx-cli
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sqlx-cli-cache
+          key: sqlx-cli-${{ runner.os }}-${{ env.SQLX_VERSION }}-${{ env.SQLX_FEATURES }}-${{ matrix.toolchain }}
+
+      - name: Install sqlx-cli
+        run: |
+          SQLX_CLI_ROOT="$RUNNER_TEMP/sqlx-cli-cache"
+          if [ ! -f "$SQLX_CLI_ROOT/bin/sqlx" ]; then
+            cargo install sqlx-cli \
+              --root "$SQLX_CLI_ROOT" \
+              --version=${{ env.SQLX_VERSION }} \
+              --features ${{ env.SQLX_FEATURES }} \
+              --no-default-features \
+              --locked
+          fi
+          echo "$SQLX_CLI_ROOT/bin" >> $GITHUB_PATH
 
       - name: Create app user in Postgres
         run: |
