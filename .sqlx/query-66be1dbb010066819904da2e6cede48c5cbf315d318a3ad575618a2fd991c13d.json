@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE offer_participants SET spent_txid = $1, spent_at_height = $2 WHERE txid = $3 AND vout = $4\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "66be1dbb010066819904da2e6cede48c5cbf315d318a3ad575618a2fd991c13d"
+}

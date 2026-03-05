@@ -1,4 +1,5 @@
 use simplicity_contracts::error::{TaprootPubkeyGenError, ValidationError};
+use simplicityhl_core::ProgramError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParametersError {
@@ -28,6 +29,14 @@ pub enum AssetAuthError {
 pub enum ScriptAuthError {
     #[error("Invalid auth UTXO script hash: expected {expected}, got {actual}")]
     InvalidAuthScriptHash { expected: String, actual: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PreLockError {
+    #[error("Not a pre lock transaction: txid - {txid}")]
+    NotAPreLockTransaction { txid: String },
+    #[error("Invalid OP_RETURN metadata bytes: {bytes}")]
+    InvalidOpReturnBytes { bytes: String },
 }
 
 /// Errors from transaction building operations.
@@ -64,8 +73,14 @@ pub enum TransactionBuildError {
     ScriptAuth(#[from] ScriptAuthError),
 
     #[error(transparent)]
+    PreLock(#[from] PreLockError),
+
+    #[error(transparent)]
     Validation(#[from] ValidationError),
 
     #[error(transparent)]
     TaprootPubkeyGen(#[from] TaprootPubkeyGenError),
+
+    #[error(transparent)]
+    Program(#[from] ProgramError),
 }

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO sync_state (id, last_indexed_height, last_indexed_hash)\n        VALUES (1, $1, $2)\n        ON CONFLICT (id) DO UPDATE SET\n            last_indexed_height = EXCLUDED.last_indexed_height,\n            last_indexed_hash = EXCLUDED.last_indexed_hash,\n            updated_at = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2e6b2d5c81ac6f58a055c484ee889ed15f58e9190749fb2b6c8b8df320f51f62"
+}
