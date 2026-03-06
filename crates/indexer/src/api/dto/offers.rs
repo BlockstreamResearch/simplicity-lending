@@ -78,6 +78,11 @@ pub struct BatchIdsRequest {
     pub ids: Vec<Uuid>,
 }
 
+#[derive(serde::Deserialize, Debug)]
+pub struct PendingOffersQuery {
+    pub borrower_pubkey: String,
+}
+
 #[derive(Serialize)]
 pub struct OfferDetailsResponse {
     #[serde(flatten)]

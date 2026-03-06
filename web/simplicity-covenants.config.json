@@ -1,0 +1,9 @@
+{
+  "covenants": [
+    { "id": "p2pk", "path": "web/src/simplicity/sources/p2pk.simf" },
+    { "id": "pre_lock", "path": "crates/contracts/src/pre_lock/source_simf/pre_lock.simf" },
+    { "id": "lending", "path": "crates/contracts/src/lending/source_simf/lending.simf" },
+    { "id": "asset_auth", "path": "crates/contracts/src/asset_auth/source_simf/asset_auth.simf" },
+    { "id": "script_auth", "path": "crates/contracts/src/script_auth/source_simf/script_auth.simf" }
+  ]
+}

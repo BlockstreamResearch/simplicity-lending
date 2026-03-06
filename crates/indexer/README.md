@@ -56,18 +56,18 @@ Follow these steps to get the indexer up and running in your local environment.
 - sqlx-cli: Required for database management and compile-time query validation
 
 ```bash
-cargo install sqlx-cli --no-default-features --features postgres
+cargo install --version='~0.8' sqlx-cli --no-default-features --features rustls,postgres
 ```
 
 ### Configuration
 
-Create a `.env` file in the root directory with your database connection string. This is required for sqlx compile-time validation and runtime connectivity.
+Create a `.env` file in the **indexer crate root** (`crates/indexer`) with your database connection string. This is required for sqlx compile-time validation and runtime connectivity.
 
 ```bash
 DATABASE_URL=postgres://username:password@localhost:5432/indexer_db
 ```
 
-Application settings are managed via YAML files in the `configuration/` folder (e.g., `base.yaml`, `local.yaml`).
+Application settings are managed via YAML files in the `configuration/` folder: `base.yaml`, `local.yaml`, and `production.yaml` (selected by `APP_ENVIRONMENT`, default is `local`).
 
 ```yaml
 # Example configuration structure
@@ -95,7 +95,7 @@ indexer:
 
 The easiest way to initialize the environment is using the provided setup script. It automatically launches a Postgres container, creates the application user, and runs migrations.
 
-Make sure Docker is running, then execute:
+Run the following from the **indexer crate root** (`crates/indexer`). Make sure Docker is running, then execute:
 ```bash
 chmod +x scripts/init_db.sh
 ./scripts/init_db.sh
@@ -107,7 +107,7 @@ SKIP_DOCKER=true ./scripts/init_db.sh
 
 ### Running the Project
 
-Commands must be executed from the root directory of the crate. The application supports two execution modes via the `RUN_MODE` environment variable:
+Commands must be executed from the **indexer crate root** (`crates/indexer`) so that the `configuration/` folder is found. The application supports two execution modes via the `RUN_MODE` environment variable:
 - `indexer`: Starts the blockchain indexing background worker.
 - `api`: Starts the REST API service (Default).
 
@@ -171,7 +171,7 @@ SQLX_OFFLINE=true cargo check
 ### Filtering Parameters (Query Params)
 
 The following parameters are available for `/offers` and `/offers/full` endpoints:
-- `status`: Filter by offer state (`ACTIVE`, `REPAID`, `LIQUIDATED`, `CANCELLED`).
+- `status`: Filter by offer state (`pending`, `active`, `repaid`, `liquidated`, `cancelled`, `claimed`). Values are lowercase in the API.
 - `asset`: Hex identifier of the asset (matches either collateral or principal asset).
 - `limit`: Maximum number of records to return (default: 50).
 - `offset`: Pagination offset (default: 0).
@@ -183,6 +183,7 @@ The following parameters are available for `/offers` and `/offers/full` endpoint
 | `GET` | `/offers` | Get list of offers with short information | `status`, `asset`, `limit`, `offset` |
 | `GET` | `/offers/full` | Get list of offers with full information | `status`, `asset`, `limit`, `offset` |
 | `GET` | `/offers/by-script` | Find offer IDs by `script_pubkey` | `script_pubkey` (query param) |
+| `GET` | `/offers/by-borrower-pubkey` | Find offer IDs where the given key is the borrower (e.g. pending offers) | `borrower_pubkey` (query param, 32-byte hex) |
 | `POST` | `/offers/batch` | Get detailed information for multiple offers | JSON Body (list of UUIDs in `ids` field) |
 | `GET` | `/offers/{id}` | Get comprehensive details for a single offer | — |
 | `GET` | `/offers/{id}/participants` | Get the latest (current) participants of an offer | — |

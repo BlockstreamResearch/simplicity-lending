@@ -330,6 +330,32 @@ pub async fn fetch_offer_ids_by_script(
 }
 
 #[tracing::instrument(
+    name = "Fetching pending offer ids by borrower pubkey from DB",
+    skip(db, borrower_pubkey),
+    fields(borrower_pubkey = %borrower_pubkey.to_hex())
+)]
+pub async fn fetch_pending_offer_ids_by_borrower_pubkey(
+    db: &PgPool,
+    borrower_pubkey: &[u8],
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT id
+        FROM offers
+        WHERE borrower_pubkey = $1
+          AND current_status = 'pending'
+        "#,
+        borrower_pubkey
+    )
+    .fetch_all(db)
+    .await?;
+
+    let offer_ids = rows.into_iter().map(|r| r.id).collect();
+
+    Ok(offer_ids)
+}
+
+#[tracing::instrument(
     name = "Fetching offer utxos history from DB",
     skip(db, offer_id),
     fields(%offer_id)

@@ -16,8 +16,28 @@ In case the Borrower fails to pay interest before the lending contract expiry, t
 
 ## Repository structure
 
-TODO
+- **crates/** — Rust workspace with three components:
+  - **CLI** — command-line tools for the lending protocol (building and signing transactions).
+  - **Contracts** — Simplicity contracts and covenant logic for the lending protocol.
+  - **Indexer** — backend service that indexes offers and exposes an API for the web app.
+- **web/** — demo frontend (React/TypeScript) for borrowers and lenders.
 
 ## How to use
 
-TODO
+To run the **demo frontend** (web app for borrowers and lenders), you need the **Indexer** API running. The web app talks to it to list and manage offers.
+
+**Quick start (from repo root):**
+
+1. **Indexer** — set up PostgreSQL, configure `crates/indexer` (see [crates/indexer/README.md](crates/indexer/README.md)), then:
+   ```bash
+   cd creates/indexer && cargo run -p lending-indexer
+   ```
+   By default this starts the API (port 8000). For full indexing you also need the indexer worker (`RUN_MODE=indexer`).
+
+2. **Web** — install deps and start the dev server (see [web/README.md](web/README.md)):
+   ```bash
+   cd web && npm install && npm run dev
+   ```
+   Open the URL shown (e.g. http://localhost:5173). Set `VITE_API_URL` in `web/.env` if the API is not at `http://localhost:8000`.
+
+**CLI** and **Contracts** are used for building/signing lending transactions and covenant logic; see the respective crates under `crates/` for development and usage.
