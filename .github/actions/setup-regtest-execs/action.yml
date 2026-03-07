@@ -1,0 +1,38 @@
+name: Setup regtest executables
+description: Download and expose Liquid regtest executables for CI
+
+runs:
+  using: composite
+  steps:
+    - name: Download regtest executables
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        BIN_DIR="${RUNNER_TEMP}/regtest-bin"
+        mkdir -p "${BIN_DIR}"
+        cd "${BIN_DIR}"
+
+        ELECTRS_FILENAME="electrs_linux_esplora_027e38d3ebc2f85b28ae76f8f3448438ee4fc7b1_liquid.zip"
+        ELECTRS_SHA256="a63a314c16bc6642fc060bbc19bd1d54ebf86b42188ff2a11c705177c1eb22f7"
+        if [ ! -x "${BIN_DIR}/electrs" ]; then
+          curl -Ls "https://github.com/RCasatta/electrsd/releases/download/electrs_releases/${ELECTRS_FILENAME}" -o "${ELECTRS_FILENAME}"
+          echo "${ELECTRS_SHA256}  ${ELECTRS_FILENAME}" | sha256sum -c -
+          unzip -qo "${ELECTRS_FILENAME}"
+          chmod +x "${BIN_DIR}/electrs"
+        fi
+
+        ELEMENTSD_VERSION="23.3.1"
+        ELEMENTSD_FILENAME="elements-${ELEMENTSD_VERSION}-x86_64-linux-gnu.tar.gz"
+        ELEMENTSD_SHA256="864e3a8240137c4e948ecae7c526ccb363771351ea68737a14c682025d5fedaa"
+        if [ ! -x "${BIN_DIR}/elements-${ELEMENTSD_VERSION}/bin/elementsd" ]; then
+          curl -Ls "https://github.com/ElementsProject/elements/releases/download/elements-${ELEMENTSD_VERSION}/${ELEMENTSD_FILENAME}" -o "${ELEMENTSD_FILENAME}"
+          echo "${ELEMENTSD_SHA256}  ${ELEMENTSD_FILENAME}" | sha256sum -c -
+          tar -xzf "${ELEMENTSD_FILENAME}"
+          chmod +x "${BIN_DIR}/elements-${ELEMENTSD_VERSION}/bin/elementsd"
+        fi
+
+        echo "${BIN_DIR}" >> "${GITHUB_PATH}"
+        echo "${BIN_DIR}/elements-${ELEMENTSD_VERSION}/bin" >> "${GITHUB_PATH}"
+        echo "ELECTRS_LIQUID_EXEC=${BIN_DIR}/electrs" >> "${GITHUB_ENV}"
+        echo "ELEMENTSD_EXEC=${BIN_DIR}/elements-${ELEMENTSD_VERSION}/bin/elementsd" >> "${GITHUB_ENV}"

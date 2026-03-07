@@ -12,13 +12,17 @@ use wallet_abi_common::WalletAbiHarness;
 #[tokio::test]
 async fn test_script_auth_creation_happy_path() -> Result<()> {
     let harness = WalletAbiHarness::new().await?;
+
     let _ = fund_address(&harness.signer_address, RuntimeFundingAsset::Lbtc, 200_000)?;
     let lock_funding = fund_address(
         &harness.signer_address,
         RuntimeFundingAsset::IssuedAsset,
         5_000,
     )?;
+
     mine_blocks(1)?;
+    harness.sync_wallet().await?;
+
     let state = harness
         .create_script_auth(
             lock_funding.funded_asset_id,
@@ -36,13 +40,17 @@ async fn test_script_auth_creation_happy_path() -> Result<()> {
 #[tokio::test]
 async fn test_script_auth_unlock_happy_path() -> Result<()> {
     let harness = WalletAbiHarness::new().await?;
+
     let _ = fund_address(&harness.signer_address, RuntimeFundingAsset::Lbtc, 200_000)?;
     let lock_funding = fund_address(
         &harness.signer_address,
         RuntimeFundingAsset::IssuedAsset,
         5_000,
     )?;
+
     mine_blocks(1)?;
+    harness.sync_wallet().await?;
+
     let state = harness
         .create_script_auth(
             lock_funding.funded_asset_id,
@@ -55,7 +63,10 @@ async fn test_script_auth_unlock_happy_path() -> Result<()> {
         RuntimeFundingAsset::IssuedAsset,
         3_000,
     )?;
+
     mine_blocks(1)?;
+    harness.sync_wallet().await?;
+
     let unlocked = harness
         .unlock_script_auth(
             &state,

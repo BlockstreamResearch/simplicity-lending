@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   test:
-    name: Build and test (matrix)
+    name: Build and test (matrix, non-regtest)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -88,8 +88,46 @@ jobs:
           cd crates/indexer
           SKIP_DOCKER=true ./scripts/init_db.sh
 
-      - name: Run tests
-        run: cargo test --workspace --all-features --no-fail-fast --verbose
+      - name: Run non-regtest workspace tests
+        run: cargo test --workspace --all-features --exclude lending-contracts --no-fail-fast --verbose
+
+      - name: Run lending-contracts library tests
+        run: cargo test -p lending-contracts --lib --all-features --verbose
 
       - name: Check that queries are fresh
         run: cargo sqlx prepare --workspace --check -- --all-targets
+
+  contracts-regtest:
+    name: Contracts regtest tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Setup regtest executables
+        uses: ./.github/actions/setup-regtest-execs
+
+      - name: Test lending-contracts regtest integration tests
+        run: cargo test -p lending-contracts --tests --all-features --no-fail-fast --verbose -- --test-threads=1
+
+      - name: Assert no leaked regtest nodes after contracts tests
+        if: always()
+        run: |
+          set -euo pipefail
+          leaks="$(ps -eo pid=,comm=,args= | awk '$2=="elementsd" || $2=="electrs" {print}')"
+          if [ -n "$leaks" ]; then
+            echo "Leaked regtest node processes after contracts regtest tests:"
+            echo "$leaks"
+            exit 1
+          fi

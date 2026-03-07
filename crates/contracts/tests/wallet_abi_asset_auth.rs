@@ -20,6 +20,7 @@ async fn test_asset_auth_creation_happy_path() -> Result<()> {
     )?;
 
     mine_blocks(1)?;
+    harness.sync_wallet().await?;
 
     let _ = harness
         .create_asset_auth(
@@ -48,6 +49,7 @@ async fn test_asset_auth_unlock_with_burn_happy_path() -> Result<()> {
     )?;
 
     mine_blocks(1)?;
+    harness.sync_wallet().await?;
 
     let mut auth_state = harness
         .create_asset_auth(
@@ -77,6 +79,7 @@ async fn test_asset_auth_unlock_without_burn_happy_path() -> Result<()> {
     )?;
 
     mine_blocks(1)?;
+    harness.sync_wallet().await?;
 
     let mut auth_state = harness
         .create_asset_auth(
