@@ -37,6 +37,18 @@ pub enum PreLockError {
     NotAPreLockTransaction { txid: String },
     #[error("Invalid OP_RETURN metadata bytes: {bytes}")]
     InvalidOpReturnBytes { bytes: String },
+    #[error(
+        "Pre lock borrower output script hashes differ: borrower NFT {borrower_nft_output_script_hash}, principal {principal_output_script_hash}"
+    )]
+    InconsistentBorrowerOutputScriptHashes {
+        borrower_nft_output_script_hash: String,
+        principal_output_script_hash: String,
+    },
+    #[error("Borrower output script hash mismatch: expected {expected_hash}, actual {actual_hash}")]
+    BorrowerOutputScriptHashMismatch {
+        expected_hash: String,
+        actual_hash: String,
+    },
 }
 
 /// Errors from transaction building operations.

@@ -52,6 +52,69 @@ export function bytes32ToHex(b: Uint8Array): string {
   return bytesToHex(b)
 }
 
+export interface OfferMetadata {
+  borrowerPubKey: Uint8Array
+  principalAssetId: Uint8Array
+  borrowerOutputScriptHash?: Uint8Array
+  borrowerOutputScriptPubkeyHex?: string
+}
+
+function encodeOpReturnPushPrefix(payloadLength: number): string {
+  if (payloadLength <= 0x4b) return `6a${payloadLength.toString(16).padStart(2, '0')}`
+  if (payloadLength <= 0xff) return `6a4c${payloadLength.toString(16).padStart(2, '0')}`
+  throw new Error('Offer metadata payload is too large')
+}
+
+export function buildOfferMetadataScript(
+  signingXOnlyPubkey: string,
+  principalAssetId: string
+): string {
+  const pubkeyBytes = hexToBytes32(signingXOnlyPubkey)
+  const principalInternal = assetIdDisplayToInternal(principalAssetId)
+  const data = new Uint8Array(64)
+  data.set(pubkeyBytes, 0)
+  data.set(principalInternal, 32)
+  return `${encodeOpReturnPushPrefix(data.length)}${bytesToHex(data)}`
+}
+
+export function buildBorrowerOutputScriptMetadataScript(
+  borrowerOutputScriptPubkeyHex: string
+): string {
+  const normalizedScript = normalizeHex(borrowerOutputScriptPubkeyHex)
+  if (normalizedScript.length === 0 || normalizedScript.length % 2 !== 0) {
+    throw new Error('Borrower output script metadata must contain a script_pubkey hex payload')
+  }
+  const borrowerOutputScript = hexToBytes(normalizedScript)
+  return `${encodeOpReturnPushPrefix(borrowerOutputScript.length)}${bytesToHex(
+    borrowerOutputScript
+  )}`
+}
+
+function parseOpReturnPayload(scriptHex: string): Uint8Array {
+  const hex = normalizeHex(scriptHex).replace(/\s/g, '')
+  if (!hex.startsWith('6a')) {
+    throw new Error('Offer metadata output must start with OP_RETURN')
+  }
+
+  let length = 0
+  let payloadOffset = 0
+
+  if (hex.startsWith('6a4c')) {
+    length = parseInt(hex.slice(4, 6), 16)
+    payloadOffset = 6
+  } else {
+    length = parseInt(hex.slice(2, 4), 16)
+    payloadOffset = 4
+  }
+
+  const dataHex = hex.slice(payloadOffset)
+  if (dataHex.length !== length * 2) {
+    throw new Error('Offer metadata output does not match its declared payload length')
+  }
+
+  return hexToBytes(dataHex)
+}
+
 /**
  * Get script_pubkey hex from an Esplora vout.
  * Uses scriptpubkey_hex or scriptpubkey (string or .hex).
@@ -70,21 +133,48 @@ export function getScriptHexFromVout(vout: EsploraVout): string {
 }
 
 /**
- * Parse OP_RETURN with 64-byte push (6a40 + 64 bytes hex = 128 chars).
- * Returns borrower_pubkey (32 bytes) and principal_asset_id (32 bytes) from offer creation tx.
+ * Parse the primary 64-byte offer creation metadata output. An optional second
+ * 32-byte OP_RETURN can carry the borrower output script hash.
  */
+export function parseOfferMetadataOutputs(
+  scriptHex: string,
+  borrowerOutputMetadataScriptHex?: string
+): OfferMetadata {
+  const data = parseOpReturnPayload(scriptHex)
+  if (data.length !== 64) {
+    throw new Error('Offer creation OP_RETURN must contain exactly 64 bytes')
+  }
+
+  const borrowerOutputMetadata = borrowerOutputMetadataScriptHex
+    ? parseOfferBorrowerOutputScriptMetadataScript(borrowerOutputMetadataScriptHex)
+    : undefined
+
+  return {
+    borrowerPubKey: data.slice(0, 32),
+    principalAssetId: data.slice(32, 64),
+    ...borrowerOutputMetadata,
+  }
+}
+
+export function parseOfferBorrowerOutputScriptMetadataScript(
+  scriptHex: string
+): Pick<OfferMetadata, 'borrowerOutputScriptHash' | 'borrowerOutputScriptPubkeyHex'> {
+  const payload = parseOpReturnPayload(scriptHex)
+
+  if (payload.length === 32) {
+    return { borrowerOutputScriptHash: payload }
+  }
+
+  return { borrowerOutputScriptPubkeyHex: bytesToHex(payload) }
+}
+
 export function parseOpReturn64(scriptHex: string): {
   borrowerPubKey: Uint8Array
   principalAssetId: Uint8Array
 } {
-  const hex = normalizeHex(scriptHex).replace(/\s/g, '')
-  if (!hex.startsWith('6a40')) {
-    throw new Error('Offer creation OP_RETURN must start with 6a40 (OP_RETURN + push 64)')
+  const metadata = parseOfferMetadataOutputs(scriptHex)
+  return {
+    borrowerPubKey: metadata.borrowerPubKey,
+    principalAssetId: metadata.principalAssetId,
   }
-  const dataHex = hex.slice(4)
-  if (dataHex.length !== 128)
-    throw new Error('Offer creation OP_RETURN must contain exactly 64 bytes')
-  const data = hexToBytes32(dataHex.slice(0, 64))
-  const principal = hexToBytes32(dataHex.slice(64))
-  return { borrowerPubKey: data, principalAssetId: principal }
 }

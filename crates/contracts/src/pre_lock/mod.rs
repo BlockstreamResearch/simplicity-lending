@@ -140,7 +140,7 @@ mod pre_lock_tests {
     use crate::sdk::parameters::LendingParameters;
     use crate::sdk::{
         build_pre_lock_cancellation, build_pre_lock_creation, build_pre_lock_lending_creation,
-        taproot_unspendable_internal_key,
+        decode_pre_lock_metadata, extract_arguments_from_tx, taproot_unspendable_internal_key,
     };
 
     use super::*;
@@ -178,6 +178,7 @@ mod pre_lock_tests {
         second_parameters_nft_amount: u64,
         borrower_pub_key: &XOnlyPublicKey,
         lending_params: &LendingParameters,
+        borrower_output_script_hash: Option<[u8; 32]>,
     ) -> Result<((PartiallySignedTransaction, Address), PreLockArguments)> {
         // Calculate script hash for the AssetAuth covenant with the Lender NFT auth
         let asset_auth_arguments = AssetAuthArguments {
@@ -222,9 +223,9 @@ mod pre_lock_tests {
         .script_pubkey();
         let parameters_nft_output_script_hash = hash_script(&script_auth_script);
 
-        // Calculate P2TR script hash
-        let borrower_p2tr_address = get_p2pk_address(borrower_pub_key, NETWORK)?;
-        let borrower_p2tr_script_hash = hash_script(&borrower_p2tr_address.script_pubkey());
+        let borrower_p2tr_script_hash = borrower_output_script_hash.unwrap_or(hash_script(
+            &get_p2pk_address(borrower_pub_key, NETWORK)?.script_pubkey(),
+        ));
 
         let pre_lock_arguments = PreLockArguments::new(
             collateral_asset_id.into_inner().0,
@@ -304,6 +305,7 @@ mod pre_lock_tests {
                     },
                 ),
                 &pre_lock_arguments,
+                None,
                 100,
                 NETWORK,
             )?,
@@ -369,6 +371,7 @@ mod pre_lock_tests {
             second_parameters_amount,
             &test_borrower_key,
             &lending_params,
+            None,
         )?;
 
         let pst = pst.extract_tx()?;
@@ -389,15 +392,86 @@ mod pre_lock_tests {
             .push_bytes()
             .unwrap();
 
-        let (op_return_pub_key, op_return_asset_id) = op_return_bytes.split_at(32);
+        let borrower_output_script_hash_bytes = pst.output.get(6).and_then(|tx_out| {
+            if !tx_out.is_null_data() {
+                return None;
+            }
 
-        let op_return_asset_id: [u8; 32] =
-            op_return_asset_id.try_into().expect("Length must be 32");
+            let mut op_return_instr_iter = tx_out.script_pubkey.instructions_minimal();
+            let _ = op_return_instr_iter.next()?;
+            op_return_instr_iter
+                .next()
+                .and_then(Result::ok)
+                .and_then(|instruction| instruction.push_bytes())
+        });
 
-        let op_return_public_key = XOnlyPublicKey::from_slice(op_return_pub_key).unwrap();
+        let metadata =
+            decode_pre_lock_metadata(op_return_bytes, borrower_output_script_hash_bytes)?;
+        let op_return_public_key =
+            XOnlyPublicKey::from_slice(&metadata.borrower_pub_key()).unwrap();
+        let borrower_p2tr_script_hash =
+            hash_script(&get_p2pk_address(&test_borrower_key, NETWORK)?.script_pubkey());
 
         assert!(op_return_public_key.serialize() == test_borrower_key.serialize());
-        assert!(principal_asset_id.into_inner().0 == op_return_asset_id);
+        assert!(principal_asset_id.into_inner().0 == metadata.principal_asset_id());
+        assert_eq!(
+            metadata.borrower_output_script_hash(),
+            Some(borrower_p2tr_script_hash)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_pre_lock_creation_round_trips_custom_borrower_output_script_hash() -> Result<()> {
+        let keypair = Keypair::from_secret_key(
+            &Secp256k1::new(),
+            &secp256k1::SecretKey::from_slice(&[1u8; 32])?,
+        );
+        let test_borrower_key = keypair.x_only_public_key().0;
+
+        let principal_asset_id = AssetId::from_str(LIQUID_TESTNET_TEST_ASSET_ID_STR)?;
+        let (
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+        ) = create_test_assets()?;
+
+        let lending_params = LendingParameters {
+            collateral_amount: 10_000,
+            principal_amount: 4_000,
+            loan_expiration_time: 100,
+            principal_interest_rate: 250,
+        };
+        let (first_parameters_amount, second_parameters_amount) =
+            lending_params.encode_parameters_nft_amounts(2)?;
+        let borrower_output_script_hash = hash_script(&Script::new_p2pkh(&PubkeyHash::hash(
+            &test_borrower_key.serialize(),
+        )));
+
+        let ((pst, _), pre_lock_arguments) = get_creation_pst(
+            *LIQUID_TESTNET_BITCOIN_ASSET,
+            principal_asset_id,
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+            first_parameters_amount,
+            second_parameters_amount,
+            &test_borrower_key,
+            &lending_params,
+            Some(borrower_output_script_hash),
+        )?;
+
+        let tx = pst.extract_tx()?;
+        let extracted_arguments = extract_arguments_from_tx(&tx, NETWORK)?;
+
+        assert_eq!(extracted_arguments, pre_lock_arguments);
+        assert_eq!(
+            extracted_arguments.principal_output_script_hash(),
+            borrower_output_script_hash
+        );
 
         Ok(())
     }
@@ -439,6 +513,7 @@ mod pre_lock_tests {
             second_parameters_amount,
             &test_borrower_key,
             &lending_params,
+            None,
         )?;
 
         let pst = pst.extract_tx()?;
@@ -612,6 +687,7 @@ mod pre_lock_tests {
             second_parameters_amount,
             &test_borrower_key,
             &lending_params,
+            None,
         )?;
 
         let pst = pst.extract_tx()?;

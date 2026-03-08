@@ -2,8 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
+import { fileURLToPath } from 'url'
 
 const SIMPLICITY_SOURCES_VIRTUAL = '\0virtual:simplicity-sources'
+const WEB_ROOT = path.dirname(fileURLToPath(import.meta.url))
 
 function simplicitySourcesPlugin() {
   let repoRoot: string
@@ -36,6 +38,8 @@ function simplicitySourcesPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  root: WEB_ROOT,
+  envDir: WEB_ROOT,
   // Vitest extension (see vitest.config reference or run vitest for tests)
   // @ts-expect-error - Vite's UserConfigExport doesn't include Vitest's 'test'
   test: {

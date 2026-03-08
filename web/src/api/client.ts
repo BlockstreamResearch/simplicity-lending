@@ -77,6 +77,18 @@ export async function fetchOfferIdsByScript(scriptPubkeyHex: string): Promise<st
   return arr.map((id) => String(id))
 }
 
+export async function fetchOfferIdsByScripts(scriptPubkeysHex: Iterable<string>): Promise<string[]> {
+  const scripts = [...new Set(Array.from(scriptPubkeysHex, (script) => script.trim().toLowerCase()))]
+    .filter((script) => script.length > 0)
+
+  if (scripts.length === 0) {
+    return []
+  }
+
+  const nestedIds = await Promise.all(scripts.map((script) => fetchOfferIdsByScript(script)))
+  return [...new Set(nestedIds.flat())]
+}
+
 /** Fetch offer IDs where the given key is the borrower (e.g. pending offers created by this user). Expects 32-byte hex (64 chars). */
 export async function fetchOfferIdsByBorrowerPubkey(borrowerPubkeyHex: string): Promise<string[]> {
   const hex = borrowerPubkeyHex.trim().toLowerCase().replace(/^0x/, '')
@@ -115,11 +127,28 @@ export function filterOffersByParticipantRole(
   scriptPubkeyHex: string,
   role: ParticipantType
 ): OfferShort[] {
-  const scriptLower = scriptPubkeyHex.trim().toLowerCase()
+  return filterOffersByParticipantScripts(offers, [scriptPubkeyHex], role)
+}
+
+export function filterOffersByParticipantScripts(
+  offers: OfferWithParticipants[],
+  scriptPubkeysHex: Iterable<string>,
+  role: ParticipantType
+): OfferShort[] {
+  const scripts = new Set(
+    Array.from(scriptPubkeysHex, (script) => script.trim().toLowerCase()).filter(
+      (script) => script.length > 0
+    )
+  )
+
+  if (scripts.size === 0) {
+    return []
+  }
+
   return offers
     .filter((o) =>
       o.participants.some(
-        (p) => p.participant_type === role && p.script_pubkey.trim().toLowerCase() === scriptLower
+        (p) => p.participant_type === role && scripts.has(p.script_pubkey.trim().toLowerCase())
       )
     )
     .map(

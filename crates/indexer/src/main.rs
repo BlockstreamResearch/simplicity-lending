@@ -2,7 +2,6 @@ use lending_indexer::esplora_client::EsploraClient;
 use lending_indexer::telemetry::{get_subscriber, init_subscriber};
 use lending_indexer::{api, indexer};
 use sqlx::PgPool;
-use tokio::net::TcpListener;
 
 use lending_indexer::configuration::get_configuration;
 
@@ -21,18 +20,24 @@ async fn main() -> Result<(), std::io::Error> {
         "indexer" => {
             let esplora_client = EsploraClient::with_base_url(&configuration.esplora.base_url);
 
-            tracing::info!("Starting indexer service");
+            tracing::info!("Starting indexer service (background worker only; no HTTP listener)");
             indexer::worker::run_indexer(configuration.indexer, pool, esplora_client).await;
         }
         _ => {
-            let address = format!(
-                "{}:{}",
-                configuration.application.host, configuration.application.port
-            );
-            let listener = TcpListener::bind(address).await?;
+            let listeners = api::server::bind_listeners(
+                &configuration.application.host,
+                configuration.application.port,
+            )
+            .await?;
 
-            tracing::info!("Starting api server");
-            api::server::run_server(listener, pool).await;
+            let listen_addresses = listeners
+                .iter()
+                .filter_map(|listener| listener.local_addr().ok())
+                .map(|addr| addr.to_string())
+                .collect::<Vec<_>>();
+
+            tracing::info!(?listen_addresses, "Starting api server");
+            api::server::run_server(listeners, pool).await?;
         }
     }
 

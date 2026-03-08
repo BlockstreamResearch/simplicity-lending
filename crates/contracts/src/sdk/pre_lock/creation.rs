@@ -14,6 +14,7 @@ use crate::script_auth::build_arguments::ScriptAuthArguments;
 use crate::script_auth::get_script_auth_address;
 use crate::sdk::basic::{add_base_input_from_utxo, check_asset_id, check_asset_value};
 use crate::sdk::parameters::{FirstNFTParameters, SecondNFTParameters};
+use crate::sdk::pre_lock::metadata::PreLockMetadata;
 use crate::sdk::taproot_unspendable_internal_key;
 
 /// Create a new pre lock contract.
@@ -40,6 +41,7 @@ pub fn build_pre_lock_creation(
     lender_nft_utxo: (OutPoint, TxOut),
     fee_utxo: (OutPoint, TxOut),
     pre_lock_arguments: &PreLockArguments,
+    borrower_output_script: Option<&Script>,
     fee_amount: u64,
     network: SimplicityNetwork,
 ) -> Result<(PartiallySignedTransaction, Address), TransactionBuildError> {
@@ -192,10 +194,12 @@ pub fn build_pre_lock_creation(
         None,
     ));
 
-    // Add OP_RETURN output with the Borrower public key and the Principal asset id
-    let mut op_return_data = [0u8; 64];
-    op_return_data[..32].copy_from_slice(&pre_lock_arguments.borrower_pub_key());
-    op_return_data[32..].copy_from_slice(&pre_lock_arguments.principal_asset_id());
+    // Persist the borrower signing key and principal asset in the primary metadata output.
+    let metadata = PreLockMetadata::from_pre_lock_arguments(
+        pre_lock_arguments,
+        borrower_output_script.map(simplicityhl::elements::Script::as_bytes),
+    )?;
+    let op_return_data = metadata.encode();
 
     pst.add_output(Output::new_explicit(
         Script::new_op_return(&op_return_data),
@@ -203,6 +207,15 @@ pub fn build_pre_lock_creation(
         AssetId::default(),
         None,
     ));
+
+    if let Some(borrower_output_metadata) = metadata.encode_borrower_output_metadata() {
+        pst.add_output(Output::new_explicit(
+            Script::new_op_return(&borrower_output_metadata),
+            0,
+            AssetId::default(),
+            None,
+        ));
+    }
 
     // Return collateral asset change
     if is_collateral_change_needed {

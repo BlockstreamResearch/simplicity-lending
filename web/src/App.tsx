@@ -1,223 +1,178 @@
-import { useState, useEffect } from 'react'
-import { SeedGate } from './SeedGate'
-import { Utility } from './pages/Utility'
-import { CreateOfferPage } from './pages/CreateOffer'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Dashboard } from './pages/Dashboard'
+import { BorrowerPage } from './pages/Borrower'
 import { LenderPage } from './pages/Lender'
-import { AccountMenu } from './components/AccountMenu'
-import { parseSeedHex, deriveSecretKeyFromIndex } from './utility/seed'
-import { getP2pkAddressFromSecret } from './utility/addressP2pk'
+import { UtilityPage } from './pages/Utility'
+import { WalletAbiSessionProvider, useWalletAbiSession } from './walletAbi/WalletAbiSessionContext'
+import { WalletConnectCard } from './walletAbi/WalletConnectCard'
 
-const SEED_STORAGE_KEY = 'simplicity-lending-seed-hex'
-const ACCOUNT_INDEX_STORAGE_KEY = 'simplicity-lending-account-index'
-const P2PK_NETWORK: 'testnet' | 'mainnet' = 'testnet'
+export type Tab = 'dashboard' | 'borrower' | 'lender' | 'utility'
 
-export type Tab = 'dashboard' | 'utility' | 'borrower' | 'lender'
+function tabFromHash(hash: string): Tab {
+  const normalized = hash.replace(/^#\/?/, '').trim().toLowerCase()
+  switch (normalized) {
+    case 'borrower':
+      return 'borrower'
+    case 'lender':
+      return 'lender'
+    case 'utility':
+      return 'utility'
+    case 'dashboard':
+    default:
+      return 'dashboard'
+  }
+}
 
-function Header({
-  tab,
-  onTab,
-  accountIndex,
-  accountAddress,
-  addressLoading,
-  onAccountIndexChange,
-  onDisconnect,
-  showTabs,
-}: {
-  tab: Tab
-  onTab: (t: Tab) => void
-  accountIndex: number
-  accountAddress: string | null
-  addressLoading: boolean
-  onAccountIndexChange: (index: number) => void
-  onDisconnect: () => void
-  showTabs: boolean
-}) {
+function hashForTab(tab: Tab): string {
+  return `#/${tab}`
+}
+
+function shortId(value: string, head = 8, tail = 4): string {
+  if (value.length <= head + tail) return value
+  return `${value.slice(0, head)}…${value.slice(-tail)}`
+}
+
+function WalletSessionMenu() {
+  const { signingXOnlyPubkey, network, disconnect } = useWalletAbiSession()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [open])
+
+  if (!signingXOnlyPubkey) return null
+
   return (
-    <header className="border-b border-gray-200 bg-white">
-      <div className="max-w-7xl mx-auto px-8 py-4 flex justify-between items-center">
-        <div className="flex flex-col">
-          <h1 className="text-2xl font-bold uppercase text-gray-900">LENDING DEMO</h1>
-          <p className="text-sm uppercase text-gray-500">POWERED BY SIMPLICITY</p>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="rounded-full bg-neutral-950 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+      >
+        {shortId(signingXOnlyPubkey)}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-3 w-72 rounded-[1.5rem] border border-neutral-200 bg-white p-4 shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
+            Wallet Session
+          </p>
+          <p className="mt-3 text-sm text-neutral-600">Network: {network ?? 'unknown'}</p>
+          <p className="mt-2 break-all font-mono text-xs text-neutral-800">{signingXOnlyPubkey}</p>
+          <button
+            type="button"
+            onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+              event.preventDefault()
+              setOpen(false)
+              void disconnect()
+            }}
+            className="mt-4 w-full rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+          >
+            Disconnect
+          </button>
         </div>
-        {showTabs && (
-          <div className="flex items-center gap-6">
-            <nav className="flex gap-6">
-              <button
-                type="button"
-                className={
-                  'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
-                  'hover:underline focus:ring-0 focus:ring-offset-0 ' +
-                  (tab === 'dashboard'
-                    ? 'font-semibold text-gray-900'
-                    : 'text-gray-600 hover:text-gray-900 font-medium')
-                }
-                onClick={() => onTab('dashboard')}
-              >
-                Dashboard
-              </button>
-              <button
-                type="button"
-                className={
-                  'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
-                  'hover:underline focus:ring-0 focus:ring-offset-0 ' +
-                  (tab === 'borrower'
-                    ? 'font-semibold text-gray-900'
-                    : 'text-gray-600 hover:text-gray-900 font-medium')
-                }
-                onClick={() => onTab('borrower')}
-              >
-                Borrower
-              </button>
-              <button
-                type="button"
-                className={
-                  'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
-                  'hover:underline focus:ring-0 focus:ring-offset-0 ' +
-                  (tab === 'lender'
-                    ? 'font-semibold text-gray-900'
-                    : 'text-gray-600 hover:text-gray-900 font-medium')
-                }
-                onClick={() => onTab('lender')}
-              >
-                Lender
-              </button>
-              <button
-                type="button"
-                className={
-                  'border-0 bg-transparent p-0 min-w-0 rounded-none shadow-none cursor-pointer ' +
-                  'hover:underline focus:ring-0 focus:ring-offset-0 ' +
-                  (tab === 'utility'
-                    ? 'font-semibold text-gray-900'
-                    : 'text-gray-600 hover:text-gray-900 font-medium')
-                }
-                onClick={() => onTab('utility')}
-              >
-                Utility
-              </button>
-            </nav>
-            <AccountMenu
-              accountIndex={accountIndex}
-              accountAddress={accountAddress}
-              addressLoading={addressLoading}
-              onAccountIndexChange={onAccountIndexChange}
-              onDisconnect={onDisconnect}
-            />
-          </div>
-        )}
-      </div>
-    </header>
+      )}
+    </div>
   )
 }
 
-function AppContent({
-  tab,
-  onTab,
-  accountIndex,
-}: {
-  tab: Tab
-  onTab: (t: Tab) => void
-  accountIndex: number
-}) {
+function AppShell() {
+  const { status, network, signerScriptPubkeyHex, signingXOnlyPubkey } = useWalletAbiSession()
+  const [tab, setTab] = useState<Tab>(() => tabFromHash(window.location.hash))
+  const connected = status === 'connected' && network && signerScriptPubkeyHex && signingXOnlyPubkey
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setTab(tabFromHash(window.location.hash))
+    }
+
+    window.addEventListener('hashchange', onHashChange)
+    onHashChange()
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  useEffect(() => {
+    const nextHash = hashForTab(tab)
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, '', nextHash)
+    }
+  }, [tab])
+
   return (
-    <main className="max-w-7xl mx-auto px-8 py-8">
-      {tab === 'dashboard' && <Dashboard onTab={onTab} accountIndex={accountIndex} />}
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#f8f4ec_0%,#fdfdfb_45%,#f3f7f5_100%)] text-neutral-950">
+      <header className="border-b border-neutral-200/80 bg-white/80 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-neutral-500">
+              Simplicity Lending
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
+              WalletConnect Wallet ABI
+            </h1>
+          </div>
+          {connected ? (
+            <div className="flex items-center gap-4">
+              <nav className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white p-1">
+                {(['dashboard', 'borrower', 'lender', 'utility'] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setTab(item)}
+                    className={
+                      tab === item
+                        ? 'rounded-full bg-neutral-950 px-4 py-2 text-sm font-medium text-white'
+                        : 'rounded-full px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100'
+                    }
+                  >
+                    {item === 'dashboard'
+                      ? 'Dashboard'
+                      : item === 'borrower'
+                        ? 'Borrower'
+                        : item === 'lender'
+                          ? 'Lender'
+                          : 'Utility'}
+                  </button>
+                ))}
+              </nav>
+              <WalletSessionMenu />
+            </div>
+          ) : null}
+        </div>
+      </header>
 
-      {tab === 'utility' && <Utility accountIndex={accountIndex} />}
-
-      {tab === 'borrower' && <CreateOfferPage accountIndex={accountIndex} onTab={onTab} />}
-
-      {tab === 'lender' && <LenderPage accountIndex={accountIndex} onTab={onTab} />}
-    </main>
+      <main className="mx-auto max-w-7xl px-6 py-8">
+        {!connected ? (
+          <WalletConnectCard />
+        ) : tab === 'dashboard' ? (
+          <Dashboard
+            onTab={setTab}
+            network={network}
+            signerScriptPubkeyHex={signerScriptPubkeyHex}
+            signingXOnlyPubkey={signingXOnlyPubkey}
+          />
+        ) : tab === 'borrower' ? (
+          <BorrowerPage />
+        ) : tab === 'utility' ? (
+          <UtilityPage />
+        ) : (
+          <LenderPage />
+        )}
+      </main>
+    </div>
   )
-}
-
-function readStoredAccountIndex(): number {
-  if (typeof localStorage === 'undefined') return 0
-  const raw = localStorage.getItem(ACCOUNT_INDEX_STORAGE_KEY)
-  if (raw === null) return 0
-  const n = parseInt(raw, 10)
-  return Number.isNaN(n) || n < 0 ? 0 : n
 }
 
 export default function App() {
-  const [seedHex, setSeedHexState] = useState<string | null>(() =>
-    typeof localStorage !== 'undefined' ? localStorage.getItem(SEED_STORAGE_KEY) : null
-  )
-  const [accountIndex, setAccountIndexState] = useState(readStoredAccountIndex)
-  const [currentAccountAddress, setCurrentAccountAddress] = useState<string | null>(null)
-  const [addressLoading, setAddressLoading] = useState(false)
-  const [tab, setTab] = useState<Tab>('dashboard')
-
-  useEffect(() => {
-    if (!seedHex) return
-    let cancelled = false
-    void (async () => {
-      setAddressLoading(true)
-      setCurrentAccountAddress(null)
-      try {
-        const seed = parseSeedHex(seedHex)
-        const secret = deriveSecretKeyFromIndex(seed, accountIndex)
-        const r = await getP2pkAddressFromSecret(secret, P2PK_NETWORK)
-        if (!cancelled) setCurrentAccountAddress(r.address)
-      } catch {
-        if (!cancelled) setCurrentAccountAddress(null)
-      } finally {
-        if (!cancelled) setAddressLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [seedHex, accountIndex])
-
-  const setSeedHex = (hex: string | null) => {
-    setSeedHexState(hex)
-    if (hex === null) {
-      setCurrentAccountAddress(null)
-      setAddressLoading(false)
-    }
-    if (typeof localStorage === 'undefined') return
-    if (hex === null) {
-      localStorage.removeItem(SEED_STORAGE_KEY)
-    } else {
-      localStorage.setItem(SEED_STORAGE_KEY, hex)
-    }
-  }
-
-  const setAccountIndex = (index: number) => {
-    const n = index >= 0 ? index : 0
-    setAccountIndexState(n)
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(ACCOUNT_INDEX_STORAGE_KEY, String(n))
-    }
-  }
-
-  const handleDisconnect = () => {
-    setSeedHex(null)
-  }
-
-  const handleTab = (t: Tab) => {
-    setTab(t)
-  }
-
   return (
-    <div className="min-h-screen flex flex-col bg-white">
-      <Header
-        tab={tab}
-        onTab={handleTab}
-        accountIndex={accountIndex}
-        accountAddress={currentAccountAddress}
-        addressLoading={addressLoading}
-        onAccountIndexChange={setAccountIndex}
-        onDisconnect={handleDisconnect}
-        showTabs={seedHex !== null}
-      />
-      <div className="flex-1 flex justify-center w-full">
-        <SeedGate seedHex={seedHex} setSeedHex={setSeedHex} accountIndex={accountIndex}>
-          <AppContent tab={tab} onTab={handleTab} accountIndex={accountIndex} />
-        </SeedGate>
-      </div>
-    </div>
+    <WalletAbiSessionProvider>
+      <AppShell />
+    </WalletAbiSessionProvider>
   )
 }

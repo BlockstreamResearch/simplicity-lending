@@ -7,6 +7,7 @@
 import { useMemo } from 'react'
 import { EsploraClient } from '../api/esplora'
 import type { OfferShort } from '../types/offers'
+import { CopyIcon } from './CopyIcon'
 import { OfferStatusBadge } from './OfferStatusBadge'
 
 const BLOCKS_PER_DAY_LIQUID = 1440
@@ -15,6 +16,10 @@ const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER
 function shortId(id: string, len = 12): string {
   if (!id || id.length <= len) return id
   return `${id.slice(0, 8)}…${id.slice(-4)}`
+}
+
+function isInteractiveTarget(target: HTMLElement | null): boolean {
+  return target?.closest('a, button, input, textarea, select') != null
 }
 
 function formatSats(amount: bigint): string {
@@ -142,25 +147,41 @@ export function OfferTable({
                     onClick={
                       onOfferClick != null
                         ? (e) => {
-                            const target = e.target as HTMLElement
-                            if (target.closest('a')) return
-                            onOfferClick(offer)
-                          }
+                          const target = e.target as HTMLElement
+                          if (isInteractiveTarget(target)) return
+                          onOfferClick(offer)
+                        }
                         : undefined
                     }
                     onKeyDown={
                       onOfferClick != null
                         ? (e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              onOfferClick(offer)
-                            }
+                          const target = e.target as HTMLElement
+                          if (isInteractiveTarget(target)) return
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onOfferClick(offer)
                           }
+                        }
                         : undefined
                     }
                   >
                     <td className="py-2 px-3 text-sm font-mono text-gray-900">
-                      {shortId(offer.id)}
+                      <div className="flex items-center gap-2">
+                        <span>{shortId(offer.id)}</span>
+                        <button
+                          type="button"
+                          title="Copy full offer ID"
+                          aria-label={`Copy offer ID ${offer.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void navigator.clipboard?.writeText(offer.id)
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                        >
+                          <CopyIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                     <td className="py-2 px-3 text-sm text-gray-900">
                       <a

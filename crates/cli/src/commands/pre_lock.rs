@@ -24,7 +24,7 @@ use lending_contracts::sdk::parameters::{
     FirstNFTParameters, LendingParameters, SecondNFTParameters,
 };
 
-use lending_contracts::sdk::taproot_unspendable_internal_key;
+use lending_contracts::sdk::{decode_pre_lock_metadata, taproot_unspendable_internal_key};
 use simplicity_contracts::sdk::validation::TxOutExt;
 use simplicityhl::elements::bitcoin::secp256k1;
 use simplicityhl::elements::hashes::Hash;
@@ -37,7 +37,7 @@ use simplicityhl::simplicity::hex::DisplayHex;
 use simplicityhl::tracker::TrackerLogLevel;
 
 use simplicity_contracts::sdk::taproot_pubkey_gen::get_random_seed;
-use simplicity_contracts_cli::explorer::{broadcast_tx, fetch_utxo};
+use simplicity_contracts_cli::explorer::{ExplorerError, broadcast_tx, fetch_utxo};
 use simplicity_contracts_cli::modules::utils::derive_keypair;
 
 use simplicityhl_core::{
@@ -289,6 +289,7 @@ impl PreLock {
                 let borrower_nft_utxo = OutPoint::new(*pre_lock_tx_id, 3);
                 let lender_nft_utxo = OutPoint::new(*pre_lock_tx_id, 4);
                 let op_return_utxo = OutPoint::new(*pre_lock_tx_id, 5);
+                let borrower_output_script_hash_utxo = OutPoint::new(*pre_lock_tx_id, 6);
 
                 let pre_lock_tx_out = fetch_utxo(pre_lock_utxo).await?;
                 let first_parameters_nft_tx_out = fetch_utxo(first_parameters_nft_utxo).await?;
@@ -296,6 +297,12 @@ impl PreLock {
                 let borrower_nft_tx_out = fetch_utxo(borrower_nft_utxo).await?;
                 let lender_nft_tx_out = fetch_utxo(lender_nft_utxo).await?;
                 let op_return_tx_out = fetch_utxo(op_return_utxo).await?;
+                let borrower_output_script_hash_tx_out =
+                    match fetch_utxo(borrower_output_script_hash_utxo).await {
+                        Ok(tx_out) => Some(tx_out),
+                        Err(ExplorerError::OutputIndexOutOfBounds { .. }) => None,
+                        Err(err) => return Err(err.into()),
+                    };
 
                 let (pre_lock_asset_id, _) = pre_lock_tx_out.explicit()?;
                 let (first_parameters_nft_asset_id, first_parameters_nft_value) =
@@ -325,17 +332,31 @@ impl PreLock {
                     .push_bytes()
                     .unwrap();
 
-                let (op_return_pub_key, op_return_asset_id) = op_return_bytes.split_at(32);
+                let borrower_output_script_hash_bytes = borrower_output_script_hash_tx_out
+                    .as_ref()
+                    .filter(|tx_out| tx_out.is_null_data())
+                    .and_then(|tx_out| {
+                        let mut op_return_instr_iter = tx_out.script_pubkey.instructions_minimal();
+                        let _ = op_return_instr_iter.next()?;
+                        op_return_instr_iter
+                            .next()
+                            .and_then(Result::ok)
+                            .and_then(|instruction| instruction.push_bytes())
+                    });
 
-                let principal_asset_id: [u8; 32] =
-                    op_return_asset_id.try_into().expect("Length must be 32");
-
-                let borrower_public_key = XOnlyPublicKey::from_slice(op_return_pub_key).unwrap();
+                let metadata =
+                    decode_pre_lock_metadata(op_return_bytes, borrower_output_script_hash_bytes)?;
+                let principal_asset_id = metadata.principal_asset_id();
+                let borrower_public_key =
+                    XOnlyPublicKey::from_slice(&metadata.borrower_pub_key()).unwrap();
 
                 println!("Pre Lock covenant info:");
                 println!("Assets Info:");
                 println!("\tCollateral asset id: {}", pre_lock_asset_id.to_hex());
-                println!("\tPrincipal asset id: {}", principal_asset_id.to_hex());
+                println!(
+                    "\tPrincipal asset id: {}",
+                    AssetId::from_slice(&principal_asset_id)?.to_hex()
+                );
                 println!(
                     "\tFirst Parameters NFT asset id: {}",
                     first_parameters_nft_asset_id.to_hex()
@@ -351,6 +372,18 @@ impl PreLock {
                 println!("\tLender NFT asset id: {}", lender_nft_asset_id.to_hex());
                 println!("Lending Offer Info:");
                 println!("\tBorrower public key: {borrower_public_key}");
+                if let Some(borrower_output_script) = metadata.borrower_output_script() {
+                    println!(
+                        "\tBorrower output script: {}",
+                        borrower_output_script.to_hex()
+                    );
+                }
+                if let Some(borrower_output_script_hash) = metadata.borrower_output_script_hash() {
+                    println!(
+                        "\tBorrower output script hash: {}",
+                        borrower_output_script_hash.to_hex()
+                    );
+                }
                 println!("\tCollateral amount: {}", lending_params.collateral_amount);
                 println!("\tPrincipal amount: {}", lending_params.principal_amount);
                 println!(
@@ -771,6 +804,7 @@ impl PreLock {
                     (*lender_nft_utxo, lender_nft_tx_out.clone()),
                     (*fee_utxo, fee_tx_out.clone()),
                     &pre_lock_arguments,
+                    Some(&to_address.script_pubkey()),
                     *fee_amount,
                     NETWORK,
                 )?;

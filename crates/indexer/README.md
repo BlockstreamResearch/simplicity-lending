@@ -115,6 +115,7 @@ To start the Indexer:
 ```bash
 RUN_MODE=indexer cargo run -p lending-indexer
 ```
+This starts only the blockchain indexing worker. It does not expose the HTTP API and does not listen on port `8000`.
 
 To start the API Service:
 ```bash
@@ -126,7 +127,7 @@ cargo run -p lending-indexer
 > [!TIP]
 > For readable, pretty-printed logs in your console, pipe the output to bunyan. If you don't have it installed, run `cargo install bunyan`:
 > ```bash
-> RUN_MODE=indexer cargo run -p lending-indexer | bunyan
+> RUN_MODE=api cargo run -p lending-indexer | bunyan
 > ```
 
 ## Development & Testing

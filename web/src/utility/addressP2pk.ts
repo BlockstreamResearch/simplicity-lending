@@ -1,18 +1,16 @@
 /**
- * P2PK (Simplicity P2TR) address from a secret key.
- * Uses simplicity layer: p2pk covenant source + LWK createP2trAddress.
+ * Helpers for P2PK-derived addresses and script conversion.
  */
 
 import { getSource, getLwk, createP2trAddress, type P2pkNetwork } from '../simplicity'
 import { bytesToHex } from './hex'
 
-/** Network used for P2PK (Utility page, split tx). */
-export const P2PK_NETWORK: P2pkNetwork = 'testnet'
+export const P2PK_NETWORK: P2pkNetwork = 'localtest'
 
-/** Liquid/Elements policy asset (L-BTC) asset ID per network, hex lowercase. */
 export const POLICY_ASSET_ID: Record<P2pkNetwork, string> = {
   mainnet: '6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d',
   testnet: '144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49',
+  localtest: '5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225',
 }
 
 export interface LwkP2pkAddressResult {
@@ -20,25 +18,18 @@ export interface LwkP2pkAddressResult {
   internalKeyHex: string
 }
 
-/**
- * Get P2TR address for the P2PK Simplicity program and the given secret key (32 bytes).
- */
 export async function getP2pkAddressFromSecret(
   secretKey: Uint8Array,
   network: P2pkNetwork
 ): Promise<LwkP2pkAddressResult> {
   const lwk = await getLwk()
-  const Keypair = lwk.Keypair
-  const SimplicityArguments = lwk.SimplicityArguments
-  const SimplicityTypedValue = lwk.SimplicityTypedValue
-
-  const keypair = new Keypair(secretKey)
+  const keypair = lwk.Keypair.fromSecretBytes(secretKey)
   const internalKey = keypair.xOnlyPublicKey()
-  const internalKeyHex = internalKey.toHex()
+  const internalKeyHex = internalKey.toString()
 
-  const args = new SimplicityArguments().addValue(
+  const args = new lwk.SimplicityArguments().addValue(
     'PUBLIC_KEY',
-    SimplicityTypedValue.fromU256Hex(internalKeyHex)
+    lwk.SimplicityTypedValue.fromU256Hex(internalKeyHex)
   )
 
   const address = await createP2trAddress({
@@ -51,24 +42,19 @@ export async function getP2pkAddressFromSecret(
   return { address, internalKeyHex }
 }
 
-/**
- * Get P2TR address for the P2PK Simplicity program from x-only public key (32 bytes).
- * Mirrors Rust: get_p2pk_address(&borrower_x_only_public_key, network).
- */
 export async function getP2pkAddressFromPublicKey(
   xOnlyPublicKey: Uint8Array,
   network: P2pkNetwork
 ): Promise<string> {
   if (xOnlyPublicKey.length !== 32) throw new Error('Expected 32-byte x-only public key')
   const lwk = await getLwk()
-  const SimplicityArguments = lwk.SimplicityArguments
-  const SimplicityTypedValue = lwk.SimplicityTypedValue
-  const internalKey = lwk.XOnlyPublicKey.fromBytes(xOnlyPublicKey)
   const internalKeyHex = bytesToHex(xOnlyPublicKey)
-  const args = new SimplicityArguments().addValue(
+  const internalKey = lwk.XOnlyPublicKey.fromBytes(xOnlyPublicKey)
+  const args = new lwk.SimplicityArguments().addValue(
     'PUBLIC_KEY',
-    SimplicityTypedValue.fromU256Hex(internalKeyHex)
+    lwk.SimplicityTypedValue.fromU256Hex(internalKeyHex)
   )
+
   return createP2trAddress({
     source: getSource('p2pk'),
     args,
@@ -77,14 +63,32 @@ export async function getP2pkAddressFromPublicKey(
   })
 }
 
-/**
- * Get script_pubkey (hex) for an Elements/Liquid address using LWK.
- * Uses the unconfidential address so the script matches what Esplora indexes.
- */
 export async function getScriptPubkeyHexFromAddress(address: string): Promise<string> {
   const lwk = await getLwk()
   const addr = new lwk.Address(address)
   const unconf = addr.toUnconfidential()
-  const script = unconf.scriptPubkey()
-  return bytesToHex(script.bytes())
+  return bytesToHex(unconf.scriptPubkey().bytes())
+}
+
+export function inferWalletAbiNetworkFromAddress(
+  address: string
+): 'liquid' | 'testnet-liquid' | 'localtest-liquid' {
+  const trimmed = address.trim().toLowerCase()
+  if (trimmed.startsWith('lq1') || trimmed.startsWith('ex1')) return 'liquid'
+  if (trimmed.startsWith('tlq1') || trimmed.startsWith('tex1')) return 'testnet-liquid'
+  if (trimmed.startsWith('el1')) return 'localtest-liquid'
+  return 'testnet-liquid'
+}
+
+export function walletAbiNetworkToP2pkNetwork(
+  network: 'liquid' | 'testnet-liquid' | 'localtest-liquid'
+): P2pkNetwork {
+  switch (network) {
+    case 'liquid':
+      return 'mainnet'
+    case 'localtest-liquid':
+      return 'localtest'
+    case 'testnet-liquid':
+      return 'testnet'
+  }
 }

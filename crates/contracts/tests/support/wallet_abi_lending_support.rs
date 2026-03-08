@@ -862,9 +862,15 @@ impl LendingScenario {
         let mut op_return_data = [0u8; 64];
         op_return_data[..32]
             .copy_from_slice(&self.harness.signer_x_only_public_key_25()?.serialize());
-        op_return_data[32..].copy_from_slice(&self.principal_asset_id.into_inner().0);
+        op_return_data[32..64].copy_from_slice(&self.principal_asset_id.into_inner().0);
         let metadata_script = {
             let bytes = el25::encode::serialize(&el25::Script::new_op_return(&op_return_data));
+            el26::encode::deserialize(&bytes)?
+        };
+        let borrower_output_script_metadata_script = {
+            let bytes = el25::encode::serialize(&el25::Script::new_op_return(
+                self.harness.wallet_script_25().as_bytes(),
+            ));
             el26::encode::deserialize(&bytes)?
         };
         let fee_utxo = self.fund_explicit_policy_fee("pre-lock-fee").await?;
@@ -1015,6 +1021,17 @@ impl LendingScenario {
                         amount_sat: 0,
                         lock: LockVariant::Script {
                             script: metadata_script,
+                        },
+                        asset: AssetVariant::AssetId {
+                            asset_id: el26::AssetId::default(),
+                        },
+                        blinder: BlinderVariant::Explicit,
+                    },
+                    OutputSchema {
+                        id: "pre-lock-borrower-output-script-hash".into(),
+                        amount_sat: 0,
+                        lock: LockVariant::Script {
+                            script: borrower_output_script_metadata_script,
                         },
                         asset: AssetVariant::AssetId {
                             asset_id: el26::AssetId::default(),

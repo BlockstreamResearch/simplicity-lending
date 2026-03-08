@@ -9,7 +9,12 @@
     "skipLibCheck": true,
 
     /* Bundler mode */
+    "baseUrl": ".",
     "moduleResolution": "bundler",
+    "paths": {
+      "wallet-abi-sdk-alpha": ["../../wallet-abi-sdk/dist/index.d.ts"],
+      "wallet-abi-sdk-alpha/*": ["../../wallet-abi-sdk/dist/*"]
+    },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",

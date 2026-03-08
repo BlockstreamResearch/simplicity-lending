@@ -1,7 +1,7 @@
 /**
  * Esplora HTTP API client for chain data.
  * Mirrors the indexer's EsploraClient (crates/indexer/src/esplora_client.rs).
- * Base URL from env VITE_ESPLORA_BASE_URL (required).
+ * Base URL from env VITE_ESPLORA_BASE_URL.
  * Explorer URL for tx links from VITE_ESPLORA_EXPLORER_URL (optional; falls back to API base URL).
  * Results use default JS types (string, number, string[], Uint8Array).
  */
@@ -9,12 +9,16 @@
 /** Default request timeout in milliseconds. */
 export const DEFAULT_TIMEOUT_MS = 30_000
 
-function getBaseUrl(): string {
-  const env = import.meta.env.VITE_ESPLORA_BASE_URL
-  if (typeof env !== 'string' || !env.trim()) {
-    throw new EsploraApiError('VITE_ESPLORA_BASE_URL is not set')
+function normalizeBaseUrl(value?: string): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) {
+    return undefined
   }
-  return env.trim().replace(/\/+$/, '')
+  return value.trim().replace(/\/+$/, '')
+}
+
+function getBaseUrl(): string | undefined {
+  const env = import.meta.env.VITE_ESPLORA_BASE_URL
+  return normalizeBaseUrl(env)
 }
 
 function getExplorerBaseUrl(apiBaseUrl: string): string {
@@ -40,18 +44,29 @@ export class EsploraApiError extends Error {
  * Esplora API client. Create once with optional baseUrl/timeout, then call methods.
  */
 export class EsploraClient {
-  private readonly baseUrl: string
-  private readonly explorerBaseUrl: string
+  private readonly baseUrl: string | undefined
+  private readonly explorerBaseUrl: string | undefined
   private readonly timeoutMs: number
 
   constructor(baseUrl?: string, timeoutMs: number = DEFAULT_TIMEOUT_MS) {
-    this.baseUrl = (baseUrl?.trim() && baseUrl.trim().replace(/\/+$/, '')) || getBaseUrl()
-    this.explorerBaseUrl = getExplorerBaseUrl(this.baseUrl)
+    this.baseUrl = normalizeBaseUrl(baseUrl) || getBaseUrl()
+    this.explorerBaseUrl = this.baseUrl ? getExplorerBaseUrl(this.baseUrl) : undefined
     this.timeoutMs = timeoutMs
   }
 
+  private requireBaseUrl(): string {
+    if (!this.baseUrl) {
+      throw new EsploraApiError('VITE_ESPLORA_BASE_URL is not set')
+    }
+    return this.baseUrl
+  }
+
+  private requireExplorerBaseUrl(): string {
+    return this.explorerBaseUrl ?? this.requireBaseUrl()
+  }
+
   private async get(path: string): Promise<string> {
-    const url = `${this.baseUrl}${path}`
+    const url = `${this.requireBaseUrl()}${path}`
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
@@ -71,7 +86,7 @@ export class EsploraClient {
   }
 
   private async getBytes(path: string): Promise<Uint8Array> {
-    const url = `${this.baseUrl}${path}`
+    const url = `${this.requireBaseUrl()}${path}`
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
@@ -92,7 +107,7 @@ export class EsploraClient {
   }
 
   private async post(path: string, body: string): Promise<string> {
-    const url = `${this.baseUrl}${path}`
+    const url = `${this.requireBaseUrl()}${path}`
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
@@ -116,7 +131,7 @@ export class EsploraClient {
     }
   }
 
-  /** POST /tx — broadcast raw transaction (hex). Returns txid on success. */
+  /** POST /tx - broadcast raw transaction (hex). Returns txid on success. */
   async broadcastTx(txHex: string): Promise<string> {
     const body = await this.post('/tx', txHex.trim())
     return body.trim()
@@ -124,12 +139,12 @@ export class EsploraClient {
 
   /** URL of the transaction page on the block explorer (e.g. to open in a new tab). Uses VITE_ESPLORA_EXPLORER_URL if set. */
   getTxExplorerUrl(txid: string): string {
-    return `${this.explorerBaseUrl}/tx/${txid.trim()}`
+    return `${this.requireExplorerBaseUrl()}/tx/${txid.trim()}`
   }
 
   /** URL of the asset page on the block explorer (e.g. to open in a new tab). */
   getAssetExplorerUrl(assetId: string): string {
-    return `${this.explorerBaseUrl}/asset/${assetId.trim()}`
+    return `${this.requireExplorerBaseUrl()}/asset/${assetId.trim()}`
   }
 
   /** Latest block hash (tip). */
@@ -340,8 +355,13 @@ export interface ScripthashTxEntry {
 export interface EsploraVout {
   scriptpubkey?: string
   scriptpubkey_hex?: string
+  scriptpubkey_address?: string
   value?: number
+  valuecommitment?: string
   asset?: string
+  assetcommitment?: string
+  nonce?: string
+  noncecommitment?: string
   [key: string]: unknown
 }
 

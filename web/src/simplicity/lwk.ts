@@ -1,6 +1,6 @@
 /**
  * LWK (Liquid Wallet Kit) integration for Simplicity programs.
- * - Initializes wasm once, exposes program creation and P2TR address helpers.
+ * Only the address / serialization helpers are still used by the Wallet ABI web flow.
  */
 
 let lwkInit: Promise<typeof import('lwk_web')> | null = null
@@ -21,48 +21,22 @@ export async function getLwk(): Promise<typeof import('lwk_web')> {
   return lwkInit
 }
 
-export type P2pkNetwork = 'mainnet' | 'testnet'
+export type P2pkNetwork = 'mainnet' | 'testnet' | 'localtest'
 
-/** LWK module (return type of getLwk()). Use for typing lwk argument across the app. */
 export type Lwk = Awaited<ReturnType<typeof getLwk>>
-
-/** Instance of LWK SimplicityArguments. */
 export type LwkSimplicityArguments = InstanceType<Lwk['SimplicityArguments']>
-
-/** Instance of LWK XOnlyPublicKey. */
-export type LwkXOnlyPublicKey = InstanceType<Lwk['XOnlyPublicKey']>
-
-/** Instance of LWK Script. */
-export type LwkScript = InstanceType<Lwk['Script']>
-
-/** Instance of LWK TxOut (use instead of InstanceType<Lwk['TxOut']> — TxOut has a private constructor). */
+export type LwkXOnlyPublicKey = ReturnType<Lwk['XOnlyPublicKey']['fromString']>
+export type LwkScript = ReturnType<InstanceType<Lwk['Address']>['scriptPubkey']>
 export type LwkTxOut = ReturnType<Lwk['TxOut']['fromExplicit']>
-
-/** Array of LWK TxOut (e.g. for getSighashAll / finalizeTransaction prevouts). */
 export type LwkTxOutArray = LwkTxOut[]
-
-/** Instance of LWK SimplicityProgram. */
-export type LwkSimplicityProgram = InstanceType<Lwk['SimplicityProgram']>
-
-/** Instance of LWK SimplicityTypedValue. */
-export type LwkSimplicityTypedValue = InstanceType<Lwk['SimplicityTypedValue']>
-
-/** Instance of LWK SimplicityWitnessValues. */
+export type LwkSimplicityProgram = ReturnType<Lwk['SimplicityProgram']['load']>
+export type LwkSimplicityTypedValue = ReturnType<Lwk['SimplicityTypedValue']['fromU32']>
 export type LwkSimplicityWitnessValues = InstanceType<Lwk['SimplicityWitnessValues']>
-
-/** Instance of LWK SimplicityType (for parsing type strings). */
 export type LwkSimplicityType = InstanceType<Lwk['SimplicityType']>
-
-/** Instance of LWK Keypair. */
-export type LwkKeypair = InstanceType<Lwk['Keypair']>
-
-/** LWK Network (return type of Network.mainnet() / Network.testnet()). */
+export type LwkKeypair = ReturnType<Lwk['Keypair']['fromSecretBytes']>
 export type LwkNetwork = ReturnType<Lwk['Network']['mainnet']>
+export type LwkTransaction = ReturnType<InstanceType<Lwk['Pset']>['extractTx']>
 
-/** LWK transaction type (first argument of getSighashAll / return of finalizeTransaction). */
-export type LwkTransaction = Parameters<InstanceType<Lwk['SimplicityProgram']>['getSighashAll']>[0]
-
-/** PSET that can yield the unsigned transaction for LWK signing (extractTx). */
 export interface PsetWithExtractTx {
   extractTx(): LwkTransaction
 }
@@ -74,14 +48,23 @@ export interface CreateP2trAddressParams {
   network: P2pkNetwork
 }
 
+function resolveNetwork(lwk: Lwk, network: P2pkNetwork): LwkNetwork {
+  switch (network) {
+    case 'mainnet':
+      return lwk.Network.mainnet()
+    case 'localtest':
+      return lwk.Network.regtestDefault()
+    case 'testnet':
+      return lwk.Network.testnet()
+  }
+}
+
 /**
  * Compile a Simplicity program from source + arguments and create its P2TR address.
  */
 export async function createP2trAddress(params: CreateP2trAddressParams): Promise<string> {
   const lwk = await getLwk()
-  const { SimplicityProgram, Network } = lwk
-  const program = new SimplicityProgram(params.source, params.args)
-  const net = params.network === 'mainnet' ? Network.mainnet() : Network.testnet()
-  const address = program.createP2trAddress(params.internalKey, net)
+  const program = lwk.SimplicityProgram.load(params.source, params.args)
+  const address = program.createP2trAddress(params.internalKey, resolveNetwork(lwk, params.network))
   return address.toString()
 }
