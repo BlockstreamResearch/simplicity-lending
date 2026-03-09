@@ -7,9 +7,9 @@ WalletConnect frontend for the Simplicity Lending protocol. The browser no longe
 - Node.js 18+
 - [Indexer API](../crates/indexer/README.md) running (API mode, port 8000). The app uses `VITE_API_URL` (default `http://localhost:8000`); see `.env.example`.
 - A [Reown](https://reown.com/) project id configured through `VITE_REOWN_PROJECT_ID`.
-
+ 
 > [!NOTE]
-> `lwk_web` is a local file dependency. To build it: clone [Blockstream/lwk](https://github.com/Blockstream/lwk), then from the LWK repo run `cd lwk_wasm && RUSTFLAGS='--cfg web_sys_unstable_apis' wasm-pack build --target web --out-dir pkg_web --features simplicity,serial`. Update the `lwk_web` path in `package.json` to point to your `pkg_web` output directory.
+> The web app now vendors its `lwk_web` and `wallet-abi-sdk-alpha` package dependencies inside [`web/vendor`](/Users/inter/Desktop/Simpl/simplicity-lending/web/vendor), so Docker builds and local installs no longer depend on sibling repositories.
 
 ## Environment
 

@@ -1,0 +1,7 @@
+.git
+.DS_Store
+target
+web/node_modules
+web/dist
+deployment/configs/compose.env
+web/.env

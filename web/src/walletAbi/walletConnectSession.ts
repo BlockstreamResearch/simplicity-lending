@@ -214,7 +214,7 @@ function createMetadata(origin: string) {
     name: 'Simplicity Lending',
     description: 'Wallet ABI WalletConnect session for the Simplicity Lending web app.',
     url: origin,
-    icons: [`${origin}/favicon.ico`],
+    icons: [`${origin}/vite.svg`],
   }
 }
 

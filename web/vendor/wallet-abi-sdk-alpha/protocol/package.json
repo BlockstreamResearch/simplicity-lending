@@ -1,0 +1,5 @@
+{
+  "main": "../dist/protocol.cjs",
+  "module": "../dist/protocol.js",
+  "types": "../dist/protocol.d.ts"
+}

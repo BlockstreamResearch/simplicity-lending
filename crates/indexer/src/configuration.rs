@@ -10,6 +10,26 @@ pub struct Settings {
 pub struct ApplicationSettings {
     pub port: u16,
     pub host: String,
+    #[serde(default)]
+    pub cors: CorsSettings,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct CorsSettings {
+    #[serde(default = "default_cors_allowed_origins")]
+    pub allowed_origins: Vec<String>,
+}
+
+impl Default for CorsSettings {
+    fn default() -> Self {
+        Self {
+            allowed_origins: default_cors_allowed_origins(),
+        }
+    }
+}
+
+fn default_cors_allowed_origins() -> Vec<String> {
+    vec!["*".to_string()]
 }
 
 #[derive(serde::Deserialize, Clone)]

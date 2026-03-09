@@ -1,0 +1,16 @@
+application:
+  port: 8000
+  cors:
+    allowed_origins: ${API_CORS_ALLOWED_ORIGINS}
+database:
+  host: "${POSTGRES_HOST}"
+  port: ${POSTGRES_PORT}
+  username: "${POSTGRES_USER}"
+  password: "${POSTGRES_PASSWORD}"
+  database_name: "${POSTGRES_DB}"
+esplora:
+  base_url: "${INDEXER_ESPLORA_BASE_URL}"
+  timeout: 10
+indexer:
+  interval: ${INDEXER_POLL_INTERVAL_MS}
+  last_indexed_height: ${INDEXER_LAST_INDEXED_HEIGHT}

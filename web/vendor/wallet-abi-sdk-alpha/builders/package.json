@@ -1,0 +1,5 @@
+{
+  "main": "../dist/builders.cjs",
+  "module": "../dist/builders.js",
+  "types": "../dist/builders.d.ts"
+}

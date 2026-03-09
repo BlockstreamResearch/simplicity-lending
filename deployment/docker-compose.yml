@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./configs/compose.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.backend
+    restart: 'no'
+    env_file:
+      - ./configs/compose.env
+    environment:
+      APP_ENVIRONMENT: production
+      RUN_MODE: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.backend
+    restart: unless-stopped
+    env_file:
+      - ./configs/compose.env
+    environment:
+      APP_ENVIRONMENT: production
+      RUN_MODE: api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  indexer:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.backend
+    restart: unless-stopped
+    env_file:
+      - ./configs/compose.env
+    environment:
+      APP_ENVIRONMENT: production
+      RUN_MODE: indexer
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.web
+    restart: unless-stopped
+    env_file:
+      - ./configs/compose.env
+    ports:
+      - '${WEB_PORT}:80'
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  postgres_data:

@@ -6,6 +6,8 @@
  * Results use default JS types (string, number, string[], Uint8Array).
  */
 
+import { getEsploraApiBaseUrl, getEsploraExplorerBaseUrl } from '../config/runtimeConfig'
+
 /** Default request timeout in milliseconds. */
 export const DEFAULT_TIMEOUT_MS = 30_000
 
@@ -17,14 +19,13 @@ function normalizeBaseUrl(value?: string): string | undefined {
 }
 
 function getBaseUrl(): string | undefined {
-  const env = import.meta.env.VITE_ESPLORA_BASE_URL
-  return normalizeBaseUrl(env)
+  return normalizeBaseUrl(getEsploraApiBaseUrl())
 }
 
 function getExplorerBaseUrl(apiBaseUrl: string): string {
-  const env = import.meta.env.VITE_ESPLORA_EXPLORER_URL
-  if (typeof env === 'string' && env.trim()) {
-    return env.trim().replace(/\/+$/, '')
+  const configured = getEsploraExplorerBaseUrl()
+  if (typeof configured === 'string' && configured.trim()) {
+    return configured.trim().replace(/\/+$/, '')
   }
   return apiBaseUrl
 }

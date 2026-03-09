@@ -1,0 +1,5 @@
+{
+  "main": "../dist/helpers.cjs",
+  "module": "../dist/helpers.js",
+  "types": "../dist/helpers.d.ts"
+}

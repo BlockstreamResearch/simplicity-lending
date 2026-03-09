@@ -1,0 +1,24 @@
+FROM rust:1.90-bookworm AS builder
+
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+COPY .sqlx ./.sqlx
+COPY crates ./crates
+
+RUN SQLX_OFFLINE=true cargo build --locked --release -p lending-indexer --bin simplicity-lending-indexer
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates gettext-base \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/crates/indexer
+
+COPY --from=builder /app/target/release/simplicity-lending-indexer /usr/local/bin/simplicity-lending-indexer
+COPY deployment/configs /deployment/configs
+COPY deployment/scripts/render-backend-config.sh /deployment/render-backend-config.sh
+
+ENTRYPOINT ["/deployment/render-backend-config.sh"]
+CMD ["simplicity-lending-indexer"]

@@ -26,6 +26,7 @@ import {
   type WalletAbiSessionController,
 } from './walletConnectSession'
 import { rememberWalletScript } from './walletScriptStorage'
+import { getReownProjectId, getWalletAbiNetworkValue } from '../config/runtimeConfig'
 
 type WalletAbiSessionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -65,8 +66,8 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
   const clientRef = useRef<WalletAbiClient | null>(null)
   const connectionPromiseRef = useRef<Promise<WalletAbiClient> | null>(null)
 
-  const walletAbiNetwork = resolveWalletAbiNetwork(import.meta.env.VITE_WALLET_ABI_NETWORK)
-  const reownProjectId = import.meta.env.VITE_REOWN_PROJECT_ID?.trim() ?? ''
+  const walletAbiNetwork = resolveWalletAbiNetwork(getWalletAbiNetworkValue())
+  const reownProjectId = getReownProjectId()
 
   const clearSessionIdentity = () => {
     setSignerReceiveAddress(null)

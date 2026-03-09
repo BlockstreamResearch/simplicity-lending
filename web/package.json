@@ -20,10 +20,10 @@
     "@walletconnect/sign-client": "^2.23.7",
     "@walletconnect/types": "^2.23.7",
     "@walletconnect/utils": "^2.23.7",
-    "lwk_web": "file:../../lwk/lwk_wasm/pkg_web",
+    "lwk_web": "file:./vendor/lwk_web",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "wallet-abi-sdk-alpha": "file:../../wallet-abi-sdk"
+    "wallet-abi-sdk-alpha": "file:./vendor/wallet-abi-sdk-alpha"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
