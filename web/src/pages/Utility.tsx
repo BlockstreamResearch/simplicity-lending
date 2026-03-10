@@ -1,9 +1,21 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react'
 import type { TxCreateRequest } from 'wallet-abi-sdk-alpha/schema'
-import { EsploraClient } from '../api/esplora'
+import { EsploraClient, resolveWalletFeeRateSatKvb } from '../api/esplora'
 import { Input } from '../components/Input'
 import { formClassNames } from '../components/formClassNames'
-import { getScriptPubkeyHexFromAddress, POLICY_ASSET_ID, walletAbiNetworkToP2pkNetwork } from '../utility/addressP2pk'
+import {
+  getScriptPubkeyHexFromAddress,
+  POLICY_ASSET_ID,
+  walletAbiNetworkToP2pkNetwork,
+} from '../utility/addressP2pk'
 import { requireWalletAbiSuccess } from '../walletAbi/response'
 import {
   buildDemoIssueAssetRequest,
@@ -102,7 +114,9 @@ function Section({
 }) {
   return (
     <section className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.06)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">{eyebrow}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
+        {eyebrow}
+      </p>
       <h3 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">{title}</h3>
       <div className="mt-5 space-y-5">{children}</div>
     </section>
@@ -127,13 +141,7 @@ function Field({
   )
 }
 
-function ExplorerLink({
-  href,
-  label,
-}: {
-  href: string
-  label: string
-}) {
+function ExplorerLink({ href, label }: { href: string; label: string }) {
   return (
     <a href={href} target="_blank" rel="noreferrer" className="font-medium underline">
       {label}
@@ -174,12 +182,8 @@ function ActionStatus({
 
 export function UtilityPage() {
   const esplora = useMemo(() => new EsploraClient(), [])
-  const {
-    network,
-    signerReceiveAddress,
-    signingXOnlyPubkey,
-    processRequest,
-  } = useWalletAbiSession()
+  const { network, signerReceiveAddress, signingXOnlyPubkey, processRequest } =
+    useWalletAbiSession()
 
   const policyAssetId = useMemo(() => {
     if (!network) return ''
@@ -241,19 +245,19 @@ export function UtilityPage() {
     setSelectedIssuedAssetId((current) =>
       current && issuedAssets.some((asset) => asset.assetId === current)
         ? current
-        : issuedAssets[0].assetId,
+        : issuedAssets[0].assetId
     )
   }, [issuedAssets])
 
   const selectedIssuedAsset = useMemo(
     () => issuedAssets.find((asset) => asset.assetId === selectedIssuedAssetId) ?? null,
-    [issuedAssets, selectedIssuedAssetId],
+    [issuedAssets, selectedIssuedAssetId]
   )
 
   const runAction = useCallback(
     async (
       setState: Dispatch<SetStateAction<ActionState>>,
-      buildRequest: () => Promise<TxCreateRequest>,
+      buildRequest: () => Promise<TxCreateRequest>
     ) => {
       setState({ loading: true, error: null, txid: null })
       try {
@@ -268,7 +272,7 @@ export function UtilityPage() {
         })
       }
     },
-    [processRequest],
+    [processRequest]
   )
 
   const handleForgetAsset = useCallback(
@@ -280,7 +284,7 @@ export function UtilityPage() {
         setSelectedIssuedAssetId(nextAssets[0]?.assetId ?? '')
       }
     },
-    [network, selectedIssuedAssetId, signingXOnlyPubkey],
+    [network, selectedIssuedAssetId, signingXOnlyPubkey]
   )
 
   const handleClearAssets = useCallback(() => {
@@ -290,34 +294,55 @@ export function UtilityPage() {
     setSelectedIssuedAssetId('')
   }, [network, signingXOnlyPubkey])
 
+  const resolveFeeRate = useCallback(() => resolveWalletFeeRateSatKvb(esplora), [esplora])
+
   const handleTransfer = useCallback(() => {
     if (!network) return
-    void runAction(setTransferState, async () =>
-      buildDemoTransferRequest({
+    void runAction(setTransferState, async () => {
+      const feeRateSatKvb = await resolveFeeRate()
+      return buildDemoTransferRequest({
         network,
+        feeRateSatKvb,
         recipientScriptPubkeyHex: await getScriptPubkeyHexFromAddress(
-          transferDestinationAddress.trim(),
+          transferDestinationAddress.trim()
         ),
         assetId: transferAssetId.trim() || undefined,
         amountSat: parsePositiveSafeInteger(transferAmountSat, 'Transfer amount'),
-      }),
-    )
-  }, [network, runAction, transferAmountSat, transferAssetId, transferDestinationAddress])
+      })
+    })
+  }, [
+    network,
+    resolveFeeRate,
+    runAction,
+    transferAmountSat,
+    transferAssetId,
+    transferDestinationAddress,
+  ])
 
   const handleSplit = useCallback(() => {
     if (!network) return
-    void runAction(setSplitState, async () =>
-      buildDemoSplitRequest({
+    void runAction(setSplitState, async () => {
+      const feeRateSatKvb = await resolveFeeRate()
+      return buildDemoSplitRequest({
         network,
+        feeRateSatKvb,
         destinationScriptPubkeyHex: await getScriptPubkeyHexFromAddress(
-          splitDestinationAddress.trim(),
+          splitDestinationAddress.trim()
         ),
         assetId: splitAssetId.trim() || undefined,
         splitParts: parsePositiveSafeInteger(splitParts, 'Split parts'),
         partAmountSat: parsePositiveSafeInteger(splitPartAmountSat, 'Split part amount'),
-      }),
-    )
-  }, [network, runAction, splitAssetId, splitDestinationAddress, splitPartAmountSat, splitParts])
+      })
+    })
+  }, [
+    network,
+    resolveFeeRate,
+    runAction,
+    splitAssetId,
+    splitDestinationAddress,
+    splitPartAmountSat,
+    splitParts,
+  ])
 
   const handleIssue = useCallback(() => {
     if (!network || !signingXOnlyPubkey) return
@@ -330,13 +355,15 @@ export function UtilityPage() {
 
     void (async () => {
       try {
+        const feeRateSatKvb = await resolveFeeRate()
         const destinationScriptPubkeyHex = await getScriptPubkeyHexFromAddress(
-          issueDestinationAddress.trim(),
+          issueDestinationAddress.trim()
         )
         const label = issueLabel.trim() || `Demo Asset ${issuedAssets.length + 1}`
         const parsedIssueAmountSat = parsePositiveSafeInteger(issueAmountSat, 'Issue amount')
         const { request, contractHash } = buildDemoIssueAssetRequest({
           network,
+          feeRateSatKvb,
           destinationScriptPubkeyHex,
           issueAmountSat: parsedIssueAmountSat,
         })
@@ -375,7 +402,7 @@ export function UtilityPage() {
           setIssueState({
             loading: false,
             error: `Transaction broadcast, but local issue metadata could not be derived: ${errorMessage(
-              deriveError,
+              deriveError
             )}`,
             txid: result.txid,
             issuedAsset: null,
@@ -397,23 +424,33 @@ export function UtilityPage() {
     issuedAssets.length,
     network,
     processRequest,
+    resolveFeeRate,
     signingXOnlyPubkey,
   ])
 
   const handleReissue = useCallback(() => {
     if (!network || !selectedIssuedAsset) return
-    void runAction(setReissueState, async () =>
-      buildDemoReissueAssetRequest({
+    void runAction(setReissueState, async () => {
+      const feeRateSatKvb = await resolveFeeRate()
+      return buildDemoReissueAssetRequest({
         network,
+        feeRateSatKvb,
         destinationScriptPubkeyHex: await getScriptPubkeyHexFromAddress(
-          reissueDestinationAddress.trim(),
+          reissueDestinationAddress.trim()
         ),
         reissuanceTokenId: selectedIssuedAsset.reissuanceTokenId,
         assetEntropy: selectedIssuedAsset.assetEntropy,
         reissueAmountSat: parsePositiveSafeInteger(reissueAmountSat, 'Reissue amount'),
-      }),
-    )
-  }, [network, reissueAmountSat, reissueDestinationAddress, runAction, selectedIssuedAsset])
+      })
+    })
+  }, [
+    network,
+    reissueAmountSat,
+    reissueDestinationAddress,
+    resolveFeeRate,
+    runAction,
+    selectedIssuedAsset,
+  ])
 
   return (
     <div className="space-y-8">
@@ -610,10 +647,7 @@ export function UtilityPage() {
                 placeholder="tex1..."
               />
             </Field>
-            <Field
-              label="Amount (sats)"
-              helper="Amount of the selected asset to send."
-            >
+            <Field label="Amount (sats)" helper="Amount of the selected asset to send.">
               <Input
                 value={transferAmountSat}
                 onChange={(event) => setTransferAmountSat(event.target.value)}
@@ -653,30 +687,21 @@ export function UtilityPage() {
 
         <Section eyebrow="Split" title="Create multiple equal outputs">
           <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label="Destination address"
-              helper="All split outputs go to this script."
-            >
+            <Field label="Destination address" helper="All split outputs go to this script.">
               <Input
                 value={splitDestinationAddress}
                 onChange={(event) => setSplitDestinationAddress(event.target.value)}
                 placeholder="tex1..."
               />
             </Field>
-            <Field
-              label="Asset id"
-              helper="LBTC by default, or switch to a saved asset id."
-            >
+            <Field label="Asset id" helper="LBTC by default, or switch to a saved asset id.">
               <Input
                 value={splitAssetId}
                 onChange={(event) => setSplitAssetId(event.target.value)}
                 placeholder={policyAssetId}
               />
             </Field>
-            <Field
-              label="Split parts"
-              helper="How many equal outputs to create."
-            >
+            <Field label="Split parts" helper="How many equal outputs to create.">
               <Input
                 value={splitParts}
                 onChange={(event) => setSplitParts(event.target.value)}
@@ -684,10 +709,7 @@ export function UtilityPage() {
                 placeholder="4"
               />
             </Field>
-            <Field
-              label="Part amount (sats)"
-              helper="Amount per resulting output."
-            >
+            <Field label="Part amount (sats)" helper="Amount per resulting output.">
               <Input
                 value={splitPartAmountSat}
                 onChange={(event) => setSplitPartAmountSat(event.target.value)}
@@ -721,10 +743,7 @@ export function UtilityPage() {
                 placeholder="Demo bond points"
               />
             </Field>
-            <Field
-              label="Issue amount (sats)"
-              helper="Satoshi-style units for the new asset."
-            >
+            <Field label="Issue amount (sats)" helper="Satoshi-style units for the new asset.">
               <Input
                 value={issueAmountSat}
                 onChange={(event) => setIssueAmountSat(event.target.value)}
@@ -831,10 +850,7 @@ export function UtilityPage() {
             </p>
           )}
           <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label="Destination address"
-              helper="Receives the reissued asset output."
-            >
+            <Field label="Destination address" helper="Receives the reissued asset output.">
               <Input
                 value={reissueDestinationAddress}
                 onChange={(event) => setReissueDestinationAddress(event.target.value)}

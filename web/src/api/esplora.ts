@@ -10,6 +10,8 @@ import { getEsploraApiBaseUrl, getEsploraExplorerBaseUrl } from '../config/runti
 
 /** Default request timeout in milliseconds. */
 export const DEFAULT_TIMEOUT_MS = 30_000
+export const DEFAULT_ESPLORA_FEE_TARGET_BLOCKS = 1
+export const DEFAULT_FEE_RATE_SAT_KVB = 100
 
 function normalizeBaseUrl(value?: string): string | undefined {
   if (typeof value !== 'string' || !value.trim()) {
@@ -28,6 +30,41 @@ function getExplorerBaseUrl(apiBaseUrl: string): string {
     return configured.trim().replace(/\/+$/, '')
   }
   return apiBaseUrl
+}
+
+function isValidFeeEstimateEntry(target: number, rate: number): boolean {
+  return Number.isInteger(target) && target > 0 && Number.isFinite(rate) && rate > 0
+}
+
+function parseFeeEstimateEntries(
+  estimates: Record<string, number>
+): Array<readonly [number, number]> {
+  return Object.entries(estimates)
+    .map(([target, rate]) => [Number(target), rate] as const)
+    .filter(([target, rate]) => isValidFeeEstimateEntry(target, rate))
+    .sort(([leftTarget], [rightTarget]) => leftTarget - rightTarget)
+}
+
+export function selectFeeRateSatVb(
+  estimates: Record<string, number>,
+  targetBlocks: number
+): number {
+  const entries = parseFeeEstimateEntries(estimates)
+  if (entries.length === 0) {
+    throw new EsploraApiError('No fee estimates available')
+  }
+
+  const exactEntry = entries.find(([target]) => target === targetBlocks)
+  if (exactEntry) {
+    return exactEntry[1]
+  }
+
+  const higherTargetEntry = entries.find(([target]) => target > targetBlocks)
+  if (higherTargetEntry) {
+    return higherTargetEntry[1]
+  }
+
+  return entries[0][1]
 }
 
 export class EsploraApiError extends Error {
@@ -160,6 +197,39 @@ export class EsploraClient {
     const height = parseInt(body.trim(), 10)
     if (Number.isNaN(height)) throw new EsploraApiError('Invalid height response')
     return height
+  }
+
+  /** GET /fee-estimates — confirmation target to fee rate map in sat/vB. */
+  async getFeeEstimates(): Promise<Record<string, number>> {
+    const body = await this.get('/fee-estimates')
+    try {
+      const raw = JSON.parse(body) as unknown
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new EsploraApiError('Expected fee estimate object')
+      }
+
+      return Object.fromEntries(
+        Object.entries(raw).filter(
+          ([target, rate]) =>
+            Number.isInteger(Number(target)) &&
+            Number(target) > 0 &&
+            typeof rate === 'number' &&
+            Number.isFinite(rate) &&
+            rate > 0
+        )
+      )
+    } catch (e) {
+      if (e instanceof EsploraApiError) throw e
+      throw new EsploraApiError(
+        `Failed to parse fee estimates: ${e instanceof Error ? e.message : String(e)}`
+      )
+    }
+  }
+
+  /** Resolve a fee rate for the target in sats/kvB. */
+  async getFeeRateSatKvb(targetBlocks: number): Promise<number> {
+    const feeRateSatVb = selectFeeRateSatVb(await this.getFeeEstimates(), targetBlocks)
+    return feeRateSatVb * 1000
   }
 
   /** Block hash at a given height. */
@@ -381,6 +451,18 @@ export interface EsploraOutspend {
   vin?: number
   status?: { confirmed: boolean }
   [key: string]: unknown
+}
+
+export async function resolveWalletFeeRateSatKvb(
+  esplora: Pick<EsploraClient, 'getFeeRateSatKvb'>,
+  targetBlocks: number = DEFAULT_ESPLORA_FEE_TARGET_BLOCKS,
+  fallbackFeeRateSatKvb: number = DEFAULT_FEE_RATE_SAT_KVB
+): Promise<number> {
+  try {
+    return await esplora.getFeeRateSatKvb(targetBlocks)
+  } catch {
+    return fallbackFeeRateSatKvb
+  }
 }
 
 /**

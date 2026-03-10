@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react'
 import {
   fetchOfferDetailsBatchWithParticipants,
   fetchOfferIdsByScripts,
@@ -8,7 +16,7 @@ import {
   filterOffersByParticipantScripts,
   getCurrentLenderParticipant,
 } from '../api/client'
-import { EsploraClient } from '../api/esplora'
+import { EsploraClient, resolveWalletFeeRateSatKvb } from '../api/esplora'
 import { OfferTable } from '../components/OfferTable'
 import { Input } from '../components/Input'
 import { formClassNames } from '../components/formClassNames'
@@ -19,10 +27,7 @@ import {
   buildLiquidateLoanRequest,
 } from '../walletAbi/requestBuilders'
 import { useWalletAbiSession } from '../walletAbi/WalletAbiSessionContext'
-import {
-  loadTrackedLenderOfferIds,
-  rememberTrackedLenderOfferId,
-} from '../walletAbi/lenderStorage'
+import { loadTrackedLenderOfferIds, rememberTrackedLenderOfferId } from '../walletAbi/lenderStorage'
 import { loadKnownWalletScripts } from '../walletAbi/walletScriptStorage'
 import type { OfferShort, OfferWithParticipants } from '../types/offers'
 import { getScriptPubkeyHexFromAddress } from '../utility/addressP2pk'
@@ -66,7 +71,9 @@ function Section({
 }) {
   return (
     <section className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.06)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">{eyebrow}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
+        {eyebrow}
+      </p>
       <h3 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">{title}</h3>
       <div className="mt-5 space-y-5">{children}</div>
     </section>
@@ -91,13 +98,7 @@ function Field({
   )
 }
 
-function ActionStatus({
-  state,
-  esplora,
-}: {
-  state: ActionState
-  esplora: EsploraClient
-}) {
+function ActionStatus({ state, esplora }: { state: ActionState; esplora: EsploraClient }) {
   if (state.error) {
     return (
       <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -125,12 +126,19 @@ function ActionStatus({
 
 export function LenderPage() {
   const esplora = useMemo(() => new EsploraClient(), [])
-  const { network, signerReceiveAddress, signerScriptPubkeyHex, signingXOnlyPubkey, processRequest } =
-    useWalletAbiSession()
+  const {
+    network,
+    signerReceiveAddress,
+    signerScriptPubkeyHex,
+    signingXOnlyPubkey,
+    processRequest,
+  } = useWalletAbiSession()
 
   const [supplyOffers, setSupplyOffers] = useState<OfferShort[]>([])
   const [pendingOffers, setPendingOffers] = useState<OfferShort[]>([])
-  const [pendingOfferDetails, setPendingOfferDetails] = useState<Record<string, OfferWithParticipants>>({})
+  const [pendingOfferDetails, setPendingOfferDetails] = useState<
+    Record<string, OfferWithParticipants>
+  >({})
   const [supplyLoading, setSupplyLoading] = useState(true)
   const [pendingLoading, setPendingLoading] = useState(true)
   const [supplyError, setSupplyError] = useState<string | null>(null)
@@ -241,6 +249,8 @@ export function LenderPage() {
     [loadPendingOffers, loadSupplyOffers, processRequest]
   )
 
+  const resolveFeeRate = useCallback(() => resolveWalletFeeRateSatKvb(esplora), [esplora])
+
   const handleTrackOffer = useCallback(() => {
     if (!network || !signingXOnlyPubkey) return
     const nextOfferId = trackOfferId.trim().toLowerCase()
@@ -275,31 +285,38 @@ export function LenderPage() {
   const handleAccept = useCallback(() => {
     if (!network || !signingXOnlyPubkey || !signerScriptPubkeyHex || !selectedOffer) return
     const detailedOffer = pendingOfferDetails[selectedOffer.id]
-    void runLenderRequest(setAcceptState, async () => {
-      if (!detailedOffer) {
-        throw new Error('Pending offer details are not loaded yet')
+    void runLenderRequest(
+      setAcceptState,
+      async () => {
+        const feeRateSatKvb = await resolveFeeRate()
+        if (!detailedOffer) {
+          throw new Error('Pending offer details are not loaded yet')
+        }
+        const offerCreationTx = await esplora.getTx(selectedOffer.created_at_txid)
+        return buildAcceptOfferRequest({
+          network,
+          feeRateSatKvb,
+          signerScriptPubkeyHex,
+          offer: selectedOffer,
+          offerCreationTx,
+          borrowerOutputScriptPubkeyHex:
+            acceptBorrowerDestinationAddress.trim() === ''
+              ? undefined
+              : await getScriptPubkeyHexFromAddress(acceptBorrowerDestinationAddress.trim()),
+        })
+      },
+      () => {
+        rememberTrackedLenderOfferId(signingXOnlyPubkey, network, selectedOffer.id)
+        setTrackOfferSuccess('Tracked accepted offer for this wallet')
+        setTrackOfferError(null)
       }
-      const offerCreationTx = await esplora.getTx(selectedOffer.created_at_txid)
-      return buildAcceptOfferRequest({
-        network,
-        signerScriptPubkeyHex,
-        offer: selectedOffer,
-        offerCreationTx,
-        borrowerOutputScriptPubkeyHex:
-          acceptBorrowerDestinationAddress.trim() === ''
-            ? undefined
-            : await getScriptPubkeyHexFromAddress(acceptBorrowerDestinationAddress.trim()),
-      })
-    }, () => {
-      rememberTrackedLenderOfferId(signingXOnlyPubkey, network, selectedOffer.id)
-      setTrackOfferSuccess('Tracked accepted offer for this wallet')
-      setTrackOfferError(null)
-    })
+    )
   }, [
     acceptBorrowerDestinationAddress,
     esplora,
     network,
     pendingOfferDetails,
+    resolveFeeRate,
     runLenderRequest,
     selectedOffer,
     signerScriptPubkeyHex,
@@ -309,6 +326,7 @@ export function LenderPage() {
   const handleClaim = useCallback(() => {
     if (!network || !signerScriptPubkeyHex || !selectedOffer) return
     void runLenderRequest(setClaimState, async () => {
+      const feeRateSatKvb = await resolveFeeRate()
       const [offerCreationTx, offerUtxos, participantsHistory] = await Promise.all([
         esplora.getTx(selectedOffer.created_at_txid),
         fetchOfferUtxos(selectedOffer.id),
@@ -322,6 +340,7 @@ export function LenderPage() {
       if (!lenderParticipant) throw new Error('No active lender NFT found')
       return buildClaimRepaidPrincipalRequest({
         network,
+        feeRateSatKvb,
         signerScriptPubkeyHex,
         offer: selectedOffer,
         offerCreationTx,
@@ -337,6 +356,7 @@ export function LenderPage() {
     claimDestinationAddress,
     esplora,
     network,
+    resolveFeeRate,
     runLenderRequest,
     selectedOffer,
     signerScriptPubkeyHex,
@@ -345,6 +365,7 @@ export function LenderPage() {
   const handleLiquidate = useCallback(() => {
     if (!network || !signerScriptPubkeyHex || !selectedOffer) return
     void runLenderRequest(setLiquidationState, async () => {
+      const feeRateSatKvb = await resolveFeeRate()
       const [offerCreationTx, offerUtxos, participantsHistory] = await Promise.all([
         esplora.getTx(selectedOffer.created_at_txid),
         fetchOfferUtxos(selectedOffer.id),
@@ -359,6 +380,7 @@ export function LenderPage() {
       const lendingTx = await esplora.getTx(lendingUtxo.txid)
       return buildLiquidateLoanRequest({
         network,
+        feeRateSatKvb,
         signerScriptPubkeyHex,
         offer: selectedOffer,
         offerCreationTx,
@@ -373,6 +395,7 @@ export function LenderPage() {
     esplora,
     liquidationDestinationAddress,
     network,
+    resolveFeeRate,
     runLenderRequest,
     selectedOffer,
     signerScriptPubkeyHex,

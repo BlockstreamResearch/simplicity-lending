@@ -33,7 +33,7 @@ function shortId(value: string, head = 8, tail = 4): string {
 }
 
 function WalletSessionMenu() {
-  const { signingXOnlyPubkey, network, disconnect } = useWalletAbiSession()
+  const { signingXOnlyPubkey, network, reconnect, disconnect } = useWalletAbiSession()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
 
@@ -71,9 +71,20 @@ function WalletSessionMenu() {
             onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
               event.preventDefault()
               setOpen(false)
+              void reconnect()
+            }}
+            className="mt-4 w-full rounded-full bg-neutral-950 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+          >
+            Reconnect
+          </button>
+          <button
+            type="button"
+            onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+              event.preventDefault()
+              setOpen(false)
               void disconnect()
             }}
-            className="mt-4 w-full rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+            className="mt-3 w-full rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
           >
             Disconnect
           </button>

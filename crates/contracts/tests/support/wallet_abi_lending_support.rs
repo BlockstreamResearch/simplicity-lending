@@ -471,6 +471,7 @@ impl LendingScenario {
                 ],
             ))
             .await?;
+        harness.mine_and_sync(1).await?;
         let principal_lend_utxo = harness.find_output(&split_tx, |tx_out| {
             tx_out.script_pubkey == *harness.wallet_script_25()
                 && tx_out.asset.explicit() == Some(principal_asset_id)

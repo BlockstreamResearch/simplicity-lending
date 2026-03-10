@@ -13,15 +13,18 @@ import {
   type ProtocolTerms,
 } from './requestBuilders'
 
+const FEE_RATE_SAT_KVB = 321
+
 describe('buildPrepareUtilityNftsRequest', () => {
   it('creates four explicit LBTC preparation outputs with no declared inputs', () => {
     const request = buildPrepareUtilityNftsRequest({
       network: 'localtest-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       destinationScriptPubkeyHex: '5120' + '11'.repeat(32),
     })
 
     expect(request.params.inputs).toEqual([])
-    expect('fee_rate_sat_kvb' in request.params).toBe(false)
+    expect(request.params.fee_rate_sat_kvb).toBe(FEE_RATE_SAT_KVB)
     expect(request.params.outputs).toHaveLength(4)
     expect(request.params.outputs.map((output) => output.id)).toEqual([
       'issuance-utxo-0',
@@ -33,8 +36,7 @@ describe('buildPrepareUtilityNftsRequest', () => {
     expect(
       request.params.outputs.every(
         (output) =>
-          output.asset.type === 'asset_id' &&
-          output.asset.asset_id === POLICY_ASSET_ID.localtest
+          output.asset.type === 'asset_id' && output.asset.asset_id === POLICY_ASSET_ID.localtest
       )
     ).toBe(true)
   })
@@ -51,6 +53,7 @@ describe('buildIssueUtilityNftsRequest', () => {
 
     const request = buildIssueUtilityNftsRequest({
       network: 'localtest-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       destinationScriptPubkeyHex: '5120' + '22'.repeat(32),
       prepareTxid: 'ab'.repeat(32),
       terms,
@@ -78,7 +81,7 @@ describe('buildIssueUtilityNftsRequest', () => {
       'explicit',
       'explicit',
     ])
-    expect('fee_rate_sat_kvb' in request.params).toBe(false)
+    expect(request.params.fee_rate_sat_kvb).toBe(FEE_RATE_SAT_KVB)
     expect(request.params.outputs).toHaveLength(8)
     expect(request.params.outputs[0]).toMatchObject({
       id: 'borrower-nft',
@@ -105,6 +108,7 @@ describe('buildIssueUtilityNftsRequest', () => {
   it('accepts wallet-managed unblinding for confidential prepare outputs', () => {
     const request = buildIssueUtilityNftsRequest({
       network: 'testnet-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       destinationScriptPubkeyHex: '0014' + '22'.repeat(20),
       prepareTxid: 'cd'.repeat(32),
       prepareInputUnblindings: ['wallet', 'wallet', 'wallet', 'wallet'],

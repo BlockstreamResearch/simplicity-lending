@@ -78,12 +78,16 @@ export interface IssuedUtilityNfts {
   terms: ProtocolTerms
 }
 
-export interface BuildPrepareUtilityNftsRequestParams {
+interface FeeRateParams {
+  feeRateSatKvb: number
+}
+
+export interface BuildPrepareUtilityNftsRequestParams extends FeeRateParams {
   network: WalletAbiNetwork
   destinationScriptPubkeyHex: string
 }
 
-export interface BuildIssueUtilityNftsRequestParams {
+export interface BuildIssueUtilityNftsRequestParams extends FeeRateParams {
   network: WalletAbiNetwork
   destinationScriptPubkeyHex: string
   prepareTxid: string
@@ -91,7 +95,7 @@ export interface BuildIssueUtilityNftsRequestParams {
   prepareInputUnblindings?: InputUnblinding[]
 }
 
-export interface BuildCreateOfferRequestParams {
+export interface BuildCreateOfferRequestParams extends FeeRateParams {
   network: WalletAbiNetwork
   signerScriptPubkeyHex: string
   signingXOnlyPubkey: string
@@ -101,7 +105,7 @@ export interface BuildCreateOfferRequestParams {
   borrowerDestinationScriptPubkeyHex?: string
 }
 
-export interface BuildCancelOfferRequestParams {
+export interface BuildCancelOfferRequestParams extends FeeRateParams {
   network: WalletAbiNetwork
   signingXOnlyPubkey: string
   offer: OfferShort
@@ -110,7 +114,7 @@ export interface BuildCancelOfferRequestParams {
   collateralDestinationScriptPubkeyHex: string
 }
 
-export interface BuildAcceptOfferRequestParams {
+export interface BuildAcceptOfferRequestParams extends FeeRateParams {
   network: WalletAbiNetwork
   signerScriptPubkeyHex: string
   offer: OfferShort
@@ -119,7 +123,7 @@ export interface BuildAcceptOfferRequestParams {
   lenderDestinationScriptPubkeyHex?: string
 }
 
-export interface BuildRepayLoanRequestParams {
+export interface BuildRepayLoanRequestParams extends FeeRateParams {
   network: WalletAbiNetwork
   signerScriptPubkeyHex: string
   offer: OfferShort
@@ -129,7 +133,7 @@ export interface BuildRepayLoanRequestParams {
   collateralDestinationScriptPubkeyHex?: string
 }
 
-export interface BuildClaimRepaidPrincipalRequestParams {
+export interface BuildClaimRepaidPrincipalRequestParams extends FeeRateParams {
   network: WalletAbiNetwork
   signerScriptPubkeyHex: string
   offer: OfferShort
@@ -140,7 +144,7 @@ export interface BuildClaimRepaidPrincipalRequestParams {
   principalDestinationScriptPubkeyHex?: string
 }
 
-export interface BuildLiquidateLoanRequestParams {
+export interface BuildLiquidateLoanRequestParams extends FeeRateParams {
   network: WalletAbiNetwork
   signerScriptPubkeyHex: string
   offer: OfferShort
@@ -191,6 +195,13 @@ function normalizeScriptHex(scriptHex: string, label: string): string {
   return normalized
 }
 
+function normalizeFeeRateSatKvb(feeRateSatKvb: number): number {
+  if (!Number.isFinite(feeRateSatKvb) || feeRateSatKvb <= 0) {
+    throw new Error('Fee rate must be a positive finite number')
+  }
+  return feeRateSatKvb
+}
+
 function toOutpoint(txid: string, vout: number): string {
   const normalizedTxid = txid.trim()
   if (!normalizedTxid || !Number.isInteger(vout) || vout < 0) {
@@ -203,8 +214,12 @@ function getPolicyAssetId(network: WalletAbiNetwork): string {
   return POLICY_ASSET_ID[walletAbiNetworkToP2pkNetwork(network)]
 }
 
-function isExplicitPreparePrevout(vout: EsploraVout): vout is EsploraVout & { value: number; asset: string } {
-  return typeof vout.value === 'number' && Number.isFinite(vout.value) && typeof vout.asset === 'string'
+function isExplicitPreparePrevout(
+  vout: EsploraVout
+): vout is EsploraVout & { value: number; asset: string } {
+  return (
+    typeof vout.value === 'number' && Number.isFinite(vout.value) && typeof vout.asset === 'string'
+  )
 }
 
 function isConfidentialPreparePrevout(vout: EsploraVout): boolean {
@@ -240,11 +255,7 @@ function createBurnOutput(id: string, amount: bigint, assetId: string): OutputSc
   })
 }
 
-function createWalletAssetInput(
-  id: string,
-  assetId: string,
-  minAmountSat?: bigint
-): InputSchema {
+function createWalletAssetInput(id: string, assetId: string, minAmountSat?: bigint): InputSchema {
   return createWalletInput({
     id,
     filter: {
@@ -270,6 +281,7 @@ function buildRequest(
   network: WalletAbiNetwork,
   inputs: InputSchema[],
   outputs: OutputSchema[],
+  feeRateSatKvb: number,
   lockTimeBlocks?: number
 ): TxCreateRequest {
   return createTxCreateRequest({
@@ -278,6 +290,7 @@ function buildRequest(
     params: createRuntimeParams({
       inputs,
       outputs,
+      fee_rate_sat_kvb: normalizeFeeRateSatKvb(feeRateSatKvb),
       ...(lockTimeBlocks !== undefined ? { lock_time: { Blocks: lockTimeBlocks } } : {}),
     }),
   })
@@ -286,8 +299,7 @@ function buildRequest(
 function enableAbsoluteLocktime(inputs: InputSchema[]): InputSchema[] {
   return inputs.map((input) => ({
     ...input,
-    sequence:
-      input.sequence === FINAL_SEQUENCE ? ENABLE_LOCKTIME_NO_RBF_SEQUENCE : input.sequence,
+    sequence: input.sequence === FINAL_SEQUENCE ? ENABLE_LOCKTIME_NO_RBF_SEQUENCE : input.sequence,
   }))
 }
 
@@ -466,7 +478,7 @@ export function buildPrepareUtilityNftsRequest(
       assetId: policyAssetId,
     })
   )
-  return buildRequest(params.network, [], outputs)
+  return buildRequest(params.network, [], outputs, params.feeRateSatKvb)
 }
 
 export function resolvePrepareUtilityNftsInputUnblindings(params: {
@@ -476,7 +488,12 @@ export function resolvePrepareUtilityNftsInputUnblindings(params: {
   const policyAssetId = getPolicyAssetId(params.network)
 
   return Array.from({ length: 4 }, (_, index) => {
-    const output = requireVout(params.prepareTx, index, `Prepare output ${String(index)}`, 'prepare tx')
+    const output = requireVout(
+      params.prepareTx,
+      index,
+      `Prepare output ${String(index)}`,
+      'prepare tx'
+    )
 
     if (isExplicitPreparePrevout(output)) {
       if (output.value !== UTILITY_ISSUANCE_INPUT_VALUE) {
@@ -485,7 +502,9 @@ export function resolvePrepareUtilityNftsInputUnblindings(params: {
         )
       }
 
-      if (normalizeAssetId(output.asset, `Prepare tx output ${String(index)} asset`) !== policyAssetId) {
+      if (
+        normalizeAssetId(output.asset, `Prepare tx output ${String(index)} asset`) !== policyAssetId
+      ) {
         throw new Error(`Prepare tx output ${String(index)} is not funded with the policy asset`)
       }
 
@@ -508,8 +527,9 @@ export function buildIssueUtilityNftsRequest(
     'Issue destination script'
   )
   const policyAssetId = getPolicyAssetId(params.network)
-  const prepareInputUnblindings = Array.from({ length: 4 }, (_, index) =>
-    params.prepareInputUnblindings?.[index] ?? 'explicit'
+  const prepareInputUnblindings = Array.from(
+    { length: 4 },
+    (_, index) => params.prepareInputUnblindings?.[index] ?? 'explicit'
   )
   const { firstParametersAmount, secondParametersAmount } = encodeIssueTerms(params.terms)
   const inputs: InputSchema[] = [
@@ -597,7 +617,7 @@ export function buildIssueUtilityNftsRequest(
       })
     ),
   ]
-  return buildRequest(params.network, inputs, outputs)
+  return buildRequest(params.network, inputs, outputs, params.feeRateSatKvb)
 }
 
 export async function buildCreateOfferRequest(
@@ -704,13 +724,11 @@ export async function buildCreateOfferRequest(
     createExplicitOutput({
       id: 'pre-lock-borrower-output-script-hash',
       amount_sat: 0,
-      lock: createScriptLock(
-        buildBorrowerOutputScriptMetadataScript(borrowerDestinationScript)
-      ),
+      lock: createScriptLock(buildBorrowerOutputScriptMetadataScript(borrowerDestinationScript)),
       assetId: ZERO_ASSET_ID,
     }),
   ]
-  return buildRequest(params.network, inputs, outputs)
+  return buildRequest(params.network, inputs, outputs, params.feeRateSatKvb)
 }
 
 export async function buildCancelOfferRequest(
@@ -780,7 +798,7 @@ export async function buildCancelOfferRequest(
     }),
     createWalletAssetInput('cancel-fee', policyAssetId),
   ]
-  return buildRequest(params.network, inputs, outputs)
+  return buildRequest(params.network, inputs, outputs, params.feeRateSatKvb)
 }
 
 export async function buildAcceptOfferRequest(
@@ -808,25 +826,27 @@ export async function buildAcceptOfferRequest(
     params.lenderDestinationScriptPubkeyHex ?? params.signerScriptPubkeyHex,
     'Lender destination script'
   )
-  const [preLockCreationFinalizer, utilityScriptAuthFinalizer, lendingFinalizer, parametersOutputFinalizer] =
-    await Promise.all([
-      buildPreLockCreationFinalizer(artifacts.preLockArguments),
-      buildScriptAuthFinalizer(artifacts.preLockScriptHash),
-      buildLendingFinalizer({
-        collateralAssetId: assetIdDisplayToInternal(artifacts.collateralAssetId),
-        principalAssetId: assetIdDisplayToInternal(artifacts.principalAssetId),
-        borrowerNftAssetId: assetIdDisplayToInternal(artifacts.borrowerNftAssetId),
-        lenderNftAssetId: assetIdDisplayToInternal(artifacts.lenderNftAssetId),
-        firstParametersNftAssetId: assetIdDisplayToInternal(artifacts.firstParametersNftAssetId),
-        secondParametersNftAssetId: assetIdDisplayToInternal(
-          artifacts.secondParametersNftAssetId
-        ),
-        lenderPrincipalCovHash: artifacts.principalAuthScriptHash,
-        lendingParams: artifacts.terms,
-        branch: 'LoanRepayment',
-      }),
-      buildScriptAuthFinalizer(artifacts.lendingCovHash),
-    ])
+  const [
+    preLockCreationFinalizer,
+    utilityScriptAuthFinalizer,
+    lendingFinalizer,
+    parametersOutputFinalizer,
+  ] = await Promise.all([
+    buildPreLockCreationFinalizer(artifacts.preLockArguments),
+    buildScriptAuthFinalizer(artifacts.preLockScriptHash),
+    buildLendingFinalizer({
+      collateralAssetId: assetIdDisplayToInternal(artifacts.collateralAssetId),
+      principalAssetId: assetIdDisplayToInternal(artifacts.principalAssetId),
+      borrowerNftAssetId: assetIdDisplayToInternal(artifacts.borrowerNftAssetId),
+      lenderNftAssetId: assetIdDisplayToInternal(artifacts.lenderNftAssetId),
+      firstParametersNftAssetId: assetIdDisplayToInternal(artifacts.firstParametersNftAssetId),
+      secondParametersNftAssetId: assetIdDisplayToInternal(artifacts.secondParametersNftAssetId),
+      lenderPrincipalCovHash: artifacts.principalAuthScriptHash,
+      lendingParams: artifacts.terms,
+      branch: 'LoanRepayment',
+    }),
+    buildScriptAuthFinalizer(artifacts.lendingCovHash),
+  ])
   const inputs: InputSchema[] = [
     createProvidedInput({
       id: 'pre-lock',
@@ -853,7 +873,11 @@ export async function buildAcceptOfferRequest(
       outpoint: toOutpoint(params.offerCreationTx.txid, 4),
       finalizer: utilityScriptAuthFinalizer,
     }),
-    createWalletAssetInput('principal-lend', artifacts.principalAssetId, params.offer.principal_amount),
+    createWalletAssetInput(
+      'principal-lend',
+      artifacts.principalAssetId,
+      params.offer.principal_amount
+    ),
     ...(artifacts.principalAssetId !== policyAssetId
       ? [createWalletAssetInput('lending-fee', policyAssetId)]
       : []),
@@ -896,7 +920,7 @@ export async function buildAcceptOfferRequest(
       assetId: artifacts.lenderNftAssetId,
     }),
   ]
-  return buildRequest(params.network, inputs, outputs)
+  return buildRequest(params.network, inputs, outputs, params.feeRateSatKvb)
 }
 
 export async function buildRepayLoanRequest(
@@ -920,9 +944,7 @@ export async function buildRepayLoanRequest(
         borrowerNftAssetId: assetIdDisplayToInternal(artifacts.borrowerNftAssetId),
         lenderNftAssetId: assetIdDisplayToInternal(artifacts.lenderNftAssetId),
         firstParametersNftAssetId: assetIdDisplayToInternal(artifacts.firstParametersNftAssetId),
-        secondParametersNftAssetId: assetIdDisplayToInternal(
-          artifacts.secondParametersNftAssetId
-        ),
+        secondParametersNftAssetId: assetIdDisplayToInternal(artifacts.secondParametersNftAssetId),
         lenderPrincipalCovHash: artifacts.principalAuthScriptHash,
         lendingParams: artifacts.terms,
         branch: 'LoanRepayment',
@@ -991,7 +1013,7 @@ export async function buildRepayLoanRequest(
     ),
     createBurnOutput('borrower-burn', 1n, artifacts.borrowerNftAssetId),
   ]
-  return buildRequest(params.network, inputs, outputs)
+  return buildRequest(params.network, inputs, outputs, params.feeRateSatKvb)
 }
 
 export async function buildClaimRepaidPrincipalRequest(
@@ -1040,7 +1062,7 @@ export async function buildClaimRepaidPrincipalRequest(
     }),
     createBurnOutput('lender-burn', 1n, artifacts.lenderNftAssetId),
   ]
-  return buildRequest(params.network, inputs, outputs)
+  return buildRequest(params.network, inputs, outputs, params.feeRateSatKvb)
 }
 
 export async function buildLiquidateLoanRequest(
@@ -1059,9 +1081,7 @@ export async function buildLiquidateLoanRequest(
       borrowerNftAssetId: assetIdDisplayToInternal(artifacts.borrowerNftAssetId),
       lenderNftAssetId: assetIdDisplayToInternal(artifacts.lenderNftAssetId),
       firstParametersNftAssetId: assetIdDisplayToInternal(artifacts.firstParametersNftAssetId),
-      secondParametersNftAssetId: assetIdDisplayToInternal(
-        artifacts.secondParametersNftAssetId
-      ),
+      secondParametersNftAssetId: assetIdDisplayToInternal(artifacts.secondParametersNftAssetId),
       lenderPrincipalCovHash: artifacts.principalAuthScriptHash,
       lendingParams: artifacts.terms,
       branch: 'LoanLiquidation',
@@ -1118,6 +1138,7 @@ export async function buildLiquidateLoanRequest(
     params.network,
     enableAbsoluteLocktime(inputs),
     outputs,
+    params.feeRateSatKvb,
     params.offer.loan_expiration_time
   )
 }

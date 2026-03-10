@@ -7,16 +7,19 @@ import {
   buildDemoTransferRequest,
 } from './utilityRequests'
 
+const FEE_RATE_SAT_KVB = 432
+
 describe('buildDemoTransferRequest', () => {
   it('uses the policy asset by default and creates one explicit output', () => {
     const request = buildDemoTransferRequest({
       network: 'testnet-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       recipientScriptPubkeyHex: '0014' + '11'.repeat(20),
       amountSat: 250,
     })
 
     expect(request.broadcast).toBe(true)
-    expect('fee_rate_sat_kvb' in request.params).toBe(false)
+    expect(request.params.fee_rate_sat_kvb).toBe(FEE_RATE_SAT_KVB)
     expect(request.params.inputs).toHaveLength(1)
     expect(request.params.inputs[0]).toMatchObject({
       id: 'transfer-input',
@@ -50,6 +53,7 @@ describe('buildDemoSplitRequest', () => {
   it('creates the requested number of explicit outputs', () => {
     const request = buildDemoSplitRequest({
       network: 'localtest-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       destinationScriptPubkeyHex: '5120' + '22'.repeat(32),
       assetId: 'ab'.repeat(32),
       splitParts: 3,
@@ -85,12 +89,14 @@ describe('buildDemoIssueAssetRequest', () => {
   it('creates one issuance input and token plus asset outputs', () => {
     const { contractHash, request } = buildDemoIssueAssetRequest({
       network: 'testnet-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       destinationScriptPubkeyHex: '0014' + '33'.repeat(20),
       issueAmountSat: 1_000,
     })
 
     expect(contractHash).toMatch(/^[0-9a-f]{64}$/)
     expect(request.broadcast).toBe(true)
+    expect(request.params.fee_rate_sat_kvb).toBe(FEE_RATE_SAT_KVB)
     expect(request.params.inputs).toHaveLength(1)
     expect(request.params.inputs[0]).toMatchObject({
       id: 'issue-input',
@@ -138,6 +144,7 @@ describe('buildDemoReissueAssetRequest', () => {
   it('spends a reissuance token and creates the reissued asset output', () => {
     const request = buildDemoReissueAssetRequest({
       network: 'testnet-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       destinationScriptPubkeyHex: '0014' + '44'.repeat(20),
       reissuanceTokenId: 'cd'.repeat(32),
       assetEntropy: 'ef'.repeat(32),

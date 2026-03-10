@@ -38,11 +38,12 @@ export interface WalletAbiSessionValue {
   signerScriptPubkeyHex: string | null
   network: WalletAbiNetwork | null
   connect(): Promise<void>
+  reconnect(): Promise<void>
   disconnect(): Promise<void>
   processRequest(request: TxCreateRequest): Promise<TxCreateResponse>
 }
 
-const REQUEST_TIMEOUT_MS = 120_000
+const REQUEST_TIMEOUT_MS = 300_000
 const WalletAbiSessionContext = createContext<WalletAbiSessionValue | null>(null)
 
 function errorMessage(error: unknown): string {
@@ -76,12 +77,34 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
     setNetwork(null)
   }
 
-  const setDisconnected = () => {
+  const clearClientState = () => {
     clientRef.current = null
     connectionPromiseRef.current = null
     clearSessionIdentity()
+  }
+
+  const setDisconnected = () => {
+    clearClientState()
     setError(null)
     setStatus('disconnected')
+  }
+
+  const invalidateSession = async (nextError?: unknown) => {
+    clearClientState()
+
+    const controller = controllerRef.current
+    if (controller !== null) {
+      await controller.disconnect().catch(() => undefined)
+    }
+
+    if (nextError === undefined) {
+      setError(null)
+      setStatus('disconnected')
+      return
+    }
+
+    setError(`${errorMessage(nextError)} Reconnect wallet to start a fresh session.`)
+    setStatus('error')
   }
 
   const buildRequester = (controller: WalletAbiSessionController): WalletAbiRequester => {
@@ -185,7 +208,11 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
       if (currentClient !== null && hasHydratedIdentity) {
         return currentClient
       }
-      return hydrateSession(currentController)
+      try {
+        return await hydrateSession(currentController)
+      } catch {
+        await invalidateSession()
+      }
     }
 
     const nextConnectionPromise = (async () => {
@@ -195,9 +222,7 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
         await controller.connect()
         return await hydrateSession(controller)
       } catch (nextError) {
-        clearSessionIdentity()
-        setError(errorMessage(nextError))
-        setStatus('error')
+        await invalidateSession(nextError)
         throw nextError
       } finally {
         connectionPromiseRef.current = null
@@ -226,18 +251,14 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
             if (cancelled) return
             void hydrateSession(controller).catch((nextError) => {
               if (cancelled) return
-              clearSessionIdentity()
-              setError(errorMessage(nextError))
-              setStatus('error')
+              void invalidateSession(nextError)
             })
           },
           onUpdated() {
             if (cancelled) return
             void hydrateSession(controller).catch((nextError) => {
               if (cancelled) return
-              clearSessionIdentity()
-              setError(errorMessage(nextError))
-              setStatus('error')
+              void invalidateSession(nextError)
             })
           },
           onDisconnected() {
@@ -247,7 +268,16 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
         })
 
         if (controller.session() !== null) {
-          await hydrateSession(controller)
+          if (!cancelled) {
+            setError(null)
+            setStatus('connecting')
+          }
+          try {
+            await hydrateSession(controller)
+          } catch (nextError) {
+            if (cancelled) return
+            await invalidateSession(nextError)
+          }
           return
         }
 
@@ -256,9 +286,7 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
         }
       } catch (nextError) {
         if (cancelled) return
-        clearSessionIdentity()
-        setError(errorMessage(nextError))
-        setStatus('error')
+        await invalidateSession(nextError)
       }
     })()
 
@@ -276,6 +304,10 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
     signerScriptPubkeyHex,
     network,
     async connect() {
+      await ensureConnected()
+    },
+    async reconnect() {
+      await invalidateSession()
       await ensureConnected()
     },
     async disconnect() {

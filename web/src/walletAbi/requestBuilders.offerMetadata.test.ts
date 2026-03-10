@@ -42,6 +42,7 @@ import {
   buildLiquidateLoanRequest,
 } from './requestBuilders'
 
+const FEE_RATE_SAT_KVB = 543
 const borrowerPubKeyHex = 'c7'.repeat(32)
 const principalAssetHex = '1e'.repeat(32)
 const collateralAssetHex = '14'.repeat(32)
@@ -146,6 +147,7 @@ describe('offer metadata handling', () => {
 
     const request = await buildCancelOfferRequest({
       network: 'testnet-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       signingXOnlyPubkey: borrowerPubKeyHex,
       offer: makeOffer(),
       offerCreationTx: makeOfferCreationTx(`6a20${borrowerOutputScriptHashHex}`),
@@ -166,6 +168,7 @@ describe('offer metadata handling', () => {
       'lender-script-auth',
       'cancel-fee',
     ])
+    expect(request.params.fee_rate_sat_kvb).toBe(FEE_RATE_SAT_KVB)
   })
 
   it('buildAcceptOfferRequest asks for a borrower address when the offer only stores a hash', async () => {
@@ -174,6 +177,7 @@ describe('offer metadata handling', () => {
     await expect(
       buildAcceptOfferRequest({
         network: 'testnet-liquid',
+        feeRateSatKvb: FEE_RATE_SAT_KVB,
         signerScriptPubkeyHex: '0014' + 'cd'.repeat(20),
         offer: makeOffer(),
         offerCreationTx: makeOfferCreationTx(`6a20${borrowerOutputScriptHashHex}`),
@@ -190,6 +194,7 @@ describe('offer metadata handling', () => {
 
     const request = await buildAcceptOfferRequest({
       network: 'testnet-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       signerScriptPubkeyHex: '0014' + 'cd'.repeat(20),
       offer: makeOffer(),
       offerCreationTx: makeOfferCreationTx(`6a16${borrowerOutputScriptPubkeyHex}`),
@@ -209,6 +214,7 @@ describe('offer metadata handling', () => {
 
     const request = await buildLiquidateLoanRequest({
       network: 'testnet-liquid',
+      feeRateSatKvb: FEE_RATE_SAT_KVB,
       signerScriptPubkeyHex: '0014' + 'cd'.repeat(20),
       offer,
       offerCreationTx: makeOfferCreationTx(`6a20${borrowerOutputScriptHashHex}`),
@@ -221,12 +227,9 @@ describe('offer metadata handling', () => {
       expect.objectContaining({ branch: 'LoanLiquidation' })
     )
     expect(request.params.lock_time).toEqual({ Blocks: offer.loan_expiration_time })
+    expect(request.params.fee_rate_sat_kvb).toBe(FEE_RATE_SAT_KVB)
     expect(request.params.inputs.map((input) => input.sequence)).toEqual([
-      0xffff_fffe,
-      0xffff_fffe,
-      0xffff_fffe,
-      0xffff_fffe,
-      0xffff_fffe,
+      0xffff_fffe, 0xffff_fffe, 0xffff_fffe, 0xffff_fffe, 0xffff_fffe,
     ])
   })
 })

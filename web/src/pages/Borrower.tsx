@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react'
 import {
   fetchOfferDetailsBatchWithParticipants,
   fetchOfferIdsByBorrowerPubkey,
@@ -7,11 +15,15 @@ import {
   fetchOfferUtxos,
   getCurrentBorrowerParticipant,
 } from '../api/client'
-import { EsploraClient } from '../api/esplora'
+import { EsploraClient, resolveWalletFeeRateSatKvb } from '../api/esplora'
 import { OfferTable } from '../components/OfferTable'
 import { Input } from '../components/Input'
 import { formClassNames } from '../components/formClassNames'
-import { loadBorrowerFlowState, saveBorrowerFlowState, clearBorrowerFlowState } from '../walletAbi/borrowerStorage'
+import {
+  loadBorrowerFlowState,
+  saveBorrowerFlowState,
+  clearBorrowerFlowState,
+} from '../walletAbi/borrowerStorage'
 import {
   loadTrackedBorrowerOfferIds,
   rememberTrackedBorrowerOfferId,
@@ -31,7 +43,11 @@ import {
 import { useWalletAbiSession } from '../walletAbi/WalletAbiSessionContext'
 import type { BorrowerFlowState } from '../walletAbi/borrowerStorage'
 import type { OfferShort, OfferWithParticipants } from '../types/offers'
-import { getScriptPubkeyHexFromAddress, POLICY_ASSET_ID, walletAbiNetworkToP2pkNetwork } from '../utility/addressP2pk'
+import {
+  getScriptPubkeyHexFromAddress,
+  POLICY_ASSET_ID,
+  walletAbiNetworkToP2pkNetwork,
+} from '../utility/addressP2pk'
 import { mergeBorrowerOffers } from '../utility/borrowerOffers'
 import type { TxCreateRequest } from 'wallet-abi-sdk-alpha/schema'
 
@@ -73,7 +89,8 @@ function parseNumberField(value: string, label: string): number {
   const trimmed = value.trim()
   if (!trimmed) throw new Error(`${label} is required`)
   const parsed = Number(trimmed)
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${label} must be a non-negative number`)
+  if (!Number.isFinite(parsed) || parsed < 0)
+    throw new Error(`${label} must be a non-negative number`)
   return parsed
 }
 
@@ -106,20 +123,16 @@ function Section({
 }) {
   return (
     <section className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.06)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">{eyebrow}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
+        {eyebrow}
+      </p>
       <h3 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">{title}</h3>
       <div className="mt-5 space-y-5">{children}</div>
     </section>
   )
 }
 
-function ActionStatus({
-  state,
-  esplora,
-}: {
-  state: ActionState
-  esplora: EsploraClient
-}) {
+function ActionStatus({ state, esplora }: { state: ActionState; esplora: EsploraClient }) {
   if (state.error) {
     return (
       <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -130,7 +143,7 @@ function ActionStatus({
   if (state.txid) {
     return (
       <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-        Broadcast via wallet: {' '}
+        Broadcast via wallet:{' '}
         <a
           href={esplora.getTxExplorerUrl(state.txid)}
           target="_blank"
@@ -181,7 +194,9 @@ export function BorrowerPage() {
   const [createCollateralAssetId, setCreateCollateralAssetId] = useState('')
   const [createPrincipalAssetId, setCreatePrincipalAssetId] = useState('')
   const [issuancePreviewError, setIssuancePreviewError] = useState<string | null>(null)
-  const [issuancePreview, setIssuancePreview] = useState<ReturnType<typeof decodeIssuedUtilityNfts> | null>(null)
+  const [issuancePreview, setIssuancePreview] = useState<ReturnType<
+    typeof decodeIssuedUtilityNfts
+  > | null>(null)
   const [prepareState, setPrepareState] = useState<ActionState>(emptyActionState)
   const [issueState, setIssueState] = useState<ActionState>(emptyActionState)
   const [createState, setCreateState] = useState<ActionState>(emptyActionState)
@@ -213,7 +228,9 @@ export function BorrowerPage() {
 
   useEffect(() => {
     if (!network) return
-    setCreateCollateralAssetId((current) => current || POLICY_ASSET_ID[walletAbiNetworkToP2pkNetwork(network)])
+    setCreateCollateralAssetId(
+      (current) => current || POLICY_ASSET_ID[walletAbiNetworkToP2pkNetwork(network)]
+    )
   }, [network])
 
   useEffect(() => {
@@ -268,7 +285,9 @@ export function BorrowerPage() {
           offerId
         )
       }
-      const borrowerIds = [...new Set([...idsByScript, ...trackedBorrowerOfferIds, ...idsByBorrowerPubkey])]
+      const borrowerIds = [
+        ...new Set([...idsByScript, ...trackedBorrowerOfferIds, ...idsByBorrowerPubkey]),
+      ]
       const detailed =
         borrowerIds.length === 0 ? [] : await fetchOfferDetailsBatchWithParticipants(borrowerIds)
       setOffers(
@@ -318,17 +337,22 @@ export function BorrowerPage() {
     [loadOffers, processRequest]
   )
 
+  const resolveFeeRate = useCallback(() => resolveWalletFeeRateSatKvb(esplora), [esplora])
+
   const handlePrepare = useCallback(() => {
     if (!network) return
     void runBorrowerRequest(
       setPrepareState,
-      async () =>
-        buildPrepareUtilityNftsRequest({
+      async () => {
+        const feeRateSatKvb = await resolveFeeRate()
+        return buildPrepareUtilityNftsRequest({
           network,
+          feeRateSatKvb,
           destinationScriptPubkeyHex: await getScriptPubkeyHexFromAddress(
             prepareDestinationAddress.trim()
           ),
-        }),
+        })
+      },
       (txid) => {
         setFlowState({
           prepareTxid: txid,
@@ -338,13 +362,14 @@ export function BorrowerPage() {
         setCreateState(emptyActionState())
       }
     )
-  }, [network, prepareDestinationAddress, runBorrowerRequest])
+  }, [network, prepareDestinationAddress, resolveFeeRate, runBorrowerRequest])
 
   const handleIssue = useCallback(() => {
     if (!network || !flowState.prepareTxid) return
     void runBorrowerRequest(
       setIssueState,
       async () => {
+        const feeRateSatKvb = await resolveFeeRate()
         const prepareTx = await esplora.getTx(flowState.prepareTxid!)
         const terms: ProtocolTerms = {
           collateralAmount: parseBigIntField(issueCollateralAmount, 'Collateral amount'),
@@ -356,6 +381,7 @@ export function BorrowerPage() {
         }
         return buildIssueUtilityNftsRequest({
           network,
+          feeRateSatKvb,
           destinationScriptPubkeyHex: await getScriptPubkeyHexFromAddress(
             issueDestinationAddress.trim()
           ),
@@ -382,6 +408,7 @@ export function BorrowerPage() {
     issueLoanExpiration,
     issuePrincipalAmount,
     network,
+    resolveFeeRate,
     runBorrowerRequest,
   ])
 
@@ -390,9 +417,11 @@ export function BorrowerPage() {
     void runBorrowerRequest(
       setCreateState,
       async () => {
+        const feeRateSatKvb = await resolveFeeRate()
         const issuanceTx = await esplora.getTx(flowState.issuanceTxid!)
         return buildCreateOfferRequest({
           network,
+          feeRateSatKvb,
           signerScriptPubkeyHex,
           signingXOnlyPubkey,
           issuanceTx,
@@ -416,6 +445,7 @@ export function BorrowerPage() {
     esplora,
     flowState.issuanceTxid,
     network,
+    resolveFeeRate,
     runBorrowerRequest,
     signerScriptPubkeyHex,
     signingXOnlyPubkey,
@@ -424,9 +454,11 @@ export function BorrowerPage() {
   const handleCancelOffer = useCallback(() => {
     if (!network || !selectedOffer) return
     void runBorrowerRequest(setCancelState, async () => {
+      const feeRateSatKvb = await resolveFeeRate()
       const offerCreationTx = await esplora.getTx(selectedOffer.created_at_txid)
       return buildCancelOfferRequest({
         network,
+        feeRateSatKvb,
         signingXOnlyPubkey: signingXOnlyPubkey!,
         offer: selectedOffer,
         offerCreationTx,
@@ -439,6 +471,7 @@ export function BorrowerPage() {
     cancelDestinationAddress,
     esplora,
     network,
+    resolveFeeRate,
     runBorrowerRequest,
     selectedOffer,
     signingXOnlyPubkey,
@@ -447,6 +480,7 @@ export function BorrowerPage() {
   const handleRepayLoan = useCallback(() => {
     if (!network || !selectedOffer || !signerScriptPubkeyHex) return
     void runBorrowerRequest(setRepayState, async () => {
+      const feeRateSatKvb = await resolveFeeRate()
       const [offerCreationTx, offerUtxos, participantsHistory] = await Promise.all([
         esplora.getTx(selectedOffer.created_at_txid),
         fetchOfferUtxos(selectedOffer.id),
@@ -461,6 +495,7 @@ export function BorrowerPage() {
       const lendingTx = await esplora.getTx(lendingUtxo.txid)
       return buildRepayLoanRequest({
         network,
+        feeRateSatKvb,
         signerScriptPubkeyHex,
         offer: selectedOffer,
         offerCreationTx,
@@ -475,6 +510,7 @@ export function BorrowerPage() {
     esplora,
     network,
     repayDestinationAddress,
+    resolveFeeRate,
     runBorrowerRequest,
     selectedOffer,
     signerScriptPubkeyHex,
@@ -610,7 +646,9 @@ export function BorrowerPage() {
           </Field>
           <button
             type="button"
-            disabled={issueState.loading || !flowState.prepareTxid || issueDestinationAddress.trim() === ''}
+            disabled={
+              issueState.loading || !flowState.prepareTxid || issueDestinationAddress.trim() === ''
+            }
             onClick={handleIssue}
             className="rounded-full bg-neutral-950 px-5 py-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300"
           >

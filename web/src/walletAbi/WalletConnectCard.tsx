@@ -1,7 +1,8 @@
 import { useWalletAbiSession } from './WalletAbiSessionContext'
 
 export function WalletConnectCard() {
-  const { connect, status, error, network } = useWalletAbiSession()
+  const { connect, reconnect, disconnect, status, error, network } = useWalletAbiSession()
+  const busy = status === 'connecting'
 
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-6 py-16 lg:flex-row lg:items-stretch">
@@ -19,14 +20,22 @@ export function WalletConnectCard() {
         <div className="mt-8 flex flex-wrap gap-4">
           <button
             type="button"
-            onClick={() => void connect()}
-            className="rounded-full bg-neutral-950 px-6 py-3 text-sm font-medium text-white hover:bg-neutral-800"
+            onClick={() => void (error ? reconnect() : connect())}
+            disabled={busy}
+            className="rounded-full bg-neutral-950 px-6 py-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
           >
-            {status === 'connecting' ? 'Waiting for wallet…' : 'Connect wallet'}
+            {busy ? 'Connecting wallet…' : error ? 'Reconnect wallet' : 'Connect wallet'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void disconnect()}
+            className="rounded-full border border-neutral-300 bg-white px-6 py-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+          >
+            Drop saved connection
           </button>
           <div className="rounded-full border border-neutral-200 px-4 py-3 text-sm text-neutral-600">
-            {status === 'connecting'
-              ? 'Approve the WalletConnect request in your wallet'
+            {busy
+              ? 'Restoring the session or waiting for wallet approval'
               : `Wallet ABI network: ${network ?? 'not connected'}`}
           </div>
         </div>
