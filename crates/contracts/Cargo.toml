@@ -40,7 +40,7 @@ simplicity-contracts = { workspace = true }
 anyhow = "1"
 cargo-husky = { workspace = true }
 lwk_common = "0.15.0"
-lwk_simplicity = { git = "https://github.com/KyrylR/lwk", rev = "751dd96", features = ["wallet_abi_test_utils"] }
+lwk_simplicity = { git = "https://github.com/KyrylR/lwk", rev = "fd33ba1", features = ["wallet_abi_test_utils"] }
 lwk_wollet = { version = "0.15.0", default-features = false, features = ["electrum", "esplora"] }
 minreq = "2.14.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }

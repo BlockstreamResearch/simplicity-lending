@@ -2272,7 +2272,7 @@ dependencies = [
 [[package]]
 name = "lwk_simplicity"
 version = "0.15.0"
-source = "git+https://github.com/KyrylR/lwk?rev=751dd96#751dd9687e3649cbd71b916afc512fd1560a985f"
+source = "git+https://github.com/KyrylR/lwk?rev=fd33ba1#fd33ba1bba2e1a052735fa01ffb421361c857fe2"
 dependencies = [
  "log",
  "lwk_common",
@@ -2290,7 +2290,7 @@ dependencies = [
 [[package]]
 name = "lwk_test_util"
 version = "0.15.0"
-source = "git+https://github.com/KyrylR/lwk?rev=751dd96#751dd9687e3649cbd71b916afc512fd1560a985f"
+source = "git+https://github.com/KyrylR/lwk?rev=fd33ba1#fd33ba1bba2e1a052735fa01ffb421361c857fe2"
 dependencies = [
  "bip39",
  "electrsd",
