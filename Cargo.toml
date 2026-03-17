@@ -20,10 +20,12 @@ tracing = { version = "0.1.41" }
 
 modular-bitfield = { version = "0.13.1"}
 
-simplicityhl = { version = "0.4.0" }
+simplicityhl = { git = "https://github.com/BlockstreamResearch/SimplicityHL.git", rev = "568b462" }
 simplicityhl-core = { version = "0.4.1", features = ["encoding"] }
 
 simplicity-contracts = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "87f89e9", package = "contracts" }
 simplicity-contracts-cli = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "87f89e9", package = "cli" }
+
+simplex = { path = "../simplex/crates/simplex", package = "simplex" }
 
 cargo-husky = { version = "1.5.0", default-features = false, features = ["user-hooks"] }
