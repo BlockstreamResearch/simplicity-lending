@@ -5,11 +5,11 @@ use lending_contracts::{
     sdk::{extract_arguments_from_tx, taproot_unspendable_internal_key},
 };
 
-use crate::indexer::db;
+use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferModel, OfferUtxoModel, UtxoType};
 use crate::{
     db::DbTx,
-    models::{ActiveUtxo, OfferParticipantModel, ParticipantType, UtxoCache, UtxoData},
+    models::{ActiveUtxo, OfferParticipantModel, ParticipantType, UtxoData},
 };
 
 #[tracing::instrument(

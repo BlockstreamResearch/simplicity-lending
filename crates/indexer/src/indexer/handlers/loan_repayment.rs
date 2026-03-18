@@ -1,11 +1,11 @@
 use simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
 use uuid::Uuid;
 
-use crate::indexer::db;
+use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferUtxoModel, UtxoData, UtxoType};
 use crate::{
     db::DbTx,
-    models::{ActiveUtxo, OfferStatus, UtxoCache},
+    models::{ActiveUtxo, OfferStatus},
 };
 
 #[tracing::instrument(

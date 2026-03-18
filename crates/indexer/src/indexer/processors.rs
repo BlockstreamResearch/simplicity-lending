@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     db::DbTx,
     esplora_client::EsploraClient,
-    indexer::{db, handlers, is_pre_lock_creation_tx},
-    models::{UtxoCache, UtxoData},
+    indexer::{cache::UtxoCache, db, handlers, is_pre_lock_creation_tx},
+    models::UtxoData,
 };
 
 #[tracing::instrument(
@@ -33,21 +33,35 @@ pub async fn process_block(
     }
 
     let mut sql_tx = db.begin().await?;
+    cache.begin_block();
 
-    for tx in txs {
-        process_tx(&mut sql_tx, &tx, cache, block_height).await?;
+    let process_result = async {
+        for tx in txs {
+            process_tx(&mut sql_tx, &tx, cache, block_height).await?;
+        }
+
+        db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
+        sql_tx.commit().await?;
+
+        Ok(())
     }
+    .await;
 
-    db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
-    sql_tx.commit().await?;
-
-    tracing::info!(
-        "Successfully indexed block #{} ({} txs)",
-        block_height,
-        tx_count
-    );
-
-    Ok(())
+    match process_result {
+        Ok(()) => {
+            cache.commit_block();
+            tracing::info!(
+                "Successfully indexed block #{} ({} txs)",
+                block_height,
+                tx_count
+            );
+            Ok(())
+        }
+        Err(error) => {
+            cache.abort_block();
+            Err(error)
+        }
+    }
 }
 
 #[tracing::instrument(

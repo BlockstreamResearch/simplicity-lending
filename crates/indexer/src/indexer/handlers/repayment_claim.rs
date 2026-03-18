@@ -1,12 +1,9 @@
 use simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
 use uuid::Uuid;
 
-use crate::indexer::db;
+use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferUtxoModel, UtxoType};
-use crate::{
-    db::DbTx,
-    models::{OfferStatus, UtxoCache},
-};
+use crate::{db::DbTx, models::OfferStatus};
 
 #[tracing::instrument(
     name = "Handling repayment tokens claim",
