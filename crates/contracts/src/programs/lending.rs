@@ -1,7 +1,7 @@
 use simplex::either::Either::{Left, Right};
 use simplex::program::Program;
-use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
+use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::lending::LendingProgram;
 use crate::artifacts::lending::derived_lending::{LendingArguments, LendingWitness};

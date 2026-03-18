@@ -1,8 +1,8 @@
+use simplex::simplicityhl::elements::{AssetId, hashes::sha256};
 use simplex::{
     provider::SimplicityNetwork,
     transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature},
 };
-use simplex::simplicityhl::elements::{AssetId, hashes::sha256};
 use simplicityhl::elements::{OutPoint, Script, TxOut};
 
 use crate::{

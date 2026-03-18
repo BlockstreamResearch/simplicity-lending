@@ -1,6 +1,6 @@
 use simplex::program::Program;
-use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
+use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::asset_auth::AssetAuthProgram;
 use crate::artifacts::asset_auth::derived_asset_auth::{AssetAuthArguments, AssetAuthWitness};

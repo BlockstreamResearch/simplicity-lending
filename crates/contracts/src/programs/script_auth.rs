@@ -1,6 +1,6 @@
 use simplex::program::Program;
-use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
+use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::script_auth::derived_script_auth::ScriptAuthWitness;
 use crate::artifacts::script_auth::{ScriptAuthProgram, derived_script_auth::ScriptAuthArguments};

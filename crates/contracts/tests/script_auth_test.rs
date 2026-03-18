@@ -1,9 +1,9 @@
 use lending_contracts::artifacts::script_auth::derived_script_auth::ScriptAuthWitness;
+use simplex::simplicityhl::elements::{OutPoint, Script, Txid};
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature,
 };
 use simplex::utils::tr_unspendable_key;
-use simplex::simplicityhl::elements::{OutPoint, Script, Txid};
 
 use lending_contracts::artifacts::script_auth::{
     ScriptAuthProgram, derived_script_auth::ScriptAuthArguments,

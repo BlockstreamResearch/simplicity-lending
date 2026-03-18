@@ -14,10 +14,7 @@ pub fn create_script_auth(
     network: SimplicityNetwork,
     arguments: ScriptAuthArguments,
 ) -> Result<(FinalTransaction, ScriptAuth), ScriptAuthTransactionError> {
-    let amount_to_lock = input_to_lock
-        .0
-        .amount
-        .ok_or(ScriptAuthTransactionError::InvalidAssetAmount())?;
+    let amount_to_lock = input_to_lock.0.amount.unwrap();
 
     create_script_auth_with_amount(input_to_lock, amount_to_lock, network, arguments)
 }
@@ -33,9 +30,7 @@ pub fn create_script_auth_with_amount(
 
     let (partial_input_to_lock, required_sig) = input_to_lock;
 
-    let asset_id_to_lock = partial_input_to_lock
-        .asset
-        .ok_or(ScriptAuthTransactionError::InvalidAssetId())?;
+    let asset_id_to_lock = partial_input_to_lock.asset.unwrap();
 
     ft.add_input(partial_input_to_lock, required_sig)?;
 

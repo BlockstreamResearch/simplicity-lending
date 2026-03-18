@@ -1,8 +1,8 @@
-use simplex::either::Either::{Left, Right};
 use simplex::constants::DUMMY_SIGNATURE;
+use simplex::either::Either::{Left, Right};
 use simplex::program::Program;
-use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
+use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::pre_lock::PreLockProgram;
 use crate::artifacts::pre_lock::derived_pre_lock::{PreLockArguments, PreLockWitness};
