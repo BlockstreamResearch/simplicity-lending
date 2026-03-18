@@ -36,7 +36,7 @@ simplicityhl-core = { workspace = true }
 
 simplicity-contracts = { workspace = true }
 
-simplex = { workspace = true }
+smplx-std = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"

@@ -1,5 +1,5 @@
-use simplex::simplex_sdk::program::Program;
-use simplex::simplex_sdk::{provider::SimplicityNetwork, utils::tr_unspendable_key};
+use simplex::program::Program;
+use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
 
 use crate::artifacts::asset_auth::AssetAuthProgram;
@@ -51,7 +51,7 @@ impl SimplexProgram for AssetAuth {
         self.program.get_program()
     }
 
-    fn get_network(&self) -> SimplicityNetwork {
-        self.network.clone()
+    fn get_network(&self) -> &SimplicityNetwork {
+        &self.network
     }
 }

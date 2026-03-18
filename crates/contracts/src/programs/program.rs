@@ -1,6 +1,6 @@
-use simplex::simplex_sdk::program::{Program, WitnessTrait};
-use simplex::simplex_sdk::provider::SimplicityNetwork;
-use simplex::simplex_sdk::transaction::{
+use simplex::program::{Program, WitnessTrait};
+use simplex::provider::SimplicityNetwork;
+use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature,
 };
 
@@ -72,14 +72,14 @@ pub trait SimplexProgram {
 
     fn get_program(&self) -> &Program;
 
-    fn get_network(&self) -> SimplicityNetwork;
+    fn get_network(&self) -> &SimplicityNetwork;
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum SimplexProgramError {
     #[error("Failed to do program action: {0}")]
-    Program(#[from] simplex::simplex_sdk::program::ProgramError),
+    Program(#[from] simplex::program::ProgramError),
 
     #[error("Failed to do transaction action: {0}")]
-    Transaction(#[from] simplex::simplex_sdk::transaction::TransactionError),
+    Transaction(#[from] simplex::transaction::TransactionError),
 }

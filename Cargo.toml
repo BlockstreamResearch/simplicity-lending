@@ -26,6 +26,6 @@ simplicityhl-core = { version = "0.4.1", features = ["encoding"] }
 simplicity-contracts = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "87f89e9", package = "contracts" }
 simplicity-contracts-cli = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "87f89e9", package = "cli" }
 
-simplex = { path = "../simplex/crates/simplex", package = "simplex" }
+smplx-std = "0.0.1"
 
 cargo-husky = { version = "1.5.0", default-features = false, features = ["user-hooks"] }

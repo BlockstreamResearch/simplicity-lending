@@ -1,4 +1,4 @@
-use simplex::simplex_sdk::{
+use simplex::{
     provider::SimplicityNetwork,
     transaction::{FinalTransaction, PartialOutput},
 };

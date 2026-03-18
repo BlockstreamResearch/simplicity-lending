@@ -1,9 +1,8 @@
-use lending_contracts::artifacts::pre_lock::derived_pre_lock::PreLockWitness;
 use lending_contracts::artifacts::script_auth::derived_script_auth::ScriptAuthWitness;
-use simplex::simplex_sdk::transaction::{
+use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature,
 };
-use simplex::simplex_sdk::utils::tr_unspendable_key;
+use simplex::utils::tr_unspendable_key;
 use simplex::simplicityhl::elements::{OutPoint, Script, Txid};
 
 use lending_contracts::artifacts::script_auth::{
@@ -24,7 +23,7 @@ fn get_script_auth(context: &simplex::TestContext) -> (ScriptAuthProgram, Script
     let script_auth = ScriptAuthProgram::new(tr_unspendable_key(), arguments);
     let script_auth_script = script_auth
         .get_program()
-        .get_script_pubkey(*context.get_network())
+        .get_script_pubkey(context.get_network())
         .unwrap();
 
     (script_auth, script_auth_script)

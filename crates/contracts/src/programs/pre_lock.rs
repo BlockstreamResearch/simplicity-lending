@@ -1,7 +1,7 @@
 use simplex::either::Either::{Left, Right};
-use simplex::simplex_sdk::constants::DUMMY_SIGNATURE;
-use simplex::simplex_sdk::program::Program;
-use simplex::simplex_sdk::{provider::SimplicityNetwork, utils::tr_unspendable_key};
+use simplex::constants::DUMMY_SIGNATURE;
+use simplex::program::Program;
+use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
 
 use crate::artifacts::pre_lock::PreLockProgram;
@@ -59,7 +59,7 @@ impl SimplexProgram for PreLock {
         self.program.get_program()
     }
 
-    fn get_network(&self) -> SimplicityNetwork {
-        self.network.clone()
+    fn get_network(&self) -> &SimplicityNetwork {
+        &self.network
     }
 }
