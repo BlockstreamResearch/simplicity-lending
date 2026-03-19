@@ -5,7 +5,7 @@ use simplex::{
         partial_input::IssuanceInput,
     },
 };
-use simplicityhl::elements::Script;
+use simplicityhl::elements::{AssetId, Script};
 
 use crate::{
     transactions::utility::{UTILITY_NFTS_COUNT, UtilityTransactionError},
@@ -18,7 +18,7 @@ pub fn issue_preparation_utxos(
     issuance_input: (PartialInput, RequiredSignature),
     issuance_utxos_output_script: Script,
     network: SimplicityNetwork,
-) -> Result<FinalTransaction, UtilityTransactionError> {
+) -> Result<(FinalTransaction, AssetId), UtilityTransactionError> {
     let mut ft = FinalTransaction::new(network);
 
     let total_asset_amount = PREPARATION_UTXO_ASSET_AMOUNT * UTILITY_NFTS_COUNT as u64;
@@ -46,5 +46,5 @@ pub fn issue_preparation_utxos(
         issuance_input.0.asset.unwrap(),
     ));
 
-    Ok(ft)
+    Ok((ft, asset_id))
 }

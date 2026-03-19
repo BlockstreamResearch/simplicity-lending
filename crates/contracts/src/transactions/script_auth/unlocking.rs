@@ -2,6 +2,7 @@ use simplex::{
     provider::SimplicityNetwork,
     transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature},
 };
+
 use simplicityhl::elements::{OutPoint, TxOut};
 
 use crate::{

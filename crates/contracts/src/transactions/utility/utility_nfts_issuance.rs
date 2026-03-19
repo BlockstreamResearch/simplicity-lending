@@ -14,7 +14,7 @@ pub const UTILITY_NFTS_COUNT: usize = 4;
 pub fn issue_utility_nfts(
     issuance_inputs: Vec<(PartialInput, RequiredSignature)>,
     utility_nfts_output_script: Script,
-    lending_offer_params: LendingParameters,
+    lending_offer_params: &LendingParameters,
     amounts_decimals: u8,
     issuance_asset_entropy: [u8; 32],
     network: SimplicityNetwork,
@@ -48,11 +48,11 @@ pub fn issue_utility_nfts(
         asset_ids.push(asset_id);
     }
 
-    for (index, asset_id) in asset_ids.iter().enumerate() {
+    for (index, asset_id) in asset_ids.into_iter().enumerate() {
         ft.add_output(PartialOutput::new(
             utility_nfts_output_script.clone(),
             utility_nfts_amounts[index],
-            asset_id.clone(),
+            asset_id,
         ));
     }
 

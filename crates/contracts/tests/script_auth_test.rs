@@ -1,122 +1,98 @@
-use lending_contracts::artifacts::script_auth::derived_script_auth::ScriptAuthWitness;
-use simplex::simplicityhl::elements::{OutPoint, Script, Txid};
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature,
-};
-use simplex::utils::tr_unspendable_key;
+use lending_contracts::artifacts::script_auth::derived_script_auth::ScriptAuthArguments;
+use lending_contracts::programs::ScriptAuth;
+use lending_contracts::programs::program::SimplexProgram;
+use lending_contracts::transactions::script_auth::{create_script_auth, unlock_script_auth};
 
-use lending_contracts::artifacts::script_auth::{
-    ScriptAuthProgram, derived_script_auth::ScriptAuthArguments,
-};
-use simplicityhl_core::hash_script;
+use simplex::simplicityhl::elements::Txid;
+use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
+use simplex::utils::hash_script;
 
-fn get_script_auth(context: &simplex::TestContext) -> (ScriptAuthProgram, Script) {
-    let signer = context.get_signer();
-    let signer_script_pubkey = signer.get_wpkh_address().unwrap().script_pubkey();
+pub mod utils;
 
-    println!("Signer script pubkey - {:?}", signer_script_pubkey);
+pub use utils::split_first_signer_utxo;
 
-    let arguments = ScriptAuthArguments {
-        script_hash: hash_script(&signer_script_pubkey),
-    };
-
-    let script_auth = ScriptAuthProgram::new(tr_unspendable_key(), arguments);
-    let script_auth_script = script_auth
-        .get_program()
-        .get_script_pubkey(context.get_network())
-        .unwrap();
-
-    (script_auth, script_auth_script)
-}
-
-fn create_script_auth(context: &simplex::TestContext) -> (ScriptAuthProgram, Txid) {
-    let signer = context.get_signer();
-    let provider = context.get_provider();
-
-    let (script_auth_program, script_auth_script) = get_script_auth(context);
-
-    let mut ft = FinalTransaction::new(*context.get_network());
-
-    ft.add_output(PartialOutput::new(
-        script_auth_script,
-        1000,
-        context.get_network().policy_asset(),
-    ));
-
-    let (tx, _) = signer.finalize(&ft, 1).unwrap();
-    let res = provider.broadcast_transaction(&tx).unwrap();
-
-    (script_auth_program, res)
-}
-
-fn spend_script_auth_covenant(
+fn create_script_auth_tx(
     context: &simplex::TestContext,
-    script_auth: ScriptAuthProgram,
-    script_auth_outpoint: OutPoint,
-) -> Txid {
-    println!("-----spend_script_auth_covenant------");
-    let signer = context.get_signer();
+    script_hash: [u8; 32],
+) -> anyhow::Result<(Txid, ScriptAuth)> {
     let provider = context.get_provider();
+    let signer = context.get_signer();
 
-    let script_auth_tx = provider
-        .fetch_transaction(&script_auth_outpoint.txid)
-        .unwrap();
-    let utxos = signer.get_wpkh_utxos().unwrap();
-    let first_utxo = utxos.first().unwrap();
+    let signer_utxos = signer.get_wpkh_utxos().unwrap();
+    let first_utxo = signer_utxos.first().unwrap();
+    let input_to_lock = PartialInput::new(first_utxo.0, first_utxo.1.clone());
 
-    let mut ft = FinalTransaction::new(*context.get_network());
-
-    let witness = ScriptAuthWitness {
-        input_script_index: 1,
-    };
-
-    ft.add_program_input(
-        PartialInput::new(
-            script_auth_outpoint,
-            script_auth_tx.output[script_auth_outpoint.vout as usize].clone(),
-        ),
-        ProgramInput::new(
-            Box::new(script_auth.get_program().clone()),
-            Box::new(witness.clone()),
-        ),
-        RequiredSignature::None,
-    )
-    .unwrap();
-    // ft.add_input(
-    //     PartialInput::new(
-    //         first_utxo.0,
-    //         first_utxo.1.clone()
-    //     ),
-    //     RequiredSignature::NativeEcdsa
-    // ).unwrap();
-    // ft.add_output(PartialOutput::new(
-    //     signer.get_wpkh_address().unwrap().script_pubkey(),
-    //     1000,
-    //     context.get_network().policy_asset(),
-    // ));
+    let (ft, script_auth) = create_script_auth(
+        (input_to_lock, RequiredSignature::NativeEcdsa),
+        *context.get_network(),
+        ScriptAuthArguments { script_hash },
+    )?;
 
     let (tx, _) = signer.finalize(&ft, 1).unwrap();
 
-    let res = provider.broadcast_transaction(&tx).unwrap();
+    let txid = provider.broadcast_transaction(&tx).unwrap();
 
-    res
+    Ok((txid, script_auth))
+}
+
+fn unlock_script_auth_tx(
+    context: &simplex::TestContext,
+    script_auth: ScriptAuth,
+) -> anyhow::Result<Txid> {
+    let provider = context.get_provider();
+    let signer = context.get_signer();
+
+    let signer_utxos = signer.get_wpkh_utxos().unwrap();
+    let first_utxo = signer_utxos.first().unwrap();
+    let auth_input = PartialInput::new(first_utxo.0, first_utxo.1.clone());
+
+    let found_script_auth_utxos =
+        provider.fetch_scripthash_utxos(&script_auth.get_script_pubkey()?)?;
+    let script_auth_utxo = found_script_auth_utxos.first().unwrap();
+
+    let signer_script = signer.get_wpkh_address().unwrap().script_pubkey();
+    let unlocked_output = PartialOutput::new(
+        signer_script,
+        script_auth_utxo.1.value.explicit().unwrap(),
+        script_auth_utxo.1.asset.explicit().unwrap(),
+    );
+
+    let ft = unlock_script_auth(
+        (script_auth_utxo.0, script_auth_utxo.1.clone()),
+        (auth_input, RequiredSignature::NativeEcdsa),
+        unlocked_output,
+        script_auth,
+        *context.get_network(),
+    )?;
+
+    let (tx, _) = signer.finalize(&ft, 1).unwrap();
+
+    let txid = provider.broadcast_transaction(&tx).unwrap();
+
+    Ok(txid)
 }
 
 #[simplex::test]
-fn creation_test(context: simplex::TestContext) -> anyhow::Result<()> {
+fn create_and_unlock_script_auth_test(context: simplex::TestContext) -> anyhow::Result<()> {
     let provider = context.get_provider();
+    let signer = context.get_signer();
 
-    let (script_auth_program, txid) = create_script_auth(&context);
+    let utxo_amounts = vec![1000, 5000, 10000];
+
+    let txid = split_first_signer_utxo(&context, utxo_amounts);
 
     provider.wait(&txid)?;
 
-    println!("ScriptAuth covenant created");
+    let signer_script_pubkey = signer.get_wpkh_address().unwrap().script_pubkey();
+    let signer_script_hash = hash_script(&signer_script_pubkey);
 
-    let tx = spend_script_auth_covenant(&context, script_auth_program, OutPoint { txid, vout: 0 });
+    let (txid, script_auth) = create_script_auth_tx(&context, signer_script_hash)?;
 
-    provider.wait(&tx)?;
+    provider.wait(&txid)?;
 
-    println!("ScriptAuth covenant spent");
+    let txid = unlock_script_auth_tx(&context, script_auth)?;
+
+    provider.wait(&txid)?;
 
     Ok(())
 }
