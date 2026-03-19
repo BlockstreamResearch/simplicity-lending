@@ -7,13 +7,10 @@ use simplex::simplicityhl::elements::hashes::sha256::Midstate;
 use simplex::simplicityhl::elements::{AssetId, Txid};
 use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
 
-pub use utils::{issue_asset, split_first_signer_utxo};
+use super::common::issuance::issue_asset;
+use super::common::wallet::{filter_signer_utxos_by_asset_id, split_first_signer_utxo};
 
-use crate::utils::filter_signer_utxos_by_asset_id;
-
-pub mod utils;
-
-fn create_asset_auth_tx(
+pub(super) fn create_asset_auth_tx(
     context: &simplex::TestContext,
     asset_id: AssetId,
     asset_amount: u64,
@@ -24,7 +21,6 @@ fn create_asset_auth_tx(
     let signer = context.get_signer();
 
     let policy_utxos = filter_signer_utxos_by_asset_id(signer, network.policy_asset());
-
     let utxo_to_lock = policy_utxos.first().unwrap();
 
     let (ft, asset_auth) = create_asset_auth(
@@ -41,13 +37,11 @@ fn create_asset_auth_tx(
     )?;
 
     let (tx, _) = signer.finalize(&ft, 1).unwrap();
-
     let txid = provider.broadcast_transaction(&tx).unwrap();
-
     Ok((txid, asset_auth))
 }
 
-fn unlock_asset_auth_tx(
+pub(super) fn unlock_asset_auth_tx(
     context: &simplex::TestContext,
     asset_auth: AssetAuth,
 ) -> anyhow::Result<Txid> {
@@ -61,12 +55,10 @@ fn unlock_asset_auth_tx(
 
     let asset_auth_arguments = asset_auth.get_asset_auth_arguments();
     let auth_asset_id = AssetId::from_inner(Midstate(asset_auth_arguments.asset_id));
-
     let auth_utxos = filter_signer_utxos_by_asset_id(signer, auth_asset_id);
     let auth_utxo = auth_utxos.first().unwrap();
 
     let signer_script_pubkey = signer.get_wpkh_address().unwrap().script_pubkey();
-
     let ft = unlock_asset_auth(
         (asset_auth_utxo.0, asset_auth_utxo.1.clone()),
         (
@@ -83,72 +75,28 @@ fn unlock_asset_auth_tx(
     )?;
 
     let (tx, _) = signer.finalize(&ft, 1).unwrap();
-
     let txid = provider.broadcast_transaction(&tx).unwrap();
-
     Ok(txid)
 }
 
 #[simplex::test]
-fn create_and_unlock_asset_auth_without_burn_test(
+fn creates_and_unlocks_asset_auth_without_burn(
     context: simplex::TestContext,
 ) -> anyhow::Result<()> {
     let provider = context.get_provider();
 
-    let utxo_amounts = vec![1000];
-
-    let txid = split_first_signer_utxo(&context, utxo_amounts);
-
+    let txid = split_first_signer_utxo(&context, vec![1000]);
     provider.wait(&txid)?;
 
     let asset_amount = 1;
     let (txid, asset_id) = issue_asset(&context, asset_amount)?;
-
     provider.wait(&txid)?;
 
     let (txid, asset_auth) = create_asset_auth_tx(&context, asset_id, asset_amount, false)?;
-
     provider.wait(&txid)?;
 
     let txid = unlock_asset_auth_tx(&context, asset_auth)?;
-
     provider.wait(&txid)?;
-
-    Ok(())
-}
-
-#[simplex::test]
-fn create_and_unlock_asset_auth_with_burn_test(
-    context: simplex::TestContext,
-) -> anyhow::Result<()> {
-    let provider = context.get_provider();
-
-    let utxo_amounts = vec![1000];
-
-    let txid = split_first_signer_utxo(&context, utxo_amounts);
-
-    provider.wait(&txid)?;
-
-    let asset_amount = 1;
-    let (txid, asset_id) = issue_asset(&context, asset_amount)?;
-
-    provider.wait(&txid)?;
-
-    let (txid, asset_auth) = create_asset_auth_tx(&context, asset_id, asset_amount, true)?;
-
-    provider.wait(&txid)?;
-
-    let txid = unlock_asset_auth_tx(&context, asset_auth)?;
-
-    provider.wait(&txid)?;
-
-    let tx = provider.fetch_transaction(&txid)?;
-
-    let burn_output = tx.output[1].clone();
-
-    assert!(burn_output.is_null_data());
-    assert_eq!(burn_output.asset.explicit().unwrap(), asset_id);
-    assert_eq!(burn_output.value.explicit().unwrap(), asset_amount);
 
     Ok(())
 }

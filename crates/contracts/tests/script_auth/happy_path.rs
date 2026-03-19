@@ -7,35 +7,33 @@ use simplex::simplicityhl::elements::Txid;
 use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
 use simplex::utils::hash_script;
 
-pub mod utils;
+use super::common::tx_steps::{finalize_and_broadcast, wait_for_tx};
+use super::common::wallet::split_first_signer_utxo;
 
-pub use utils::split_first_signer_utxo;
-
-fn create_script_auth_tx(
+pub(super) fn create_script_auth_tx(
     context: &simplex::TestContext,
     script_hash: [u8; 32],
 ) -> anyhow::Result<(Txid, ScriptAuth)> {
-    let provider = context.get_provider();
     let signer = context.get_signer();
 
     let signer_utxos = signer.get_wpkh_utxos().unwrap();
     let first_utxo = signer_utxos.first().unwrap();
-    let input_to_lock = PartialInput::new(first_utxo.0, first_utxo.1.clone());
 
     let (ft, script_auth) = create_script_auth(
-        (input_to_lock, RequiredSignature::NativeEcdsa),
+        (
+            PartialInput::new(first_utxo.0, first_utxo.1.clone()),
+            RequiredSignature::NativeEcdsa,
+        ),
         *context.get_network(),
         ScriptAuthArguments { script_hash },
     )?;
 
-    let (tx, _) = signer.finalize(&ft, 1).unwrap();
-
-    let txid = provider.broadcast_transaction(&tx).unwrap();
+    let txid = finalize_and_broadcast(context, &ft)?;
 
     Ok((txid, script_auth))
 }
 
-fn unlock_script_auth_tx(
+pub(super) fn unlock_script_auth_tx(
     context: &simplex::TestContext,
     script_auth: ScriptAuth,
 ) -> anyhow::Result<Txid> {
@@ -65,34 +63,26 @@ fn unlock_script_auth_tx(
         *context.get_network(),
     )?;
 
-    let (tx, _) = signer.finalize(&ft, 1).unwrap();
-
-    let txid = provider.broadcast_transaction(&tx).unwrap();
+    let txid = finalize_and_broadcast(context, &ft)?;
 
     Ok(txid)
 }
 
 #[simplex::test]
-fn create_and_unlock_script_auth_test(context: simplex::TestContext) -> anyhow::Result<()> {
-    let provider = context.get_provider();
+fn creates_and_unlocks_script_auth(context: simplex::TestContext) -> anyhow::Result<()> {
     let signer = context.get_signer();
 
-    let utxo_amounts = vec![1000, 5000, 10000];
-
-    let txid = split_first_signer_utxo(&context, utxo_amounts);
-
-    provider.wait(&txid)?;
+    let txid = split_first_signer_utxo(&context, vec![1000, 5000, 10000]);
+    wait_for_tx(&context, &txid)?;
 
     let signer_script_pubkey = signer.get_wpkh_address().unwrap().script_pubkey();
     let signer_script_hash = hash_script(&signer_script_pubkey);
 
     let (txid, script_auth) = create_script_auth_tx(&context, signer_script_hash)?;
-
-    provider.wait(&txid)?;
+    wait_for_tx(&context, &txid)?;
 
     let txid = unlock_script_auth_tx(&context, script_auth)?;
-
-    provider.wait(&txid)?;
+    wait_for_tx(&context, &txid)?;
 
     Ok(())
 }

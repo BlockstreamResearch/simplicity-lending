@@ -5,106 +5,23 @@ use lending_contracts::{
         script_auth::derived_script_auth::ScriptAuthArguments,
     },
     programs::{AssetAuth, Lending, PreLock, ScriptAuth, program::SimplexProgram},
-    transactions::{
-        pre_lock::{cancel_pre_lock, create_lending_from_pre_lock, create_pre_lock},
-        utility::{UTILITY_NFTS_COUNT, issue_preparation_utxos, issue_utility_nfts},
-    },
+    transactions::pre_lock::{cancel_pre_lock, create_lending_from_pre_lock, create_pre_lock},
     utils::LendingParameters,
 };
 use simplex::{
     transaction::{PartialInput, PartialOutput, RequiredSignature},
     utils::hash_script,
 };
-use simplicity_contracts::sdk::taproot_pubkey_gen::get_random_seed;
 use simplicityhl::elements::{AssetId, OutPoint, Txid, hashes::sha256::Midstate};
 
-use crate::utils::{
+use super::common::issuance::{issue_asset, issue_preparation_utxos_tx, issue_utility_nfts_tx};
+use super::common::tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast, wait_for_tx};
+use super::common::wallet::{
     AmountFilter, filter_signer_utxos_by_asset_and_amount, filter_signer_utxos_by_asset_id,
-    filter_utxos_by_amount, get_split_utxo_ft, issue_asset, split_first_signer_utxo,
+    filter_utxos_by_amount, get_split_utxo_ft, split_first_signer_utxo,
 };
 
-pub mod utils;
-
-fn issue_preparation_utxos_tx(context: &simplex::TestContext) -> anyhow::Result<(Txid, AssetId)> {
-    let provider = context.get_provider();
-    let signer = context.get_signer();
-
-    let signer_script_pubkey = signer.get_wpkh_address().unwrap().script_pubkey();
-
-    let signer_utxos = signer.get_wpkh_utxos().unwrap();
-    let first_utxo = signer_utxos.first().unwrap();
-
-    let (ft, asset_id) = issue_preparation_utxos(
-        (
-            PartialInput::new(first_utxo.0, first_utxo.1.clone()),
-            RequiredSignature::NativeEcdsa,
-        ),
-        signer_script_pubkey,
-        *context.get_network(),
-    )?;
-
-    let (tx, _) = signer.finalize(&ft, 1).unwrap();
-
-    let txid = provider.broadcast_transaction(&tx).unwrap();
-
-    Ok((txid, asset_id))
-}
-
-fn issue_utility_nfts_tx(
-    context: &simplex::TestContext,
-    offer_params: &LendingParameters,
-    preparation_asset_id: AssetId,
-) -> anyhow::Result<Txid> {
-    let provider = context.get_provider();
-    let signer = context.get_signer();
-
-    let signer_script_pubkey = signer.get_wpkh_address().unwrap().script_pubkey();
-
-    let issuance_utxos = filter_signer_utxos_by_asset_id(signer, preparation_asset_id);
-
-    assert_eq!(issuance_utxos.len(), UTILITY_NFTS_COUNT);
-
-    let issuance_inputs = issuance_utxos
-        .iter()
-        .map(|utxo| {
-            (
-                PartialInput::new(utxo.0, utxo.1.clone()),
-                RequiredSignature::NativeEcdsa,
-            )
-        })
-        .collect();
-    let issuance_asset_entropy = get_random_seed();
-
-    let mut ft = issue_utility_nfts(
-        issuance_inputs,
-        signer_script_pubkey,
-        offer_params,
-        1,
-        issuance_asset_entropy,
-        *context.get_network(),
-    )?;
-
-    let signer_policy_utxos = filter_signer_utxos_by_asset_and_amount(
-        signer,
-        context.get_network().policy_asset(),
-        100_000,
-        AmountFilter::LessThan,
-    );
-    let fee_utxo = signer_policy_utxos.first().unwrap();
-
-    ft.add_input(
-        PartialInput::new(fee_utxo.0, fee_utxo.1.clone()),
-        RequiredSignature::NativeEcdsa,
-    )?;
-
-    let (tx, _) = signer.finalize_strict(&ft, 1).unwrap();
-
-    let txid = provider.broadcast_transaction(&tx).unwrap();
-
-    Ok(txid)
-}
-
-fn create_pre_lock_tx(
+pub(super) fn create_pre_lock_tx(
     context: &simplex::TestContext,
     offer_parameters: &LendingParameters,
     principal_asset_id: AssetId,
@@ -115,7 +32,6 @@ fn create_pre_lock_tx(
     let signer = context.get_signer();
 
     let utility_nfts_tx = provider.fetch_transaction(&utility_nfts_issuance_txid)?;
-
     let signer_schnorr_pubkey = signer.get_schnorr_public_key()?;
     let first_parameters_nft_asset_id = utility_nfts_tx.output[0].asset.explicit().unwrap();
     let second_parameters_nft_asset_id = utility_nfts_tx.output[1].asset.explicit().unwrap();
@@ -187,7 +103,6 @@ fn create_pre_lock_tx(
         collateral_utxos.len() > 1,
         "No UTXOs serving as collateral were found"
     );
-
     let collateral_utxo = collateral_utxos.first().unwrap();
 
     let (ft, pre_lock) = create_pre_lock(
@@ -227,14 +142,11 @@ fn create_pre_lock_tx(
         pre_lock_arguments,
     )?;
 
-    let (tx, _) = signer.finalize(&ft, 1).unwrap();
-
-    let txid = provider.broadcast_transaction(&tx).unwrap();
-
+    let txid = finalize_and_broadcast(context, &ft)?;
     Ok((txid, pre_lock))
 }
 
-fn create_lending_from_pre_lock_tx(
+pub(super) fn create_lending_from_pre_lock_tx(
     context: &simplex::TestContext,
     pre_lock: PreLock,
     pre_lock_txid: Txid,
@@ -248,7 +160,6 @@ fn create_lending_from_pre_lock_tx(
 
     let principal_utxos = filter_signer_utxos_by_asset_id(signer, principal_asset_id);
     let utxo_to_split = principal_utxos.first().unwrap();
-
     let ft = get_split_utxo_ft(
         (utxo_to_split.0, utxo_to_split.1.clone()),
         vec![pre_lock_arguments.principal_amount],
@@ -256,10 +167,8 @@ fn create_lending_from_pre_lock_tx(
         *network,
     );
 
-    let (tx, _) = signer.finalize(&ft, 1).unwrap();
-
-    let txid = provider.broadcast_transaction(&tx).unwrap();
-    provider.wait(&txid)?;
+    let txid = finalize_and_broadcast(context, &ft)?;
+    wait_for_tx(context, &txid)?;
 
     let principal_utxos = filter_signer_utxos_by_asset_and_amount(
         signer,
@@ -319,14 +228,11 @@ fn create_lending_from_pre_lock_tx(
         RequiredSignature::NativeEcdsa,
     )?;
 
-    let (tx, _) = signer.finalize_strict(&ft, 1).unwrap();
-
-    let txid = provider.broadcast_transaction(&tx).unwrap();
-
+    let txid = finalize_strict_and_broadcast(context, &ft)?;
     Ok((txid, lending))
 }
 
-fn cancel_pre_lock_tx(
+pub(super) fn cancel_pre_lock_tx(
     context: &simplex::TestContext,
     pre_lock: PreLock,
     pre_lock_txid: Txid,
@@ -336,7 +242,6 @@ fn cancel_pre_lock_tx(
     let signer = context.get_signer();
 
     let pre_lock_arguments = pre_lock.get_pre_lock_arguments();
-
     let pre_lock_creation_tx = provider.fetch_transaction(&pre_lock_txid)?;
 
     let mut ft = cancel_pre_lock(
@@ -382,74 +287,29 @@ fn cancel_pre_lock_tx(
         RequiredSignature::NativeEcdsa,
     )?;
 
-    let (tx, _) = signer.finalize_strict(&ft, 1).unwrap();
-
-    let txid = provider.broadcast_transaction(&tx).unwrap();
-
+    let txid = finalize_strict_and_broadcast(context, &ft)?;
     Ok(txid)
 }
 
-fn setup_pre_lock(context: &simplex::TestContext) -> anyhow::Result<(Txid, PreLock)> {
-    let provider = context.get_provider();
+pub(super) fn setup_pre_lock(context: &simplex::TestContext) -> anyhow::Result<(Txid, PreLock)> {
+    let txid = split_first_signer_utxo(context, vec![1000, 2000, 5000]);
+    wait_for_tx(context, &txid)?;
 
-    let utxo_amounts = vec![1000, 2000, 5000];
+    let (txid, preparation_asset_id) = issue_preparation_utxos_tx(context)?;
+    wait_for_tx(context, &txid)?;
 
-    let txid = split_first_signer_utxo(&context, utxo_amounts);
+    let (txid, principal_asset_id) = issue_asset(context, 20000)?;
+    wait_for_tx(context, &txid)?;
 
-    provider.wait(&txid)?;
-
-    let (txid, preparation_asset_id) = issue_preparation_utxos_tx(&context)?;
-
-    provider.wait(&txid)?;
-
-    let total_principal_amount = 20000;
-
-    let (txid, principal_asset_id) = issue_asset(&context, total_principal_amount)?;
-
-    provider.wait(&txid)?;
-
-    let new_offer_parameters = LendingParameters {
+    let offer_parameters = LendingParameters {
         collateral_amount: 1000,
         principal_amount: 5000,
         loan_expiration_time: 110,
         principal_interest_rate: 200,
     };
-    let txid = issue_utility_nfts_tx(&context, &new_offer_parameters, preparation_asset_id)?;
 
-    provider.wait(&txid)?;
+    let txid = issue_utility_nfts_tx(context, &offer_parameters, preparation_asset_id)?;
+    wait_for_tx(context, &txid)?;
 
-    let (txid, pre_lock) =
-        create_pre_lock_tx(&context, &new_offer_parameters, principal_asset_id, txid)?;
-
-    Ok((txid, pre_lock))
-}
-
-#[simplex::test]
-fn create_lending_from_pre_lock_test(context: simplex::TestContext) -> anyhow::Result<()> {
-    let provider = context.get_provider();
-
-    let (txid, pre_lock) = setup_pre_lock(&context)?;
-
-    provider.wait(&txid)?;
-
-    let (txid, _) = create_lending_from_pre_lock_tx(&context, pre_lock, txid)?;
-
-    provider.wait(&txid)?;
-
-    Ok(())
-}
-
-#[simplex::test]
-fn cancel_pre_lock_test(context: simplex::TestContext) -> anyhow::Result<()> {
-    let provider = context.get_provider();
-
-    let (txid, pre_lock) = setup_pre_lock(&context)?;
-
-    provider.wait(&txid)?;
-
-    let txid = cancel_pre_lock_tx(&context, pre_lock, txid)?;
-
-    provider.wait(&txid)?;
-
-    Ok(())
+    create_pre_lock_tx(context, &offer_parameters, principal_asset_id, txid)
 }
