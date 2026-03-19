@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
+use simplicityhl::elements::{Txid, hashes::Hash};
 
 use lending_contracts::pre_lock::build_arguments::PreLockArguments;
 
@@ -20,8 +18,6 @@ pub struct ActiveUtxo {
     pub offer_id: Uuid,
     pub data: UtxoData,
 }
-
-pub type UtxoCache = HashMap<OutPoint, ActiveUtxo>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "offer_status", rename_all = "lowercase")]

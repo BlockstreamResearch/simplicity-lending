@@ -1,3 +1,4 @@
+mod cache;
 mod db;
 mod handlers;
 mod processors;

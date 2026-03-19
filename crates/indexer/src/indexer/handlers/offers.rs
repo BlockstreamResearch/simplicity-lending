@@ -3,10 +3,11 @@ use uuid::Uuid;
 
 use crate::indexer::handlers::{handle_lending_creation, handle_offer_cancellation};
 use crate::indexer::{
-    handle_loan_liquidation, handle_loan_repayment, handle_repayment_claim, is_loan_repayment_tx,
+    cache::UtxoCache, handle_loan_liquidation, handle_loan_repayment, handle_repayment_claim,
+    is_loan_repayment_tx,
 };
 use crate::models::UtxoType;
-use crate::{db::DbTx, indexer::is_offer_cancellation_tx, models::UtxoCache};
+use crate::{db::DbTx, indexer::is_offer_cancellation_tx};
 
 #[tracing::instrument(
     name = "Handling offer status transition",

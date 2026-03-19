@@ -3,12 +3,9 @@ use uuid::Uuid;
 use simplicityhl::elements::hashes::Hash;
 use simplicityhl::elements::{OutPoint, Transaction};
 
-use crate::indexer::db;
+use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferParticipantModel, ParticipantType, UtxoData};
-use crate::{
-    db::DbTx,
-    models::{ActiveUtxo, UtxoCache},
-};
+use crate::{db::DbTx, models::ActiveUtxo};
 
 #[tracing::instrument(
     name = "Handling offer participant movement",

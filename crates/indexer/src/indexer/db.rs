@@ -1,13 +1,12 @@
-use std::collections::HashMap;
-
 use simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::DbTx;
+use crate::indexer::cache::UtxoCache;
 use crate::models::{
     ActiveUtxo, OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType,
-    UtxoCache, UtxoData, UtxoType,
+    UtxoData, UtxoType,
 };
 
 #[tracing::instrument(
@@ -342,7 +341,7 @@ pub async fn load_utxo_cache(db: &PgPool) -> anyhow::Result<UtxoCache> {
     let offers_count = offer_rows.len();
     let offer_participants_count = participant_rows.len();
 
-    let mut cache: UtxoCache = HashMap::with_capacity(offers_count + offer_participants_count);
+    let mut cache = UtxoCache::with_capacity(offers_count + offer_participants_count);
 
     for rec in offer_rows {
         let outpoint = OutPoint {
