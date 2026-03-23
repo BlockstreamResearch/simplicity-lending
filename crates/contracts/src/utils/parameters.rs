@@ -7,15 +7,15 @@ use modular_bitfield::{error::OutOfBounds, prelude::*};
 
 use crate::error::ParametersError;
 
-#[derive(Debug, Clone)]
-pub struct LendingParameters {
+#[derive(Debug, Clone, Copy)]
+pub struct LendingOfferParameters {
     pub collateral_amount: u64,
     pub principal_amount: u64,
     pub loan_expiration_time: u32,
     pub principal_interest_rate: u16,
 }
 
-impl LendingParameters {
+impl LendingOfferParameters {
     /// Build lending parameters by using values from the first and second NFT parameters
     #[must_use]
     pub fn build_from_parameters_nfts(
@@ -39,10 +39,10 @@ impl LendingParameters {
         }
     }
 
-    /// Encode Parameters NFT amounts from the `LendingParameters` values and the passed `amounts_decimals`
+    /// Encode Parameters NFT amounts from the `LendingOfferParameters` values and the passed `amounts_decimals`
     ///
     /// # Errors
-    /// Returns an error if a parameter from `LendingParameters` is out of bounds of the parameters bits structure
+    /// Returns an error if a parameter from `LendingOfferParameters` is out of bounds of the parameters bits structure
     pub fn encode_parameters_nft_amounts(
         &self,
         amounts_decimals: u8,
@@ -73,7 +73,7 @@ impl LendingParameters {
     /// Validate lending offer parameters according to the first and second NFT parameters
     ///
     /// # Errors
-    /// Returns an error if a parameter from `LendingParameters` differs from the NFT parameter
+    /// Returns an error if a parameter from `LendingOfferParameters` differs from the NFT parameter
     pub fn validate_params(
         &self,
         first_nft_params: &FirstNFTParameters,

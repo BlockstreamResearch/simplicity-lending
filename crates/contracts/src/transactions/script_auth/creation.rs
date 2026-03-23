@@ -1,40 +1,33 @@
-use simplex::{
-    provider::SimplicityNetwork,
-    transaction::{FinalTransaction, PartialInput, RequiredSignature},
-};
+use simplex::transaction::FinalTransaction;
 
 use crate::{
-    artifacts::script_auth::derived_script_auth::ScriptAuthArguments,
-    programs::{ScriptAuth, program::SimplexProgram},
-    transactions::script_auth::ScriptAuthTransactionError,
+    programs::{ScriptAuth, ScriptAuthParameters, program::SimplexProgram},
+    transactions::{core::SimplexInput, script_auth::ScriptAuthTransactionError},
 };
 
 pub fn create_script_auth(
-    input_to_lock: (PartialInput, RequiredSignature),
-    network: SimplicityNetwork,
-    arguments: ScriptAuthArguments,
+    input_to_lock: &SimplexInput,
+    parameters: ScriptAuthParameters,
 ) -> Result<(FinalTransaction, ScriptAuth), ScriptAuthTransactionError> {
-    let amount_to_lock = input_to_lock.0.amount.unwrap();
+    let amount_to_lock = input_to_lock.explicit_amount();
 
-    create_script_auth_with_amount(input_to_lock, amount_to_lock, network, arguments)
+    create_script_auth_with_amount(input_to_lock, amount_to_lock, parameters)
 }
 
 pub fn create_script_auth_with_amount(
-    input_to_lock: (PartialInput, RequiredSignature),
+    input_to_lock: &SimplexInput,
     amount_to_lock: u64,
-    network: SimplicityNetwork,
-    arguments: ScriptAuthArguments,
+    parameters: ScriptAuthParameters,
 ) -> Result<(FinalTransaction, ScriptAuth), ScriptAuthTransactionError> {
-    let script_auth = ScriptAuth::new(arguments, network.clone());
-    let mut ft = FinalTransaction::new(network);
+    let script_auth = ScriptAuth::new(parameters);
+    let mut ft = FinalTransaction::new(parameters.network);
 
-    let (partial_input_to_lock, required_sig) = input_to_lock;
+    ft.add_input(
+        input_to_lock.partial_input().clone(),
+        input_to_lock.required_sig().clone(),
+    )?;
 
-    let asset_id_to_lock = partial_input_to_lock.asset.unwrap();
-
-    ft.add_input(partial_input_to_lock, required_sig)?;
-
-    script_auth.add_program_output(&mut ft, asset_id_to_lock, amount_to_lock)?;
+    script_auth.add_program_output(&mut ft, input_to_lock.explicit_asset(), amount_to_lock)?;
 
     Ok((ft, script_auth))
 }

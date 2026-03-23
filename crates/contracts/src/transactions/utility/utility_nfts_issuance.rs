@@ -7,14 +7,14 @@ use simplex::{
 };
 use simplicityhl::elements::{AssetId, Script};
 
-use crate::{transactions::utility::UtilityTransactionError, utils::LendingParameters};
+use crate::{transactions::utility::UtilityTransactionError, utils::LendingOfferParameters};
 
 pub const UTILITY_NFTS_COUNT: usize = 4;
 
 pub fn issue_utility_nfts(
     issuance_inputs: Vec<(PartialInput, RequiredSignature)>,
     utility_nfts_output_script: Script,
-    lending_offer_params: &LendingParameters,
+    lending_offer_params: &LendingOfferParameters,
     amounts_decimals: u8,
     issuance_asset_entropy: [u8; 32],
     network: SimplicityNetwork,

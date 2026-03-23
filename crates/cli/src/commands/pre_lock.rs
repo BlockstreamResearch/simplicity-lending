@@ -21,7 +21,7 @@ use lending_contracts::script_auth::{
     finalize_script_auth_transaction, get_script_auth_address, get_script_auth_program,
 };
 use lending_contracts::sdk::parameters::{
-    FirstNFTParameters, LendingParameters, SecondNFTParameters,
+    FirstNFTParameters, LendingOfferParameters, SecondNFTParameters,
 };
 
 use lending_contracts::sdk::taproot_unspendable_internal_key;
@@ -308,7 +308,7 @@ impl PreLock {
                 let first_parameters = FirstNFTParameters::decode(first_parameters_nft_value);
                 let second_parameters = SecondNFTParameters::decode(second_parameters_nft_value);
 
-                let lending_params = LendingParameters::build_from_parameters_nfts(
+                let lending_params = LendingOfferParameters::build_from_parameters_nfts(
                     &first_parameters,
                     &second_parameters,
                 );
@@ -437,7 +437,7 @@ impl PreLock {
 
                 let issuance_asset_entropy = get_random_seed();
 
-                let lending_params = LendingParameters {
+                let lending_params = LendingOfferParameters {
                     collateral_amount: *collateral_amount,
                     principal_amount: *principal_amount,
                     principal_interest_rate: *principal_interest_rate,
@@ -556,7 +556,7 @@ impl PreLock {
 
                 let issuance_asset_entropy = get_random_seed();
 
-                let lending_params = LendingParameters {
+                let lending_params = LendingOfferParameters {
                     collateral_amount: *collateral_amount,
                     principal_amount: *principal_amount,
                     principal_interest_rate: *principal_interest_rate,
@@ -686,7 +686,7 @@ impl PreLock {
                 let second_nft_parameters =
                     SecondNFTParameters::decode(second_parameters_nft_value);
 
-                let lending_params = LendingParameters::build_from_parameters_nfts(
+                let lending_params = LendingOfferParameters::build_from_parameters_nfts(
                     &first_nft_parameters,
                     &second_nft_parameters,
                 );

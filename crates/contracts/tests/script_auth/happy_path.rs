@@ -1,10 +1,9 @@
-use lending_contracts::artifacts::script_auth::derived_script_auth::ScriptAuthArguments;
-use lending_contracts::programs::ScriptAuth;
-use lending_contracts::programs::program::SimplexProgram;
+use lending_contracts::programs::{ScriptAuth, ScriptAuthParameters, program::SimplexProgram};
+use lending_contracts::transactions::core::SimplexInput;
 use lending_contracts::transactions::script_auth::{create_script_auth, unlock_script_auth};
 
 use simplex::simplicityhl::elements::Txid;
-use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{PartialOutput, RequiredSignature};
 use simplex::utils::hash_script;
 
 use super::common::tx_steps::{finalize_and_broadcast, wait_for_tx};
@@ -20,12 +19,15 @@ pub(super) fn create_script_auth_tx(
     let first_utxo = signer_utxos.first().unwrap();
 
     let (ft, script_auth) = create_script_auth(
-        (
-            PartialInput::new(first_utxo.0, first_utxo.1.clone()),
+        &SimplexInput::new(
+            first_utxo.0,
+            first_utxo.1.clone(),
             RequiredSignature::NativeEcdsa,
         ),
-        *context.get_network(),
-        ScriptAuthArguments { script_hash },
+        ScriptAuthParameters {
+            script_hash: script_hash,
+            network: *context.get_network(),
+        },
     )?;
 
     let txid = finalize_and_broadcast(context, &ft)?;
@@ -42,7 +44,11 @@ pub(super) fn unlock_script_auth_tx(
 
     let signer_utxos = signer.get_wpkh_utxos().unwrap();
     let first_utxo = signer_utxos.first().unwrap();
-    let auth_input = PartialInput::new(first_utxo.0, first_utxo.1.clone());
+    let auth_input = SimplexInput::new(
+        first_utxo.0,
+        first_utxo.1.clone(),
+        RequiredSignature::NativeEcdsa,
+    );
 
     let found_script_auth_utxos =
         provider.fetch_scripthash_utxos(&script_auth.get_script_pubkey()?)?;
@@ -57,10 +63,9 @@ pub(super) fn unlock_script_auth_tx(
 
     let ft = unlock_script_auth(
         (script_auth_utxo.0, script_auth_utxo.1.clone()),
-        (auth_input, RequiredSignature::NativeEcdsa),
+        &auth_input,
         unlocked_output,
         script_auth,
-        *context.get_network(),
     )?;
 
     let txid = finalize_and_broadcast(context, &ft)?;

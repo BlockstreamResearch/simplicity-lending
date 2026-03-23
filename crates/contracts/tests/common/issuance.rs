@@ -2,9 +2,9 @@
 use lending_contracts::transactions::utility::{
     UTILITY_NFTS_COUNT, issue_preparation_utxos, issue_utility_nfts,
 };
-use lending_contracts::utils::{LendingParameters, get_random_seed};
+use lending_contracts::utils::{LendingOfferParameters, get_random_seed};
 
-use simplex::simplicityhl::elements::{AssetId, OutPoint, TxOut, Txid};
+use simplex::simplicityhl::elements::{AssetId, Txid};
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, partial_input::IssuanceInput,
 };
@@ -24,11 +24,8 @@ pub fn issue_asset(
 
     let mut ft = FinalTransaction::new(*context.get_network());
 
-    let signer_utxos = signer.get_wpkh_utxos().unwrap();
-    let policy_utxos: Vec<(OutPoint, TxOut)> = signer_utxos
-        .into_iter()
-        .filter(|utxo| utxo.1.asset.explicit().unwrap() == context.get_network().policy_asset())
-        .collect();
+    let policy_utxos =
+        filter_signer_utxos_by_asset_id(signer, context.get_network().policy_asset());
     let first_utxo = policy_utxos.first().unwrap();
 
     let asset_entropy = get_random_seed();
@@ -84,7 +81,7 @@ pub fn issue_preparation_utxos_tx(
 
 pub fn issue_utility_nfts_tx(
     context: &simplex::TestContext,
-    offer_params: &LendingParameters,
+    offer_params: &LendingOfferParameters,
     preparation_asset_id: AssetId,
 ) -> anyhow::Result<Txid> {
     let signer = context.get_signer();

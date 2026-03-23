@@ -1,3 +1,5 @@
+use lending_contracts::programs::AssetAuthParameters;
+
 use super::common::asserts::assert_burn_output;
 use super::common::issuance::issue_asset;
 use super::common::wallet::split_first_signer_utxo;
@@ -14,7 +16,14 @@ fn creates_and_unlocks_asset_auth_with_burn(context: simplex::TestContext) -> an
     let (txid, asset_id) = issue_asset(&context, asset_amount)?;
     provider.wait(&txid)?;
 
-    let (txid, asset_auth) = create_asset_auth_tx(&context, asset_id, asset_amount, true)?;
+    let asset_auth_parameters = AssetAuthParameters {
+        asset_id,
+        asset_amount,
+        with_asset_burn: true,
+        network: *context.get_network(),
+    };
+
+    let (txid, asset_auth) = create_asset_auth_tx(&context, asset_auth_parameters)?;
     provider.wait(&txid)?;
 
     let txid = unlock_asset_auth_tx(&context, asset_auth)?;

@@ -1,38 +1,33 @@
-use simplex::{
-    provider::SimplicityNetwork,
-    transaction::{FinalTransaction, PartialInput, RequiredSignature},
-};
+use simplex::transaction::FinalTransaction;
 
 use crate::{
-    artifacts::asset_auth::derived_asset_auth::AssetAuthArguments,
-    programs::{AssetAuth, program::SimplexProgram},
-    transactions::asset_auth::AssetAuthTransactionError,
+    programs::{AssetAuth, AssetAuthParameters, program::SimplexProgram},
+    transactions::{asset_auth::AssetAuthTransactionError, core::SimplexInput},
 };
 
 pub fn create_asset_auth(
-    input_to_lock: (PartialInput, RequiredSignature),
-    network: SimplicityNetwork,
-    arguments: AssetAuthArguments,
+    input_to_lock: &SimplexInput,
+    parameters: AssetAuthParameters,
 ) -> Result<(FinalTransaction, AssetAuth), AssetAuthTransactionError> {
-    let amount_to_lock = input_to_lock.0.amount.unwrap();
+    let amount_to_lock = input_to_lock.explicit_amount();
 
-    create_asset_auth_with_amount(input_to_lock, amount_to_lock, network, arguments)
+    create_asset_auth_with_amount(input_to_lock, amount_to_lock, parameters)
 }
 
 pub fn create_asset_auth_with_amount(
-    input_to_lock: (PartialInput, RequiredSignature),
+    input_to_lock: &SimplexInput,
     amount_to_lock: u64,
-    network: SimplicityNetwork,
-    arguments: AssetAuthArguments,
+    parameters: AssetAuthParameters,
 ) -> Result<(FinalTransaction, AssetAuth), AssetAuthTransactionError> {
-    let asset_auth = AssetAuth::new(arguments, network.clone());
-    let mut ft = FinalTransaction::new(network);
+    let mut ft = FinalTransaction::new(parameters.network);
+    let asset_auth = AssetAuth::new(parameters);
 
-    let (partial_input_to_lock, required_sig) = input_to_lock;
+    let asset_id_to_lock = input_to_lock.explicit_asset();
 
-    let asset_id_to_lock = partial_input_to_lock.asset.unwrap();
-
-    ft.add_input(partial_input_to_lock, required_sig)?;
+    ft.add_input(
+        input_to_lock.partial_input().clone(),
+        input_to_lock.required_sig().clone(),
+    )?;
 
     asset_auth.add_program_output(&mut ft, asset_id_to_lock, amount_to_lock)?;
 

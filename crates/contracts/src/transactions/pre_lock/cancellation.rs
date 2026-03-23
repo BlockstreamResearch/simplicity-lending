@@ -1,12 +1,7 @@
-use simplex::simplicityhl::elements::{AssetId, hashes::sha256};
-use simplex::{
-    provider::SimplicityNetwork,
-    transaction::{FinalTransaction, PartialOutput},
-};
+use simplex::transaction::{FinalTransaction, PartialOutput};
 use simplicityhl::elements::{OutPoint, Script, TxOut};
 
 use crate::{
-    artifacts::script_auth::derived_script_auth::ScriptAuthArguments,
     programs::{PreLock, PreLockBranch, ScriptAuth, program::SimplexProgram},
     transactions::pre_lock::PreLockTransactionError,
 };
@@ -19,9 +14,9 @@ pub fn cancel_pre_lock(
     lender_nft_utxo: (OutPoint, TxOut),
     collateral_output: PartialOutput,
     pre_lock: PreLock,
-    network: SimplicityNetwork,
 ) -> Result<FinalTransaction, PreLockTransactionError> {
-    let mut ft = FinalTransaction::new(network);
+    let pre_lock_parameters = pre_lock.get_pre_lock_parameters();
+    let mut ft = FinalTransaction::new(pre_lock_parameters.network);
 
     let first_parameters_nft_amount = first_parameters_nft_utxo.1.value.explicit().unwrap();
     let second_parameters_nft_amount = second_parameters_nft_utxo.1.value.explicit().unwrap();
@@ -34,13 +29,7 @@ pub fn cancel_pre_lock(
         "SIGNATURE".into(),
     )?;
 
-    let pre_lock_cov_hash = pre_lock.get_script_hash()?;
-    let utility_nfts_script_auth = ScriptAuth::new(
-        ScriptAuthArguments {
-            script_hash: pre_lock_cov_hash,
-        },
-        network,
-    );
+    let utility_nfts_script_auth = ScriptAuth::from_simplex_program(&pre_lock)?;
     let utility_nfts_witness = ScriptAuth::get_script_auth_witness(0);
 
     utility_nfts_script_auth.add_program_input(
@@ -66,41 +55,28 @@ pub fn cancel_pre_lock(
 
     ft.add_output(collateral_output);
 
-    let pre_lock_arguments = pre_lock.get_pre_lock_arguments();
-
-    let first_parameters_nft_asset_id = AssetId::from_inner(sha256::Midstate(
-        pre_lock_arguments.first_parameters_nft_asset_id,
-    ));
-    let second_parameters_nft_asset_id = AssetId::from_inner(sha256::Midstate(
-        pre_lock_arguments.second_parameters_nft_asset_id,
-    ));
-    let borrower_nft_asset_id =
-        AssetId::from_inner(sha256::Midstate(pre_lock_arguments.borrower_nft_asset_id));
-    let lender_nft_asset_id =
-        AssetId::from_inner(sha256::Midstate(pre_lock_arguments.lender_nft_asset_id));
-
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         first_parameters_nft_amount,
-        first_parameters_nft_asset_id,
+        pre_lock_parameters.first_parameters_nft_asset_id,
     ));
 
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         second_parameters_nft_amount,
-        second_parameters_nft_asset_id,
+        pre_lock_parameters.second_parameters_nft_asset_id,
     ));
 
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         1,
-        borrower_nft_asset_id,
+        pre_lock_parameters.borrower_nft_asset_id,
     ));
 
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         1,
-        lender_nft_asset_id,
+        pre_lock_parameters.lender_nft_asset_id,
     ));
 
     Ok(ft)

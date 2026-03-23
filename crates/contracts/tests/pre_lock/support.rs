@@ -1,18 +1,13 @@
 use lending_contracts::{
-    artifacts::{
-        asset_auth::derived_asset_auth::AssetAuthArguments,
-        lending::derived_lending::LendingArguments, pre_lock::derived_pre_lock::PreLockArguments,
-        script_auth::derived_script_auth::ScriptAuthArguments,
+    programs::{Lending, PreLock, PreLockParameters},
+    transactions::{
+        core::SimplexInput,
+        pre_lock::{cancel_pre_lock, create_lending_from_pre_lock, create_pre_lock},
     },
-    programs::{AssetAuth, Lending, PreLock, ScriptAuth, program::SimplexProgram},
-    transactions::pre_lock::{cancel_pre_lock, create_lending_from_pre_lock, create_pre_lock},
-    utils::LendingParameters,
+    utils::LendingOfferParameters,
 };
-use simplex::{
-    transaction::{PartialInput, PartialOutput, RequiredSignature},
-    utils::hash_script,
-};
-use simplicityhl::elements::{AssetId, OutPoint, Txid, hashes::sha256::Midstate};
+use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
+use simplicityhl::elements::{AssetId, OutPoint, Txid};
 
 use super::common::issuance::{issue_asset, issue_preparation_utxos_tx, issue_utility_nfts_tx};
 use super::common::tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast, wait_for_tx};
@@ -23,7 +18,7 @@ use super::common::wallet::{
 
 pub(super) fn create_pre_lock_tx(
     context: &simplex::TestContext,
-    offer_parameters: &LendingParameters,
+    offer_parameters: &LendingOfferParameters,
     principal_asset_id: AssetId,
     utility_nfts_issuance_txid: Txid,
 ) -> anyhow::Result<(Txid, PreLock)> {
@@ -38,56 +33,16 @@ pub(super) fn create_pre_lock_tx(
     let borrower_nft_asset_id = utility_nfts_tx.output[2].asset.explicit().unwrap();
     let lender_nft_asset_id = utility_nfts_tx.output[3].asset.explicit().unwrap();
 
-    let signer_wpkh_script_pubkey = signer.get_wpkh_address().unwrap().script_pubkey();
-    let borrower_output_script_hash = hash_script(&signer_wpkh_script_pubkey);
-
-    let lender_principal_asset_auth = AssetAuth::new(
-        AssetAuthArguments {
-            asset_id: lender_nft_asset_id.into_inner().0,
-            asset_amount: 1,
-            with_asset_burn: true,
-        },
-        *context.get_network(),
-    );
-
-    let lending_arguments = LendingArguments {
-        first_parameters_nft_asset_id: first_parameters_nft_asset_id.into_inner().0,
-        second_parameters_nft_asset_id: second_parameters_nft_asset_id.into_inner().0,
-        borrower_nft_asset_id: borrower_nft_asset_id.into_inner().0,
-        lender_nft_asset_id: lender_nft_asset_id.into_inner().0,
-        collateral_asset_id: context.get_network().policy_asset().into_inner().0,
-        principal_asset_id: principal_asset_id.into_inner().0,
-        collateral_amount: offer_parameters.collateral_amount,
-        principal_amount: offer_parameters.principal_amount,
-        loan_expiration_time: offer_parameters.loan_expiration_time,
-        principal_interest_rate: offer_parameters.principal_interest_rate,
-        lender_principal_cov_hash: lender_principal_asset_auth.get_script_hash()?,
-    };
-
-    let lending = Lending::new(lending_arguments, *context.get_network());
-    let parameters_script_auth = ScriptAuth::new(
-        ScriptAuthArguments {
-            script_hash: lending.get_script_hash()?,
-        },
-        *context.get_network(),
-    );
-
-    let pre_lock_arguments = PreLockArguments {
-        first_parameters_nft_asset_id: first_parameters_nft_asset_id.into_inner().0,
-        second_parameters_nft_asset_id: second_parameters_nft_asset_id.into_inner().0,
-        borrower_nft_asset_id: borrower_nft_asset_id.into_inner().0,
-        lender_nft_asset_id: lender_nft_asset_id.into_inner().0,
-        collateral_asset_id: context.get_network().policy_asset().into_inner().0,
-        principal_asset_id: principal_asset_id.into_inner().0,
-        collateral_amount: offer_parameters.collateral_amount,
-        principal_amount: offer_parameters.principal_amount,
-        loan_expiration_time: offer_parameters.loan_expiration_time,
-        principal_interest_rate: offer_parameters.principal_interest_rate,
-        borrower_pub_key: signer_schnorr_pubkey.serialize(),
-        borrower_nft_output_script_hash: borrower_output_script_hash.clone(),
-        principal_output_script_hash: borrower_output_script_hash,
-        lending_cov_hash: lending.get_script_hash()?,
-        parameters_nft_output_script_hash: parameters_script_auth.get_script_hash()?,
+    let pre_lock_parameters = PreLockParameters {
+        collateral_asset_id: network.policy_asset(),
+        principal_asset_id,
+        first_parameters_nft_asset_id,
+        second_parameters_nft_asset_id,
+        borrower_nft_asset_id,
+        lender_nft_asset_id,
+        offer_parameters: offer_parameters.clone(),
+        borrower_pubkey: signer_schnorr_pubkey.serialize(),
+        network: *network,
     };
 
     let collateral_utxos = filter_signer_utxos_by_asset_and_amount(
@@ -106,40 +61,32 @@ pub(super) fn create_pre_lock_tx(
     let collateral_utxo = collateral_utxos.first().unwrap();
 
     let (ft, pre_lock) = create_pre_lock(
-        (
-            PartialInput::new(collateral_utxo.0, collateral_utxo.1.clone()),
+        &SimplexInput::new(
+            collateral_utxo.0,
+            collateral_utxo.1.clone(),
             RequiredSignature::NativeEcdsa,
         ),
-        (
-            PartialInput::new(
-                OutPoint::new(utility_nfts_issuance_txid, 0),
-                utility_nfts_tx.output[0].clone(),
-            ),
+        &SimplexInput::new(
+            OutPoint::new(utility_nfts_issuance_txid, 0),
+            utility_nfts_tx.output[0].clone(),
             RequiredSignature::NativeEcdsa,
         ),
-        (
-            PartialInput::new(
-                OutPoint::new(utility_nfts_issuance_txid, 1),
-                utility_nfts_tx.output[1].clone(),
-            ),
+        &SimplexInput::new(
+            OutPoint::new(utility_nfts_issuance_txid, 1),
+            utility_nfts_tx.output[1].clone(),
             RequiredSignature::NativeEcdsa,
         ),
-        (
-            PartialInput::new(
-                OutPoint::new(utility_nfts_issuance_txid, 2),
-                utility_nfts_tx.output[2].clone(),
-            ),
+        &SimplexInput::new(
+            OutPoint::new(utility_nfts_issuance_txid, 2),
+            utility_nfts_tx.output[2].clone(),
             RequiredSignature::NativeEcdsa,
         ),
-        (
-            PartialInput::new(
-                OutPoint::new(utility_nfts_issuance_txid, 3),
-                utility_nfts_tx.output[3].clone(),
-            ),
+        &SimplexInput::new(
+            OutPoint::new(utility_nfts_issuance_txid, 3),
+            utility_nfts_tx.output[3].clone(),
             RequiredSignature::NativeEcdsa,
         ),
-        *network,
-        pre_lock_arguments,
+        pre_lock_parameters,
     )?;
 
     let txid = finalize_and_broadcast(context, &ft)?;
@@ -155,14 +102,14 @@ pub(super) fn create_lending_from_pre_lock_tx(
     let network = context.get_network();
     let signer = context.get_signer();
 
-    let pre_lock_arguments = pre_lock.get_pre_lock_arguments();
-    let principal_asset_id = AssetId::from_inner(Midstate(pre_lock_arguments.principal_asset_id));
+    let pre_lock_parameters = pre_lock.get_pre_lock_parameters();
 
-    let principal_utxos = filter_signer_utxos_by_asset_id(signer, principal_asset_id);
+    let principal_utxos =
+        filter_signer_utxos_by_asset_id(signer, pre_lock_parameters.principal_asset_id);
     let utxo_to_split = principal_utxos.first().unwrap();
     let ft = get_split_utxo_ft(
         (utxo_to_split.0, utxo_to_split.1.clone()),
-        vec![pre_lock_arguments.principal_amount],
+        vec![pre_lock_parameters.offer_parameters.principal_amount],
         signer,
         *network,
     );
@@ -172,8 +119,8 @@ pub(super) fn create_lending_from_pre_lock_tx(
 
     let principal_utxos = filter_signer_utxos_by_asset_and_amount(
         signer,
-        principal_asset_id,
-        pre_lock_arguments.principal_amount,
+        pre_lock_parameters.principal_asset_id,
+        pre_lock_parameters.offer_parameters.principal_amount,
         AmountFilter::EqualTo,
     );
     let principal_utxo = principal_utxos.first().unwrap();
@@ -201,18 +148,17 @@ pub(super) fn create_lending_from_pre_lock_tx(
             OutPoint::new(pre_lock_txid, 4),
             pre_lock_creation_tx.output[4].clone(),
         ),
-        vec![(
-            PartialInput::new(principal_utxo.0, principal_utxo.1.clone()),
+        vec![&SimplexInput::new(
+            principal_utxo.0,
+            principal_utxo.1.clone(),
             RequiredSignature::NativeEcdsa,
         )],
-        signer.get_wpkh_address().unwrap().script_pubkey(),
         PartialOutput::new(
             signer.get_wpkh_address().unwrap().script_pubkey(),
             1,
-            AssetId::from_inner(Midstate(pre_lock_arguments.lender_nft_asset_id)),
+            pre_lock_parameters.lender_nft_asset_id,
         ),
         pre_lock,
-        *network,
     )?;
 
     let signer_policy_utxos = filter_signer_utxos_by_asset_and_amount(
@@ -241,7 +187,7 @@ pub(super) fn cancel_pre_lock_tx(
     let network = context.get_network();
     let signer = context.get_signer();
 
-    let pre_lock_arguments = pre_lock.get_pre_lock_arguments();
+    let pre_lock_parameters = pre_lock.get_pre_lock_parameters();
     let pre_lock_creation_tx = provider.fetch_transaction(&pre_lock_txid)?;
 
     let mut ft = cancel_pre_lock(
@@ -267,11 +213,10 @@ pub(super) fn cancel_pre_lock_tx(
         ),
         PartialOutput::new(
             signer.get_wpkh_address().unwrap().script_pubkey(),
-            pre_lock_arguments.collateral_amount,
+            pre_lock_parameters.offer_parameters.collateral_amount,
             network.policy_asset(),
         ),
         pre_lock,
-        *network,
     )?;
 
     let signer_policy_utxos = filter_signer_utxos_by_asset_and_amount(
@@ -301,7 +246,7 @@ pub(super) fn setup_pre_lock(context: &simplex::TestContext) -> anyhow::Result<(
     let (txid, principal_asset_id) = issue_asset(context, 20000)?;
     wait_for_tx(context, &txid)?;
 
-    let offer_parameters = LendingParameters {
+    let offer_parameters = LendingOfferParameters {
         collateral_amount: 1000,
         principal_amount: 5000,
         loan_expiration_time: 110,

@@ -9,7 +9,7 @@ pub fn finalize_and_broadcast(
     let provider = context.get_provider();
     let signer = context.get_signer();
 
-    let (tx, _) = signer.finalize(ft, 1).unwrap();
+    let (tx, _) = signer.finalize(ft).unwrap();
     let txid = provider.broadcast_transaction(&tx).unwrap();
     Ok(txid)
 }

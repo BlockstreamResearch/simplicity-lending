@@ -1,15 +1,32 @@
 use simplex::program::Program;
-use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
+use simplex::simplicityhl::elements::{AssetId, secp256k1_zkp::XOnlyPublicKey};
 use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::asset_auth::AssetAuthProgram;
 use crate::artifacts::asset_auth::derived_asset_auth::{AssetAuthArguments, AssetAuthWitness};
 use crate::programs::program::SimplexProgram;
 
+#[derive(Debug, Clone, Copy)]
+pub struct AssetAuthParameters {
+    pub asset_id: AssetId,
+    pub asset_amount: u64,
+    pub with_asset_burn: bool,
+    pub network: SimplicityNetwork,
+}
+
+impl From<AssetAuthParameters> for AssetAuthArguments {
+    fn from(value: AssetAuthParameters) -> Self {
+        Self {
+            with_asset_burn: value.with_asset_burn,
+            asset_amount: value.asset_amount,
+            asset_id: value.asset_id.into_inner().0,
+        }
+    }
+}
+
 pub struct AssetAuth {
-    arguments: AssetAuthArguments,
     program: AssetAuthProgram,
-    network: SimplicityNetwork,
+    parameters: AssetAuthParameters,
 }
 
 pub struct AssetAuthWitnessParams {
@@ -18,19 +35,17 @@ pub struct AssetAuthWitnessParams {
 }
 
 impl AssetAuth {
-    pub fn new(arguments: AssetAuthArguments, network: SimplicityNetwork) -> AssetAuth {
-        Self::from_internal_key(tr_unspendable_key(), arguments, network)
+    pub fn new(parameters: AssetAuthParameters) -> AssetAuth {
+        Self::from_internal_key(tr_unspendable_key(), parameters)
     }
 
     pub fn from_internal_key(
         internal_key: XOnlyPublicKey,
-        arguments: AssetAuthArguments,
-        network: SimplicityNetwork,
+        parameters: AssetAuthParameters,
     ) -> AssetAuth {
         AssetAuth {
-            arguments: arguments.clone(),
-            program: AssetAuthProgram::new(internal_key, arguments),
-            network,
+            program: AssetAuthProgram::new(internal_key, AssetAuthArguments::from(parameters)),
+            parameters: parameters,
         }
     }
 
@@ -41,8 +56,8 @@ impl AssetAuth {
         }
     }
 
-    pub fn get_asset_auth_arguments(&self) -> &AssetAuthArguments {
-        &self.arguments
+    pub fn get_asset_auth_parameters(&self) -> &AssetAuthParameters {
+        &self.parameters
     }
 }
 
@@ -52,6 +67,6 @@ impl SimplexProgram for AssetAuth {
     }
 
     fn get_network(&self) -> &SimplicityNetwork {
-        &self.network
+        &self.parameters.network
     }
 }
