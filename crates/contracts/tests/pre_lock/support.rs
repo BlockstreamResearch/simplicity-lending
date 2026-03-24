@@ -6,8 +6,8 @@ use lending_contracts::{
     },
     utils::LendingOfferParameters,
 };
+use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
 use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
-use simplicityhl::elements::{AssetId, OutPoint, Txid};
 
 use super::common::issuance::{issue_asset, issue_preparation_utxos_tx, issue_utility_nfts_tx};
 use super::common::tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast, wait_for_tx};

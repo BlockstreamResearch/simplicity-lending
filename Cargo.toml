@@ -13,19 +13,12 @@ multiple_crate_versions = "allow"
 
 [workspace.dependencies]
 ring = "0.17.14"
-sha2 = { version = "0.10.9", features = ["compress"] }
-
 hex = "0.4.3"
+smplx-std = "0.0.2"
+sha2 = { version = "0.10.9", features = ["compress"] }
+serde = { version = "1.0.228", features = ["derive"]}
+thiserror = { version = "2.0.18" }
 tracing = { version = "0.1.41" }
-
 modular-bitfield = { version = "0.13.1"}
-
-simplicityhl = { git = "https://github.com/BlockstreamResearch/SimplicityHL.git", rev = "568b462" }
-simplicityhl-core = { version = "0.4.1", features = ["encoding"] }
-
-simplicity-contracts = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "87f89e9", package = "contracts" }
-simplicity-contracts-cli = { git = "https://github.com/BlockstreamResearch/simplicity-contracts.git", rev = "87f89e9", package = "cli" }
-
-smplx-std = "0.0.1"
 
 cargo-husky = { version = "1.5.0", default-features = false, features = ["user-hooks"] }

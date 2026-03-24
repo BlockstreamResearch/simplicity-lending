@@ -4,8 +4,7 @@ use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature,
 };
 
-use simplex::simplicityhl::elements::{OutPoint, Script, TxOut};
-use simplicityhl::elements::AssetId;
+use simplex::simplicityhl::elements::{AssetId, OutPoint, Script, TxOut};
 
 pub trait SimplexProgram {
     fn add_program_input<'a>(

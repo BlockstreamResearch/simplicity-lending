@@ -1,12 +1,10 @@
+use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::{
     provider::SimplicityNetwork,
-    transaction::{
-        FinalTransaction, PartialInput, PartialOutput, RequiredSignature,
-        partial_input::IssuanceInput,
-    },
+    transaction::{FinalTransaction, PartialOutput, partial_input::IssuanceInput},
 };
-use simplicityhl::elements::{AssetId, Script};
 
+use crate::transactions::core::SimplexInput;
 use crate::{
     transactions::utility::{UTILITY_NFTS_COUNT, UtilityTransactionError},
     utils::get_random_seed,
@@ -15,7 +13,7 @@ use crate::{
 pub const PREPARATION_UTXO_ASSET_AMOUNT: u64 = 10;
 
 pub fn issue_preparation_utxos(
-    issuance_input: (PartialInput, RequiredSignature),
+    issuance_input: &SimplexInput,
     issuance_utxos_output_script: Script,
     network: SimplicityNetwork,
 ) -> Result<(FinalTransaction, AssetId), UtilityTransactionError> {
@@ -25,9 +23,9 @@ pub fn issue_preparation_utxos(
     let asset_entropy = get_random_seed();
 
     let asset_id = ft.add_issuance_input(
-        issuance_input.0.clone(),
+        issuance_input.partial_input().clone(),
         IssuanceInput::new(total_asset_amount, asset_entropy),
-        issuance_input.1,
+        issuance_input.required_sig().clone(),
     )?;
 
     for _ in 0..UTILITY_NFTS_COUNT {
@@ -38,13 +36,7 @@ pub fn issue_preparation_utxos(
         ));
     }
 
-    let input_script = issuance_input.0.witness_utxo.script_pubkey;
-
-    ft.add_output(PartialOutput::new(
-        input_script,
-        issuance_input.0.amount.unwrap(),
-        issuance_input.0.asset.unwrap(),
-    ));
+    ft.add_output(issuance_input.new_partial_output());
 
     Ok((ft, asset_id))
 }

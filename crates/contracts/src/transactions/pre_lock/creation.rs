@@ -1,6 +1,5 @@
-use simplex::simplicityhl::elements::AssetId;
+use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::transaction::{FinalTransaction, PartialOutput};
-use simplicityhl::elements::Script;
 
 use crate::programs::PreLockParameters;
 use crate::transactions::core::SimplexInput;

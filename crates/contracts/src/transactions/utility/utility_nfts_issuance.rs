@@ -1,18 +1,18 @@
+use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::{
     provider::SimplicityNetwork,
-    transaction::{
-        FinalTransaction, PartialInput, PartialOutput, RequiredSignature,
-        partial_input::IssuanceInput,
-    },
+    transaction::{FinalTransaction, PartialOutput, partial_input::IssuanceInput},
 };
-use simplicityhl::elements::{AssetId, Script};
 
-use crate::{transactions::utility::UtilityTransactionError, utils::LendingOfferParameters};
+use crate::{
+    transactions::{core::SimplexInput, utility::UtilityTransactionError},
+    utils::LendingOfferParameters,
+};
 
 pub const UTILITY_NFTS_COUNT: usize = 4;
 
 pub fn issue_utility_nfts(
-    issuance_inputs: Vec<(PartialInput, RequiredSignature)>,
+    issuance_inputs: Vec<SimplexInput>,
     utility_nfts_output_script: Script,
     lending_offer_params: &LendingOfferParameters,
     amounts_decimals: u8,
@@ -39,11 +39,11 @@ pub fn issue_utility_nfts(
     ];
     let mut asset_ids: Vec<AssetId> = Vec::with_capacity(UTILITY_NFTS_COUNT);
 
-    for (index, (input, required_sig)) in issuance_inputs.iter().enumerate() {
+    for (index, input) in issuance_inputs.iter().enumerate() {
         let asset_id = ft.add_issuance_input(
-            input.clone(),
+            input.partial_input().clone(),
             IssuanceInput::new(utility_nfts_amounts[index], issuance_asset_entropy),
-            required_sig.clone(),
+            input.required_sig().clone(),
         )?;
         asset_ids.push(asset_id);
     }
@@ -56,14 +56,8 @@ pub fn issue_utility_nfts(
         ));
     }
 
-    for (input, _) in issuance_inputs {
-        let input_script = input.witness_utxo.script_pubkey;
-
-        ft.add_output(PartialOutput::new(
-            input_script,
-            input.amount.unwrap(),
-            input.asset.unwrap(),
-        ));
+    for input in issuance_inputs {
+        ft.add_output(input.new_partial_output());
     }
 
     Ok(ft)

@@ -263,26 +263,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
 
 [[package]]
-name = "bincode"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
-dependencies = [
- "bincode_derive",
- "serde",
- "unty",
-]
-
-[[package]]
-name = "bincode_derive"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf95709a440f45e986983918d0e8a1f30a9b1df04918fc828670606804ac3c09"
-dependencies = [
- "virtue",
-]
-
-[[package]]
 name = "bip39"
 version = "2.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -547,25 +527,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
-name = "cli"
-version = "0.1.0"
-source = "git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=87f89e9#87f89e9e75c91845bf5c4ce7be0e85dcfd648a1e"
-dependencies = [
- "anyhow",
- "clap",
- "config",
- "contracts",
- "dotenvy",
- "hex",
- "minreq",
- "simplicityhl 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "simplicityhl-core",
- "sled",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "cmake"
 version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -643,20 +604,6 @@ dependencies = [
  "getrandom 0.2.17",
  "once_cell",
  "tiny-keccak",
-]
-
-[[package]]
-name = "contracts"
-version = "0.1.0"
-source = "git+https://github.com/BlockstreamResearch/simplicity-contracts.git?rev=87f89e9#87f89e9e75c91845bf5c4ce7be0e85dcfd648a1e"
-dependencies = [
- "bincode",
- "hex",
- "ring",
- "sha2",
- "simplicityhl 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "simplicityhl-core",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1707,16 +1654,14 @@ dependencies = [
  "anyhow",
  "cargo-husky",
  "clap",
- "cli",
  "config",
- "contracts",
  "dotenvy",
  "hex",
  "lending-contracts",
  "minreq",
- "simplicityhl 0.4.1 (git+https://github.com/BlockstreamResearch/SimplicityHL.git?rev=568b462)",
- "simplicityhl-core",
+ "serde",
  "sled",
+ "smplx-std",
  "thiserror 2.0.18",
  "tokio",
 ]
@@ -1726,15 +1671,10 @@ name = "lending-contracts"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bincode",
  "cargo-husky",
- "contracts",
  "hex",
  "modular-bitfield",
  "ring",
- "sha2",
- "simplicityhl 0.4.1 (git+https://github.com/BlockstreamResearch/SimplicityHL.git?rev=568b462)",
- "simplicityhl-core",
  "smplx-std",
  "thiserror 2.0.18",
 ]
@@ -1752,8 +1692,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "simplicityhl 0.4.1 (git+https://github.com/BlockstreamResearch/SimplicityHL.git?rev=568b462)",
- "simplicityhl-core",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",
@@ -2994,42 +2932,6 @@ dependencies = [
 
 [[package]]
 name = "simplicityhl"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aa7477fc9bfef4cc53ae969db00539f0e67af38156822ac79662513d04f6fee"
-dependencies = [
- "base64 0.21.7",
- "clap",
- "either",
- "getrandom 0.2.17",
- "itertools",
- "miniscript",
- "pest",
- "pest_derive",
- "serde",
- "serde_json",
- "simplicity-lang",
-]
-
-[[package]]
-name = "simplicityhl"
-version = "0.4.1"
-source = "git+https://github.com/BlockstreamResearch/SimplicityHL.git?rev=568b462#568b4621d6145cd97dce68a3f3428c7eb85306b6"
-dependencies = [
- "base64 0.21.7",
- "chumsky",
- "clap",
- "either",
- "getrandom 0.2.17",
- "itertools",
- "miniscript",
- "serde",
- "serde_json",
- "simplicity-lang",
-]
-
-[[package]]
-name = "simplicityhl"
 version = "0.5.0-rc.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8fb4ae422c730ec6e274c1438013ce6d7b41b97152e2dec63735e8daad1f1c4"
@@ -3044,19 +2946,6 @@ dependencies = [
  "serde",
  "serde_json",
  "simplicity-lang",
-]
-
-[[package]]
-name = "simplicityhl-core"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e341dd0a1c4967109d4b71bc6821d45d0c2310ea0b70efeefe154cd1a0f8932"
-dependencies = [
- "bincode",
- "hex",
- "sha2",
- "simplicityhl 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3092,9 +2981,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-build"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "405636c8a7d0d9a87822faddc04215bb7919d590cf3dff78a1495458e311103d"
+checksum = "118d31992f9fb44336b43ece2b5d61c789fa47da6a8a48c525730a4d5bf375ca"
 dependencies = [
  "glob",
  "globwalk",
@@ -3103,7 +2992,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
- "simplicityhl 0.5.0-rc.0",
+ "simplicityhl",
  "syn",
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
@@ -3111,9 +3000,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-macros"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ec9275ef5dff18aa65009f2ac42892f5cf0d409746da57eae842a7bee1c5a20"
+checksum = "5a3ca85dc30a8f2f26635e09ba71444dd15cb0cbe9c519e0ecf1f93a14434de1"
 dependencies = [
  "smplx-build",
  "smplx-test",
@@ -3122,9 +3011,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-regtest"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "407bc1cb6dddd30a5fc7859a129db39d3b021ecb1db14db9d0d287e5b26cf7c3"
+checksum = "da9060d2ef808263e9aa268f09329cbf40383f9d7e13ea6cb2a9034a56812334"
 dependencies = [
  "electrsd",
  "serde",
@@ -3135,9 +3024,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-sdk"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29977f9989db6b89180fd1d7ce4b57820f1bd93bbc42b9e215db81f42602102f"
+checksum = "2db575f27f2cceefe94085fffb87b0897972ccd85203681b969c463298f2104d"
 dependencies = [
  "bip39",
  "bitcoin_hashes",
@@ -3149,19 +3038,19 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "simplicityhl 0.5.0-rc.0",
+ "simplicityhl",
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "smplx-std"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25684233ca96852fdc72ad1afe732b77582e1ab65ac4093eb594e1f8e25fc567"
+checksum = "33a86f5f9c05fc0d12007f28db12b9de574429f9c183ec06e52470cf34e2a4c4"
 dependencies = [
  "either",
  "serde",
- "simplicityhl 0.5.0-rc.0",
+ "simplicityhl",
  "smplx-macros",
  "smplx-sdk",
  "smplx-test",
@@ -3169,15 +3058,15 @@ dependencies = [
 
 [[package]]
 name = "smplx-test"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bcf316dc5fe2a283708006ca6f28c361ed81347504e0bcf75ba6b551b54e7fd"
+checksum = "4e7dd57284967a6fe2525a8d1ab3f949f27547a8d9c37e165e5f68947b5ef2f2"
 dependencies = [
  "electrsd",
  "proc-macro2",
  "quote",
  "serde",
- "simplicityhl 0.5.0-rc.0",
+ "simplicityhl",
  "smplx-regtest",
  "smplx-sdk",
  "syn",
@@ -3985,12 +3874,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
-name = "unty"
-version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
-
-[[package]]
 name = "url"
 version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4043,12 +3926,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "virtue"
-version = "0.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "051eb1abcf10076295e815102942cc58f9d5e3b4560e46e53c21e8ff6f3af7b1"
 
 [[package]]
 name = "walkdir"

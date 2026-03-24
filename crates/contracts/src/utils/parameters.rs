@@ -5,7 +5,23 @@ use std::num::TryFromIntError;
 
 use modular_bitfield::{error::OutOfBounds, prelude::*};
 
-use crate::error::ParametersError;
+#[derive(Debug, thiserror::Error)]
+pub enum ParametersError {
+    #[error("Invalid collateral amount: expected {expected}, got {actual}")]
+    InvalidCollateralAmount { expected: String, actual: String },
+
+    #[error("Invalid principal amount: expected {expected}, got {actual}")]
+    InvalidPrincipalAmount { expected: String, actual: String },
+
+    #[error("Invalid interest rate: expected {expected}, got {actual}")]
+    InvalidInterestRate { expected: String, actual: String },
+
+    #[error("Invalid loan expiration time: expected {expected}, got {actual}")]
+    InvalidLoanExpirationTime { expected: String, actual: String },
+
+    #[error("Out of bounds error: {actual_error}")]
+    ValueOutOfBounds { actual_error: String },
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct LendingOfferParameters {

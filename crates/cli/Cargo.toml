@@ -8,34 +8,30 @@ readme = "README.md"
 publish = false
 
 [[bin]]
-name = "simplicity-lending-cli"
-path = "src/main.rs"
+name = "lending-cli"
+path = "src/bin/main.rs"
 
 [lints]
 workspace = true
 
 [dependencies]
+thiserror = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+smplx-std = { workspace = true }
+
 anyhow = "1"
-thiserror = "2"
+dotenvy = "0.15"
+clap = { version = "4.5", features = ["derive", "env"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync"] }
 
 sled = "0.34.7"
 
-dotenvy = "0.15"
-clap = { version = "4.5", features = ["derive"] }
 config = { version = "0.15.16", default-features = true }
 
 minreq = { version = "2.14", features = ["https"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync"] }
-
-hex = { workspace = true }
 
 lending-contracts = { path = "../contracts" }
-simplicity-contracts = { workspace = true }
-simplicity-contracts-cli = { workspace = true }
-
-simplicityhl = { workspace = true }
-
-simplicityhl-core = { workspace = true }
 
 [dev-dependencies]
 cargo-husky = { workspace = true }

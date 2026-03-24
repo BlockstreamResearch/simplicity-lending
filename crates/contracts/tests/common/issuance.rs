@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use lending_contracts::transactions::core::SimplexInput;
 use lending_contracts::transactions::utility::{
     UTILITY_NFTS_COUNT, issue_preparation_utxos, issue_utility_nfts,
 };
@@ -66,8 +67,9 @@ pub fn issue_preparation_utxos_tx(
     let first_utxo = signer_utxos.first().unwrap();
 
     let (ft, asset_id) = issue_preparation_utxos(
-        (
-            PartialInput::new(first_utxo.0, first_utxo.1.clone()),
+        &SimplexInput::new(
+            first_utxo.0,
+            first_utxo.1.clone(),
             RequiredSignature::NativeEcdsa,
         ),
         signer_script_pubkey,
@@ -93,12 +95,7 @@ pub fn issue_utility_nfts_tx(
 
     let issuance_inputs = issuance_utxos
         .iter()
-        .map(|utxo| {
-            (
-                PartialInput::new(utxo.0, utxo.1.clone()),
-                RequiredSignature::NativeEcdsa,
-            )
-        })
+        .map(|utxo| SimplexInput::new(utxo.0, utxo.1.clone(), RequiredSignature::NativeEcdsa))
         .collect();
 
     let issuance_asset_entropy = get_random_seed();

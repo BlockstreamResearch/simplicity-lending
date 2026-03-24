@@ -1,6 +1,5 @@
+use simplex::simplicityhl::elements::{OutPoint, TxOut};
 use simplex::transaction::{FinalTransaction, PartialOutput};
-
-use simplicityhl::elements::{OutPoint, TxOut};
 
 use crate::{
     programs::{ScriptAuth, program::SimplexProgram},

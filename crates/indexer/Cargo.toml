@@ -33,9 +33,6 @@ serde = { version= "1", features = ["derive"]}
 
 hex = { workspace = true }
 
-simplicityhl = { workspace = true }
-simplicityhl-core = { workspace = true }
-
 lending-contracts = { path = "../contracts" }
 
 [dependencies.sqlx]

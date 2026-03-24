@@ -1,5 +1,5 @@
+use simplex::simplicityhl::elements::{AssetId, OutPoint, Script, TxOut};
 use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
-use simplicityhl::elements::{AssetId, OutPoint, Script, TxOut};
 
 pub struct SimplexInput {
     partial_input: PartialInput,
