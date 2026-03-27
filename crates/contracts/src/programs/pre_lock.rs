@@ -1,6 +1,9 @@
 use simplex::constants::DUMMY_SIGNATURE;
 use simplex::either::Either::{Left, Right};
 use simplex::program::Program;
+
+use simplex::simplicityhl::elements::hashes::FromSliceError;
+use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
 use simplex::simplicityhl::elements::{
     AssetId, Script, WPubkeyHash,
@@ -107,6 +110,20 @@ pub enum PreLockBranch {
     PreLockCancellation,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum PreLockError {
+    #[error("Invalid creation OP_RETURN data length: expected - {expected}, actual - {actual}")]
+    InvalidCreationOpReturnDataLength { expected: usize, actual: usize },
+
+    #[error("Invalid OP_RETURN borrower pubkey bytes: {0}")]
+    InvalidOpReturnBytes(String),
+
+    #[error("Failed to convert OP_RETURN asset id bytes to valid asset id: {0}")]
+    FromSlice(#[from] FromSliceError),
+}
+
+pub const PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH: usize = 64;
+
 impl PreLock {
     pub fn new(parameters: PreLockParameters) -> Result<PreLock, SimplexProgramError> {
         Self::from_internal_key(tr_unspendable_key(), parameters)
@@ -136,16 +153,36 @@ impl PreLock {
         }
     }
 
-    pub fn get_pre_lock_parameters(&self) -> &PreLockParameters {
-        &self.parameters
+    pub fn decode_creation_op_return_data(
+        op_return_bytes: Vec<u8>,
+    ) -> Result<([u8; 32], AssetId), PreLockError> {
+        if op_return_bytes.len() != PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH {
+            return Err(PreLockError::InvalidCreationOpReturnDataLength {
+                expected: PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH,
+                actual: op_return_bytes.len(),
+            });
+        }
+
+        let (op_return_pub_key, op_return_asset_id) = op_return_bytes.split_at(32);
+
+        let principal_asset_id = AssetId::from_slice(op_return_asset_id)?;
+        let borrower_public_key_bytes: [u8; 32] = op_return_pub_key
+            .try_into()
+            .map_err(|_| PreLockError::InvalidOpReturnBytes(op_return_pub_key.to_hex()))?;
+
+        Ok((borrower_public_key_bytes, principal_asset_id))
     }
 
     pub fn encode_creation_op_return_data(&self) -> Vec<u8> {
-        let mut op_return_data = Vec::with_capacity(64);
+        let mut op_return_data = Vec::with_capacity(PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH);
         op_return_data.extend_from_slice(&self.parameters.borrower_pubkey);
         op_return_data.extend_from_slice(&self.parameters.principal_asset_id.into_inner().0);
 
         op_return_data
+    }
+
+    pub fn get_pre_lock_parameters(&self) -> &PreLockParameters {
+        &self.parameters
     }
 }
 

@@ -1,6 +1,6 @@
-use clap::{Args, Subcommand};
+use clap::Subcommand;
 
-use crate::commands::utility::UtilityCommand;
+use crate::commands::{account::AccountCommand, pre_lock::PreLockCommand, utility::UtilityCommand};
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
@@ -8,5 +8,12 @@ pub enum Command {
         #[command(subcommand)]
         command: UtilityCommand,
     },
+    Account {
+        #[command(subcommand)]
+        command: AccountCommand,
+    },
+    PreLock {
+        #[command(subcommand)]
+        command: PreLockCommand,
+    },
 }
-

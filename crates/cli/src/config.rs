@@ -40,10 +40,10 @@ impl TryFrom<String> for ConfigNetwork {
     type Error = String;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "liquid" => Ok(Self::Liquid),
-            "liquid_testnet" => Ok(Self::LiquidTestnet),
-            "elements_regtest" => Ok(Self::ElementsRegtest),
+        match value.as_str() {
+            "Liquid" => Ok(Self::Liquid),
+            "LiquidTestnet" => Ok(Self::LiquidTestnet),
+            "ElementsRegtest" => Ok(Self::ElementsRegtest),
             other => Err(format!("Unsupported network name: {other}")),
         }
     }

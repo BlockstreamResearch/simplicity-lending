@@ -7,7 +7,8 @@ use lending_contracts::utils::{LendingOfferParameters, get_random_seed};
 use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::hex::ToHex;
-use simplex::transaction::RequiredSignature;
+use simplex::transaction::partial_input::IssuanceInput;
+use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
 use lending_contracts::transactions::utility::{
     UTILITY_NFTS_COUNT, issue_preparation_utxos, issue_utility_nfts,
@@ -18,6 +19,11 @@ use crate::commands::utility::UtilityCommandError;
 
 #[derive(Debug, Subcommand)]
 pub enum UtilityCommand {
+    IssueAsset {
+        /// Asset amount to issue
+        #[arg(long = "asset-amount")]
+        asset_amount: u64,
+    },
     IssuePreparationUTXOs,
     IssueUtilityNfts {
         /// Preparation UTXOs asset ID in hexadecimal (big-endian)
@@ -35,7 +41,7 @@ pub enum UtilityCommand {
         /// Principal interest rate (in basis points where 100% = `10_000`)
         #[arg(long = "principal-interest-rate")]
         principal_interest_rate: u16,
-    }
+    },
 }
 
 pub struct Utility {}
@@ -43,6 +49,9 @@ pub struct Utility {}
 impl Utility {
     pub fn run(context: CliContext, command: &UtilityCommand) -> Result<(), UtilityCommandError> {
         match command {
+            UtilityCommand::IssueAsset { asset_amount } => {
+                Utility::issue_asset(context, *asset_amount)
+            }
             UtilityCommand::IssuePreparationUTXOs => Utility::issue_preparation_utxos_tx(context),
             UtilityCommand::IssueUtilityNfts {
                 preparation_utxos_asset_id_hex_be,
@@ -67,6 +76,51 @@ impl Utility {
                 )
             }
         }
+    }
+
+    fn issue_asset(context: CliContext, asset_amount: u64) -> Result<(), UtilityCommandError> {
+        let policy_utxos = context
+            .signer
+            .get_wpkh_utxos_asset(context.get_network().policy_asset())?;
+        let first_utxo = policy_utxos.first().expect("No policy UTXOs found");
+
+        let asset_entropy = get_random_seed();
+
+        let mut ft = FinalTransaction::new(context.get_network());
+
+        let asset_id = ft.add_issuance_input(
+            PartialInput::new(first_utxo.0, first_utxo.1.clone()),
+            IssuanceInput::new(asset_amount, asset_entropy),
+            RequiredSignature::NativeEcdsa,
+        )?;
+
+        let signer_script_pubkey = context.signer.get_wpkh_address()?.script_pubkey();
+
+        ft.add_output(PartialOutput::new(
+            signer_script_pubkey.clone(),
+            asset_amount,
+            asset_id,
+        ));
+
+        ft.add_output(PartialOutput::new(
+            signer_script_pubkey,
+            first_utxo.1.value.explicit().unwrap(),
+            first_utxo.1.asset.explicit().unwrap(),
+        ));
+
+        println!(
+            "Issuing new asset with id - {} and amount - {}",
+            asset_id.to_hex(),
+            asset_amount,
+        );
+
+        let (tx, _) = context.signer.finalize(&ft)?;
+        let txid = context.esplora_provider.broadcast_transaction(&tx)?;
+
+        println!("New asset successfully issued!");
+        println!("Broadcast txid: {txid}");
+
+        Ok(())
     }
 
     fn issue_preparation_utxos_tx(context: CliContext) -> Result<(), UtilityCommandError> {
