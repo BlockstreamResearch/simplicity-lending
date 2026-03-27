@@ -29,3 +29,24 @@ pub fn finalize_strict_and_broadcast(
 pub fn wait_for_tx(context: &simplex::TestContext, txid: &Txid) -> anyhow::Result<()> {
     Ok(context.get_provider().wait(txid)?)
 }
+
+pub fn mine_blocks_with_self_send(
+    context: &simplex::TestContext,
+    blocks: u32,
+    amount: u64,
+) -> anyhow::Result<Vec<Txid>> {
+    let provider = context.get_provider();
+    let signer = context.get_signer();
+
+    let mut txids = Vec::with_capacity(blocks as usize);
+    let recipient_script = signer.get_wpkh_address()?.script_pubkey();
+
+    for _ in 0..blocks {
+        let (tx, _) = signer.send(recipient_script.clone(), amount)?;
+        let txid = provider.broadcast_transaction(&tx)?;
+        provider.wait(&txid)?;
+        txids.push(txid);
+    }
+
+    Ok(txids)
+}

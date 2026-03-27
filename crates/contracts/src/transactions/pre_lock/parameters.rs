@@ -1,4 +1,4 @@
-use simplex::{provider::SimplicityNetwork, simplicityhl::elements::Transaction};
+use simplex::{provider::ProviderTrait, simplicityhl::elements::Transaction, utils::hash_script};
 
 use crate::{
     programs::{PreLock, PreLockParameters},
@@ -8,7 +8,7 @@ use crate::{
 
 pub fn extract_parameters_from_tx(
     tx: &Transaction,
-    network: SimplicityNetwork,
+    provider: &impl ProviderTrait,
 ) -> Result<PreLockParameters, PreLockTransactionError> {
     if tx.input.len() < 6 || tx.output.len() < 7 || !tx.output[5].is_null_data() {
         return Err(PreLockTransactionError::NotAPreLockCreationTx(tx.txid()));
@@ -49,6 +49,12 @@ pub fn extract_parameters_from_tx(
         &SecondNFTParameters::decode(second_parameters_nft_amount),
     );
 
+    let prev_collateral_outpoint = tx.input[0].previous_output;
+    let pre_collateral_tx = provider.fetch_transaction(&prev_collateral_outpoint.txid)?;
+    let collateral_script_hash = hash_script(
+        &pre_collateral_tx.output[prev_collateral_outpoint.vout as usize].script_pubkey,
+    );
+
     let mut op_return_instr_iter = tx.output[5].script_pubkey.instructions_minimal();
 
     op_return_instr_iter.next();
@@ -72,7 +78,8 @@ pub fn extract_parameters_from_tx(
         lender_nft_asset_id,
         offer_parameters: offer_parameters.clone(),
         borrower_pubkey,
-        network,
+        borrower_output_script_hash: collateral_script_hash,
+        network: *provider.get_network(),
     };
 
     Ok(pre_lock_parameters)

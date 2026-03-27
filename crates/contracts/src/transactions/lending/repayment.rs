@@ -1,7 +1,6 @@
 use simplex::simplicityhl::elements::{OutPoint, Script, TxOut};
 use simplex::transaction::{FinalTransaction, PartialOutput};
 
-use crate::programs::ScriptAuthParameters;
 use crate::transactions::core::SimplexInput;
 use crate::{
     programs::{Lending, LendingBranch, ScriptAuth, program::SimplexProgram},
@@ -14,32 +13,21 @@ pub fn repay_loan(
     first_parameters_nft_utxo: (OutPoint, TxOut),
     second_parameters_nft_utxo: (OutPoint, TxOut),
     borrower_nft_input: &SimplexInput,
-    principal_inputs: Vec<&SimplexInput>,
+    principal_inputs: Vec<SimplexInput>,
     collateral_output: PartialOutput,
     lending: Lending,
 ) -> Result<FinalTransaction, LendingTransactionError> {
     let lending_parameters = lending.get_lending_parameters();
     let mut ft = FinalTransaction::new(lending_parameters.network);
 
-    let (first_parameters_nft_asset_id, first_parameters_nft_amount) = (
-        first_parameters_nft_utxo.1.asset.explicit().unwrap(),
-        first_parameters_nft_utxo.1.value.explicit().unwrap(),
-    );
-    let (second_parameters_nft_asset_id, second_parameters_nft_amount) = (
-        second_parameters_nft_utxo.1.asset.explicit().unwrap(),
-        second_parameters_nft_utxo.1.value.explicit().unwrap(),
-    );
-    let borrower_nft_asset_id = borrower_nft_input.explicit_asset();
+    let first_parameters_nft_amount = first_parameters_nft_utxo.1.value.explicit().unwrap();
+    let second_parameters_nft_amount = second_parameters_nft_utxo.1.value.explicit().unwrap();
 
     let witness = Lending::get_lending_witness(&LendingBranch::LoanRepayment);
 
     lending.add_program_input(&mut ft, lending_utxo, Box::new(witness))?;
 
-    let lending_cov_hash = lending.get_script_hash()?;
-    let parameters_script_auth = ScriptAuth::new(ScriptAuthParameters {
-        script_hash: lending_cov_hash,
-        network: lending_parameters.network,
-    });
+    let parameters_script_auth = ScriptAuth::from_simplex_program(&lending)?;
     let parameters_witness = ScriptAuth::get_script_auth_witness(0);
 
     parameters_script_auth.add_program_input(
@@ -58,11 +46,16 @@ pub fn repay_loan(
         borrower_nft_input.required_sig().clone(),
     )?;
 
+    let mut total_principal_input_amount = 0;
+    let principal_script_pubkey = principal_inputs.first().unwrap().utxo_script_pubkey();
+
     for principal_input in principal_inputs {
         ft.add_input(
             principal_input.partial_input().clone(),
             principal_input.required_sig().clone(),
         )?;
+
+        total_principal_input_amount += principal_input.explicit_amount();
     }
 
     ft.add_output(collateral_output);
@@ -73,6 +66,13 @@ pub fn repay_loan(
     );
     let lender_principal_asset_auth = lending_parameters.get_lender_principal_asset_auth();
 
+    if total_principal_input_amount < principal_with_interest {
+        return Err(LendingTransactionError::NotEnoughPrincipalToRepay {
+            expected: principal_with_interest,
+            actual: total_principal_input_amount,
+        });
+    }
+
     lender_principal_asset_auth.add_program_output(
         &mut ft,
         lending_parameters.principal_asset_id,
@@ -82,20 +82,28 @@ pub fn repay_loan(
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         first_parameters_nft_amount,
-        first_parameters_nft_asset_id,
+        lending_parameters.first_parameters_nft_asset_id,
     ));
 
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         second_parameters_nft_amount,
-        second_parameters_nft_asset_id,
+        lending_parameters.second_parameters_nft_asset_id,
     ));
 
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
         1,
-        borrower_nft_asset_id,
+        lending_parameters.borrower_nft_asset_id,
     ));
+
+    if total_principal_input_amount > principal_with_interest {
+        ft.add_output(PartialOutput::new(
+            principal_script_pubkey,
+            total_principal_input_amount - principal_with_interest,
+            lending_parameters.principal_asset_id,
+        ));
+    }
 
     Ok(ft)
 }

@@ -2,14 +2,10 @@ use simplex::constants::DUMMY_SIGNATURE;
 use simplex::either::Either::{Left, Right};
 use simplex::program::Program;
 
+use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::hashes::FromSliceError;
 use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::simplicityhl::elements::{
-    AssetId, Script, WPubkeyHash,
-    hashes::{Hash, HashEngine},
-};
-use simplex::utils::hash_script;
 use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::pre_lock::PreLockProgram;
@@ -27,7 +23,8 @@ pub struct PreLockParameters {
     pub borrower_nft_asset_id: AssetId,
     pub lender_nft_asset_id: AssetId,
     pub offer_parameters: LendingOfferParameters,
-    pub borrower_pubkey: [u8; 32],
+    pub borrower_pubkey: XOnlyPublicKey,
+    pub borrower_output_script_hash: [u8; 32],
     pub network: SimplicityNetwork,
 }
 
@@ -58,9 +55,6 @@ impl TryFrom<PreLockParameters> for PreLockArguments {
     fn try_from(value: PreLockParameters) -> Result<Self, Self::Error> {
         let parameter_nfts_script_auth = value.get_parameter_nfts_script_auth()?;
 
-        let borrower_wpkh_script = value.get_borrower_wpkh_script_pubkey();
-        let borrower_output_script_hash = hash_script(&borrower_wpkh_script);
-
         Ok(Self {
             collateral_asset_id: value.collateral_asset_id.into_inner().0,
             principal_asset_id: value.principal_asset_id.into_inner().0,
@@ -72,26 +66,18 @@ impl TryFrom<PreLockParameters> for PreLockArguments {
             principal_amount: value.offer_parameters.principal_amount,
             principal_interest_rate: value.offer_parameters.principal_interest_rate,
             loan_expiration_time: value.offer_parameters.loan_expiration_time,
-            borrower_pub_key: value.borrower_pubkey,
+            borrower_pub_key: value.borrower_pubkey.serialize(),
             lending_cov_hash: parameter_nfts_script_auth
                 .get_script_auth_parameters()
                 .script_hash,
             parameters_nft_output_script_hash: parameter_nfts_script_auth.get_script_hash()?,
-            borrower_nft_output_script_hash: borrower_output_script_hash,
-            principal_output_script_hash: borrower_output_script_hash,
+            borrower_nft_output_script_hash: value.borrower_output_script_hash,
+            principal_output_script_hash: value.borrower_output_script_hash,
         })
     }
 }
 
 impl PreLockParameters {
-    pub fn get_borrower_wpkh_script_pubkey(&self) -> Script {
-        let mut engine = WPubkeyHash::engine();
-        engine.input(self.borrower_pubkey.as_slice());
-
-        let wpkh = WPubkeyHash::from_engine(engine);
-        Script::new_v0_wpkh(&wpkh)
-    }
-
     pub fn get_parameter_nfts_script_auth(&self) -> Result<ScriptAuth, SimplexProgramError> {
         let lending = Lending::new(self.into())?;
 
@@ -155,7 +141,7 @@ impl PreLock {
 
     pub fn decode_creation_op_return_data(
         op_return_bytes: Vec<u8>,
-    ) -> Result<([u8; 32], AssetId), PreLockError> {
+    ) -> Result<(XOnlyPublicKey, AssetId), PreLockError> {
         if op_return_bytes.len() != PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH {
             return Err(PreLockError::InvalidCreationOpReturnDataLength {
                 expected: PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH,
@@ -166,16 +152,15 @@ impl PreLock {
         let (op_return_pub_key, op_return_asset_id) = op_return_bytes.split_at(32);
 
         let principal_asset_id = AssetId::from_slice(op_return_asset_id)?;
-        let borrower_public_key_bytes: [u8; 32] = op_return_pub_key
-            .try_into()
+        let borrower_public_key = XOnlyPublicKey::from_slice(op_return_pub_key)
             .map_err(|_| PreLockError::InvalidOpReturnBytes(op_return_pub_key.to_hex()))?;
 
-        Ok((borrower_public_key_bytes, principal_asset_id))
+        Ok((borrower_public_key, principal_asset_id))
     }
 
     pub fn encode_creation_op_return_data(&self) -> Vec<u8> {
         let mut op_return_data = Vec::with_capacity(PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH);
-        op_return_data.extend_from_slice(&self.parameters.borrower_pubkey);
+        op_return_data.extend_from_slice(&self.parameters.borrower_pubkey.serialize());
         op_return_data.extend_from_slice(&self.parameters.principal_asset_id.into_inner().0);
 
         op_return_data

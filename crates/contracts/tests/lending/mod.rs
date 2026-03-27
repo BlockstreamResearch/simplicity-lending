@@ -1,5 +1,7 @@
-#[test]
-fn lending_module_placeholder() {
-    // Reserved for dedicated lending integration scenarios.
-    assert!(true);
-}
+#[path = "../common/mod.rs"]
+mod common;
+
+mod claim;
+mod liquidate;
+mod repay;
+mod support;

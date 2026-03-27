@@ -1,4 +1,6 @@
-use simplex::{simplicityhl::elements::Txid, transaction::TransactionError};
+use simplex::{
+    provider::ProviderError, simplicityhl::elements::Txid, transaction::TransactionError,
+};
 
 use crate::programs::{PreLockError, program::SimplexProgramError};
 
@@ -15,6 +17,9 @@ pub enum PreLockTransactionError {
 
     #[error(transparent)]
     SimplexProgram(#[from] SimplexProgramError),
+
+    #[error(transparent)]
+    SimplexProvider(#[from] ProviderError),
 
     #[error(transparent)]
     SimplexTransaction(#[from] TransactionError),

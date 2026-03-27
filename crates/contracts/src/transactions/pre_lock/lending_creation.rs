@@ -1,4 +1,4 @@
-use simplex::simplicityhl::elements::{OutPoint, TxOut};
+use simplex::simplicityhl::elements::{OutPoint, Script, TxOut};
 use simplex::transaction::{FinalTransaction, PartialOutput};
 
 use crate::transactions::core::SimplexInput;
@@ -15,6 +15,7 @@ pub fn create_lending_from_pre_lock(
     lender_nft_utxo: (OutPoint, TxOut),
     principal_inputs: Vec<&SimplexInput>,
     lender_nft_output: PartialOutput,
+    borrower_output_script: Script,
     pre_lock: PreLock,
 ) -> Result<(FinalTransaction, Lending), PreLockTransactionError> {
     let pre_lock_parameters = pre_lock.get_pre_lock_parameters();
@@ -66,10 +67,8 @@ pub fn create_lending_from_pre_lock(
         pre_lock_parameters.offer_parameters.collateral_amount,
     )?;
 
-    let borrower_script_pubkey = pre_lock_parameters.get_borrower_wpkh_script_pubkey();
-
     ft.add_output(PartialOutput::new(
-        borrower_script_pubkey.clone(),
+        borrower_output_script.clone(),
         pre_lock_parameters.offer_parameters.principal_amount,
         pre_lock_parameters.principal_asset_id,
     ));
@@ -86,7 +85,7 @@ pub fn create_lending_from_pre_lock(
     )?;
 
     ft.add_output(PartialOutput::new(
-        borrower_script_pubkey,
+        borrower_output_script,
         1,
         pre_lock_parameters.borrower_nft_asset_id,
     ));

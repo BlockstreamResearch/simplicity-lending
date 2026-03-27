@@ -4,7 +4,7 @@ use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature,
 };
 
-use simplex::simplicityhl::elements::{AssetId, OutPoint, Script, TxOut};
+use simplex::simplicityhl::elements::{AssetId, OutPoint, Script, Sequence, TxOut};
 
 pub trait SimplexProgram {
     fn add_program_input<'a>(
@@ -17,6 +17,24 @@ pub trait SimplexProgram {
 
         ft.add_program_input(
             PartialInput::new(program_outpoint, program_tx_out),
+            ProgramInput::new(Box::new(self.get_program().clone()), witness),
+            RequiredSignature::None,
+        )?;
+
+        Ok(ft)
+    }
+
+    fn add_program_input_with_sequence<'a>(
+        &self,
+        ft: &'a mut FinalTransaction,
+        program_utxo: (OutPoint, TxOut),
+        witness: Box<dyn WitnessTrait>,
+        sequence: Sequence,
+    ) -> Result<&'a mut FinalTransaction, SimplexProgramError> {
+        let (program_outpoint, program_tx_out) = program_utxo;
+
+        ft.add_program_input(
+            PartialInput::new_sequence(program_outpoint, program_tx_out, sequence),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
             RequiredSignature::None,
         )?;
