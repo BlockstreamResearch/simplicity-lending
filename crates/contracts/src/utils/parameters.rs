@@ -134,6 +134,20 @@ impl LendingOfferParameters {
 
         Ok(())
     }
+
+    /// Calculate principal amount with the principal interest
+    ///
+    /// # Panics
+    /// - if final amount is greater than `U64::MAX`
+    #[must_use]
+    pub fn calculate_principal_with_interest(&self) -> u64 {
+        let interest = calculate_interest(self.principal_amount, self.principal_interest_rate)
+            .expect("Interest is greater than U64::MAX");
+
+        self.principal_amount
+            .checked_add(interest)
+            .expect("Overflow in principal with interest calculation")
+    }
 }
 
 #[bitfield]
@@ -286,18 +300,4 @@ pub fn calculate_interest(
     let interest = interest_wide / u128::from(MAX_BASIS_POINTS);
 
     u64::try_from(interest)
-}
-
-/// Calculate principal amount with the principal interest
-///
-/// # Panics
-/// - if final amount is greater than `U64::MAX`
-#[must_use]
-pub fn calculate_principal_with_interest(principal_amount: u64, interest_rate: u16) -> u64 {
-    let interest = calculate_interest(principal_amount, interest_rate)
-        .expect("Interest is greater than U64::MAX");
-
-    principal_amount
-        .checked_add(interest)
-        .expect("Overflow in principal with interest calculation")
 }

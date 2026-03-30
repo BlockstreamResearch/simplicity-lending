@@ -5,7 +5,6 @@ use crate::transactions::core::SimplexInput;
 use crate::{
     programs::{Lending, LendingBranch, ScriptAuth, program::SimplexProgram},
     transactions::lending::LendingTransactionError,
-    utils::calculate_principal_with_interest,
 };
 
 pub fn repay_loan(
@@ -60,10 +59,9 @@ pub fn repay_loan(
 
     ft.add_output(collateral_output);
 
-    let principal_with_interest = calculate_principal_with_interest(
-        lending_parameters.offer_parameters.principal_amount,
-        lending_parameters.offer_parameters.principal_interest_rate,
-    );
+    let principal_with_interest = lending_parameters
+        .offer_parameters
+        .calculate_principal_with_interest();
     let lender_principal_asset_auth = lending_parameters.get_lender_principal_asset_auth();
 
     if total_principal_input_amount < principal_with_interest {

@@ -6,7 +6,7 @@ use crate::{
     utils::{FirstNFTParameters, LendingOfferParameters, SecondNFTParameters},
 };
 
-pub fn extract_parameters_from_tx(
+pub fn extract_pre_lock_parameters_from_tx(
     tx: &Transaction,
     provider: &impl ProviderTrait,
 ) -> Result<PreLockParameters, PreLockTransactionError> {

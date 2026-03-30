@@ -5,7 +5,6 @@ use lending_contracts::{
         core::SimplexInput,
         lending::{liquidate_loan, repay_loan},
     },
-    utils::calculate_principal_with_interest,
 };
 use simplex::{
     TestContext,
@@ -56,10 +55,9 @@ pub(super) fn repay_lending_tx(
     let mut principal_inputs: Vec<SimplexInput> = Vec::new();
     let mut total_inputs_amount = 0;
 
-    let principal_with_interest = calculate_principal_with_interest(
-        lending_parameters.offer_parameters.principal_amount,
-        lending_parameters.offer_parameters.principal_interest_rate,
-    );
+    let principal_with_interest = lending_parameters
+        .offer_parameters
+        .calculate_principal_with_interest();
 
     for utxo in principal_utxos {
         let input = SimplexInput::from_utxo(&utxo, RequiredSignature::NativeEcdsa);
@@ -190,10 +188,9 @@ pub(super) fn claim_lender_principal(
 
     let principal_asset_auth = lending_parameters.get_lender_principal_asset_auth();
 
-    let principal_with_interest = calculate_principal_with_interest(
-        lending_parameters.offer_parameters.principal_amount,
-        lending_parameters.offer_parameters.principal_interest_rate,
-    );
+    let principal_with_interest = lending_parameters
+        .offer_parameters
+        .calculate_principal_with_interest();
 
     let ft = unlock_asset_auth(
         (
