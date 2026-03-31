@@ -1,5 +1,6 @@
-use simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
 use uuid::Uuid;
+
+use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
 
 use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferUtxoModel, UtxoData, UtxoType};

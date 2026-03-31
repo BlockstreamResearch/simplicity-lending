@@ -24,7 +24,7 @@ pub enum UtilityCommand {
         #[arg(long = "asset-amount")]
         asset_amount: u64,
     },
-    IssuePreparationUTXOs,
+    IssuePreparationUTXOS,
     IssueUtilityNfts {
         /// Preparation UTXOs asset ID in hexadecimal (big-endian)
         #[arg(long = "preparation-utxos-asset-id-hex-be")]
@@ -52,7 +52,7 @@ impl Utility {
             UtilityCommand::IssueAsset { asset_amount } => {
                 Utility::issue_asset(context, *asset_amount)
             }
-            UtilityCommand::IssuePreparationUTXOs => Utility::issue_preparation_utxos_tx(context),
+            UtilityCommand::IssuePreparationUTXOS => Utility::issue_preparation_utxos_tx(context),
             UtilityCommand::IssueUtilityNfts {
                 preparation_utxos_asset_id_hex_be,
                 collateral_amount,
@@ -100,12 +100,6 @@ impl Utility {
             signer_script_pubkey.clone(),
             asset_amount,
             asset_id,
-        ));
-
-        ft.add_output(PartialOutput::new(
-            signer_script_pubkey,
-            first_utxo.1.value.explicit().unwrap(),
-            first_utxo.1.asset.explicit().unwrap(),
         ));
 
         println!(

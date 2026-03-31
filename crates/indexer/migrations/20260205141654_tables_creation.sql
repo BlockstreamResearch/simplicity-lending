@@ -20,6 +20,7 @@ CREATE TABLE offers (
     id uuid NOT NULL,
     PRIMARY KEY (id),
     borrower_pubkey BYTEA NOT NULL,
+    borrower_output_script_hash BYTEA NOT NULL,
     collateral_asset_id BYTEA NOT NULL,
     principal_asset_id BYTEA NOT NULL,
     first_parameters_nft_asset_id BYTEA NOT NULL,

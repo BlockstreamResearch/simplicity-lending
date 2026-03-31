@@ -10,7 +10,7 @@ pub fn extract_pre_lock_parameters_from_tx(
     tx: &Transaction,
     provider: &impl ProviderTrait,
 ) -> Result<PreLockParameters, PreLockTransactionError> {
-    if tx.input.len() < 6 || tx.output.len() < 7 || !tx.output[5].is_null_data() {
+    if tx.input.len() < 5 || tx.output.len() < 7 || !tx.output[5].is_null_data() {
         return Err(PreLockTransactionError::NotAPreLockCreationTx(tx.txid()));
     }
 

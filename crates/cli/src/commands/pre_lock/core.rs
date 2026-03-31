@@ -207,6 +207,13 @@ impl CliPreLock {
         let principal_utxo = principal_utxos.first().unwrap();
         let signer_script_pubkey = context.signer.get_wpkh_address()?.script_pubkey();
 
+        let prev_collateral_outpoint = pre_lock_creation_tx.input[0].previous_output;
+        let pre_collateral_tx = context
+            .esplora_provider
+            .fetch_transaction(&prev_collateral_outpoint.txid)?;
+        let borrower_output_script =
+            &pre_collateral_tx.output[prev_collateral_outpoint.vout as usize].script_pubkey;
+
         let (ft, _) = create_lending_from_pre_lock(
             (
                 OutPoint::new(pre_lock_creation_txid, 0),
@@ -238,7 +245,7 @@ impl CliPreLock {
                 1,
                 pre_lock_parameters.lender_nft_asset_id,
             ),
-            signer_script_pubkey,
+            borrower_output_script.clone(),
             pre_lock,
         )?;
 

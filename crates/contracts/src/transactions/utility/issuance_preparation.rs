@@ -36,7 +36,9 @@ pub fn issue_preparation_utxos(
         ));
     }
 
-    ft.add_output(issuance_input.new_partial_output());
+    if issuance_input.explicit_asset() != network.policy_asset() {
+        ft.add_output(issuance_input.new_partial_output());
+    }
 
     Ok((ft, asset_id))
 }

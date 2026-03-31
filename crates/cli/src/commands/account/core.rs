@@ -1,7 +1,10 @@
+use std::str::FromStr;
+
 use clap::Subcommand;
+use lending_contracts::transactions::core::SimplexInput;
 use simplex::{
     provider::ProviderTrait,
-    simplicityhl::elements::{Address, OutPoint, hex::ToHex},
+    simplicityhl::elements::{Address, AssetId, OutPoint, hex::ToHex},
     transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature},
 };
 
@@ -13,6 +16,17 @@ pub enum AccountCommand {
         /// Recipient address (Liquid testnet bech32m)
         #[arg(long = "to-address")]
         to_address: Address,
+        /// Policy amount to send
+        #[arg(long = "amount")]
+        amount: u64,
+    },
+    SendAsset {
+        /// Recipient address (Liquid testnet bech32m)
+        #[arg(long = "to-address")]
+        to_address: Address,
+        /// Asset ID in hexadecimal (big-endian) to send
+        #[arg(long = "asset-id-hex-be")]
+        asset_id_hex_be: String,
         /// Policy amount to send
         #[arg(long = "amount")]
         amount: u64,
@@ -37,6 +51,11 @@ impl Account {
             AccountCommand::SendPolicyAsset { to_address, amount } => {
                 Account::send_policy_asset(context, to_address, *amount)
             }
+            AccountCommand::SendAsset {
+                to_address,
+                asset_id_hex_be,
+                amount,
+            } => Account::send_asset(context, to_address, asset_id_hex_be, *amount),
             AccountCommand::SplitUTXO { outpoint, amounts } => {
                 Account::split_account_utxo(context, *outpoint, amounts)
             }
@@ -60,6 +79,73 @@ impl Account {
             "Successfully sent {amount} policy asset to the {}",
             to_address
         );
+        println!("Broadcast txid: {txid}");
+
+        Ok(())
+    }
+
+    fn send_asset(
+        context: CliContext,
+        to_address: &Address,
+        asset_id_hex_be: &String,
+        amount: u64,
+    ) -> Result<(), AccountCommandError> {
+        let asset_id = AssetId::from_str(asset_id_hex_be)?;
+
+        let asset_utxos = context.signer.get_wpkh_utxos_asset(asset_id)?;
+
+        let mut inputs = Vec::new();
+        let mut total_inputs_amount = 0;
+
+        for utxo in asset_utxos {
+            let input = SimplexInput::from_utxo(&utxo, RequiredSignature::NativeEcdsa);
+
+            total_inputs_amount += input.explicit_amount();
+            inputs.push(input);
+
+            if total_inputs_amount >= amount {
+                break;
+            }
+        }
+
+        if total_inputs_amount < amount {
+            return Err(AccountCommandError::NotEnoughAsset {
+                asset_id: asset_id.to_hex(),
+                needed_amount: amount,
+                actual_amount: total_inputs_amount,
+            });
+        }
+
+        let mut ft = FinalTransaction::new(context.get_network());
+
+        for input in inputs {
+            ft.add_input(input.partial_input().clone(), input.required_sig().clone())?;
+        }
+
+        ft.add_output(PartialOutput::new(
+            to_address.script_pubkey(),
+            amount,
+            asset_id,
+        ));
+
+        if total_inputs_amount > amount {
+            ft.add_output(PartialOutput::new(
+                context.signer.get_wpkh_address()?.script_pubkey(),
+                total_inputs_amount - amount,
+                asset_id,
+            ));
+        }
+
+        println!(
+            "Sending {amount} of the {} asset to the {to_address}",
+            asset_id.to_hex()
+        );
+
+        let (tx, _) = context.signer.finalize(&ft)?;
+
+        let txid = context.esplora_provider.broadcast_transaction(&tx)?;
+
+        println!("Asset successfully sent");
         println!("Broadcast txid: {txid}");
 
         Ok(())
@@ -102,7 +188,7 @@ impl Account {
             total_amount += amount;
         }
 
-        if total_amount <= utxo_amount {
+        if total_amount > utxo_amount {
             return Err(AccountCommandError::AmountsToSplitTooLarge {
                 utxo_amount,
                 total_amount_to_split: total_amount,

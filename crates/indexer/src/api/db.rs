@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use simplicityhl::elements::hex::ToHex;
+use simplex::simplicityhl::elements::hex::ToHex;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
 
@@ -140,6 +140,7 @@ pub async fn fetch_offer_full_info_by_id(
             id,
             current_status AS "current_status: OfferStatus",
             borrower_pubkey,
+            borrower_output_script_hash,
             collateral_asset_id,
             principal_asset_id,
             first_parameters_nft_asset_id,
@@ -183,7 +184,7 @@ pub async fn fetch_offer_details_by_ids(
         r#"
         SELECT 
             id, current_status AS "current_status: OfferStatus",
-            borrower_pubkey, collateral_asset_id, principal_asset_id,
+            borrower_pubkey, borrower_output_script_hash, collateral_asset_id, principal_asset_id,
             first_parameters_nft_asset_id, second_parameters_nft_asset_id,
             borrower_nft_asset_id, lender_nft_asset_id,
             collateral_amount, principal_amount, interest_rate,

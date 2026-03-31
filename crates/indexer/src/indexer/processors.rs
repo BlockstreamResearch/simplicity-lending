@@ -1,6 +1,6 @@
 use sqlx::PgPool;
 
-use simplicityhl::elements::{Transaction, hex::ToHex};
+use simplex::simplicityhl::elements::{Transaction, hex::ToHex};
 
 use uuid::Uuid;
 
@@ -37,7 +37,7 @@ pub async fn process_block(
 
     let process_result = async {
         for tx in txs {
-            process_tx(&mut sql_tx, &tx, cache, block_height).await?;
+            process_tx(&mut sql_tx, &tx, cache, client, block_height).await?;
         }
 
         db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
@@ -73,6 +73,7 @@ pub async fn process_tx(
     sql_tx: &mut DbTx<'_>,
     tx: &Transaction,
     cache: &mut UtxoCache,
+    client: &EsploraClient,
     block_height: u64,
 ) -> anyhow::Result<()> {
     let mut is_offer_tx = false;
@@ -109,7 +110,7 @@ pub async fn process_tx(
         }
     }
 
-    if !is_offer_tx && let Some(args) = is_pre_lock_creation_tx(tx) {
+    if !is_offer_tx && let Some(args) = is_pre_lock_creation_tx(tx, client) {
         handlers::pre_lock::handle_pre_lock_creation(sql_tx, cache, args, tx, block_height).await?;
     }
 

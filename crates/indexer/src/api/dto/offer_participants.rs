@@ -1,5 +1,6 @@
-use simplicityhl::elements::hex::ToHex;
 use uuid::Uuid;
+
+use simplex::simplicityhl::elements::hex::ToHex;
 
 use crate::{
     api::utils::format_hex,

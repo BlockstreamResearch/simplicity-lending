@@ -1,4 +1,4 @@
-use simplicityhl::elements::{OutPoint, Transaction, hex::ToHex};
+use simplex::simplicityhl::elements::{OutPoint, Transaction, hex::ToHex};
 use uuid::Uuid;
 
 use crate::indexer::handlers::{handle_lending_creation, handle_offer_cancellation};

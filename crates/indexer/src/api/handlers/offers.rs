@@ -4,7 +4,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use simplicityhl::elements::schnorr::XOnlyPublicKey;
+use simplex::simplicityhl::elements::schnorr::XOnlyPublicKey;
 use uuid::Uuid;
 
 use crate::api::{ApiError, AppState, OfferFilters, db, dto::OfferDetailsResponse};

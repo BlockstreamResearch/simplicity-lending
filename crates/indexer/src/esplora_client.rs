@@ -1,7 +1,10 @@
 use std::{num::ParseIntError, time::Duration};
 
 use reqwest::{Client, ClientBuilder, Response};
-use simplicityhl::elements::{Transaction, Txid, encode};
+use simplex::{
+    provider::{EsploraProvider, SimplicityNetwork},
+    simplicityhl::elements::{Transaction, Txid, encode},
+};
 
 /// Default Esplora API base URL for Liquid testnet.
 pub const DEFAULT_BASE_URL: &str = "https://blockstream.info/liquidtestnet/api";
@@ -40,6 +43,10 @@ impl EsploraClient {
             base_url: base_url.trim_end_matches('/').to_owned(),
             client,
         }
+    }
+
+    pub fn to_simplex_provider(&self) -> EsploraProvider {
+        EsploraProvider::new(self.base_url.clone(), SimplicityNetwork::LiquidTestnet)
     }
 
     pub async fn get_latest_block_hash(&self) -> Result<String, EsploraClientError> {
@@ -137,7 +144,7 @@ pub enum EsploraClientError {
     #[error("invalid transaction hex: {0}")]
     InvalidTransactionHex(#[from] hex::FromHexError),
     #[error("failed to deserialize transaction: {0}")]
-    TransactionDeserialize(#[from] simplicityhl::simplicity::elements::encode::Error),
+    TransactionDeserialize(#[from] simplex::simplicityhl::simplicity::elements::encode::Error),
     #[error("parsing error: {0}")]
     Parsing(String),
     #[error("api error: status {0}, body {1}")]

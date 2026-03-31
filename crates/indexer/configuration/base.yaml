@@ -7,8 +7,8 @@ database:
   password: "password"
   database_name: "lending-indexer"
 esplora:
-  base_url: "https://blockstream.info/liquidtestnet/api"
+  base_url: "https://liquid.network/liquidtestnet/api"
   timeout: 10
 indexer:
   interval: 10000
-  last_indexed_height: 2360000
+  last_indexed_height: 2375530
