@@ -87,7 +87,7 @@ impl Account {
     fn send_asset(
         context: CliContext,
         to_address: &Address,
-        asset_id_hex_be: &String,
+        asset_id_hex_be: &str,
         amount: u64,
     ) -> Result<(), AccountCommandError> {
         let asset_id = AssetId::from_str(asset_id_hex_be)?;
@@ -160,7 +160,7 @@ impl Account {
             .signer
             .get_wpkh_utxos_filter(|utxo| utxo.0 == outpoint)?;
 
-        if found_utxos.len() == 0 {
+        if found_utxos.is_empty() {
             return Err(AccountCommandError::NotASignerUTXO(outpoint));
         }
 

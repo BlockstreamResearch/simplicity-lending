@@ -45,7 +45,7 @@ impl AssetAuth {
     ) -> AssetAuth {
         AssetAuth {
             program: AssetAuthProgram::new(internal_key, AssetAuthArguments::from(parameters)),
-            parameters: parameters,
+            parameters,
         }
     }
 

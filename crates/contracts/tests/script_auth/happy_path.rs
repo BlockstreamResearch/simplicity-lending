@@ -25,7 +25,7 @@ pub(super) fn create_script_auth_tx(
             RequiredSignature::NativeEcdsa,
         ),
         ScriptAuthParameters {
-            script_hash: script_hash,
+            script_hash,
             network: *context.get_network(),
         },
     )?;

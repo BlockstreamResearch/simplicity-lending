@@ -39,7 +39,7 @@ enum ConfigNetwork {
 impl TryFrom<String> for ConfigNetwork {
     type Error = String;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> Result<Self, Self::Error> { // TODO
         match value.as_str() {
             "Liquid" => Ok(Self::Liquid),
             "LiquidTestnet" => Ok(Self::LiquidTestnet),

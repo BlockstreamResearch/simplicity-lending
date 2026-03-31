@@ -35,7 +35,7 @@ impl ScriptAuth {
     ) -> Result<ScriptAuth, SimplexProgramError> {
         Ok(Self::new(ScriptAuthParameters {
             script_hash: program.get_script_hash()?,
-            network: program.get_network().clone(),
+            network: *program.get_network(),
         }))
     }
 
@@ -45,14 +45,12 @@ impl ScriptAuth {
     ) -> ScriptAuth {
         ScriptAuth {
             program: ScriptAuthProgram::new(internal_key, ScriptAuthArguments::from(parameters)),
-            parameters: parameters,
+            parameters,
         }
     }
 
     pub fn get_script_auth_witness(input_script_index: u32) -> ScriptAuthWitness {
-        ScriptAuthWitness {
-            input_script_index: input_script_index,
-        }
+        ScriptAuthWitness { input_script_index }
     }
 
     pub fn get_script_auth_parameters(&self) -> &ScriptAuthParameters {

@@ -57,7 +57,7 @@ pub fn create_pre_lock_tx(
         second_parameters_nft_asset_id,
         borrower_nft_asset_id,
         lender_nft_asset_id,
-        offer_parameters: offer_parameters.clone(),
+        offer_parameters: *offer_parameters,
         borrower_pubkey: signer_schnorr_pubkey,
         borrower_output_script_hash: hash_script(
             &signer.get_wpkh_address().unwrap().script_pubkey(),

@@ -32,7 +32,7 @@ pub fn issue_preparation_utxos(
         ft.add_output(PartialOutput::new(
             issuance_utxos_output_script.clone(),
             PREPARATION_UTXO_ASSET_AMOUNT,
-            asset_id.clone(),
+            asset_id,
         ));
     }
 

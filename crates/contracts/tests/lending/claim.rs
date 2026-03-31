@@ -11,7 +11,7 @@ fn lender_principal_claim_flow(context: simplex::TestContext) -> anyhow::Result<
 
     provider.wait(&fixture.lending_txid)?;
 
-    let lending_parameters = fixture.lending.get_lending_parameters().clone();
+    let lending_parameters = *fixture.lending.get_lending_parameters();
     let txid = repay_lending_tx(&context, fixture.lending, fixture.lending_txid)?;
 
     provider.wait(&txid)?;

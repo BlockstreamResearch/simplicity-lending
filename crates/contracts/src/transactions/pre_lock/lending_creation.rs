@@ -7,6 +7,7 @@ use crate::{
     transactions::pre_lock::PreLockTransactionError,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_lending_from_pre_lock(
     pre_lock_utxo: (OutPoint, TxOut),
     first_parameters_nft_utxo: (OutPoint, TxOut),

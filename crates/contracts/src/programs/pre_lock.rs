@@ -123,7 +123,7 @@ impl PreLock {
 
         Ok(PreLock {
             program: PreLockProgram::new(internal_key, arguments),
-            parameters: parameters,
+            parameters,
         })
     }
 

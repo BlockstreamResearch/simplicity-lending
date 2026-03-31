@@ -67,7 +67,7 @@ impl CliLending {
 
         let lending_parameters =
             extract_lending_parameters_from_tx(&lending_creation_tx, &context.esplora_provider)?;
-        let lending = Lending::new(lending_parameters.clone())?;
+        let lending = Lending::new(lending_parameters)?;
 
         let borrower_nft_utxos = context
             .signer
@@ -152,7 +152,7 @@ impl CliLending {
 
         let lending_parameters =
             extract_lending_parameters_from_tx(&lending_creation_tx, &context.esplora_provider)?;
-        let lending = Lending::new(lending_parameters.clone())?;
+        let lending = Lending::new(lending_parameters)?;
 
         let lender_nft_utxos = context
             .signer

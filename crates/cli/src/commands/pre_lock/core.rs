@@ -69,8 +69,8 @@ impl CliPreLock {
     fn create_pre_lock_tx(
         context: CliContext,
         utility_nfts_issuance_txid: Txid,
-        collateral_asset_id_hex_be: &String,
-        principal_asset_id_hex_be: &String,
+        collateral_asset_id_hex_be: &str,
+        principal_asset_id_hex_be: &str,
     ) -> Result<(), PreLockCommandError> {
         let utility_nfts_tx = context
             .esplora_provider
@@ -117,7 +117,7 @@ impl CliPreLock {
             second_parameters_nft_asset_id,
             borrower_nft_asset_id,
             lender_nft_asset_id,
-            offer_parameters: offer_parameters.clone(),
+            offer_parameters,
             borrower_pubkey: context.signer.get_schnorr_public_key()?,
             borrower_output_script_hash: hash_script(&borrower_script),
             network: context.get_network(),
@@ -129,7 +129,7 @@ impl CliPreLock {
                     >= pre_lock_parameters.offer_parameters.collateral_amount
         })?;
 
-        if collateral_utxos.len() == 0 {
+        if collateral_utxos.is_empty() {
             return Err(PreLockCommandError::NoCollateralUTXOsFound(
                 pre_lock_parameters.offer_parameters.collateral_amount,
             ));
@@ -190,7 +190,7 @@ impl CliPreLock {
 
         let pre_lock_parameters =
             extract_pre_lock_parameters_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
-        let pre_lock = PreLock::new(pre_lock_parameters.clone())?;
+        let pre_lock = PreLock::new(pre_lock_parameters)?;
 
         let principal_utxos = context.signer.get_wpkh_utxos_filter(|utxo| {
             utxo.1.asset.explicit().unwrap() == pre_lock_parameters.principal_asset_id
@@ -198,7 +198,7 @@ impl CliPreLock {
                     == pre_lock_parameters.offer_parameters.principal_amount
         })?;
 
-        if principal_utxos.len() == 0 {
+        if principal_utxos.is_empty() {
             return Err(PreLockCommandError::NoSuitablePrincipalUTXOsFound(
                 pre_lock_parameters.offer_parameters.principal_amount,
             ));
@@ -270,7 +270,7 @@ impl CliPreLock {
 
         let pre_lock_parameters =
             extract_pre_lock_parameters_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
-        let pre_lock = PreLock::new(pre_lock_parameters.clone())?;
+        let pre_lock = PreLock::new(pre_lock_parameters)?;
 
         let ft = cancel_pre_lock(
             (

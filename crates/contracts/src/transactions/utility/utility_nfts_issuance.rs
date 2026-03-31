@@ -31,7 +31,7 @@ pub fn issue_utility_nfts(
     let (first_parameters_nft_amount, second_parameters_nft_amount) =
         lending_offer_params.encode_parameters_nft_amounts(amounts_decimals)?;
 
-    let utility_nfts_amounts = vec![
+    let utility_nfts_amounts = [
         first_parameters_nft_amount,
         second_parameters_nft_amount,
         1,

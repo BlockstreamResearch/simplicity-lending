@@ -76,7 +76,7 @@ pub fn extract_pre_lock_parameters_from_tx(
         second_parameters_nft_asset_id,
         borrower_nft_asset_id,
         lender_nft_asset_id,
-        offer_parameters: offer_parameters.clone(),
+        offer_parameters,
         borrower_pubkey,
         borrower_output_script_hash: collateral_script_hash,
         network: *provider.get_network(),
