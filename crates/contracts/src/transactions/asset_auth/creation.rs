@@ -19,7 +19,7 @@ pub fn create_asset_auth_with_amount(
     amount_to_lock: u64,
     parameters: AssetAuthParameters,
 ) -> Result<(FinalTransaction, AssetAuth), AssetAuthTransactionError> {
-    let mut ft = FinalTransaction::new(parameters.network);
+    let mut ft = FinalTransaction::new();
     let asset_auth = AssetAuth::new(parameters);
 
     let asset_id_to_lock = input_to_lock.explicit_asset();

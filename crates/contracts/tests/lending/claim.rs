@@ -6,7 +6,7 @@ use super::support::setup_lending_fixture;
 
 #[simplex::test]
 fn lender_principal_claim_flow(context: simplex::TestContext) -> anyhow::Result<()> {
-    let provider = context.get_provider();
+    let provider = context.get_default_provider();
     let fixture = setup_lending_fixture(&context)?;
 
     provider.wait(&fixture.lending_txid)?;
@@ -22,8 +22,8 @@ fn lender_principal_claim_flow(context: simplex::TestContext) -> anyhow::Result<
 
     let principal_outpoint = OutPoint::new(txid, 0);
     let signer_principal_utxos = context
-        .get_signer()
-        .get_wpkh_utxos_filter(|utxo| utxo.0 == principal_outpoint)?;
+        .get_default_signer()
+        .get_utxos_filter(&|utxo| utxo.outpoint == principal_outpoint, &|_| true)?;
 
     assert!(
         signer_principal_utxos.len() == 1,

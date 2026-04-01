@@ -9,7 +9,7 @@ use lending_contracts::{
 use simplex::{
     TestContext,
     simplicityhl::elements::{OutPoint, Txid},
-    transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature},
+    transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO},
 };
 
 use crate::lending_tests::common::{
@@ -20,7 +20,7 @@ use crate::lending_tests::common::{
 pub(super) use super::common::flows::pre_lock_flow::setup_lending_fixture;
 
 pub(super) fn mine_until_height(context: &TestContext, target_height: u32) -> anyhow::Result<()> {
-    let current_height = context.get_provider().fetch_tip_height()?;
+    let current_height = context.get_default_provider().fetch_tip_height()?;
     if current_height < target_height {
         let blocks_to_mine = target_height - current_height;
         let _ = mine_blocks_with_self_send(context, blocks_to_mine, 1_000)?;
@@ -34,14 +34,13 @@ pub(super) fn repay_lending_tx(
     lending: Lending,
     lending_txid: Txid,
 ) -> anyhow::Result<Txid> {
-    let provider = context.get_provider();
-    let signer = context.get_signer();
+    let provider = context.get_default_provider();
+    let signer = context.get_default_signer();
 
     let lending_parameters = lending.get_lending_parameters();
     let lending_creation_tx = provider.fetch_transaction(&lending_txid)?;
 
-    let borrower_nft_utxos =
-        signer.get_wpkh_utxos_asset(lending_parameters.borrower_nft_asset_id)?;
+    let borrower_nft_utxos = signer.get_utxos_asset(lending_parameters.borrower_nft_asset_id)?;
 
     assert!(
         borrower_nft_utxos.len() == 1,
@@ -50,7 +49,7 @@ pub(super) fn repay_lending_tx(
 
     let borrower_nft_utxo = borrower_nft_utxos.first().unwrap();
 
-    let principal_utxos = signer.get_wpkh_utxos_asset(lending_parameters.principal_asset_id)?;
+    let principal_utxos = signer.get_utxos_asset(lending_parameters.principal_asset_id)?;
 
     let mut principal_inputs: Vec<SimplexInput> = Vec::new();
     let mut total_inputs_amount = 0;
@@ -60,7 +59,7 @@ pub(super) fn repay_lending_tx(
         .calculate_principal_with_interest();
 
     for utxo in principal_utxos {
-        let input = SimplexInput::from_utxo(&utxo, RequiredSignature::NativeEcdsa);
+        let input = SimplexInput::new(&utxo, RequiredSignature::NativeEcdsa);
 
         total_inputs_amount += input.explicit_amount();
         principal_inputs.push(input);
@@ -71,22 +70,25 @@ pub(super) fn repay_lending_tx(
     }
 
     let mut ft = repay_loan(
-        (
-            OutPoint::new(lending_txid, 0),
-            lending_creation_tx.output[0].clone(),
-        ),
-        (
-            OutPoint::new(lending_txid, 2),
-            lending_creation_tx.output[2].clone(),
-        ),
-        (
-            OutPoint::new(lending_txid, 3),
-            lending_creation_tx.output[3].clone(),
-        ),
-        &SimplexInput::from_utxo(borrower_nft_utxo, RequiredSignature::NativeEcdsa),
+        UTXO {
+            outpoint: OutPoint::new(lending_txid, 0),
+            txout: lending_creation_tx.output[0].clone(),
+            secrets: None,
+        },
+        UTXO {
+            outpoint: OutPoint::new(lending_txid, 2),
+            txout: lending_creation_tx.output[2].clone(),
+            secrets: None,
+        },
+        UTXO {
+            outpoint: OutPoint::new(lending_txid, 3),
+            txout: lending_creation_tx.output[3].clone(),
+            secrets: None,
+        },
+        &SimplexInput::new(borrower_nft_utxo, RequiredSignature::NativeEcdsa),
         principal_inputs,
         PartialOutput::new(
-            signer.get_wpkh_address().unwrap().script_pubkey(),
+            signer.get_address().unwrap().script_pubkey(),
             lending_parameters.offer_parameters.collateral_amount,
             lending_parameters.collateral_asset_id,
         ),
@@ -102,7 +104,7 @@ pub(super) fn repay_lending_tx(
     let fee_utxo = signer_policy_utxos.first().unwrap();
 
     ft.add_input(
-        PartialInput::new(fee_utxo.0, fee_utxo.1.clone()),
+        PartialInput::new(fee_utxo.clone()),
         RequiredSignature::NativeEcdsa,
     )?;
 
@@ -114,13 +116,13 @@ pub(super) fn get_lending_liquidation_tx(
     lending: Lending,
     lending_txid: Txid,
 ) -> anyhow::Result<FinalTransaction> {
-    let provider = context.get_provider();
-    let signer = context.get_signer();
+    let provider = context.get_default_provider();
+    let signer = context.get_default_signer();
 
     let lending_parameters = lending.get_lending_parameters();
     let lending_creation_tx = provider.fetch_transaction(&lending_txid)?;
 
-    let lender_nft_utxos = signer.get_wpkh_utxos_asset(lending_parameters.lender_nft_asset_id)?;
+    let lender_nft_utxos = signer.get_utxos_asset(lending_parameters.lender_nft_asset_id)?;
 
     assert!(
         lender_nft_utxos.len() == 1,
@@ -130,21 +132,24 @@ pub(super) fn get_lending_liquidation_tx(
     let lender_nft_utxo = lender_nft_utxos.first().unwrap();
 
     let mut ft = liquidate_loan(
-        (
-            OutPoint::new(lending_txid, 0),
-            lending_creation_tx.output[0].clone(),
-        ),
-        (
-            OutPoint::new(lending_txid, 2),
-            lending_creation_tx.output[2].clone(),
-        ),
-        (
-            OutPoint::new(lending_txid, 3),
-            lending_creation_tx.output[3].clone(),
-        ),
-        &SimplexInput::from_utxo(lender_nft_utxo, RequiredSignature::NativeEcdsa),
+        UTXO {
+            outpoint: OutPoint::new(lending_txid, 0),
+            txout: lending_creation_tx.output[0].clone(),
+            secrets: None,
+        },
+        UTXO {
+            outpoint: OutPoint::new(lending_txid, 2),
+            txout: lending_creation_tx.output[2].clone(),
+            secrets: None,
+        },
+        UTXO {
+            outpoint: OutPoint::new(lending_txid, 3),
+            txout: lending_creation_tx.output[3].clone(),
+            secrets: None,
+        },
+        &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
         PartialOutput::new(
-            signer.get_wpkh_address().unwrap().script_pubkey(),
+            signer.get_address().unwrap().script_pubkey(),
             lending_parameters.offer_parameters.collateral_amount,
             lending_parameters.collateral_asset_id,
         ),
@@ -160,7 +165,7 @@ pub(super) fn get_lending_liquidation_tx(
     let fee_utxo = signer_policy_utxos.first().unwrap();
 
     ft.add_input(
-        PartialInput::new(fee_utxo.0, fee_utxo.1.clone()),
+        PartialInput::new(fee_utxo.clone()),
         RequiredSignature::NativeEcdsa,
     )?;
 
@@ -172,12 +177,12 @@ pub(super) fn claim_lender_principal(
     lending_parameters: &LendingParameters,
     repayment_txid: Txid,
 ) -> anyhow::Result<Txid> {
-    let provider = context.get_provider();
-    let signer = context.get_signer();
+    let provider = context.get_default_provider();
+    let signer = context.get_default_signer();
 
     let loan_repayment_tx = provider.fetch_transaction(&repayment_txid)?;
 
-    let lender_nft_utxos = signer.get_wpkh_utxos_asset(lending_parameters.lender_nft_asset_id)?;
+    let lender_nft_utxos = signer.get_utxos_asset(lending_parameters.lender_nft_asset_id)?;
 
     assert!(
         lender_nft_utxos.len() == 1,
@@ -193,13 +198,14 @@ pub(super) fn claim_lender_principal(
         .calculate_principal_with_interest();
 
     let ft = unlock_asset_auth(
-        (
-            OutPoint::new(repayment_txid, 1),
-            loan_repayment_tx.output[1].clone(),
-        ),
-        &SimplexInput::from_utxo(lender_nft_utxo, RequiredSignature::NativeEcdsa),
+        UTXO {
+            outpoint: OutPoint::new(repayment_txid, 1),
+            txout: loan_repayment_tx.output[1].clone(),
+            secrets: None,
+        },
+        &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
         PartialOutput::new(
-            signer.get_wpkh_address().unwrap().script_pubkey(),
+            signer.get_address().unwrap().script_pubkey(),
             principal_with_interest,
             lending_parameters.principal_asset_id,
         ),

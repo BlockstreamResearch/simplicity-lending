@@ -11,7 +11,7 @@ use lending_contracts::transactions::pre_lock::{
 use lending_contracts::utils::{FirstNFTParameters, LendingOfferParameters, SecondNFTParameters};
 use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
-use simplex::transaction::{PartialOutput, RequiredSignature};
+use simplex::transaction::{PartialOutput, RequiredSignature, UTXO};
 use simplex::utils::hash_script;
 
 use crate::cli::CliContext;
@@ -108,7 +108,7 @@ impl CliPreLock {
 
         let collateral_asset_id = AssetId::from_str(collateral_asset_id_hex_be)?;
         let principal_asset_id = AssetId::from_str(principal_asset_id_hex_be)?;
-        let borrower_script = context.signer.get_wpkh_address()?.script_pubkey();
+        let borrower_script = context.signer.get_address()?.script_pubkey();
 
         let pre_lock_parameters = PreLockParameters {
             collateral_asset_id,
@@ -123,11 +123,14 @@ impl CliPreLock {
             network: context.get_network(),
         };
 
-        let collateral_utxos = context.signer.get_wpkh_utxos_filter(|utxo| {
-            utxo.1.asset.explicit().unwrap() == pre_lock_parameters.collateral_asset_id
-                && utxo.1.value.explicit().unwrap_or(0)
-                    >= pre_lock_parameters.offer_parameters.collateral_amount
-        })?;
+        let collateral_utxos = context.signer.get_utxos_filter(
+            &|utxo| {
+                utxo.txout.asset.explicit().unwrap() == pre_lock_parameters.collateral_asset_id
+                    && utxo.txout.value.explicit().unwrap_or(0)
+                        >= pre_lock_parameters.offer_parameters.collateral_amount
+            },
+            &|_| true,
+        )?;
 
         if collateral_utxos.is_empty() {
             return Err(PreLockCommandError::NoCollateralUTXOsFound(
@@ -138,29 +141,37 @@ impl CliPreLock {
         let collateral_utxo = collateral_utxos.first().unwrap();
 
         let (ft, _) = create_pre_lock(
+            &SimplexInput::new(collateral_utxo, RequiredSignature::NativeEcdsa),
             &SimplexInput::new(
-                collateral_utxo.0,
-                collateral_utxo.1.clone(),
+                &UTXO {
+                    outpoint: OutPoint::new(utility_nfts_issuance_txid, 0),
+                    txout: utility_nfts_tx.output[0].clone(),
+                    secrets: None,
+                },
                 RequiredSignature::NativeEcdsa,
             ),
             &SimplexInput::new(
-                OutPoint::new(utility_nfts_issuance_txid, 0),
-                utility_nfts_tx.output[0].clone(),
+                &UTXO {
+                    outpoint: OutPoint::new(utility_nfts_issuance_txid, 1),
+                    txout: utility_nfts_tx.output[1].clone(),
+                    secrets: None,
+                },
                 RequiredSignature::NativeEcdsa,
             ),
             &SimplexInput::new(
-                OutPoint::new(utility_nfts_issuance_txid, 1),
-                utility_nfts_tx.output[1].clone(),
+                &UTXO {
+                    outpoint: OutPoint::new(utility_nfts_issuance_txid, 2),
+                    txout: utility_nfts_tx.output[2].clone(),
+                    secrets: None,
+                },
                 RequiredSignature::NativeEcdsa,
             ),
             &SimplexInput::new(
-                OutPoint::new(utility_nfts_issuance_txid, 2),
-                utility_nfts_tx.output[2].clone(),
-                RequiredSignature::NativeEcdsa,
-            ),
-            &SimplexInput::new(
-                OutPoint::new(utility_nfts_issuance_txid, 3),
-                utility_nfts_tx.output[3].clone(),
+                &UTXO {
+                    outpoint: OutPoint::new(utility_nfts_issuance_txid, 3),
+                    txout: utility_nfts_tx.output[3].clone(),
+                    secrets: None,
+                },
                 RequiredSignature::NativeEcdsa,
             ),
             pre_lock_parameters,
@@ -192,11 +203,14 @@ impl CliPreLock {
             extract_pre_lock_parameters_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
         let pre_lock = PreLock::new(pre_lock_parameters)?;
 
-        let principal_utxos = context.signer.get_wpkh_utxos_filter(|utxo| {
-            utxo.1.asset.explicit().unwrap() == pre_lock_parameters.principal_asset_id
-                && utxo.1.value.explicit().unwrap()
-                    == pre_lock_parameters.offer_parameters.principal_amount
-        })?;
+        let principal_utxos = context.signer.get_utxos_filter(
+            &|utxo| {
+                utxo.txout.asset.explicit().unwrap() == pre_lock_parameters.principal_asset_id
+                    && utxo.txout.value.explicit().unwrap()
+                        == pre_lock_parameters.offer_parameters.principal_amount
+            },
+            &|_| true,
+        )?;
 
         if principal_utxos.is_empty() {
             return Err(PreLockCommandError::NoSuitablePrincipalUTXOsFound(
@@ -205,7 +219,7 @@ impl CliPreLock {
         }
 
         let principal_utxo = principal_utxos.first().unwrap();
-        let signer_script_pubkey = context.signer.get_wpkh_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
 
         let prev_collateral_outpoint = pre_lock_creation_tx.input[0].previous_output;
         let pre_collateral_tx = context
@@ -215,29 +229,33 @@ impl CliPreLock {
             &pre_collateral_tx.output[prev_collateral_outpoint.vout as usize].script_pubkey;
 
         let (ft, _) = create_lending_from_pre_lock(
-            (
-                OutPoint::new(pre_lock_creation_txid, 0),
-                pre_lock_creation_tx.output[0].clone(),
-            ),
-            (
-                OutPoint::new(pre_lock_creation_txid, 1),
-                pre_lock_creation_tx.output[1].clone(),
-            ),
-            (
-                OutPoint::new(pre_lock_creation_txid, 2),
-                pre_lock_creation_tx.output[2].clone(),
-            ),
-            (
-                OutPoint::new(pre_lock_creation_txid, 3),
-                pre_lock_creation_tx.output[3].clone(),
-            ),
-            (
-                OutPoint::new(pre_lock_creation_txid, 4),
-                pre_lock_creation_tx.output[4].clone(),
-            ),
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 0),
+                txout: pre_lock_creation_tx.output[0].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 1),
+                txout: pre_lock_creation_tx.output[1].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 2),
+                txout: pre_lock_creation_tx.output[2].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 3),
+                txout: pre_lock_creation_tx.output[3].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 4),
+                txout: pre_lock_creation_tx.output[4].clone(),
+                secrets: None,
+            },
             vec![&SimplexInput::new(
-                principal_utxo.0,
-                principal_utxo.1.clone(),
+                principal_utxo,
                 RequiredSignature::NativeEcdsa,
             )],
             PartialOutput::new(
@@ -273,28 +291,33 @@ impl CliPreLock {
         let pre_lock = PreLock::new(pre_lock_parameters)?;
 
         let ft = cancel_pre_lock(
-            (
-                OutPoint::new(pre_lock_creation_txid, 0),
-                pre_lock_creation_tx.output[0].clone(),
-            ),
-            (
-                OutPoint::new(pre_lock_creation_txid, 1),
-                pre_lock_creation_tx.output[1].clone(),
-            ),
-            (
-                OutPoint::new(pre_lock_creation_txid, 2),
-                pre_lock_creation_tx.output[2].clone(),
-            ),
-            (
-                OutPoint::new(pre_lock_creation_txid, 3),
-                pre_lock_creation_tx.output[3].clone(),
-            ),
-            (
-                OutPoint::new(pre_lock_creation_txid, 4),
-                pre_lock_creation_tx.output[4].clone(),
-            ),
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 0),
+                txout: pre_lock_creation_tx.output[0].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 1),
+                txout: pre_lock_creation_tx.output[1].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 2),
+                txout: pre_lock_creation_tx.output[2].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 3),
+                txout: pre_lock_creation_tx.output[3].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(pre_lock_creation_txid, 4),
+                txout: pre_lock_creation_tx.output[4].clone(),
+                secrets: None,
+            },
             PartialOutput::new(
-                context.signer.get_wpkh_address()?.script_pubkey(),
+                context.signer.get_address()?.script_pubkey(),
                 pre_lock_parameters.offer_parameters.collateral_amount,
                 pre_lock_parameters.collateral_asset_id,
             ),

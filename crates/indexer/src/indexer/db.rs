@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use sqlx::PgPool;
 use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
+use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::db::DbTx;
 use crate::indexer::cache::UtxoCache;

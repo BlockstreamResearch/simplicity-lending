@@ -81,20 +81,20 @@ impl Utility {
     fn issue_asset(context: CliContext, asset_amount: u64) -> Result<(), UtilityCommandError> {
         let policy_utxos = context
             .signer
-            .get_wpkh_utxos_asset(context.get_network().policy_asset())?;
+            .get_utxos_asset(context.get_network().policy_asset())?;
         let first_utxo = policy_utxos.first().expect("No policy UTXOs found");
 
         let asset_entropy = get_random_seed();
 
-        let mut ft = FinalTransaction::new(context.get_network());
+        let mut ft = FinalTransaction::new();
 
         let asset_id = ft.add_issuance_input(
-            PartialInput::new(first_utxo.0, first_utxo.1.clone()),
+            PartialInput::new(first_utxo.clone()),
             IssuanceInput::new(asset_amount, asset_entropy),
             RequiredSignature::NativeEcdsa,
         )?;
 
-        let signer_script_pubkey = context.signer.get_wpkh_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
 
         ft.add_output(PartialOutput::new(
             signer_script_pubkey.clone(),
@@ -118,21 +118,17 @@ impl Utility {
     }
 
     fn issue_preparation_utxos_tx(context: CliContext) -> Result<(), UtilityCommandError> {
-        let signer_script_pubkey = context.signer.get_wpkh_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
 
         let policy_utxos = context
             .signer
-            .get_wpkh_utxos_asset(context.esplora_provider.network.policy_asset())?;
+            .get_utxos_asset(context.esplora_provider.network.policy_asset())?;
         let issuance_utxo = policy_utxos
             .first()
             .expect("Must be at least one policy asset UTXO to issue preparation utxos");
 
         let (ft, asset_id) = issue_preparation_utxos(
-            &SimplexInput::new(
-                issuance_utxo.0,
-                issuance_utxo.1.clone(),
-                RequiredSignature::NativeEcdsa,
-            ),
+            &SimplexInput::new(issuance_utxo, RequiredSignature::NativeEcdsa),
             signer_script_pubkey,
             context.get_network(),
         )?;
@@ -156,11 +152,9 @@ impl Utility {
         preparation_utxos_asset_id: AssetId,
         offer_parameters: LendingOfferParameters,
     ) -> Result<(), UtilityCommandError> {
-        let signer_script_pubkey = context.signer.get_wpkh_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
 
-        let issuance_utxos = context
-            .signer
-            .get_wpkh_utxos_asset(preparation_utxos_asset_id)?;
+        let issuance_utxos = context.signer.get_utxos_asset(preparation_utxos_asset_id)?;
 
         if issuance_utxos.len() != UTILITY_NFTS_COUNT {
             return Err(UtilityCommandError::InvalidPreparationUTXOsCount {
@@ -171,7 +165,7 @@ impl Utility {
 
         let issuance_inputs = issuance_utxos
             .iter()
-            .map(|utxo| SimplexInput::new(utxo.0, utxo.1.clone(), RequiredSignature::NativeEcdsa))
+            .map(|utxo| SimplexInput::new(utxo, RequiredSignature::NativeEcdsa))
             .collect();
 
         let issuance_asset_entropy = get_random_seed();
@@ -181,7 +175,6 @@ impl Utility {
             &offer_parameters,
             1,
             issuance_asset_entropy,
-            context.get_network(),
         )?;
 
         println!(

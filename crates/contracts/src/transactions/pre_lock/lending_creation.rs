@@ -1,5 +1,5 @@
-use simplex::simplicityhl::elements::{OutPoint, Script, TxOut};
-use simplex::transaction::{FinalTransaction, PartialOutput};
+use simplex::simplicityhl::elements::Script;
+use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
 
 use crate::transactions::core::SimplexInput;
 use crate::{
@@ -9,21 +9,21 @@ use crate::{
 
 #[allow(clippy::too_many_arguments)]
 pub fn create_lending_from_pre_lock(
-    pre_lock_utxo: (OutPoint, TxOut),
-    first_parameters_nft_utxo: (OutPoint, TxOut),
-    second_parameters_nft_utxo: (OutPoint, TxOut),
-    borrower_nft_utxo: (OutPoint, TxOut),
-    lender_nft_utxo: (OutPoint, TxOut),
+    pre_lock_utxo: UTXO,
+    first_parameters_nft_utxo: UTXO,
+    second_parameters_nft_utxo: UTXO,
+    borrower_nft_utxo: UTXO,
+    lender_nft_utxo: UTXO,
     principal_inputs: Vec<&SimplexInput>,
     lender_nft_output: PartialOutput,
     borrower_output_script: Script,
     pre_lock: PreLock,
 ) -> Result<(FinalTransaction, Lending), PreLockTransactionError> {
     let pre_lock_parameters = pre_lock.get_pre_lock_parameters();
-    let mut ft = FinalTransaction::new(pre_lock_parameters.network);
+    let mut ft = FinalTransaction::new();
 
-    let first_parameters_nft_amount = first_parameters_nft_utxo.1.value.explicit().unwrap();
-    let second_parameters_nft_amount = second_parameters_nft_utxo.1.value.explicit().unwrap();
+    let first_parameters_nft_amount = first_parameters_nft_utxo.txout.value.explicit().unwrap();
+    let second_parameters_nft_amount = second_parameters_nft_utxo.txout.value.explicit().unwrap();
 
     let pre_lock_witness = PreLock::get_pre_lock_witness(&PreLockBranch::LendingCreation);
     pre_lock.add_program_input(&mut ft, pre_lock_utxo, Box::new(pre_lock_witness))?;

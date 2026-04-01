@@ -16,7 +16,7 @@ pub fn create_pre_lock(
     lender_nft_input: &SimplexInput,
     parameters: PreLockParameters,
 ) -> Result<(FinalTransaction, PreLock), PreLockTransactionError> {
-    let mut ft = FinalTransaction::new(parameters.network);
+    let mut ft = FinalTransaction::new();
 
     ft.add_input(
         collateral_input.partial_input().clone(),

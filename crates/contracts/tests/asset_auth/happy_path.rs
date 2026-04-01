@@ -16,17 +16,13 @@ pub(super) fn create_asset_auth_tx(
     parameters: AssetAuthParameters,
 ) -> anyhow::Result<(Txid, AssetAuth)> {
     let network = context.get_network();
-    let signer = context.get_signer();
+    let signer = context.get_default_signer();
 
     let policy_utxos = filter_signer_utxos_by_asset_id(signer, network.policy_asset());
     let utxo_to_lock = policy_utxos.first().unwrap();
 
     let (ft, asset_auth) = create_asset_auth(
-        &SimplexInput::new(
-            utxo_to_lock.0,
-            utxo_to_lock.1.clone(),
-            RequiredSignature::NativeEcdsa,
-        ),
+        &SimplexInput::new(utxo_to_lock, RequiredSignature::NativeEcdsa),
         parameters,
     )?;
 
@@ -39,8 +35,8 @@ pub(super) fn unlock_asset_auth_tx(
     context: &simplex::TestContext,
     asset_auth: AssetAuth,
 ) -> anyhow::Result<Txid> {
-    let provider = context.get_provider();
-    let signer = context.get_signer();
+    let provider = context.get_default_provider();
+    let signer = context.get_default_signer();
 
     let found_asset_auth_utxos =
         provider.fetch_scripthash_utxos(&asset_auth.get_script_pubkey()?)?;
@@ -50,18 +46,14 @@ pub(super) fn unlock_asset_auth_tx(
     let auth_utxos = filter_signer_utxos_by_asset_id(signer, asset_auth_parameters.asset_id);
     let auth_utxo = auth_utxos.first().unwrap();
 
-    let signer_script_pubkey = signer.get_wpkh_address().unwrap().script_pubkey();
+    let signer_script_pubkey = signer.get_address().unwrap().script_pubkey();
     let ft = unlock_asset_auth(
-        (asset_auth_utxo.0, asset_auth_utxo.1.clone()),
-        &SimplexInput::new(
-            auth_utxo.0,
-            auth_utxo.1.clone(),
-            RequiredSignature::NativeEcdsa,
-        ),
+        asset_auth_utxo.clone(),
+        &SimplexInput::new(auth_utxo, RequiredSignature::NativeEcdsa),
         PartialOutput::new(
             signer_script_pubkey,
-            asset_auth_utxo.1.value.explicit().unwrap(),
-            asset_auth_utxo.1.asset.explicit().unwrap(),
+            asset_auth_utxo.txout.value.explicit().unwrap(),
+            asset_auth_utxo.txout.asset.explicit().unwrap(),
         ),
         asset_auth,
     )?;
@@ -73,7 +65,7 @@ pub(super) fn unlock_asset_auth_tx(
 fn creates_and_unlocks_asset_auth_without_burn(
     context: simplex::TestContext,
 ) -> anyhow::Result<()> {
-    let provider = context.get_provider();
+    let provider = context.get_default_provider();
 
     let txid = split_first_signer_utxo(&context, vec![1000]);
     provider.wait(&txid)?;

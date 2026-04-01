@@ -20,7 +20,7 @@ pub fn create_script_auth_with_amount(
     parameters: ScriptAuthParameters,
 ) -> Result<(FinalTransaction, ScriptAuth), ScriptAuthTransactionError> {
     let script_auth = ScriptAuth::new(parameters);
-    let mut ft = FinalTransaction::new(parameters.network);
+    let mut ft = FinalTransaction::new();
 
     ft.add_input(
         input_to_lock.partial_input().clone(),

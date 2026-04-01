@@ -1,5 +1,4 @@
-use simplex::simplicityhl::elements::{OutPoint, TxOut};
-use simplex::transaction::{FinalTransaction, PartialOutput};
+use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
 
 use crate::{
     programs::{ScriptAuth, program::SimplexProgram},
@@ -7,13 +6,12 @@ use crate::{
 };
 
 pub fn unlock_script_auth(
-    program_utxo: (OutPoint, TxOut),
+    program_utxo: UTXO,
     auth_input: &SimplexInput,
     unlocked_output: PartialOutput,
     script_auth: ScriptAuth,
 ) -> Result<FinalTransaction, ScriptAuthTransactionError> {
-    let parameters = script_auth.get_script_auth_parameters();
-    let mut ft = FinalTransaction::new(parameters.network);
+    let mut ft = FinalTransaction::new();
 
     let witness = ScriptAuth::get_script_auth_witness(1);
 

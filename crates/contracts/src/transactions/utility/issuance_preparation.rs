@@ -17,7 +17,7 @@ pub fn issue_preparation_utxos(
     issuance_utxos_output_script: Script,
     network: SimplicityNetwork,
 ) -> Result<(FinalTransaction, AssetId), UtilityTransactionError> {
-    let mut ft = FinalTransaction::new(network);
+    let mut ft = FinalTransaction::new();
 
     let total_asset_amount = PREPARATION_UTXO_ASSET_AMOUNT * UTILITY_NFTS_COUNT as u64;
     let asset_entropy = get_random_seed();

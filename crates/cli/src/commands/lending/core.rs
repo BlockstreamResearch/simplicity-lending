@@ -8,7 +8,7 @@ use lending_contracts::transactions::lending::{
 };
 use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::{OutPoint, Txid};
-use simplex::transaction::{PartialOutput, RequiredSignature};
+use simplex::transaction::{PartialOutput, RequiredSignature, UTXO};
 
 use crate::cli::CliContext;
 use crate::commands::lending::LendingCommandError;
@@ -71,7 +71,7 @@ impl CliLending {
 
         let borrower_nft_utxos = context
             .signer
-            .get_wpkh_utxos_asset(lending_parameters.borrower_nft_asset_id)?;
+            .get_utxos_asset(lending_parameters.borrower_nft_asset_id)?;
 
         if borrower_nft_utxos.len() != 1 {
             return Err(LendingCommandError::NotABorrower(lending_creation_txid));
@@ -81,7 +81,7 @@ impl CliLending {
 
         let principal_utxos = context
             .signer
-            .get_wpkh_utxos_asset(lending_parameters.principal_asset_id)?;
+            .get_utxos_asset(lending_parameters.principal_asset_id)?;
 
         let mut principal_inputs: Vec<SimplexInput> = Vec::new();
         let mut total_inputs_amount = 0;
@@ -91,7 +91,7 @@ impl CliLending {
             .calculate_principal_with_interest();
 
         for utxo in principal_utxos {
-            let input = SimplexInput::from_utxo(&utxo, RequiredSignature::NativeEcdsa);
+            let input = SimplexInput::new(&utxo, RequiredSignature::NativeEcdsa);
 
             total_inputs_amount += input.explicit_amount();
             principal_inputs.push(input);
@@ -109,22 +109,25 @@ impl CliLending {
         }
 
         let ft = repay_loan(
-            (
-                OutPoint::new(lending_creation_txid, 0),
-                lending_creation_tx.output[0].clone(),
-            ),
-            (
-                OutPoint::new(lending_creation_txid, 2),
-                lending_creation_tx.output[2].clone(),
-            ),
-            (
-                OutPoint::new(lending_creation_txid, 3),
-                lending_creation_tx.output[3].clone(),
-            ),
-            &SimplexInput::from_utxo(borrower_nft_utxo, RequiredSignature::NativeEcdsa),
+            UTXO {
+                outpoint: OutPoint::new(lending_creation_txid, 0),
+                txout: lending_creation_tx.output[0].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(lending_creation_txid, 2),
+                txout: lending_creation_tx.output[2].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(lending_creation_txid, 3),
+                txout: lending_creation_tx.output[3].clone(),
+                secrets: None,
+            },
+            &SimplexInput::new(borrower_nft_utxo, RequiredSignature::NativeEcdsa),
             principal_inputs,
             PartialOutput::new(
-                context.signer.get_wpkh_address()?.script_pubkey(),
+                context.signer.get_address()?.script_pubkey(),
                 lending_parameters.offer_parameters.collateral_amount,
                 lending_parameters.collateral_asset_id,
             ),
@@ -156,7 +159,7 @@ impl CliLending {
 
         let lender_nft_utxos = context
             .signer
-            .get_wpkh_utxos_asset(lending_parameters.lender_nft_asset_id)?;
+            .get_utxos_asset(lending_parameters.lender_nft_asset_id)?;
 
         if lender_nft_utxos.len() != 1 {
             return Err(LendingCommandError::NotALender(lending_creation_txid));
@@ -174,21 +177,24 @@ impl CliLending {
         }
 
         let ft = liquidate_loan(
-            (
-                OutPoint::new(lending_creation_txid, 0),
-                lending_creation_tx.output[0].clone(),
-            ),
-            (
-                OutPoint::new(lending_creation_txid, 2),
-                lending_creation_tx.output[2].clone(),
-            ),
-            (
-                OutPoint::new(lending_creation_txid, 3),
-                lending_creation_tx.output[3].clone(),
-            ),
-            &SimplexInput::from_utxo(lender_nft_utxo, RequiredSignature::NativeEcdsa),
+            UTXO {
+                outpoint: OutPoint::new(lending_creation_txid, 0),
+                txout: lending_creation_tx.output[0].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(lending_creation_txid, 2),
+                txout: lending_creation_tx.output[2].clone(),
+                secrets: None,
+            },
+            UTXO {
+                outpoint: OutPoint::new(lending_creation_txid, 3),
+                txout: lending_creation_tx.output[3].clone(),
+                secrets: None,
+            },
+            &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
             PartialOutput::new(
-                context.signer.get_wpkh_address().unwrap().script_pubkey(),
+                context.signer.get_address().unwrap().script_pubkey(),
                 lending_parameters.offer_parameters.collateral_amount,
                 lending_parameters.collateral_asset_id,
             ),
@@ -220,7 +226,7 @@ impl CliLending {
 
         let lender_nft_utxos = context
             .signer
-            .get_wpkh_utxos_asset(lending_parameters.lender_nft_asset_id)?;
+            .get_utxos_asset(lending_parameters.lender_nft_asset_id)?;
 
         if lender_nft_utxos.len() != 1 {
             return Err(LendingCommandError::NotALender(lending_creation_txid));
@@ -238,13 +244,14 @@ impl CliLending {
             .fetch_transaction(&lending_repayment_txid)?;
 
         let ft = unlock_asset_auth(
-            (
-                OutPoint::new(lending_repayment_txid, 1),
-                lending_repayment_tx.output[1].clone(),
-            ),
-            &SimplexInput::from_utxo(lender_nft_utxo, RequiredSignature::NativeEcdsa),
+            UTXO {
+                outpoint: OutPoint::new(lending_repayment_txid, 1),
+                txout: lending_repayment_tx.output[1].clone(),
+                secrets: None,
+            },
+            &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
             PartialOutput::new(
-                context.signer.get_wpkh_address()?.script_pubkey(),
+                context.signer.get_address()?.script_pubkey(),
                 principal_with_interest,
                 lending_parameters.principal_asset_id,
             ),

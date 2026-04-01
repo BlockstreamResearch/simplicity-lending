@@ -1,5 +1,5 @@
-use simplex::simplicityhl::elements::{AssetId, OutPoint, Script, TxOut};
-use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
+use simplex::simplicityhl::elements::{AssetId, Script};
+use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature, UTXO};
 
 pub struct SimplexInput {
     partial_input: PartialInput,
@@ -7,15 +7,11 @@ pub struct SimplexInput {
 }
 
 impl SimplexInput {
-    pub fn new(outpoint: OutPoint, txout: TxOut, required_sig: RequiredSignature) -> Self {
+    pub fn new(utxo: &UTXO, required_sig: RequiredSignature) -> Self {
         Self {
-            partial_input: PartialInput::new(outpoint, txout),
+            partial_input: PartialInput::new(utxo.clone()),
             required_sig,
         }
-    }
-
-    pub fn from_utxo(utxo: &(OutPoint, TxOut), required_sig: RequiredSignature) -> Self {
-        SimplexInput::new(utxo.0, utxo.1.clone(), required_sig)
     }
 
     pub fn explicit_asset(&self) -> AssetId {

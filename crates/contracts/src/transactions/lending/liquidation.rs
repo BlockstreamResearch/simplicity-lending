@@ -1,6 +1,6 @@
 use simplex::{
-    simplicityhl::elements::{LockTime, OutPoint, Script, Sequence, TxOut},
-    transaction::{FinalTransaction, PartialOutput},
+    simplicityhl::elements::{LockTime, Script, Sequence},
+    transaction::{FinalTransaction, PartialInput, PartialOutput, UTXO},
 };
 
 use crate::{
@@ -9,18 +9,18 @@ use crate::{
 };
 
 pub fn liquidate_loan(
-    lending_utxo: (OutPoint, TxOut),
-    first_parameters_nft_utxo: (OutPoint, TxOut),
-    second_parameters_nft_utxo: (OutPoint, TxOut),
+    lending_utxo: UTXO,
+    first_parameters_nft_utxo: UTXO,
+    second_parameters_nft_utxo: UTXO,
     lender_nft_input: &SimplexInput,
     collateral_output: PartialOutput,
     lending: Lending,
 ) -> Result<FinalTransaction, LendingTransactionError> {
     let lending_parameters = lending.get_lending_parameters();
-    let mut ft = FinalTransaction::new(lending_parameters.network);
+    let mut ft = FinalTransaction::new();
 
-    let first_parameters_nft_amount = first_parameters_nft_utxo.1.value.explicit().unwrap();
-    let second_parameters_nft_amount = second_parameters_nft_utxo.1.value.explicit().unwrap();
+    let first_parameters_nft_amount = first_parameters_nft_utxo.txout.value.explicit().unwrap();
+    let second_parameters_nft_amount = second_parameters_nft_utxo.txout.value.explicit().unwrap();
 
     let witness = Lending::get_lending_witness(&LendingBranch::LoanLiquidation);
 
@@ -31,14 +31,11 @@ pub fn liquidate_loan(
             )
         })?;
 
-    ft.set_fallback_locktime(Some(locktime));
+    let lending_input = PartialInput::new(lending_utxo)
+        .with_sequence(Sequence::ENABLE_LOCKTIME_NO_RBF)
+        .with_locktime(locktime);
 
-    lending.add_program_input_with_sequence(
-        &mut ft,
-        lending_utxo,
-        Box::new(witness),
-        Sequence::ENABLE_LOCKTIME_NO_RBF,
-    )?;
+    lending.add_program_input_from_partial_input(&mut ft, lending_input, Box::new(witness))?;
 
     let parameters_script_auth = ScriptAuth::from_simplex_program(&lending)?;
     let parameters_witness = ScriptAuth::get_script_auth_witness(0);

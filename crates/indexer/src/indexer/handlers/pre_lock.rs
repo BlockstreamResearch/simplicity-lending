@@ -3,8 +3,8 @@ use simplex::simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
 use lending_contracts::programs::{PreLock, PreLockParameters, program::SimplexProgram};
 use lending_contracts::transactions::pre_lock::extract_pre_lock_parameters_from_tx;
 
-use crate::indexer::{cache::UtxoCache, db};
 use crate::esplora_client::EsploraClient;
+use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferModel, OfferUtxoModel, UtxoType};
 use crate::{
     db::DbTx,

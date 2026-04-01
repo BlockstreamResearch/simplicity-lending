@@ -7,7 +7,7 @@ use lending_contracts::{
     },
     utils::LendingOfferParameters,
 };
-use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature, UTXO};
 use simplex::{
     simplicityhl::elements::{AssetId, OutPoint, Txid},
     utils::hash_script,
@@ -39,9 +39,9 @@ pub fn create_pre_lock_tx(
     principal_asset_id: AssetId,
     utility_nfts_issuance_txid: Txid,
 ) -> anyhow::Result<(Txid, PreLock)> {
-    let provider = context.get_provider();
+    let provider = context.get_default_provider();
     let network = context.get_network();
-    let signer = context.get_signer();
+    let signer = context.get_default_signer();
 
     let utility_nfts_tx = provider.fetch_transaction(&utility_nfts_issuance_txid)?;
     let signer_schnorr_pubkey = signer.get_schnorr_public_key()?;
@@ -59,9 +59,7 @@ pub fn create_pre_lock_tx(
         lender_nft_asset_id,
         offer_parameters: *offer_parameters,
         borrower_pubkey: signer_schnorr_pubkey,
-        borrower_output_script_hash: hash_script(
-            &signer.get_wpkh_address().unwrap().script_pubkey(),
-        ),
+        borrower_output_script_hash: hash_script(&signer.get_address().unwrap().script_pubkey()),
         network: *network,
     };
 
@@ -81,29 +79,37 @@ pub fn create_pre_lock_tx(
     let collateral_utxo = collateral_utxos.first().unwrap();
 
     let (ft, pre_lock) = create_pre_lock(
+        &SimplexInput::new(collateral_utxo, RequiredSignature::NativeEcdsa),
         &SimplexInput::new(
-            collateral_utxo.0,
-            collateral_utxo.1.clone(),
+            &UTXO {
+                outpoint: OutPoint::new(utility_nfts_issuance_txid, 0),
+                txout: utility_nfts_tx.output[0].clone(),
+                secrets: None,
+            },
             RequiredSignature::NativeEcdsa,
         ),
         &SimplexInput::new(
-            OutPoint::new(utility_nfts_issuance_txid, 0),
-            utility_nfts_tx.output[0].clone(),
+            &UTXO {
+                outpoint: OutPoint::new(utility_nfts_issuance_txid, 1),
+                txout: utility_nfts_tx.output[1].clone(),
+                secrets: None,
+            },
             RequiredSignature::NativeEcdsa,
         ),
         &SimplexInput::new(
-            OutPoint::new(utility_nfts_issuance_txid, 1),
-            utility_nfts_tx.output[1].clone(),
+            &UTXO {
+                outpoint: OutPoint::new(utility_nfts_issuance_txid, 2),
+                txout: utility_nfts_tx.output[2].clone(),
+                secrets: None,
+            },
             RequiredSignature::NativeEcdsa,
         ),
         &SimplexInput::new(
-            OutPoint::new(utility_nfts_issuance_txid, 2),
-            utility_nfts_tx.output[2].clone(),
-            RequiredSignature::NativeEcdsa,
-        ),
-        &SimplexInput::new(
-            OutPoint::new(utility_nfts_issuance_txid, 3),
-            utility_nfts_tx.output[3].clone(),
+            &UTXO {
+                outpoint: OutPoint::new(utility_nfts_issuance_txid, 3),
+                txout: utility_nfts_tx.output[3].clone(),
+                secrets: None,
+            },
             RequiredSignature::NativeEcdsa,
         ),
         pre_lock_parameters,
@@ -118,16 +124,16 @@ pub fn create_lending_from_pre_lock_tx(
     pre_lock: PreLock,
     pre_lock_txid: Txid,
 ) -> anyhow::Result<(Txid, Lending)> {
-    let provider = context.get_provider();
+    let provider = context.get_default_provider();
     let network = context.get_network();
-    let signer = context.get_signer();
+    let signer = context.get_default_signer();
 
     let pre_lock_parameters = pre_lock.get_pre_lock_parameters();
     let principal_utxos =
         filter_signer_utxos_by_asset_id(signer, pre_lock_parameters.principal_asset_id);
     let utxo_to_split = principal_utxos.first().unwrap();
     let ft = get_split_utxo_ft(
-        (utxo_to_split.0, utxo_to_split.1.clone()),
+        utxo_to_split.clone(),
         vec![pre_lock_parameters.offer_parameters.principal_amount],
         signer,
         *network,
@@ -146,37 +152,41 @@ pub fn create_lending_from_pre_lock_tx(
 
     let pre_lock_creation_tx = provider.fetch_transaction(&pre_lock_txid)?;
     let (mut ft, lending) = create_lending_from_pre_lock(
-        (
-            OutPoint::new(pre_lock_txid, 0),
-            pre_lock_creation_tx.output[0].clone(),
-        ),
-        (
-            OutPoint::new(pre_lock_txid, 1),
-            pre_lock_creation_tx.output[1].clone(),
-        ),
-        (
-            OutPoint::new(pre_lock_txid, 2),
-            pre_lock_creation_tx.output[2].clone(),
-        ),
-        (
-            OutPoint::new(pre_lock_txid, 3),
-            pre_lock_creation_tx.output[3].clone(),
-        ),
-        (
-            OutPoint::new(pre_lock_txid, 4),
-            pre_lock_creation_tx.output[4].clone(),
-        ),
+        UTXO {
+            outpoint: OutPoint::new(pre_lock_txid, 0),
+            txout: pre_lock_creation_tx.output[0].clone(),
+            secrets: None,
+        },
+        UTXO {
+            outpoint: OutPoint::new(pre_lock_txid, 1),
+            txout: pre_lock_creation_tx.output[1].clone(),
+            secrets: None,
+        },
+        UTXO {
+            outpoint: OutPoint::new(pre_lock_txid, 2),
+            txout: pre_lock_creation_tx.output[2].clone(),
+            secrets: None,
+        },
+        UTXO {
+            outpoint: OutPoint::new(pre_lock_txid, 3),
+            txout: pre_lock_creation_tx.output[3].clone(),
+            secrets: None,
+        },
+        UTXO {
+            outpoint: OutPoint::new(pre_lock_txid, 4),
+            txout: pre_lock_creation_tx.output[4].clone(),
+            secrets: None,
+        },
         vec![&SimplexInput::new(
-            principal_utxo.0,
-            principal_utxo.1.clone(),
+            principal_utxo,
             RequiredSignature::NativeEcdsa,
         )],
         PartialOutput::new(
-            signer.get_wpkh_address().unwrap().script_pubkey(),
+            signer.get_address().unwrap().script_pubkey(),
             1,
             pre_lock_parameters.lender_nft_asset_id,
         ),
-        signer.get_wpkh_address().unwrap().script_pubkey(),
+        signer.get_address().unwrap().script_pubkey(),
         pre_lock,
     )?;
 
@@ -189,7 +199,7 @@ pub fn create_lending_from_pre_lock_tx(
     let fee_utxo = signer_policy_utxos.first().unwrap();
 
     ft.add_input(
-        PartialInput::new(fee_utxo.0, fee_utxo.1.clone()),
+        PartialInput::new(fee_utxo.clone()),
         RequiredSignature::NativeEcdsa,
     )?;
 
@@ -211,7 +221,7 @@ pub fn setup_pre_lock_fixture(context: &simplex::TestContext) -> anyhow::Result<
     let (txid, principal_asset_id) = issue_asset(context, 20000)?;
     wait_for_tx(context, &txid)?;
 
-    let current_height = context.get_provider().fetch_tip_height()?;
+    let current_height = context.get_default_provider().fetch_tip_height()?;
 
     let offer_parameters = LendingOfferParameters {
         collateral_amount: 1000,

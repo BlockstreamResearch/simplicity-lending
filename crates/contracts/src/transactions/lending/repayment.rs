@@ -1,5 +1,5 @@
-use simplex::simplicityhl::elements::{OutPoint, Script, TxOut};
-use simplex::transaction::{FinalTransaction, PartialOutput};
+use simplex::simplicityhl::elements::Script;
+use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
 
 use crate::transactions::core::SimplexInput;
 use crate::{
@@ -8,19 +8,19 @@ use crate::{
 };
 
 pub fn repay_loan(
-    lending_utxo: (OutPoint, TxOut),
-    first_parameters_nft_utxo: (OutPoint, TxOut),
-    second_parameters_nft_utxo: (OutPoint, TxOut),
+    lending_utxo: UTXO,
+    first_parameters_nft_utxo: UTXO,
+    second_parameters_nft_utxo: UTXO,
     borrower_nft_input: &SimplexInput,
     principal_inputs: Vec<SimplexInput>,
     collateral_output: PartialOutput,
     lending: Lending,
 ) -> Result<FinalTransaction, LendingTransactionError> {
     let lending_parameters = lending.get_lending_parameters();
-    let mut ft = FinalTransaction::new(lending_parameters.network);
+    let mut ft = FinalTransaction::new();
 
-    let first_parameters_nft_amount = first_parameters_nft_utxo.1.value.explicit().unwrap();
-    let second_parameters_nft_amount = second_parameters_nft_utxo.1.value.explicit().unwrap();
+    let first_parameters_nft_amount = first_parameters_nft_utxo.txout.value.explicit().unwrap();
+    let second_parameters_nft_amount = second_parameters_nft_utxo.txout.value.explicit().unwrap();
 
     let witness = Lending::get_lending_witness(&LendingBranch::LoanRepayment);
 

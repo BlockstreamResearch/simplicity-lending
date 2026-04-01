@@ -71,9 +71,7 @@ impl Account {
     ) -> Result<(), AccountCommandError> {
         println!("Sending {amount} policy asset to the {}", to_address);
 
-        let (tx, _) = context.signer.send(to_address.script_pubkey(), amount)?;
-
-        let txid = context.esplora_provider.broadcast_transaction(&tx)?;
+        let txid = context.signer.send(to_address.script_pubkey(), amount)?;
 
         println!(
             "Successfully sent {amount} policy asset to the {}",
@@ -92,13 +90,13 @@ impl Account {
     ) -> Result<(), AccountCommandError> {
         let asset_id = AssetId::from_str(asset_id_hex_be)?;
 
-        let asset_utxos = context.signer.get_wpkh_utxos_asset(asset_id)?;
+        let asset_utxos = context.signer.get_utxos_asset(asset_id)?;
 
         let mut inputs = Vec::new();
         let mut total_inputs_amount = 0;
 
         for utxo in asset_utxos {
-            let input = SimplexInput::from_utxo(&utxo, RequiredSignature::NativeEcdsa);
+            let input = SimplexInput::new(&utxo, RequiredSignature::NativeEcdsa);
 
             total_inputs_amount += input.explicit_amount();
             inputs.push(input);
@@ -116,7 +114,7 @@ impl Account {
             });
         }
 
-        let mut ft = FinalTransaction::new(context.get_network());
+        let mut ft = FinalTransaction::new();
 
         for input in inputs {
             ft.add_input(input.partial_input().clone(), input.required_sig().clone())?;
@@ -130,7 +128,7 @@ impl Account {
 
         if total_inputs_amount > amount {
             ft.add_output(PartialOutput::new(
-                context.signer.get_wpkh_address()?.script_pubkey(),
+                context.signer.get_address()?.script_pubkey(),
                 total_inputs_amount - amount,
                 asset_id,
             ));
@@ -158,7 +156,7 @@ impl Account {
     ) -> Result<(), AccountCommandError> {
         let found_utxos = context
             .signer
-            .get_wpkh_utxos_filter(|utxo| utxo.0 == outpoint)?;
+            .get_utxos_filter(&|utxo| utxo.outpoint == outpoint, &|_| true)?;
 
         if found_utxos.is_empty() {
             return Err(AccountCommandError::NotASignerUTXO(outpoint));
@@ -166,17 +164,17 @@ impl Account {
 
         let utxo_to_split = found_utxos.first().unwrap();
 
-        let utxo_asset_id = utxo_to_split.1.asset.explicit().unwrap();
-        let utxo_amount = utxo_to_split.1.value.explicit().unwrap();
+        let utxo_asset_id = utxo_to_split.txout.asset.explicit().unwrap();
+        let utxo_amount = utxo_to_split.txout.value.explicit().unwrap();
 
-        let mut ft = FinalTransaction::new(context.get_network());
+        let mut ft = FinalTransaction::new();
 
         ft.add_input(
-            PartialInput::new(utxo_to_split.0, utxo_to_split.1.clone()),
+            PartialInput::new(utxo_to_split.clone()),
             RequiredSignature::NativeEcdsa,
         )?;
 
-        let signer_script_pubkey = context.signer.get_wpkh_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
         let mut total_amount = 0;
 
         for amount in amounts {
@@ -215,7 +213,7 @@ impl Account {
     }
 
     fn show_account_info(context: CliContext) -> Result<(), AccountCommandError> {
-        let signer_wpkh_address = context.signer.get_wpkh_address()?;
+        let signer_wpkh_address = context.signer.get_address()?;
         let signer_schnorr_pubkey = context.signer.get_schnorr_public_key()?;
 
         println!("User WPKH address: {:?}", signer_wpkh_address);
@@ -232,16 +230,16 @@ impl Account {
     }
 
     fn show_account_utxos(context: CliContext) -> Result<(), AccountCommandError> {
-        let account_utxos = context.signer.get_wpkh_utxos()?;
+        let account_utxos = context.signer.get_utxos()?;
 
         println!("Account has {} WPKH UTXOs:", account_utxos.len());
 
         for (index, utxo) in account_utxos.into_iter().enumerate() {
-            let asset_id_str = match utxo.1.asset.explicit() {
+            let asset_id_str = match utxo.txout.asset.explicit() {
                 Some(asset_id) => asset_id.to_hex(),
                 None => "Confidential asset".into(),
             };
-            let asset_amount_str = match utxo.1.value.explicit() {
+            let asset_amount_str = match utxo.txout.value.explicit() {
                 Some(asset_amount) => asset_amount.to_string(),
                 None => "Confidential amount".into(),
             };
@@ -249,7 +247,7 @@ impl Account {
             println!(
                 "{}. Outpoint - {}, asset_id - {}, amount - {},",
                 index + 1,
-                utxo.0,
+                utxo.outpoint,
                 asset_id_str,
                 asset_amount_str,
             );

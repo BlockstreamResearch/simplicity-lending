@@ -1,5 +1,4 @@
-use simplex::simplicityhl::elements::{OutPoint, TxOut};
-use simplex::transaction::{FinalTransaction, PartialOutput};
+use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
 
 use crate::{
     programs::{AssetAuth, AssetAuthWitnessParams, program::SimplexProgram},
@@ -7,14 +6,14 @@ use crate::{
 };
 
 pub fn unlock_asset_auth(
-    program_utxo: (OutPoint, TxOut),
+    program_utxo: UTXO,
     auth_input: &SimplexInput,
     unlocked_output: PartialOutput,
     asset_auth: AssetAuth,
 ) -> Result<FinalTransaction, AssetAuthTransactionError> {
     let parameters = asset_auth.get_asset_auth_parameters();
 
-    let mut ft = FinalTransaction::new(parameters.network);
+    let mut ft = FinalTransaction::new();
 
     let witness_params = AssetAuthWitnessParams {
         input_asset_index: 1,

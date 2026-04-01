@@ -14,7 +14,7 @@ multiple_crate_versions = "allow"
 [workspace.dependencies]
 ring = "0.17.14"
 hex = "0.4.3"
-smplx-std = "0.0.2"
+smplx-std = { git = "https://github.com/BlockstreamResearch/smplx.git", rev = "6cad4d4325d8f8644d1ec1726dc21dbac2d78cff" }
 sha2 = { version = "0.10.9", features = ["compress"] }
 serde = { version = "1.0.228", features = ["derive"]}
 thiserror = { version = "2.0.18" }

@@ -1,22 +1,20 @@
 use simplex::program::{Program, WitnessTrait};
 use simplex::provider::SimplicityNetwork;
 use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature,
+    FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature, UTXO,
 };
 
-use simplex::simplicityhl::elements::{AssetId, OutPoint, Script, Sequence, TxOut};
+use simplex::simplicityhl::elements::{AssetId, Script};
 
 pub trait SimplexProgram {
     fn add_program_input<'a>(
         &self,
         ft: &'a mut FinalTransaction,
-        program_utxo: (OutPoint, TxOut),
+        program_utxo: UTXO,
         witness: Box<dyn WitnessTrait>,
     ) -> Result<&'a mut FinalTransaction, SimplexProgramError> {
-        let (program_outpoint, program_tx_out) = program_utxo;
-
         ft.add_program_input(
-            PartialInput::new(program_outpoint, program_tx_out),
+            PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
             RequiredSignature::None,
         )?;
@@ -24,17 +22,14 @@ pub trait SimplexProgram {
         Ok(ft)
     }
 
-    fn add_program_input_with_sequence<'a>(
+    fn add_program_input_from_partial_input<'a>(
         &self,
         ft: &'a mut FinalTransaction,
-        program_utxo: (OutPoint, TxOut),
+        partial_input: PartialInput,
         witness: Box<dyn WitnessTrait>,
-        sequence: Sequence,
     ) -> Result<&'a mut FinalTransaction, SimplexProgramError> {
-        let (program_outpoint, program_tx_out) = program_utxo;
-
         ft.add_program_input(
-            PartialInput::new_sequence(program_outpoint, program_tx_out, sequence),
+            partial_input,
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
             RequiredSignature::None,
         )?;
@@ -45,14 +40,12 @@ pub trait SimplexProgram {
     fn add_program_input_with_signature<'a>(
         &self,
         ft: &'a mut FinalTransaction,
-        program_utxo: (OutPoint, TxOut),
+        program_utxo: UTXO,
         witness: Box<dyn WitnessTrait>,
         sig_witness_name: String,
     ) -> Result<&'a mut FinalTransaction, SimplexProgramError> {
-        let (program_outpoint, program_tx_out) = program_utxo;
-
         ft.add_program_input(
-            PartialInput::new(program_outpoint, program_tx_out),
+            PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
             RequiredSignature::Witness(sig_witness_name),
         )?;

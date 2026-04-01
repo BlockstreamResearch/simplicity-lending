@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
+use simplex::simplicityhl::elements::{Txid, hashes::Hash};
 
 use lending_contracts::programs::PreLockParameters;
 

@@ -7,7 +7,7 @@ use super::happy_path::{create_asset_auth_tx, unlock_asset_auth_tx};
 
 #[simplex::test]
 fn creates_and_unlocks_asset_auth_with_burn(context: simplex::TestContext) -> anyhow::Result<()> {
-    let provider = context.get_provider();
+    let provider = context.get_default_provider();
 
     let txid = split_first_signer_utxo(&context, vec![1000]);
     provider.wait(&txid)?;

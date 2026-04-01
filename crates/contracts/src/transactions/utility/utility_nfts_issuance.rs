@@ -1,8 +1,5 @@
 use simplex::simplicityhl::elements::{AssetId, Script};
-use simplex::{
-    provider::SimplicityNetwork,
-    transaction::{FinalTransaction, PartialOutput, partial_input::IssuanceInput},
-};
+use simplex::transaction::{FinalTransaction, PartialOutput, partial_input::IssuanceInput};
 
 use crate::{
     transactions::{core::SimplexInput, utility::UtilityTransactionError},
@@ -17,9 +14,8 @@ pub fn issue_utility_nfts(
     lending_offer_params: &LendingOfferParameters,
     amounts_decimals: u8,
     issuance_asset_entropy: [u8; 32],
-    network: SimplicityNetwork,
 ) -> Result<FinalTransaction, UtilityTransactionError> {
-    let mut ft = FinalTransaction::new(network);
+    let mut ft = FinalTransaction::new();
 
     if issuance_inputs.len() != UTILITY_NFTS_COUNT {
         return Err(UtilityTransactionError::InvalidIssuanceInputsCount {
