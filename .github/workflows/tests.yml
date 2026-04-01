@@ -71,6 +71,27 @@ jobs:
           fi
           echo "$SQLX_CLI_ROOT/bin" >> $GITHUB_PATH
 
+      - name: Install simplex-cli via simplexup
+        shell: bash
+        run: |
+          curl -L https://smplx.simplicity-lang.org | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          simplexup
+          simplex --version
+
+      - name: Generate contract artifacts
+        shell: bash
+        run: |
+          cd crates/contracts
+          simplex build
+          test -f src/artifacts/mod.rs
+
+      - name: Run simplex integration tests
+        shell: bash
+        run: |
+          cd crates/contracts
+          simplex test integration --nocapture
+
       - name: Create app user in Postgres
         run: |
           sudo apt-get install postgresql-client

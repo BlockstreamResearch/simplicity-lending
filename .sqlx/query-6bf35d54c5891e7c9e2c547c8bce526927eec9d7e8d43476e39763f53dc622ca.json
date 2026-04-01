@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT \n            id,\n            current_status AS \"current_status: OfferStatus\",\n            borrower_pubkey,\n            collateral_asset_id,\n            principal_asset_id,\n            first_parameters_nft_asset_id,\n            second_parameters_nft_asset_id,\n            borrower_nft_asset_id,\n            lender_nft_asset_id,\n            collateral_amount,\n            principal_amount,\n            interest_rate,\n            loan_expiration_time,\n            created_at_height,\n            created_at_txid\n        FROM offers\n        WHERE id = $1\n        ",
+  "query": "\n        SELECT \n            id, current_status AS \"current_status: OfferStatus\",\n            borrower_pubkey, borrower_output_script_hash, collateral_asset_id, principal_asset_id,\n            first_parameters_nft_asset_id, second_parameters_nft_asset_id,\n            borrower_nft_asset_id, lender_nft_asset_id,\n            collateral_amount, principal_amount, interest_rate,\n            loan_expiration_time, created_at_height, created_at_txid\n        FROM offers\n        WHERE id = ANY($1)\n        ",
   "describe": {
     "columns": [
       {
@@ -34,68 +34,73 @@
       },
       {
         "ordinal": 3,
-        "name": "collateral_asset_id",
+        "name": "borrower_output_script_hash",
         "type_info": "Bytea"
       },
       {
         "ordinal": 4,
-        "name": "principal_asset_id",
+        "name": "collateral_asset_id",
         "type_info": "Bytea"
       },
       {
         "ordinal": 5,
-        "name": "first_parameters_nft_asset_id",
+        "name": "principal_asset_id",
         "type_info": "Bytea"
       },
       {
         "ordinal": 6,
-        "name": "second_parameters_nft_asset_id",
+        "name": "first_parameters_nft_asset_id",
         "type_info": "Bytea"
       },
       {
         "ordinal": 7,
-        "name": "borrower_nft_asset_id",
+        "name": "second_parameters_nft_asset_id",
         "type_info": "Bytea"
       },
       {
         "ordinal": 8,
-        "name": "lender_nft_asset_id",
+        "name": "borrower_nft_asset_id",
         "type_info": "Bytea"
       },
       {
         "ordinal": 9,
+        "name": "lender_nft_asset_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 10,
         "name": "collateral_amount",
         "type_info": "Int8"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "principal_amount",
         "type_info": "Int8"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "interest_rate",
         "type_info": "Int4"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "loan_expiration_time",
         "type_info": "Int4"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "created_at_height",
         "type_info": "Int8"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "created_at_txid",
         "type_info": "Bytea"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -113,8 +118,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "822d61e447e8731a2b806160063ee80d8b6d28c2183f5b168ceaad0f2624e65a"
+  "hash": "6bf35d54c5891e7c9e2c547c8bce526927eec9d7e8d43476e39763f53dc622ca"
 }
