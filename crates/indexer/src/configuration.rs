@@ -59,6 +59,8 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
         .add_source(config::File::from(
             configuration_directory.join(environment_filename),
         ))
+        // Environment variables override file-based configuration
+        .add_source(config::Environment::default().separator("__"))
         .build()?;
 
     settings.try_deserialize::<Settings>()
