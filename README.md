@@ -24,13 +24,24 @@ In case the Borrower fails to pay interest before the lending contract expiry, t
 
 ## How to use
 
+### Through Docker
+
+From repo root:
+
+```bash
+docker compose up --build
+```
+
+
+### Locally (without Docker)
+
 To run the **demo frontend** (web app for borrowers and lenders), you need the **Indexer** API running. The web app talks to it to list and manage offers.
 
 **Quick start (from repo root):**
 
 1. **Indexer** — set up PostgreSQL, configure `crates/indexer` (see [crates/indexer/README.md](crates/indexer/README.md)), then:
    ```bash
-   cd creates/indexer && cargo run -p lending-indexer
+   cd crates/indexer && cargo run -p lending-indexer
    ```
    By default this starts the API (port 8000). For full indexing you also need the indexer worker (`RUN_MODE=indexer`).
 
