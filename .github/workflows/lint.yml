@@ -32,6 +32,22 @@ jobs:
         with:
           cache-on-failure: true
 
+      - name: Install simplex-cli via simplexup
+        shell: bash
+        run: |
+          curl -L https://smplx.simplicity-lang.org | bash
+          export PATH="$PATH:$HOME/.simplex/bin"
+          echo "$HOME/.simplex/bin" >> "$GITHUB_PATH"
+          simplexup
+          simplex --version
+
+      - name: Generate contract artifacts
+        shell: bash
+        run: |
+          cd crates/contracts
+          simplex build
+          test -f src/artifacts/mod.rs
+
       - name: Format check
         run: cargo fmt --all --check
 

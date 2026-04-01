@@ -75,7 +75,8 @@ jobs:
         shell: bash
         run: |
           curl -L https://smplx.simplicity-lang.org | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$PATH:$HOME/.simplex/bin"
+          echo "$HOME/.simplex/bin" >> "$GITHUB_PATH"
           simplexup
           simplex --version
 
