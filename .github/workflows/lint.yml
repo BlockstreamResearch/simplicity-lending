@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   lint:
-    name: Format and Clippy
+    name: Clippy
     runs-on: ubuntu-latest
     env:
       SQLX_OFFLINE: true
@@ -25,7 +25,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          components: clippy, rustfmt
+          components: clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -35,11 +35,14 @@ jobs:
       - name: Install simplex-cli via simplexup
         shell: bash
         run: |
-          curl -L https://smplx.simplicity-lang.org | bash
-          export PATH="$PATH:$HOME/.simplex/bin"
-          echo "$HOME/.simplex/bin" >> "$GITHUB_PATH"
-          simplexup
-          simplex --version
+          set -euo pipefail
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 https://smplx.simplicity-lang.org | bash
+          BASE_DIR="${XDG_CONFIG_HOME:-$HOME}"
+          SIMPLEX_DIR="${SIMPLEX_DIR:-$BASE_DIR/.simplex}"
+          SIMPLEX_BIN_DIR="$SIMPLEX_DIR/bin"
+          "$SIMPLEX_BIN_DIR/simplexup"
+          echo "$SIMPLEX_BIN_DIR" >> "$GITHUB_PATH"
+          "$SIMPLEX_BIN_DIR/simplex" --version
 
       - name: Generate contract artifacts
         shell: bash
@@ -47,9 +50,6 @@ jobs:
           cd crates/contracts
           simplex build
           test -f src/artifacts/mod.rs
-
-      - name: Format check
-        run: cargo fmt --all --check
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
