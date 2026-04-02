@@ -19,8 +19,8 @@ pub fn liquidate_loan(
     let lending_parameters = lending.get_lending_parameters();
     let mut ft = FinalTransaction::new();
 
-    let first_parameters_nft_amount = first_parameters_nft_utxo.txout.value.explicit().unwrap();
-    let second_parameters_nft_amount = second_parameters_nft_utxo.txout.value.explicit().unwrap();
+    let first_parameters_nft_amount = first_parameters_nft_utxo.explicit_amount();
+    let second_parameters_nft_amount = second_parameters_nft_utxo.explicit_amount();
 
     let witness = Lending::get_lending_witness(&LendingBranch::LoanLiquidation);
 
@@ -35,26 +35,26 @@ pub fn liquidate_loan(
         .with_sequence(Sequence::ENABLE_LOCKTIME_NO_RBF)
         .with_locktime(locktime);
 
-    lending.add_program_input_from_partial_input(&mut ft, lending_input, Box::new(witness))?;
+    lending.add_program_input_from_partial_input(&mut ft, lending_input, Box::new(witness));
 
-    let parameters_script_auth = ScriptAuth::from_simplex_program(&lending)?;
+    let parameters_script_auth = ScriptAuth::from_simplex_program(&lending);
     let parameters_witness = ScriptAuth::get_script_auth_witness(0);
 
     parameters_script_auth.add_program_input(
         &mut ft,
         first_parameters_nft_utxo,
         Box::new(parameters_witness.clone()),
-    )?;
+    );
     parameters_script_auth.add_program_input(
         &mut ft,
         second_parameters_nft_utxo,
         Box::new(parameters_witness),
-    )?;
+    );
 
     ft.add_input(
         lender_nft_input.partial_input().clone(),
         lender_nft_input.required_sig().clone(),
-    )?;
+    );
 
     ft.add_output(collateral_output);
 

@@ -1,8 +1,6 @@
-use simplex::{
-    provider::ProviderError, simplicityhl::elements::Txid, transaction::TransactionError,
-};
+use simplex::{provider::ProviderError, simplicityhl::elements::Txid};
 
-use crate::programs::{PreLockError, program::SimplexProgramError};
+use crate::programs::PreLockError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreLockTransactionError {
@@ -16,11 +14,5 @@ pub enum PreLockTransactionError {
     PreLock(#[from] PreLockError),
 
     #[error(transparent)]
-    SimplexProgram(#[from] SimplexProgramError),
-
-    #[error(transparent)]
     SimplexProvider(#[from] ProviderError),
-
-    #[error(transparent)]
-    SimplexTransaction(#[from] TransactionError),
 }

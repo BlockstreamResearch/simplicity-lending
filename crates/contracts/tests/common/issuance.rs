@@ -35,9 +35,9 @@ pub fn issue_asset(
         PartialInput::new(first_utxo.clone()),
         IssuanceInput::new(asset_amount, asset_entropy),
         RequiredSignature::NativeEcdsa,
-    )?;
+    );
 
-    let signer_script_pubkey = signer.get_address().unwrap().script_pubkey();
+    let signer_script_pubkey = signer.get_address().script_pubkey();
 
     ft.add_output(PartialOutput::new(
         signer_script_pubkey.clone(),
@@ -47,8 +47,8 @@ pub fn issue_asset(
 
     ft.add_output(PartialOutput::new(
         signer_script_pubkey,
-        first_utxo.txout.value.explicit().unwrap(),
-        first_utxo.txout.asset.explicit().unwrap(),
+        first_utxo.explicit_amount(),
+        first_utxo.explicit_asset(),
     ));
 
     let txid = finalize_and_broadcast(context, &ft)?;
@@ -61,7 +61,7 @@ pub fn issue_preparation_utxos_tx(
 ) -> anyhow::Result<(Txid, AssetId)> {
     let signer = context.get_default_signer();
 
-    let signer_script_pubkey = signer.get_address().unwrap().script_pubkey();
+    let signer_script_pubkey = signer.get_address().script_pubkey();
 
     let signer_utxos = signer.get_utxos().unwrap();
     let first_utxo = signer_utxos.first().unwrap();
@@ -70,7 +70,7 @@ pub fn issue_preparation_utxos_tx(
         &SimplexInput::new(first_utxo, RequiredSignature::NativeEcdsa),
         signer_script_pubkey,
         *context.get_network(),
-    )?;
+    );
 
     let txid = finalize_and_broadcast(context, &ft)?;
 
@@ -84,7 +84,7 @@ pub fn issue_utility_nfts_tx(
 ) -> anyhow::Result<Txid> {
     let signer = context.get_default_signer();
 
-    let signer_script_pubkey = signer.get_address().unwrap().script_pubkey();
+    let signer_script_pubkey = signer.get_address().script_pubkey();
     let issuance_utxos = filter_signer_utxos_by_asset_id(signer, preparation_asset_id);
 
     assert_eq!(issuance_utxos.len(), UTILITY_NFTS_COUNT);
@@ -114,7 +114,7 @@ pub fn issue_utility_nfts_tx(
     ft.add_input(
         PartialInput::new(fee_utxo.clone()),
         RequiredSignature::NativeEcdsa,
-    )?;
+    );
 
     let txid = finalize_strict_and_broadcast(context, &ft)?;
 

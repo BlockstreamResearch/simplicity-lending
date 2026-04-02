@@ -88,7 +88,7 @@ pub(super) fn repay_lending_tx(
         &SimplexInput::new(borrower_nft_utxo, RequiredSignature::NativeEcdsa),
         principal_inputs,
         PartialOutput::new(
-            signer.get_address().unwrap().script_pubkey(),
+            signer.get_address().script_pubkey(),
             lending_parameters.offer_parameters.collateral_amount,
             lending_parameters.collateral_asset_id,
         ),
@@ -106,7 +106,7 @@ pub(super) fn repay_lending_tx(
     ft.add_input(
         PartialInput::new(fee_utxo.clone()),
         RequiredSignature::NativeEcdsa,
-    )?;
+    );
 
     finalize_strict_and_broadcast(context, &ft)
 }
@@ -149,7 +149,7 @@ pub(super) fn get_lending_liquidation_tx(
         },
         &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
         PartialOutput::new(
-            signer.get_address().unwrap().script_pubkey(),
+            signer.get_address().script_pubkey(),
             lending_parameters.offer_parameters.collateral_amount,
             lending_parameters.collateral_asset_id,
         ),
@@ -167,7 +167,7 @@ pub(super) fn get_lending_liquidation_tx(
     ft.add_input(
         PartialInput::new(fee_utxo.clone()),
         RequiredSignature::NativeEcdsa,
-    )?;
+    );
 
     Ok(ft)
 }
@@ -205,12 +205,12 @@ pub(super) fn claim_lender_principal(
         },
         &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
         PartialOutput::new(
-            signer.get_address().unwrap().script_pubkey(),
+            signer.get_address().script_pubkey(),
             principal_with_interest,
             lending_parameters.principal_asset_id,
         ),
         principal_asset_auth,
-    )?;
+    );
 
     finalize_and_broadcast(context, &ft)
 }

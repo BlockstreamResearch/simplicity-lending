@@ -24,7 +24,7 @@ pub(super) fn create_script_auth_tx(
             script_hash,
             network: *context.get_network(),
         },
-    )?;
+    );
 
     let txid = finalize_and_broadcast(context, &ft)?;
 
@@ -43,14 +43,14 @@ pub(super) fn unlock_script_auth_tx(
     let auth_input = SimplexInput::new(first_utxo, RequiredSignature::NativeEcdsa);
 
     let found_script_auth_utxos =
-        provider.fetch_scripthash_utxos(&script_auth.get_script_pubkey()?)?;
+        provider.fetch_scripthash_utxos(&script_auth.get_script_pubkey())?;
     let script_auth_utxo = found_script_auth_utxos.first().unwrap();
 
-    let signer_script = signer.get_address().unwrap().script_pubkey();
+    let signer_script = signer.get_address().script_pubkey();
     let unlocked_output = PartialOutput::new(
         signer_script,
-        script_auth_utxo.txout.value.explicit().unwrap(),
-        script_auth_utxo.txout.asset.explicit().unwrap(),
+        script_auth_utxo.explicit_amount(),
+        script_auth_utxo.explicit_asset(),
     );
 
     let ft = unlock_script_auth(
@@ -58,7 +58,7 @@ pub(super) fn unlock_script_auth_tx(
         &auth_input,
         unlocked_output,
         script_auth,
-    )?;
+    );
 
     let txid = finalize_and_broadcast(context, &ft)?;
 
@@ -72,7 +72,7 @@ fn creates_and_unlocks_script_auth(context: simplex::TestContext) -> anyhow::Res
     let txid = split_first_signer_utxo(&context, vec![1000, 5000, 10000]);
     wait_for_tx(&context, &txid)?;
 
-    let signer_script_pubkey = signer.get_address().unwrap().script_pubkey();
+    let signer_script_pubkey = signer.get_address().script_pubkey();
     let signer_script_hash = hash_script(&signer_script_pubkey);
 
     let (txid, script_auth) = create_script_auth_tx(&context, signer_script_hash)?;

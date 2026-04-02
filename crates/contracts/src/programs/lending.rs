@@ -5,7 +5,7 @@ use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::lending::LendingProgram;
 use crate::artifacts::lending::derived_lending::{LendingArguments, LendingWitness};
-use crate::programs::program::{SimplexProgram, SimplexProgramError};
+use crate::programs::program::SimplexProgram;
 use crate::programs::{AssetAuth, AssetAuthParameters};
 use crate::utils::LendingOfferParameters;
 
@@ -21,13 +21,11 @@ pub struct LendingParameters {
     pub network: SimplicityNetwork,
 }
 
-impl TryFrom<LendingParameters> for LendingArguments {
-    type Error = SimplexProgramError;
-
-    fn try_from(value: LendingParameters) -> Result<Self, Self::Error> {
+impl From<LendingParameters> for LendingArguments {
+    fn from(value: LendingParameters) -> Self {
         let lender_principal_asset_auth = value.get_lender_principal_asset_auth();
 
-        Ok(Self {
+        Self {
             collateral_asset_id: value.collateral_asset_id.into_inner().0,
             principal_asset_id: value.principal_asset_id.into_inner().0,
             first_parameters_nft_asset_id: value.first_parameters_nft_asset_id.into_inner().0,
@@ -38,8 +36,8 @@ impl TryFrom<LendingParameters> for LendingArguments {
             principal_amount: value.offer_parameters.principal_amount,
             principal_interest_rate: value.offer_parameters.principal_interest_rate,
             loan_expiration_time: value.offer_parameters.loan_expiration_time,
-            lender_principal_cov_hash: lender_principal_asset_auth.get_script_hash()?,
-        })
+            lender_principal_cov_hash: lender_principal_asset_auth.get_script_hash(),
+        }
     }
 }
 
@@ -66,20 +64,17 @@ pub enum LendingBranch {
 }
 
 impl Lending {
-    pub fn new(parameters: LendingParameters) -> Result<Lending, SimplexProgramError> {
+    pub fn new(parameters: LendingParameters) -> Self {
         Self::from_internal_key(tr_unspendable_key(), parameters)
     }
 
-    pub fn from_internal_key(
-        internal_key: XOnlyPublicKey,
-        parameters: LendingParameters,
-    ) -> Result<Lending, SimplexProgramError> {
-        let arguments = LendingArguments::try_from(parameters)?;
+    pub fn from_internal_key(internal_key: XOnlyPublicKey, parameters: LendingParameters) -> Self {
+        let arguments = LendingArguments::from(parameters);
 
-        Ok(Lending {
+        Self {
             program: LendingProgram::new(internal_key, arguments),
             parameters,
-        })
+        }
     }
 
     pub fn get_lending_witness(witness_branch: &LendingBranch) -> LendingWitness {

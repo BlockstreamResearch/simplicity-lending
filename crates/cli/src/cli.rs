@@ -63,7 +63,7 @@ impl Cli {
         let signer = Signer::new(
             &config.mnemonic,
             Box::new(EsploraProvider::new(config.esplora_url, config.network)),
-        )?;
+        );
 
         Ok(CliContext {
             signer,

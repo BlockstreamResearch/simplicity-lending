@@ -5,10 +5,7 @@ use simplex::{
 };
 
 use crate::transactions::core::SimplexInput;
-use crate::{
-    transactions::utility::{UTILITY_NFTS_COUNT, UtilityTransactionError},
-    utils::get_random_seed,
-};
+use crate::{transactions::utility::UTILITY_NFTS_COUNT, utils::get_random_seed};
 
 pub const PREPARATION_UTXO_ASSET_AMOUNT: u64 = 10;
 
@@ -16,7 +13,7 @@ pub fn issue_preparation_utxos(
     issuance_input: &SimplexInput,
     issuance_utxos_output_script: Script,
     network: SimplicityNetwork,
-) -> Result<(FinalTransaction, AssetId), UtilityTransactionError> {
+) -> (FinalTransaction, AssetId) {
     let mut ft = FinalTransaction::new();
 
     let total_asset_amount = PREPARATION_UTXO_ASSET_AMOUNT * UTILITY_NFTS_COUNT as u64;
@@ -26,7 +23,7 @@ pub fn issue_preparation_utxos(
         issuance_input.partial_input().clone(),
         IssuanceInput::new(total_asset_amount, asset_entropy),
         issuance_input.required_sig().clone(),
-    )?;
+    );
 
     for _ in 0..UTILITY_NFTS_COUNT {
         ft.add_output(PartialOutput::new(
@@ -40,5 +37,5 @@ pub fn issue_preparation_utxos(
         ft.add_output(issuance_input.new_partial_output());
     }
 
-    Ok((ft, asset_id))
+    (ft, asset_id)
 }

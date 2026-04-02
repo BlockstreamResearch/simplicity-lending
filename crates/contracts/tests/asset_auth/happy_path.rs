@@ -24,7 +24,7 @@ pub(super) fn create_asset_auth_tx(
     let (ft, asset_auth) = create_asset_auth(
         &SimplexInput::new(utxo_to_lock, RequiredSignature::NativeEcdsa),
         parameters,
-    )?;
+    );
 
     let txid = finalize_and_broadcast(context, &ft)?;
 
@@ -39,24 +39,24 @@ pub(super) fn unlock_asset_auth_tx(
     let signer = context.get_default_signer();
 
     let found_asset_auth_utxos =
-        provider.fetch_scripthash_utxos(&asset_auth.get_script_pubkey()?)?;
+        provider.fetch_scripthash_utxos(&asset_auth.get_script_pubkey())?;
     let asset_auth_utxo = found_asset_auth_utxos.first().unwrap();
 
     let asset_auth_parameters = asset_auth.get_asset_auth_parameters();
     let auth_utxos = filter_signer_utxos_by_asset_id(signer, asset_auth_parameters.asset_id);
     let auth_utxo = auth_utxos.first().unwrap();
 
-    let signer_script_pubkey = signer.get_address().unwrap().script_pubkey();
+    let signer_script_pubkey = signer.get_address().script_pubkey();
     let ft = unlock_asset_auth(
         asset_auth_utxo.clone(),
         &SimplexInput::new(auth_utxo, RequiredSignature::NativeEcdsa),
         PartialOutput::new(
             signer_script_pubkey,
-            asset_auth_utxo.txout.value.explicit().unwrap(),
-            asset_auth_utxo.txout.asset.explicit().unwrap(),
+            asset_auth_utxo.explicit_amount(),
+            asset_auth_utxo.explicit_asset(),
         ),
         asset_auth,
-    )?;
+    );
 
     finalize_and_broadcast(context, &ft)
 }

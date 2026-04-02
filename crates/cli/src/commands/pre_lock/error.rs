@@ -1,6 +1,4 @@
-use lending_contracts::{
-    programs::program::SimplexProgramError, transactions::pre_lock::PreLockTransactionError,
-};
+use lending_contracts::transactions::pre_lock::PreLockTransactionError;
 use simplex::{
     provider::ProviderError, signer::SignerError, simplicityhl::simplicity::hex::HexToArrayError,
 };
@@ -15,9 +13,6 @@ pub enum PreLockCommandError {
 
     #[error("Failed to build pre lock transaction: {0}")]
     PreLockTransaction(#[from] PreLockTransactionError),
-
-    #[error(transparent)]
-    SimplexProgram(#[from] SimplexProgramError),
 
     #[error("Simplex Signer error: {0}")]
     Signer(#[from] SignerError),

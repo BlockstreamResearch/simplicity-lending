@@ -1,6 +1,4 @@
-use simplex::transaction::TransactionError;
-
-use crate::{programs::program::SimplexProgramError, utils::ParametersError};
+use crate::utils::ParametersError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum UtilityTransactionError {
@@ -12,10 +10,4 @@ pub enum UtilityTransactionError {
 
     #[error(transparent)]
     OfferParameters(#[from] ParametersError),
-
-    #[error(transparent)]
-    SimplexProgram(#[from] SimplexProgramError),
-
-    #[error(transparent)]
-    SimplexTransaction(#[from] TransactionError),
 }

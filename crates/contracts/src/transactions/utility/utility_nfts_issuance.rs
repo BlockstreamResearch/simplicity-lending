@@ -40,7 +40,7 @@ pub fn issue_utility_nfts(
             input.partial_input().clone(),
             IssuanceInput::new(utility_nfts_amounts[index], issuance_asset_entropy),
             input.required_sig().clone(),
-        )?;
+        );
         asset_ids.push(asset_id);
     }
 

@@ -1,6 +1,4 @@
-use simplex::{simplicityhl::elements::Txid, transaction::TransactionError};
-
-use crate::programs::program::SimplexProgramError;
+use simplex::simplicityhl::elements::Txid;
 
 #[derive(thiserror::Error, Debug)]
 pub enum LendingTransactionError {
@@ -15,10 +13,4 @@ pub enum LendingTransactionError {
 
     #[error("Failed to convert loan expiration time to LockTime: {0}")]
     InvalidLockHeight(u32),
-
-    #[error(transparent)]
-    SimplexProgram(#[from] SimplexProgramError),
-
-    #[error(transparent)]
-    SimplexTransaction(#[from] TransactionError),
 }

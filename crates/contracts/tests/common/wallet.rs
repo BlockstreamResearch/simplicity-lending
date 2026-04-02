@@ -49,9 +49,9 @@ pub fn filter_utxos_by_amount(
     let filtered_utxos: Vec<UTXO> = utxos
         .into_iter()
         .filter(|utxo| match amount_filter {
-            AmountFilter::LessThan => utxo.txout.value.explicit().unwrap() < amount,
-            AmountFilter::GreaterThan => utxo.txout.value.explicit().unwrap() > amount,
-            AmountFilter::EqualTo => utxo.txout.value.explicit().unwrap() == amount,
+            AmountFilter::LessThan => utxo.explicit_amount() < amount,
+            AmountFilter::GreaterThan => utxo.explicit_amount() > amount,
+            AmountFilter::EqualTo => utxo.explicit_amount() == amount,
         })
         .collect();
 
@@ -61,7 +61,7 @@ pub fn filter_utxos_by_amount(
 pub fn filter_utxos_by_asset_id(utxos: Vec<UTXO>, asset_id: AssetId) -> Vec<UTXO> {
     let filtered_utxos: Vec<UTXO> = utxos
         .into_iter()
-        .filter(|utxo| utxo.txout.asset.explicit().unwrap() == asset_id)
+        .filter(|utxo| utxo.explicit_asset() == asset_id)
         .collect();
 
     filtered_utxos
@@ -73,15 +73,14 @@ pub fn get_split_utxo_ft(
     signer: &Signer,
     network: SimplicityNetwork,
 ) -> FinalTransaction {
-    let utxo_asset_id = utxo.txout.asset.explicit().unwrap();
-    let utxo_amount = utxo.txout.value.explicit().unwrap();
+    let utxo_asset_id = utxo.explicit_asset();
+    let utxo_amount = utxo.explicit_amount();
 
     let mut ft = FinalTransaction::new();
 
-    ft.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa)
-        .expect("Failed to add input utxo");
+    ft.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
 
-    let signer_script_pubkey = signer.get_address().unwrap().script_pubkey();
+    let signer_script_pubkey = signer.get_address().script_pubkey();
     let mut total_amount = 0;
 
     for amount in amounts {

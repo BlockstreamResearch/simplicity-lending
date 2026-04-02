@@ -107,8 +107,8 @@ pub fn is_pre_lock_creation_tx(
     let pre_lock_parameters =
         extract_pre_lock_parameters_from_tx(tx, &client.to_simplex_provider()).ok()?;
 
-    let pre_lock = PreLock::new(pre_lock_parameters).ok()?;
-    let pre_lock_script_pubkey = pre_lock.get_script_pubkey().ok()?;
+    let pre_lock = PreLock::new(pre_lock_parameters);
+    let pre_lock_script_pubkey = pre_lock.get_script_pubkey();
 
     if tx.output.first().unwrap().script_pubkey != pre_lock_script_pubkey {
         return None;

@@ -4,7 +4,7 @@ use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::script_auth::derived_script_auth::ScriptAuthWitness;
 use crate::artifacts::script_auth::{ScriptAuthProgram, derived_script_auth::ScriptAuthArguments};
-use crate::programs::program::{SimplexProgram, SimplexProgramError};
+use crate::programs::program::SimplexProgram;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ScriptAuthParameters {
@@ -26,24 +26,22 @@ pub struct ScriptAuth {
 }
 
 impl ScriptAuth {
-    pub fn new(parameters: ScriptAuthParameters) -> ScriptAuth {
+    pub fn new(parameters: ScriptAuthParameters) -> Self {
         Self::from_internal_key(tr_unspendable_key(), parameters)
     }
 
-    pub fn from_simplex_program(
-        program: &impl SimplexProgram,
-    ) -> Result<ScriptAuth, SimplexProgramError> {
-        Ok(Self::new(ScriptAuthParameters {
-            script_hash: program.get_script_hash()?,
+    pub fn from_simplex_program(program: &impl SimplexProgram) -> Self {
+        Self::new(ScriptAuthParameters {
+            script_hash: program.get_script_hash(),
             network: *program.get_network(),
-        }))
+        })
     }
 
     pub fn from_internal_key(
         internal_key: XOnlyPublicKey,
         parameters: ScriptAuthParameters,
-    ) -> ScriptAuth {
-        ScriptAuth {
+    ) -> Self {
+        Self {
             program: ScriptAuthProgram::new(internal_key, ScriptAuthArguments::from(parameters)),
             parameters,
         }

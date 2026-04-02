@@ -10,7 +10,7 @@ use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::pre_lock::PreLockProgram;
 use crate::artifacts::pre_lock::derived_pre_lock::{PreLockArguments, PreLockWitness};
-use crate::programs::program::{SimplexProgram, SimplexProgramError};
+use crate::programs::program::SimplexProgram;
 use crate::programs::{Lending, LendingParameters, ScriptAuth};
 use crate::utils::LendingOfferParameters;
 
@@ -49,13 +49,11 @@ impl From<&PreLockParameters> for LendingParameters {
     }
 }
 
-impl TryFrom<PreLockParameters> for PreLockArguments {
-    type Error = SimplexProgramError;
+impl From<PreLockParameters> for PreLockArguments {
+    fn from(value: PreLockParameters) -> Self {
+        let parameter_nfts_script_auth = value.get_parameter_nfts_script_auth();
 
-    fn try_from(value: PreLockParameters) -> Result<Self, Self::Error> {
-        let parameter_nfts_script_auth = value.get_parameter_nfts_script_auth()?;
-
-        Ok(Self {
+        Self {
             collateral_asset_id: value.collateral_asset_id.into_inner().0,
             principal_asset_id: value.principal_asset_id.into_inner().0,
             first_parameters_nft_asset_id: value.first_parameters_nft_asset_id.into_inner().0,
@@ -70,16 +68,16 @@ impl TryFrom<PreLockParameters> for PreLockArguments {
             lending_cov_hash: parameter_nfts_script_auth
                 .get_script_auth_parameters()
                 .script_hash,
-            parameters_nft_output_script_hash: parameter_nfts_script_auth.get_script_hash()?,
+            parameters_nft_output_script_hash: parameter_nfts_script_auth.get_script_hash(),
             borrower_nft_output_script_hash: value.borrower_output_script_hash,
             principal_output_script_hash: value.borrower_output_script_hash,
-        })
+        }
     }
 }
 
 impl PreLockParameters {
-    pub fn get_parameter_nfts_script_auth(&self) -> Result<ScriptAuth, SimplexProgramError> {
-        let lending = Lending::new(self.into())?;
+    pub fn get_parameter_nfts_script_auth(&self) -> ScriptAuth {
+        let lending = Lending::new(self.into());
 
         ScriptAuth::from_simplex_program(&lending)
     }
@@ -111,20 +109,17 @@ pub enum PreLockError {
 pub const PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH: usize = 64;
 
 impl PreLock {
-    pub fn new(parameters: PreLockParameters) -> Result<PreLock, SimplexProgramError> {
+    pub fn new(parameters: PreLockParameters) -> Self {
         Self::from_internal_key(tr_unspendable_key(), parameters)
     }
 
-    pub fn from_internal_key(
-        internal_key: XOnlyPublicKey,
-        parameters: PreLockParameters,
-    ) -> Result<PreLock, SimplexProgramError> {
-        let arguments = PreLockArguments::try_from(parameters)?;
+    pub fn from_internal_key(internal_key: XOnlyPublicKey, parameters: PreLockParameters) -> Self {
+        let arguments = PreLockArguments::from(parameters);
 
-        Ok(PreLock {
+        Self {
             program: PreLockProgram::new(internal_key, arguments),
             parameters,
-        })
+        }
     }
 
     pub fn get_pre_lock_witness(witness_branch: &PreLockBranch) -> PreLockWitness {

@@ -39,7 +39,7 @@ pub fn mine_blocks_with_self_send(
     let signer = context.get_default_signer();
 
     let mut txids = Vec::with_capacity(blocks as usize);
-    let recipient_script = signer.get_address()?.script_pubkey();
+    let recipient_script = signer.get_address().script_pubkey();
 
     for _ in 0..blocks {
         let txid = signer.send(recipient_script.clone(), amount)?;

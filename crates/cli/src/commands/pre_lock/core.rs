@@ -108,7 +108,7 @@ impl CliPreLock {
 
         let collateral_asset_id = AssetId::from_str(collateral_asset_id_hex_be)?;
         let principal_asset_id = AssetId::from_str(principal_asset_id_hex_be)?;
-        let borrower_script = context.signer.get_address()?.script_pubkey();
+        let borrower_script = context.signer.get_address().script_pubkey();
 
         let pre_lock_parameters = PreLockParameters {
             collateral_asset_id,
@@ -118,14 +118,14 @@ impl CliPreLock {
             borrower_nft_asset_id,
             lender_nft_asset_id,
             offer_parameters,
-            borrower_pubkey: context.signer.get_schnorr_public_key()?,
+            borrower_pubkey: context.signer.get_schnorr_public_key(),
             borrower_output_script_hash: hash_script(&borrower_script),
             network: context.get_network(),
         };
 
         let collateral_utxos = context.signer.get_utxos_filter(
             &|utxo| {
-                utxo.txout.asset.explicit().unwrap() == pre_lock_parameters.collateral_asset_id
+                utxo.explicit_asset() == pre_lock_parameters.collateral_asset_id
                     && utxo.txout.value.explicit().unwrap_or(0)
                         >= pre_lock_parameters.offer_parameters.collateral_amount
             },
@@ -175,7 +175,7 @@ impl CliPreLock {
                 RequiredSignature::NativeEcdsa,
             ),
             pre_lock_parameters,
-        )?;
+        );
 
         println!(
             "Creating Lending offer with next parameters: {:?}",
@@ -201,12 +201,12 @@ impl CliPreLock {
 
         let pre_lock_parameters =
             extract_pre_lock_parameters_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
-        let pre_lock = PreLock::new(pre_lock_parameters)?;
+        let pre_lock = PreLock::new(pre_lock_parameters);
 
         let principal_utxos = context.signer.get_utxos_filter(
             &|utxo| {
-                utxo.txout.asset.explicit().unwrap() == pre_lock_parameters.principal_asset_id
-                    && utxo.txout.value.explicit().unwrap()
+                utxo.explicit_asset() == pre_lock_parameters.principal_asset_id
+                    && utxo.explicit_amount()
                         == pre_lock_parameters.offer_parameters.principal_amount
             },
             &|_| true,
@@ -219,7 +219,7 @@ impl CliPreLock {
         }
 
         let principal_utxo = principal_utxos.first().unwrap();
-        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address().script_pubkey();
 
         let prev_collateral_outpoint = pre_lock_creation_tx.input[0].previous_output;
         let pre_collateral_tx = context
@@ -265,7 +265,7 @@ impl CliPreLock {
             ),
             borrower_output_script.clone(),
             pre_lock,
-        )?;
+        );
 
         println!("Activating Lending offer...");
 
@@ -288,7 +288,7 @@ impl CliPreLock {
 
         let pre_lock_parameters =
             extract_pre_lock_parameters_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
-        let pre_lock = PreLock::new(pre_lock_parameters)?;
+        let pre_lock = PreLock::new(pre_lock_parameters);
 
         let ft = cancel_pre_lock(
             UTXO {
@@ -317,12 +317,12 @@ impl CliPreLock {
                 secrets: None,
             },
             PartialOutput::new(
-                context.signer.get_address()?.script_pubkey(),
+                context.signer.get_address().script_pubkey(),
                 pre_lock_parameters.offer_parameters.collateral_amount,
                 pre_lock_parameters.collateral_asset_id,
             ),
             pre_lock,
-        )?;
+        );
 
         println!("Cancelling Lending offer...");
 

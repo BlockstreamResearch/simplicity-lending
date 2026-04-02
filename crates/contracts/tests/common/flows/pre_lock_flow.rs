@@ -44,7 +44,7 @@ pub fn create_pre_lock_tx(
     let signer = context.get_default_signer();
 
     let utility_nfts_tx = provider.fetch_transaction(&utility_nfts_issuance_txid)?;
-    let signer_schnorr_pubkey = signer.get_schnorr_public_key()?;
+    let signer_schnorr_pubkey = signer.get_schnorr_public_key();
     let first_parameters_nft_asset_id = utility_nfts_tx.output[0].asset.explicit().unwrap();
     let second_parameters_nft_asset_id = utility_nfts_tx.output[1].asset.explicit().unwrap();
     let borrower_nft_asset_id = utility_nfts_tx.output[2].asset.explicit().unwrap();
@@ -59,7 +59,7 @@ pub fn create_pre_lock_tx(
         lender_nft_asset_id,
         offer_parameters: *offer_parameters,
         borrower_pubkey: signer_schnorr_pubkey,
-        borrower_output_script_hash: hash_script(&signer.get_address().unwrap().script_pubkey()),
+        borrower_output_script_hash: hash_script(&signer.get_address().script_pubkey()),
         network: *network,
     };
 
@@ -113,7 +113,7 @@ pub fn create_pre_lock_tx(
             RequiredSignature::NativeEcdsa,
         ),
         pre_lock_parameters,
-    )?;
+    );
 
     let txid = finalize_and_broadcast(context, &ft)?;
     Ok((txid, pre_lock))
@@ -182,13 +182,13 @@ pub fn create_lending_from_pre_lock_tx(
             RequiredSignature::NativeEcdsa,
         )],
         PartialOutput::new(
-            signer.get_address().unwrap().script_pubkey(),
+            signer.get_address().script_pubkey(),
             1,
             pre_lock_parameters.lender_nft_asset_id,
         ),
-        signer.get_address().unwrap().script_pubkey(),
+        signer.get_address().script_pubkey(),
         pre_lock,
-    )?;
+    );
 
     let signer_policy_utxos = filter_signer_utxos_by_asset_and_amount(
         signer,
@@ -201,7 +201,7 @@ pub fn create_lending_from_pre_lock_tx(
     ft.add_input(
         PartialInput::new(fee_utxo.clone()),
         RequiredSignature::NativeEcdsa,
-    )?;
+    );
 
     let txid = finalize_strict_and_broadcast(context, &ft)?;
     Ok((txid, lending))

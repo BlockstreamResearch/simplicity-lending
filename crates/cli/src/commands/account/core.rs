@@ -117,7 +117,7 @@ impl Account {
         let mut ft = FinalTransaction::new();
 
         for input in inputs {
-            ft.add_input(input.partial_input().clone(), input.required_sig().clone())?;
+            ft.add_input(input.partial_input().clone(), input.required_sig().clone());
         }
 
         ft.add_output(PartialOutput::new(
@@ -128,7 +128,7 @@ impl Account {
 
         if total_inputs_amount > amount {
             ft.add_output(PartialOutput::new(
-                context.signer.get_address()?.script_pubkey(),
+                context.signer.get_address().script_pubkey(),
                 total_inputs_amount - amount,
                 asset_id,
             ));
@@ -164,17 +164,17 @@ impl Account {
 
         let utxo_to_split = found_utxos.first().unwrap();
 
-        let utxo_asset_id = utxo_to_split.txout.asset.explicit().unwrap();
-        let utxo_amount = utxo_to_split.txout.value.explicit().unwrap();
+        let utxo_asset_id = utxo_to_split.explicit_asset();
+        let utxo_amount = utxo_to_split.explicit_amount();
 
         let mut ft = FinalTransaction::new();
 
         ft.add_input(
             PartialInput::new(utxo_to_split.clone()),
             RequiredSignature::NativeEcdsa,
-        )?;
+        );
 
-        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address().script_pubkey();
         let mut total_amount = 0;
 
         for amount in amounts {
@@ -213,8 +213,8 @@ impl Account {
     }
 
     fn show_account_info(context: CliContext) -> Result<(), AccountCommandError> {
-        let signer_wpkh_address = context.signer.get_address()?;
-        let signer_schnorr_pubkey = context.signer.get_schnorr_public_key()?;
+        let signer_wpkh_address = context.signer.get_address();
+        let signer_schnorr_pubkey = context.signer.get_schnorr_public_key();
 
         println!("User WPKH address: {:?}", signer_wpkh_address);
         println!(

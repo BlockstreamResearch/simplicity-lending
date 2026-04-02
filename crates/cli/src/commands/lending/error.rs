@@ -1,7 +1,4 @@
-use lending_contracts::{
-    programs::program::SimplexProgramError,
-    transactions::{asset_auth::AssetAuthTransactionError, lending::LendingTransactionError},
-};
+use lending_contracts::transactions::lending::LendingTransactionError;
 use simplex::{
     provider::ProviderError,
     signer::SignerError,
@@ -34,12 +31,6 @@ pub enum LendingCommandError {
 
     #[error("Failed to build lending transaction: {0}")]
     LendingTransaction(#[from] LendingTransactionError),
-
-    #[error("Failed to build asset auth transaction: {0}")]
-    AssetAuthTransaction(#[from] AssetAuthTransactionError),
-
-    #[error(transparent)]
-    SimplexProgram(#[from] SimplexProgramError),
 
     #[error("Simplex Signer error: {0}")]
     Signer(#[from] SignerError),

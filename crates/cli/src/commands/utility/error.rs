@@ -1,7 +1,6 @@
 use lending_contracts::transactions::utility::UtilityTransactionError;
 use simplex::{
     provider::ProviderError, signer::SignerError, simplicityhl::simplicity::hex::HexToArrayError,
-    transaction::TransactionError,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -17,9 +16,6 @@ pub enum UtilityCommandError {
 
     #[error("Simplex Provider error: {0}")]
     Provider(#[from] ProviderError),
-
-    #[error("Simplex Transaction error: {0}")]
-    Transaction(#[from] TransactionError),
 
     #[error("Hex to array error: {0}")]
     HexToArray(#[from] HexToArrayError),

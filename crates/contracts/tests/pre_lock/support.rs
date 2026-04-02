@@ -47,12 +47,12 @@ pub(super) fn cancel_pre_lock_tx(
             secrets: None,
         },
         PartialOutput::new(
-            signer.get_address().unwrap().script_pubkey(),
+            signer.get_address().script_pubkey(),
             pre_lock_parameters.offer_parameters.collateral_amount,
             network.policy_asset(),
         ),
         pre_lock,
-    )?;
+    );
 
     let signer_policy_utxos = filter_signer_utxos_by_asset_and_amount(
         signer,
@@ -65,7 +65,7 @@ pub(super) fn cancel_pre_lock_tx(
     ft.add_input(
         PartialInput::new(fee_utxo.clone()),
         RequiredSignature::NativeEcdsa,
-    )?;
+    );
 
     finalize_strict_and_broadcast(context, &ft)
 }

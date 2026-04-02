@@ -35,15 +35,15 @@ pub struct AssetAuthWitnessParams {
 }
 
 impl AssetAuth {
-    pub fn new(parameters: AssetAuthParameters) -> AssetAuth {
+    pub fn new(parameters: AssetAuthParameters) -> Self {
         Self::from_internal_key(tr_unspendable_key(), parameters)
     }
 
     pub fn from_internal_key(
         internal_key: XOnlyPublicKey,
         parameters: AssetAuthParameters,
-    ) -> AssetAuth {
-        AssetAuth {
+    ) -> Self {
+        Self {
             program: AssetAuthProgram::new(internal_key, AssetAuthArguments::from(parameters)),
             parameters,
         }

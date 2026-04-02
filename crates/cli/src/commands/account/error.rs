@@ -2,7 +2,6 @@ use simplex::{
     provider::ProviderError,
     signer::SignerError,
     simplicityhl::{elements::OutPoint, simplicity::hex::HexToArrayError},
-    transaction::TransactionError,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -32,9 +31,6 @@ pub enum AccountCommandError {
 
     #[error("Simplex Provider error: {0}")]
     Provider(#[from] ProviderError),
-
-    #[error("Simplex Transaction error: {0}")]
-    Transaction(#[from] TransactionError),
 
     #[error("Hex to array error: {0}")]
     HexToArray(#[from] HexToArrayError),

@@ -67,7 +67,7 @@ impl CliLending {
 
         let lending_parameters =
             extract_lending_parameters_from_tx(&lending_creation_tx, &context.esplora_provider)?;
-        let lending = Lending::new(lending_parameters)?;
+        let lending = Lending::new(lending_parameters);
 
         let borrower_nft_utxos = context
             .signer
@@ -127,7 +127,7 @@ impl CliLending {
             &SimplexInput::new(borrower_nft_utxo, RequiredSignature::NativeEcdsa),
             principal_inputs,
             PartialOutput::new(
-                context.signer.get_address()?.script_pubkey(),
+                context.signer.get_address().script_pubkey(),
                 lending_parameters.offer_parameters.collateral_amount,
                 lending_parameters.collateral_asset_id,
             ),
@@ -155,7 +155,7 @@ impl CliLending {
 
         let lending_parameters =
             extract_lending_parameters_from_tx(&lending_creation_tx, &context.esplora_provider)?;
-        let lending = Lending::new(lending_parameters)?;
+        let lending = Lending::new(lending_parameters);
 
         let lender_nft_utxos = context
             .signer
@@ -194,7 +194,7 @@ impl CliLending {
             },
             &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
             PartialOutput::new(
-                context.signer.get_address().unwrap().script_pubkey(),
+                context.signer.get_address().script_pubkey(),
                 lending_parameters.offer_parameters.collateral_amount,
                 lending_parameters.collateral_asset_id,
             ),
@@ -251,12 +251,12 @@ impl CliLending {
             },
             &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
             PartialOutput::new(
-                context.signer.get_address()?.script_pubkey(),
+                context.signer.get_address().script_pubkey(),
                 principal_with_interest,
                 lending_parameters.principal_asset_id,
             ),
             principal_asset_auth,
-        )?;
+        );
 
         println!("Claiming principal with interest...");
 

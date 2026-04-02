@@ -92,9 +92,9 @@ impl Utility {
             PartialInput::new(first_utxo.clone()),
             IssuanceInput::new(asset_amount, asset_entropy),
             RequiredSignature::NativeEcdsa,
-        )?;
+        );
 
-        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address().script_pubkey();
 
         ft.add_output(PartialOutput::new(
             signer_script_pubkey.clone(),
@@ -118,7 +118,7 @@ impl Utility {
     }
 
     fn issue_preparation_utxos_tx(context: CliContext) -> Result<(), UtilityCommandError> {
-        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address().script_pubkey();
 
         let policy_utxos = context
             .signer
@@ -131,7 +131,7 @@ impl Utility {
             &SimplexInput::new(issuance_utxo, RequiredSignature::NativeEcdsa),
             signer_script_pubkey,
             context.get_network(),
-        )?;
+        );
 
         println!(
             "Issuing preparation UTXOs with the {} asset id...",
@@ -152,7 +152,7 @@ impl Utility {
         preparation_utxos_asset_id: AssetId,
         offer_parameters: LendingOfferParameters,
     ) -> Result<(), UtilityCommandError> {
-        let signer_script_pubkey = context.signer.get_address()?.script_pubkey();
+        let signer_script_pubkey = context.signer.get_address().script_pubkey();
 
         let issuance_utxos = context.signer.get_utxos_asset(preparation_utxos_asset_id)?;
 

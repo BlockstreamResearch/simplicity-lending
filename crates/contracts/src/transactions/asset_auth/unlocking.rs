@@ -2,7 +2,7 @@ use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
 
 use crate::{
     programs::{AssetAuth, AssetAuthWitnessParams, program::SimplexProgram},
-    transactions::{asset_auth::AssetAuthTransactionError, core::SimplexInput},
+    transactions::core::SimplexInput,
 };
 
 pub fn unlock_asset_auth(
@@ -10,7 +10,7 @@ pub fn unlock_asset_auth(
     auth_input: &SimplexInput,
     unlocked_output: PartialOutput,
     asset_auth: AssetAuth,
-) -> Result<FinalTransaction, AssetAuthTransactionError> {
+) -> FinalTransaction {
     let parameters = asset_auth.get_asset_auth_parameters();
 
     let mut ft = FinalTransaction::new();
@@ -21,12 +21,12 @@ pub fn unlock_asset_auth(
     };
     let witness = AssetAuth::get_asset_auth_witness(&witness_params);
 
-    asset_auth.add_program_input(&mut ft, program_utxo, Box::new(witness))?;
+    asset_auth.add_program_input(&mut ft, program_utxo, Box::new(witness));
 
     ft.add_input(
         auth_input.partial_input().clone(),
         auth_input.required_sig().clone(),
-    )?;
+    );
 
     ft.add_output(unlocked_output);
 
@@ -36,5 +36,5 @@ pub fn unlock_asset_auth(
         ft.add_output(auth_input.new_partial_output());
     }
 
-    Ok(ft)
+    ft
 }
