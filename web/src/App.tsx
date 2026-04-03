@@ -33,6 +33,8 @@ function Header({
   onDisconnect: () => void
   showTabs: boolean
 }) {
+  const faucetUrl = import.meta.env.VITE_FAUCET_URL?.trim()
+
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="max-w-7xl mx-auto px-8 py-4 flex justify-between items-center">
@@ -95,6 +97,16 @@ function Header({
               >
                 Utility
               </button>
+              {faucetUrl ? (
+                <a
+                  href={faucetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-gray-600 hover:text-gray-900 hover:underline"
+                >
+                  Faucet
+                </a>
+              ) : null}
             </nav>
             <AccountMenu
               accountIndex={accountIndex}

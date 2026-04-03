@@ -206,8 +206,8 @@ export function Dashboard({
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:items-stretch">
+        <div className="flex h-full min-h-0 flex-col rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-sm font-semibold text-indigo-700">
               B
@@ -216,39 +216,42 @@ export function Dashboard({
               Your Borrows
             </h2>
           </div>
-          <div className="mb-7 space-y-4">
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-gray-500">LBTC Locked</p>
-              <StatValue
-                loading={statsLoading}
-                value={`${formatBigint(borrowStats.lockedLbtc)} sats`}
-                emphasize
-              />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">LBTC Locked</p>
+                <StatValue
+                  loading={statsLoading}
+                  value={`${formatBigint(borrowStats.lockedLbtc)} sats`}
+                  emphasize
+                />
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Active Deals</p>
+                <StatValue loading={statsLoading} value={borrowStats.activeDeals} />
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Pending Deals</p>
+                <StatValue loading={statsLoading} value={borrowStats.pendingDeals} />
+              </div>
             </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Active Deals</p>
-              <StatValue loading={statsLoading} value={borrowStats.activeDeals} />
-            </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Pending Deals</p>
-              <StatValue loading={statsLoading} value={borrowStats.pendingDeals} />
-            </div>
+            <div className="min-h-0 flex-1" aria-hidden="true" />
           </div>
           {statsError && (
-            <p className="mb-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <p className="mt-4 mb-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
               {statsError}
             </p>
           )}
           <button
             type="button"
             onClick={() => onTab('borrower')}
-            className="w-full rounded-xl bg-[#5F3DC4] px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#4f36a8] hover:shadow-sm"
+            className="mt-4 w-full rounded-xl bg-[#5F3DC4] px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#4f36a8] hover:shadow-sm"
           >
             Borrow
           </button>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="flex h-full min-h-0 flex-col rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-sm font-semibold text-indigo-700">
               S
@@ -257,25 +260,28 @@ export function Dashboard({
               Your Supply
             </h2>
           </div>
-          <div className="mb-7 space-y-4">
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Active Offers</p>
-              <StatValue loading={statsLoading} value={supplyStats.activeOffers} emphasize />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Active Offers</p>
+                <StatValue loading={statsLoading} value={supplyStats.activeOffers} emphasize />
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Expecting Liquidation</p>
+                <StatValue loading={statsLoading} value={supplyStats.waitingLiquidation} />
+              </div>
             </div>
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Expecting Liquidation</p>
-              <StatValue loading={statsLoading} value={supplyStats.waitingLiquidation} />
-            </div>
+            <div className="min-h-0 flex-1" aria-hidden="true" />
           </div>
           {statsError && (
-            <p className="mb-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <p className="mt-4 mb-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
               {statsError}
             </p>
           )}
           <button
             type="button"
             onClick={() => onTab('lender')}
-            className="w-full rounded-xl bg-[#5F3DC4] px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#4f36a8] hover:shadow-sm"
+            className="mt-4 w-full rounded-xl bg-[#5F3DC4] px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#4f36a8] hover:shadow-sm"
           >
             Supply
           </button>
