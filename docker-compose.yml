@@ -78,6 +78,7 @@ services:
         VITE_API_URL: ${VITE_API_URL}
         VITE_ESPLORA_BASE_URL: ${VITE_ESPLORA_BASE_URL}
         VITE_ESPLORA_EXPLORER_URL: ${VITE_ESPLORA_EXPLORER_URL}
+        VITE_FAUCET_URL: ${VITE_FAUCET_URL}
     restart: unless-stopped
     ports:
       - '${WEB_PORT}:80'
