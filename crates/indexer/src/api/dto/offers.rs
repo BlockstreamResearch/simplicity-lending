@@ -1,5 +1,5 @@
 use serde::Serialize;
-use simplicityhl::elements::hex::ToHex;
+use simplex::simplicityhl::elements::hex::ToHex;
 use uuid::Uuid;
 
 use crate::api::dto::ParticipantDto;
@@ -43,6 +43,7 @@ pub struct OfferListItemFull {
     pub base: OfferListItemShort,
 
     pub borrower_pubkey: String,
+    pub borrower_output_script_hash: String,
     pub first_parameters_nft_asset: String,
     pub second_parameters_nft_asset: String,
     pub borrower_nft_asset: String,
@@ -65,6 +66,7 @@ impl From<OfferModel> for OfferListItemFull {
                 created_at_txid: format_hex(value.created_at_txid),
             },
             borrower_pubkey: value.borrower_pubkey.to_hex(),
+            borrower_output_script_hash: value.borrower_output_script_hash.to_hex(),
             first_parameters_nft_asset: format_hex(value.first_parameters_nft_asset_id),
             second_parameters_nft_asset: format_hex(value.second_parameters_nft_asset_id),
             borrower_nft_asset: format_hex(value.borrower_nft_asset_id),

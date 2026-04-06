@@ -50,7 +50,7 @@ export function fromBaseAmount(baseAmount: number, decimals: number): bigint {
 
 /**
  * Build lending parameters from first and second Parameter NFT amounts.
- * Mirrors LendingParameters::build_from_parameters_nfts in parameters.rs.
+ * Mirrors LendingOfferParameters::build_from_parameters_nfts in parameters.rs.
  */
 export function buildLendingParamsFromParameterNFTs(
   firstNFTAmount: bigint,

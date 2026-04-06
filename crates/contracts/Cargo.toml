@@ -20,21 +20,12 @@ pre_lock = []
 workspace = true
 
 [dependencies]
-bincode = "2.0.1"
-
-thiserror = "2"
-
 ring = { workspace = true }
-sha2 = { workspace = true }
-
 hex = { workspace = true }
+thiserror = { workspace = true }
 modular-bitfield = { workspace = true }
 
-simplicityhl = { workspace = true }
-
-simplicityhl-core = { workspace = true }
-
-simplicity-contracts = { workspace = true }
+smplx-std = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"

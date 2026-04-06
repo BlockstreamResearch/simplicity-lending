@@ -1,6 +1,7 @@
-use crate::models::ActiveUtxo;
-use simplicityhl::elements::OutPoint;
+use simplex::simplicityhl::elements::OutPoint;
 use std::collections::HashMap;
+
+use crate::models::ActiveUtxo;
 
 #[derive(Debug)]
 enum PendingOp {
@@ -96,7 +97,7 @@ impl Default for UtxoCache {
 mod tests {
     use super::UtxoCache;
     use crate::models::{ActiveUtxo, UtxoData, UtxoType};
-    use simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
+    use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
     use uuid::Uuid;
 
     fn outpoint(txid_byte: u8, vout: u32) -> OutPoint {

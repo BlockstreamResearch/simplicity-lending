@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use simplicityhl::elements::{Txid, hashes::Hash};
+use simplex::simplicityhl::elements::{Txid, hashes::Hash};
 
-use lending_contracts::pre_lock::build_arguments::PreLockArguments;
+use lending_contracts::programs::PreLockParameters;
 
 use crate::models::{ParticipantType, UtxoType};
 
@@ -35,6 +35,7 @@ pub enum OfferStatus {
 pub struct OfferModel {
     pub id: Uuid,
     pub borrower_pubkey: Vec<u8>,
+    pub borrower_output_script_hash: Vec<u8>,
     pub collateral_asset_id: Vec<u8>,
     pub principal_asset_id: Vec<u8>,
     pub first_parameters_nft_asset_id: Vec<u8>,
@@ -51,22 +52,45 @@ pub struct OfferModel {
 }
 
 impl OfferModel {
-    pub fn new(pre_lock_args: &PreLockArguments, block_height: u64, txid: Txid) -> Self {
-        let lending_params = pre_lock_args.lending_params();
-
+    pub fn new(pre_lock_parameters: &PreLockParameters, block_height: u64, txid: Txid) -> Self {
         Self {
             id: Uuid::new_v4(),
-            borrower_pubkey: pre_lock_args.borrower_pub_key().to_vec(),
-            collateral_asset_id: pre_lock_args.collateral_asset_id().to_vec(),
-            principal_asset_id: pre_lock_args.principal_asset_id().to_vec(),
-            first_parameters_nft_asset_id: pre_lock_args.first_parameters_nft_asset_id().to_vec(),
-            second_parameters_nft_asset_id: pre_lock_args.second_parameters_nft_asset_id().to_vec(),
-            borrower_nft_asset_id: pre_lock_args.borrower_nft_asset_id().to_vec(),
-            lender_nft_asset_id: pre_lock_args.lender_nft_asset_id().to_vec(),
-            collateral_amount: lending_params.collateral_amount as i64,
-            principal_amount: lending_params.principal_amount as i64,
-            interest_rate: lending_params.principal_interest_rate as i32,
-            loan_expiration_time: lending_params.loan_expiration_time as i32,
+            borrower_pubkey: pre_lock_parameters.borrower_pubkey.serialize().to_vec(),
+            borrower_output_script_hash: pre_lock_parameters.borrower_output_script_hash.to_vec(),
+            collateral_asset_id: pre_lock_parameters
+                .collateral_asset_id
+                .into_inner()
+                .0
+                .to_vec(),
+            principal_asset_id: pre_lock_parameters
+                .principal_asset_id
+                .into_inner()
+                .0
+                .to_vec(),
+            first_parameters_nft_asset_id: pre_lock_parameters
+                .first_parameters_nft_asset_id
+                .into_inner()
+                .0
+                .to_vec(),
+            second_parameters_nft_asset_id: pre_lock_parameters
+                .second_parameters_nft_asset_id
+                .into_inner()
+                .0
+                .to_vec(),
+            borrower_nft_asset_id: pre_lock_parameters
+                .borrower_nft_asset_id
+                .into_inner()
+                .0
+                .to_vec(),
+            lender_nft_asset_id: pre_lock_parameters
+                .lender_nft_asset_id
+                .into_inner()
+                .0
+                .to_vec(),
+            collateral_amount: pre_lock_parameters.offer_parameters.collateral_amount as i64,
+            principal_amount: pre_lock_parameters.offer_parameters.principal_amount as i64,
+            interest_rate: pre_lock_parameters.offer_parameters.principal_interest_rate as i32,
+            loan_expiration_time: pre_lock_parameters.offer_parameters.loan_expiration_time as i32,
             current_status: OfferStatus::Pending,
             created_at_height: block_height as i64,
             created_at_txid: txid.as_byte_array().to_vec(),

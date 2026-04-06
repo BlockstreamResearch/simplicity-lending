@@ -1,10 +1,9 @@
-use simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
+use simplex::simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
 
-use lending_contracts::{
-    pre_lock::{build_arguments::PreLockArguments, get_pre_lock_address},
-    sdk::{extract_arguments_from_tx, taproot_unspendable_internal_key},
-};
+use lending_contracts::programs::{PreLock, PreLockParameters, program::SimplexProgram};
+use lending_contracts::transactions::pre_lock::extract_pre_lock_parameters_from_tx;
 
+use crate::esplora_client::EsploraClient;
 use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferModel, OfferUtxoModel, UtxoType};
 use crate::{
@@ -14,13 +13,13 @@ use crate::{
 
 #[tracing::instrument(
     name = "Handling pre lock creation transaction",
-    skip(sql_tx, pre_lock_args, tx, block_height),
+    skip(sql_tx, pre_lock_params, tx, block_height),
     fields(txid = %tx.txid(), %block_height),
 )]
 pub async fn handle_pre_lock_creation(
     sql_tx: &mut DbTx<'_>,
     cache: &mut UtxoCache,
-    pre_lock_args: PreLockArguments,
+    pre_lock_params: PreLockParameters,
     tx: &Transaction,
     block_height: u64,
 ) -> anyhow::Result<()> {
@@ -34,7 +33,7 @@ pub async fn handle_pre_lock_creation(
         ));
     }
 
-    let offer_model = OfferModel::new(&pre_lock_args, block_height, txid);
+    let offer_model = OfferModel::new(&pre_lock_params, block_height, txid);
 
     db::insert_offer(sql_tx, &offer_model).await?;
 
@@ -101,20 +100,19 @@ pub async fn handle_pre_lock_creation(
     Ok(())
 }
 
-pub fn is_pre_lock_creation_tx(tx: &Transaction) -> Option<PreLockArguments> {
-    let pre_lock_args =
-        extract_arguments_from_tx(tx, simplicityhl_core::SimplicityNetwork::LiquidTestnet).ok()?;
+pub fn is_pre_lock_creation_tx(
+    tx: &Transaction,
+    client: &EsploraClient,
+) -> Option<PreLockParameters> {
+    let pre_lock_parameters =
+        extract_pre_lock_parameters_from_tx(tx, &client.to_simplex_provider()).ok()?;
 
-    let expected_pre_lock_address = get_pre_lock_address(
-        &taproot_unspendable_internal_key(),
-        &pre_lock_args,
-        simplicityhl_core::SimplicityNetwork::LiquidTestnet,
-    )
-    .ok()?;
+    let pre_lock = PreLock::new(pre_lock_parameters);
+    let pre_lock_script_pubkey = pre_lock.get_script_pubkey();
 
-    if tx.output.first().unwrap().script_pubkey != expected_pre_lock_address.script_pubkey() {
+    if tx.output.first().unwrap().script_pubkey != pre_lock_script_pubkey {
         return None;
     }
 
-    Some(pre_lock_args)
+    Some(pre_lock_parameters)
 }

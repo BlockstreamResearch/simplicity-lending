@@ -1,4 +1,4 @@
-use simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
+use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -50,16 +50,17 @@ pub async fn insert_offer(sql_tx: &mut DbTx<'_>, offer: &OfferModel) -> Result<(
     sqlx::query!(
         r#"
         INSERT INTO offers (
-            id, borrower_pubkey, collateral_asset_id, principal_asset_id,
+            id, borrower_pubkey, borrower_output_script_hash, collateral_asset_id, principal_asset_id,
             first_parameters_nft_asset_id, second_parameters_nft_asset_id,
             borrower_nft_asset_id, lender_nft_asset_id,
             collateral_amount, principal_amount, interest_rate,
             loan_expiration_time, created_at_height, created_at_txid
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ON CONFLICT (created_at_txid) DO NOTHING
         "#,
         offer.id,
         offer.borrower_pubkey,
+        offer.borrower_output_script_hash,
         offer.collateral_asset_id,
         offer.principal_asset_id,
         offer.first_parameters_nft_asset_id,
