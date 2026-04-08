@@ -7,6 +7,7 @@ import {
   WALLET_ABI_WALLETCONNECT_EVENTS,
   WALLET_ABI_WALLETCONNECT_METHODS,
   WALLET_ABI_WALLETCONNECT_NAMESPACE,
+  createWalletAbiRequiredNamespaces,
   walletAbiNetworkToWalletConnectChain,
   type WalletAbiMethod,
   type WalletAbiWalletConnectChain,
@@ -16,6 +17,9 @@ import type { WalletAbiNetwork } from 'wallet-abi-sdk-alpha/schema'
 const DEFAULT_WALLET_ABI_NETWORK: WalletAbiNetwork = 'testnet-liquid'
 const WALLET_ABI_STORAGE_PREFIX = 'simplicity-lending-wallet-abi'
 const WALLETCONNECT_USER_DISCONNECTED = getSdkError('USER_DISCONNECTED')
+const WALLETCONNECT_APPROVAL_TIMEOUT_MS = 90_000
+const WALLETCONNECT_APPROVAL_REJECTION_GRACE_MS = 1_500
+const WALLETCONNECT_SESSION_POLL_INTERVAL_MS = 250
 
 export interface WalletAbiWalletConnectRequest {
   method: WalletAbiMethod
@@ -40,7 +44,7 @@ export interface WalletAbiSessionController {
 export interface CreateWalletAbiSessionControllerOptions {
   projectId: string
   network: WalletAbiNetwork
-  origin: string
+  appUrl: string
 }
 
 export interface SelectedWalletAbiSessions {
@@ -61,6 +65,29 @@ type WalletAbiRequiredNamespaces = Record<
     events: string[]
   }
 >
+
+export interface WalletAbiSessionApprovalSignClient {
+  session: {
+    getAll(): SessionTypes.Struct[]
+  }
+  on(
+    event: 'session_connect',
+    listener: (event: SignClientTypes.EventArguments['session_connect']) => void
+  ): void
+  off(
+    event: 'session_connect',
+    listener: (event: SignClientTypes.EventArguments['session_connect']) => void
+  ): void
+}
+
+export interface AwaitWalletAbiApprovedSessionOptions {
+  approval(): Promise<SessionTypes.Struct>
+  signClient: WalletAbiSessionApprovalSignClient
+  chainId: WalletAbiWalletConnectChain
+  connectTimeoutMs?: number
+  approvalRejectionGraceMs?: number
+  sessionPollMs?: number
+}
 
 const WALLET_ABI_NATIVE_CURRENCY = {
   name: 'Liquid Bitcoin',
@@ -209,12 +236,17 @@ function disconnectSession(signClient: SignClient, topic: string): Promise<void>
     .catch(() => undefined)
 }
 
-function createMetadata(origin: string) {
+export function createWalletAbiMetadata(appUrl: string) {
+  const normalizedUrl = new URL(appUrl)
+
   return {
     name: 'Simplicity Lending',
     description: 'Wallet ABI WalletConnect session for the Simplicity Lending web app.',
-    url: origin,
-    icons: [`${origin}/vite.svg`],
+    url: normalizedUrl.toString(),
+    icons: [`${normalizedUrl.origin}/vite.svg`],
+    redirect: {
+      universal: normalizedUrl.toString(),
+    },
   }
 }
 
@@ -262,15 +294,129 @@ function describeWalletConnectError(error: unknown): string {
   return 'Unknown error'
 }
 
+function sleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delayMs)
+  })
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(message))
+    }, timeoutMs)
+
+    promise.then(
+      (result) => {
+        clearTimeout(timeoutId)
+        resolve(result)
+      },
+      (error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      }
+    )
+  })
+}
+
+function currentWalletAbiSession(
+  signClient: WalletAbiSessionApprovalSignClient,
+  chainId: WalletAbiWalletConnectChain
+): SessionTypes.Struct | null {
+  return selectWalletAbiSessions(signClient.session.getAll(), chainId).activeSession
+}
+
 function createRequiredNamespaces(
   chainId: WalletAbiWalletConnectChain
 ): WalletAbiRequiredNamespaces {
-  return {
-    [WALLET_ABI_WALLETCONNECT_NAMESPACE]: {
-      methods: [...WALLET_ABI_WALLETCONNECT_METHODS],
-      chains: [chainId],
-      events: [...WALLET_ABI_WALLETCONNECT_EVENTS],
-    },
+  const requiredNamespaces = createWalletAbiRequiredNamespaces(chainId)
+
+  return Object.fromEntries(
+    Object.entries(requiredNamespaces).map(([namespace, value]) => [
+      namespace,
+      {
+        methods: [...value.methods],
+        chains: [...value.chains],
+        events: [...value.events],
+      },
+    ])
+  )
+}
+
+export async function awaitWalletAbiApprovedSession({
+  approval,
+  signClient,
+  chainId,
+  connectTimeoutMs = WALLETCONNECT_APPROVAL_TIMEOUT_MS,
+  approvalRejectionGraceMs = WALLETCONNECT_APPROVAL_REJECTION_GRACE_MS,
+  sessionPollMs = WALLETCONNECT_SESSION_POLL_INTERVAL_MS,
+}: AwaitWalletAbiApprovedSessionOptions): Promise<SessionTypes.Struct> {
+  const existingSession = currentWalletAbiSession(signClient, chainId)
+  if (existingSession !== null) {
+    return existingSession
+  }
+
+  let active = true
+  let cleanupListener: (() => void) | null = null
+
+  const stopWaiting = () => {
+    if (!active) {
+      return
+    }
+
+    active = false
+    cleanupListener?.()
+    cleanupListener = null
+  }
+
+  const sessionConnectPromise = new Promise<SessionTypes.Struct>((resolve) => {
+    const onConnected = ({
+      session,
+    }: SignClientTypes.EventArguments['session_connect']) => {
+      if (!isWalletAbiSession(session, chainId)) {
+        return
+      }
+
+      stopWaiting()
+      resolve(session)
+    }
+
+    cleanupListener = () => {
+      signClient.off('session_connect', onConnected)
+    }
+    signClient.on('session_connect', onConnected)
+  })
+
+  const approvalPromise = approval()
+    .then((session) => {
+      stopWaiting()
+      return session
+    })
+    .catch(async (error) => {
+      const deadline = Date.now() + approvalRejectionGraceMs
+
+      while (active && Date.now() < deadline) {
+        const nextSession = currentWalletAbiSession(signClient, chainId)
+        if (nextSession !== null) {
+          stopWaiting()
+          return nextSession
+        }
+
+        await sleep(sessionPollMs)
+      }
+
+      stopWaiting()
+      throw error
+    })
+
+  try {
+    return await withTimeout(
+      Promise.race([approvalPromise, sessionConnectPromise]),
+      connectTimeoutMs,
+      'WalletConnect session approval timed out'
+    )
+  } finally {
+    stopWaiting()
   }
 }
 
@@ -331,7 +477,11 @@ class WalletAbiUniversalSessionController implements WalletAbiSessionController 
         modalOpened = true
       }
 
-      session = await approval()
+      session = await awaitWalletAbiApprovedSession({
+        approval,
+        signClient: this.#signClient,
+        chainId: this.chainId,
+      })
       this.#session = session
     } catch (error) {
       throw new Error(`Error connecting to wallet: ${describeWalletConnectError(error)}`)
@@ -434,9 +584,9 @@ class WalletAbiUniversalSessionController implements WalletAbiSessionController 
 export async function createWalletAbiSessionController({
   projectId,
   network,
-  origin,
+  appUrl,
 }: CreateWalletAbiSessionControllerOptions): Promise<WalletAbiSessionController> {
-  const metadata = createMetadata(origin)
+  const metadata = createWalletAbiMetadata(appUrl)
   const chainId = walletAbiNetworkToWalletConnectChain(network)
   const caipNetwork = createWalletAbiCaipNetwork(network)
   const requiredNamespaces = createRequiredNamespaces(chainId)

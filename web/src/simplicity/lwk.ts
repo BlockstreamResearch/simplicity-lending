@@ -3,18 +3,13 @@
  * Only the address / serialization helpers are still used by the Wallet ABI web flow.
  */
 
-let lwkInit: Promise<typeof import('lwk_web')> | null = null
+let lwkInit: Promise<typeof import('wallet-abi-sdk-alpha/vendor')> | null = null
 
-function getWasmUrl(): string {
-  if (import.meta.env.DEV) return '/lwk_wasm_bg.wasm'
-  return `${import.meta.env.BASE_URL}assets/lwk_wasm_bg.wasm`
-}
-
-export async function getLwk(): Promise<typeof import('lwk_web')> {
+export async function getLwk(): Promise<typeof import('wallet-abi-sdk-alpha/vendor')> {
   if (!lwkInit) {
     lwkInit = (async () => {
-      const lwk = await import('lwk_web')
-      if (typeof lwk.default === 'function') await lwk.default(getWasmUrl())
+      const lwk = await import('wallet-abi-sdk-alpha/vendor')
+      if (typeof lwk.default === 'function') await lwk.default()
       return lwk
     })()
   }

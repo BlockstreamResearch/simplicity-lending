@@ -1,7 +1,10 @@
+import { EventEmitter } from 'node:events'
 import { describe, expect, it } from 'vitest'
-import type { SessionTypes } from '@walletconnect/types'
+import type { SessionTypes, SignClientTypes } from '@walletconnect/types'
 import {
+  awaitWalletAbiApprovedSession,
   createWalletAbiCaipNetwork,
+  createWalletAbiMetadata,
   resolveWalletAbiNetwork,
   selectWalletAbiSessions,
 } from './walletConnectSession'
@@ -69,6 +72,40 @@ function sessionWith({
   }
 }
 
+function createMockApprovalSignClient(initialSessions: SessionTypes.Struct[] = []) {
+  const emitter = new EventEmitter()
+  const sessions = [...initialSessions]
+
+  return {
+    signClient: {
+      session: {
+        getAll() {
+          return [...sessions]
+        },
+      },
+      on(
+        event: 'session_connect',
+        listener: (event: SignClientTypes.EventArguments['session_connect']) => void
+      ) {
+        emitter.on(event, listener)
+      },
+      off(
+        event: 'session_connect',
+        listener: (event: SignClientTypes.EventArguments['session_connect']) => void
+      ) {
+        emitter.off(event, listener)
+      },
+    },
+    addSession(session: SessionTypes.Struct) {
+      sessions.unshift(session)
+    },
+    emitSessionConnect(session: SessionTypes.Struct) {
+      sessions.unshift(session)
+      emitter.emit('session_connect', { session })
+    },
+  }
+}
+
 describe('walletConnectSession', () => {
   it('keeps the newest wallet_abi session and marks older ones as stale', () => {
     const chainId = 'walabi:testnet-liquid'
@@ -103,6 +140,96 @@ describe('walletConnectSession', () => {
   it('defaults invalid or missing network config to testnet-liquid', () => {
     expect(resolveWalletAbiNetwork(undefined)).toBe('testnet-liquid')
     expect(resolveWalletAbiNetwork('unsupported-network')).toBe('testnet-liquid')
+  })
+
+  it('includes a redirect target in WalletConnect metadata for mobile handoff', () => {
+    expect(createWalletAbiMetadata('https://app.example/connect?wallet=green')).toEqual({
+      name: 'Simplicity Lending',
+      description: 'Wallet ABI WalletConnect session for the Simplicity Lending web app.',
+      url: 'https://app.example/connect?wallet=green',
+      icons: ['https://app.example/vite.svg'],
+      redirect: {
+        universal: 'https://app.example/connect?wallet=green',
+      },
+    })
+  })
+
+  it('accepts session_connect as a fallback when approval does not settle', async () => {
+    const chainId = 'walabi:testnet-liquid'
+    const { signClient, emitSessionConnect } = createMockApprovalSignClient()
+    const connectedSession = sessionWith({
+      topic: 'connected',
+      expiry: 50,
+      chainId,
+    })
+
+    const approval = awaitWalletAbiApprovedSession({
+      approval: () => new Promise(() => undefined),
+      signClient,
+      chainId,
+      connectTimeoutMs: 500,
+      sessionPollMs: 5,
+    })
+
+    setTimeout(() => {
+      emitSessionConnect(connectedSession)
+    }, 10)
+
+    await expect(approval).resolves.toMatchObject({
+      topic: 'connected',
+    })
+  })
+
+  it('falls back to the stored session when approval rejects after the wallet settles', async () => {
+    const chainId = 'walabi:testnet-liquid'
+    const { signClient, addSession } = createMockApprovalSignClient()
+    const settledSession = sessionWith({
+      topic: 'settled',
+      expiry: 60,
+      chainId,
+    })
+
+    const approval = awaitWalletAbiApprovedSession({
+      approval: async () => {
+        setTimeout(() => {
+          addSession(settledSession)
+        }, 10)
+        throw new Error('approval promise failed')
+      },
+      signClient,
+      chainId,
+      connectTimeoutMs: 500,
+      approvalRejectionGraceMs: 50,
+      sessionPollMs: 5,
+    })
+
+    await expect(approval).resolves.toMatchObject({
+      topic: 'settled',
+    })
+  })
+
+  it('does not treat a stored session as approved before approval settles', async () => {
+    const chainId = 'walabi:testnet-liquid'
+    const { signClient, addSession } = createMockApprovalSignClient()
+    const storedSession = sessionWith({
+      topic: 'stored-only',
+      expiry: 70,
+      chainId,
+    })
+
+    const approval = awaitWalletAbiApprovedSession({
+      approval: () => new Promise(() => undefined),
+      signClient,
+      chainId,
+      connectTimeoutMs: 50,
+      sessionPollMs: 5,
+    })
+
+    setTimeout(() => {
+      addSession(storedSession)
+    }, 10)
+
+    await expect(approval).rejects.toThrow('WalletConnect session approval timed out')
   })
 
   it('infers wallet abi networks from Liquid address prefixes', () => {

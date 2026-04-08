@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import {
   createContext,
   useContext,
@@ -44,6 +46,7 @@ export interface WalletAbiSessionValue {
 }
 
 const REQUEST_TIMEOUT_MS = 300_000
+const SESSION_IDENTITY_REQUEST_TIMEOUT_MS = 15_000
 const WalletAbiSessionContext = createContext<WalletAbiSessionValue | null>(null)
 
 function errorMessage(error: unknown): string {
@@ -141,6 +144,13 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
     return nextClient
   }
 
+  const createIdentityClient = (controller: WalletAbiSessionController): WalletAbiClient => {
+    return new WalletAbiClient({
+      requester: buildRequester(controller),
+      requestTimeoutMs: SESSION_IDENTITY_REQUEST_TIMEOUT_MS,
+    })
+  }
+
   const getController = async (): Promise<WalletAbiSessionController> => {
     if (reownProjectId.length === 0) {
       throw new Error('Missing VITE_REOWN_PROJECT_ID')
@@ -158,7 +168,7 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
     const nextControllerPromise = createWalletAbiSessionController({
       projectId: reownProjectId,
       network: walletAbiNetwork,
-      origin: window.location.origin,
+      appUrl: window.location.href,
     }).then((controller) => {
       controllerRef.current = controller
       return controller
@@ -174,9 +184,10 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
   }
 
   const hydrateSession = async (controller: WalletAbiSessionController): Promise<WalletAbiClient> => {
+    const identityClient = createIdentityClient(controller)
     const client = getClient(controller)
-    const nextAddress = await client.getSignerReceiveAddress()
-    const nextPubkey = await client.getRawSigningXOnlyPubkey()
+    const nextAddress = await identityClient.getSignerReceiveAddress()
+    const nextPubkey = await identityClient.getRawSigningXOnlyPubkey()
     const nextScript = await getScriptPubkeyHexFromAddress(nextAddress)
 
     setSignerReceiveAddress(nextAddress)
@@ -238,6 +249,8 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
     rememberWalletScript(signingXOnlyPubkey, network, signerScriptPubkeyHex)
   }, [network, signerScriptPubkeyHex, signingXOnlyPubkey])
 
+  // This effect should only rebind the controller when the project id or target network changes.
+  // The helper functions close over refs/state and are intentionally not dependency drivers here.
   useEffect(() => {
     let cancelled = false
     let unsubscribe: (() => void) | undefined
@@ -294,7 +307,7 @@ export function WalletAbiSessionProvider({ children }: PropsWithChildren) {
       cancelled = true
       unsubscribe?.()
     }
-  }, [reownProjectId, walletAbiNetwork])
+  }, [reownProjectId, walletAbiNetwork]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const value: WalletAbiSessionValue = {
     status,
