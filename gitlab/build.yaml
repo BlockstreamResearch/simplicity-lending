@@ -1,0 +1,23 @@
+build_backend:
+  extends:
+    - .auth_gcp
+    - .build_docker
+  needs:
+    - job: create_timestamp
+      artifacts: true
+  variables:
+    ARCH: amd64
+    IMAGE: ${BACKEND_IMAGE}
+    DOCKERFILE: deployment/Dockerfile.backend
+
+build_web:
+  extends:
+    - .auth_gcp
+    - .build_docker
+  needs:
+    - job: create_timestamp
+      artifacts: true
+  variables:
+    ARCH: amd64
+    IMAGE: ${WEB_IMAGE}
+    DOCKERFILE: deployment/Dockerfile.web

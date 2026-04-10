@@ -1,0 +1,58 @@
+# Timestamp to be shared by all deploy jobs in the pipeline
+create_timestamp:
+  stage: .pre
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - export TIMESTAMP=$(date +%Y%m%d%H%M%S)
+    - echo "TIMESTAMP=${TIMESTAMP}" >> timestamp.env
+    - echo "Generated timestamp ${TIMESTAMP}"
+  artifacts:
+    reports:
+      dotenv: timestamp.env
+
+.auth_gcp:
+  variables:
+    PROJECT_NUMBER: ${CI_PROJECT_NUMBER}
+    POOL_ID: ${CI_POOL_ID}
+    PROVIDER_ID: ${CI_PROVIDER_ID}
+    SERVICE_ACCOUNT_EMAIL: ${CI_SERVICE_ACCOUNT_EMAIL}
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: ${CI_OIDC_AUDIENCE}
+  before_script:
+    - echo ${GITLAB_OIDC_TOKEN} > .ci_job_jwt_file
+    - export PATH=/opt/google-cloud-sdk/bin:$PATH
+    - gcloud iam workload-identity-pools create-cred-config "projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
+      --service-account="${SERVICE_ACCOUNT_EMAIL}"
+      --output-file=.gcp_temp_cred.json
+      --credential-source-file=.ci_job_jwt_file
+    - gcloud auth login --cred-file=.gcp_temp_cred.json --update-adc
+    - gcloud auth list
+    - gcloud auth configure-docker ${REGION}-docker.pkg.dev
+
+.build_docker:
+  stage: build
+  when: manual
+  script:
+    - PLATFORM=linux/${ARCH}
+    - TAG=${CI_COMMIT_SHORT_SHA}-${TIMESTAMP}
+    - echo "Using timestamp ${TIMESTAMP} and tag ${TAG}"
+    - GAR_IMAGE=${IMAGE}
+    - GAR_IMAGE_LATEST=${GAR_IMAGE}:latest
+    - GAR_IMAGE_TAG=${GAR_IMAGE}:${TAG}
+    - docker buildx create
+      --driver=docker-container
+      --name=buildkit-builder
+      --use
+      --platform ${PLATFORM}
+    - docker buildx build
+      --platform ${PLATFORM}
+      --cache-from ${GAR_IMAGE_LATEST}
+      --load
+      -f ${DOCKERFILE}
+      -t ${GAR_IMAGE_LATEST}
+      -t ${GAR_IMAGE_TAG} .
+    - docker push ${GAR_IMAGE_TAG}
+    - echo "pushed ${GAR_IMAGE_TAG}"
+    - if [ ${CI_COMMIT_BRANCH} == ${CI_DEFAULT_BRANCH} ]; then docker push ${GAR_IMAGE_LATEST}; echo "pushed ${GAR_IMAGE_LATEST}"; fi
