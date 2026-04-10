@@ -2,11 +2,11 @@ use simplex::constants::DUMMY_SIGNATURE;
 use simplex::either::Either::{Left, Right};
 use simplex::program::Program;
 
+use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::hashes::FromSliceError;
 use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
 
 use crate::artifacts::pre_lock::PreLockProgram;
 use crate::artifacts::pre_lock::derived_pre_lock::{PreLockArguments, PreLockWitness};
@@ -110,14 +110,8 @@ pub const PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH: usize = 64;
 
 impl PreLock {
     pub fn new(parameters: PreLockParameters) -> Self {
-        Self::from_internal_key(tr_unspendable_key(), parameters)
-    }
-
-    pub fn from_internal_key(internal_key: XOnlyPublicKey, parameters: PreLockParameters) -> Self {
-        let arguments = PreLockArguments::from(parameters);
-
         Self {
-            program: PreLockProgram::new(internal_key, arguments),
+            program: PreLockProgram::new(PreLockArguments::from(parameters)),
             parameters,
         }
     }

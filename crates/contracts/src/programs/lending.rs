@@ -1,7 +1,7 @@
 use simplex::either::Either::{Left, Right};
 use simplex::program::Program;
-use simplex::simplicityhl::elements::{AssetId, secp256k1_zkp::XOnlyPublicKey};
-use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
+use simplex::provider::SimplicityNetwork;
+use simplex::simplicityhl::elements::AssetId;
 
 use crate::artifacts::lending::LendingProgram;
 use crate::artifacts::lending::derived_lending::{LendingArguments, LendingWitness};
@@ -65,14 +65,8 @@ pub enum LendingBranch {
 
 impl Lending {
     pub fn new(parameters: LendingParameters) -> Self {
-        Self::from_internal_key(tr_unspendable_key(), parameters)
-    }
-
-    pub fn from_internal_key(internal_key: XOnlyPublicKey, parameters: LendingParameters) -> Self {
-        let arguments = LendingArguments::from(parameters);
-
         Self {
-            program: LendingProgram::new(internal_key, arguments),
+            program: LendingProgram::new(LendingArguments::from(parameters)),
             parameters,
         }
     }
