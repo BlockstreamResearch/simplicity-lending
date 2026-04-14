@@ -50,10 +50,10 @@ export async function finalizeLoanRepaymentTx(
   const net = network === 'mainnet' ? Network.mainnet() : Network.testnet()
   const taprootUnspendableKey = getTaprootUnspendableInternalKey(lwk)
 
-  const keypair = new Keypair(borrowerSecretKey)
-  const p2pkInternalKey = keypair.xOnlyPublicKey()
-  const p2pkArgs = buildP2pkArguments(lwk, { publicKeyHex: p2pkInternalKey.toHex() })
-  const p2pkProgram = new SimplicityProgram(getSource('p2pk'), p2pkArgs)
+  const keypair = Keypair.fromSecretBytes(borrowerSecretKey)
+  const p2pkInternalKey = keypair.xOnlyPublicKey
+  const p2pkArgs = buildP2pkArguments(lwk, { publicKeyHex: p2pkInternalKey.toString() })
+  const p2pkProgram = SimplicityProgram.load(getSource('p2pk'), p2pkArgs)
 
   const lendingArgsLwk = buildLendingArguments(lwk, {
     collateralAssetId: lendingArgs.collateralAssetId,
@@ -65,11 +65,11 @@ export async function finalizeLoanRepaymentTx(
     lenderPrincipalCovHash: lendingArgs.lenderPrincipalCovHash,
     lendingParams: lendingArgs.lendingParams,
   })
-  const lendingProgram = new SimplicityProgram(getSource('lending'), lendingArgsLwk)
+  const lendingProgram = SimplicityProgram.load(getSource('lending'), lendingArgsLwk)
   const lendingWitness = buildLendingWitness(lwk, { branch: 'LoanRepayment' })
 
   const scriptAuthArgs = buildScriptAuthArguments(lwk, { scriptHash: lendingCovHash })
-  const scriptAuthProgram = new SimplicityProgram(getSource('script_auth'), scriptAuthArgs)
+  const scriptAuthProgram = SimplicityProgram.load(getSource('script_auth'), scriptAuthArgs)
   const scriptAuthInternalKey = getTaprootUnspendableInternalKey(lwk)
   const scriptAuthWitness = buildScriptAuthWitness(lwk, { inputScriptIndex: 0 })
 

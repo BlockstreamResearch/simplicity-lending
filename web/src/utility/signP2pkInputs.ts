@@ -34,13 +34,13 @@ export function signP2pkInputs(params: SignP2pkInputsParams): string {
   } = lwk
 
   const net = network === 'mainnet' ? Network.mainnet() : Network.testnet()
-  const keypair = new Keypair(secretKey)
-  const internalKey = keypair.xOnlyPublicKey()
+  const keypair = Keypair.fromSecretBytes(secretKey)
+  const internalKey = keypair.xOnlyPublicKey
   const args = new SimplicityArguments().addValue(
     'PUBLIC_KEY',
-    SimplicityTypedValue.fromU256Hex(internalKey.toHex())
+    SimplicityTypedValue.fromU256Hex(internalKey.toString())
   )
-  const program = new SimplicityProgram(getSource('p2pk'), args)
+  const program = SimplicityProgram.load(getSource('p2pk'), args)
 
   let tx: LwkTransaction = pset.extractTx()
 

@@ -1,7 +1,7 @@
 FROM rust:1.90-bookworm AS lwk-builder
 
-ARG LWK_REF=wasm_0.15.0
-ARG LWK_COMMIT=5b015d6548a2e5ce60c5fcaae449248447e4c02d
+ARG LWK_REF=wasm_0.16.0
+ARG LWK_COMMIT=4786e456db6efc05413721f6489899a6426eaa47
 
 RUN apt-get update && apt-get install -y --no-install-recommends git pkg-config libssl-dev ca-certificates clang && rm -rf /var/lib/apt/lists/*
 RUN rustup target add wasm32-unknown-unknown

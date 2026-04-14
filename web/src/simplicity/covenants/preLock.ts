@@ -77,12 +77,12 @@ export function buildPreLockWitness(
 ): LwkSimplicityWitnessValues {
   const { SimplicityType, SimplicityTypedValue, SimplicityWitnessValues } = lwk
 
-  const pathType = new SimplicityType('Either<(), Signature>')
+  const pathType = SimplicityType.fromString('Either<(), Signature>')
 
   const pathValue =
     params.branch === 'LendingCreation'
-      ? new SimplicityTypedValue('Left(())', pathType)
-      : new SimplicityTypedValue(`Right(0x${params.cancellationSignatureHex ?? ''})`, pathType)
+      ? SimplicityTypedValue.parse('Left(())', pathType)
+      : SimplicityTypedValue.parse(`Right(0x${params.cancellationSignatureHex ?? ''})`, pathType)
 
   let witness = new SimplicityWitnessValues()
   const next = witness.addValue('PATH', pathValue)

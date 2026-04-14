@@ -32,9 +32,9 @@ export async function getP2pkAddressFromSecret(
   const SimplicityArguments = lwk.SimplicityArguments
   const SimplicityTypedValue = lwk.SimplicityTypedValue
 
-  const keypair = new Keypair(secretKey)
-  const internalKey = keypair.xOnlyPublicKey()
-  const internalKeyHex = internalKey.toHex()
+  const keypair = Keypair.fromSecretBytes(secretKey)
+  const internalKey = keypair.xOnlyPublicKey
+  const internalKeyHex = internalKey.toString()
 
   const args = new SimplicityArguments().addValue(
     'PUBLIC_KEY',
