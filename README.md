@@ -28,9 +28,14 @@ In case the Borrower fails to pay interest before the lending contract expiry, t
 
 From repo root:
 
-```bash
-docker compose up --build
-```
+1. Create the environment file (in the root):
+   ```bash
+   cp .env.example .env
+   ```
+2. Start the services:
+   ```bash
+   docker compose up --build
+   ```
 
 
 ### Locally (without Docker)

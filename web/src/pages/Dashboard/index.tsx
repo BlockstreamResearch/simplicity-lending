@@ -17,7 +17,11 @@ import {
 import { EsploraClient } from '../../api/esplora'
 import { OfferTable } from '../../components/OfferTable'
 import type { OfferShort } from '../../types/offers'
-import { getScriptPubkeyHexFromAddress, getP2pkAddressFromSecret, P2PK_NETWORK } from '../../utility/addressP2pk'
+import {
+  getScriptPubkeyHexFromAddress,
+  getP2pkAddressFromSecret,
+  P2PK_NETWORK,
+} from '../../utility/addressP2pk'
 import { POLICY_ASSET_ID } from '../../utility/addressP2pk'
 import { deriveSecretKeyFromIndex, parseSeedHex } from '../../utility/seed'
 
@@ -133,7 +137,9 @@ export function Dashboard({
 
       const allBorrowerIds = [...new Set([...idsByScript, ...idsByBorrowerPubkey])]
       const [scriptOffersWithParticipants, borrowerOffersWithParticipants] = await Promise.all([
-        idsByScript.length === 0 ? Promise.resolve([]) : fetchOfferDetailsBatchWithParticipants(idsByScript),
+        idsByScript.length === 0
+          ? Promise.resolve([])
+          : fetchOfferDetailsBatchWithParticipants(idsByScript),
         allBorrowerIds.length === 0
           ? Promise.resolve([])
           : fetchOfferDetailsBatchWithParticipants(allBorrowerIds),

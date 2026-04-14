@@ -5,16 +5,11 @@
 
 let lwkInit: Promise<typeof import('lwk_web')> | null = null
 
-function getWasmUrl(): string {
-  if (import.meta.env.DEV) return '/lwk_wasm_bg.wasm'
-  return `${import.meta.env.BASE_URL}assets/lwk_wasm_bg.wasm`
-}
-
 export async function getLwk(): Promise<typeof import('lwk_web')> {
   if (!lwkInit) {
     lwkInit = (async () => {
       const lwk = await import('lwk_web')
-      if (typeof lwk.default === 'function') await lwk.default(getWasmUrl())
+      if (typeof lwk.default === 'function') await lwk.default()
       return lwk
     })()
   }
@@ -30,7 +25,7 @@ export type Lwk = Awaited<ReturnType<typeof getLwk>>
 export type LwkSimplicityArguments = InstanceType<Lwk['SimplicityArguments']>
 
 /** Instance of LWK XOnlyPublicKey. */
-export type LwkXOnlyPublicKey = InstanceType<Lwk['XOnlyPublicKey']>
+export type LwkXOnlyPublicKey = ReturnType<Lwk['XOnlyPublicKey']['fromBytes']>
 
 /** Instance of LWK Script. */
 export type LwkScript = InstanceType<Lwk['Script']>
@@ -42,25 +37,25 @@ export type LwkTxOut = ReturnType<Lwk['TxOut']['fromExplicit']>
 export type LwkTxOutArray = LwkTxOut[]
 
 /** Instance of LWK SimplicityProgram. */
-export type LwkSimplicityProgram = InstanceType<Lwk['SimplicityProgram']>
+export type LwkSimplicityProgram = ReturnType<Lwk['SimplicityProgram']['load']>
 
 /** Instance of LWK SimplicityTypedValue. */
-export type LwkSimplicityTypedValue = InstanceType<Lwk['SimplicityTypedValue']>
+export type LwkSimplicityTypedValue = ReturnType<Lwk['SimplicityTypedValue']['fromU8']>
 
 /** Instance of LWK SimplicityWitnessValues. */
 export type LwkSimplicityWitnessValues = InstanceType<Lwk['SimplicityWitnessValues']>
 
 /** Instance of LWK SimplicityType (for parsing type strings). */
-export type LwkSimplicityType = InstanceType<Lwk['SimplicityType']>
+export type LwkSimplicityType = ReturnType<Lwk['SimplicityType']['u1']>
 
 /** Instance of LWK Keypair. */
-export type LwkKeypair = InstanceType<Lwk['Keypair']>
+export type LwkKeypair = ReturnType<Lwk['Keypair']['fromSecretBytes']>
 
 /** LWK Network (return type of Network.mainnet() / Network.testnet()). */
 export type LwkNetwork = ReturnType<Lwk['Network']['mainnet']>
 
 /** LWK transaction type (first argument of getSighashAll / return of finalizeTransaction). */
-export type LwkTransaction = Parameters<InstanceType<Lwk['SimplicityProgram']>['getSighashAll']>[0]
+export type LwkTransaction = ReturnType<Lwk['Transaction']['fromString']>
 
 /** PSET that can yield the unsigned transaction for LWK signing (extractTx). */
 export interface PsetWithExtractTx {
@@ -80,7 +75,7 @@ export interface CreateP2trAddressParams {
 export async function createP2trAddress(params: CreateP2trAddressParams): Promise<string> {
   const lwk = await getLwk()
   const { SimplicityProgram, Network } = lwk
-  const program = new SimplicityProgram(params.source, params.args)
+  const program = SimplicityProgram.load(params.source, params.args)
   const net = params.network === 'mainnet' ? Network.mainnet() : Network.testnet()
   const address = program.createP2trAddress(params.internalKey, net)
   return address.toString()
