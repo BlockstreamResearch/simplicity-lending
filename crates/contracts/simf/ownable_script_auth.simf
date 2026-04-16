@@ -1,0 +1,141 @@
+// Helper getters
+
+fn get_script_hash(index: u32, is_input_index: bool) -> u256 {
+    let script_hash: u256 = match is_input_index {
+        true => unwrap(jet::input_script_hash(index)),
+        false => unwrap(jet::output_script_hash(index)),
+    };
+
+    script_hash
+}
+
+fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
+    let pair: (Asset1, Amount1) = match is_input_index {
+        true => unwrap(jet::input_amount(index)),
+        false => unwrap(jet::output_amount(index)),
+    };
+    let (asset, amount): (Asset1, Amount1) = pair;
+    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_bits, amount)
+}
+
+// Check helpers
+
+fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
+    assert!(jet::eq_64(asset_amount_1, asset_amount_2));
+}
+
+fn check_assets_eq(asset_bits_1: u256, asset_bits_2: u256) {
+    assert!(jet::eq_256(asset_bits_1, asset_bits_2));
+}
+
+fn check_script_hashes_eq(script_1: u256, script_2: u256) {
+    assert!(jet::eq_256(script_1, script_2));
+}
+
+fn ensure_current_script_hash(expected_script_hash: u256) {
+    check_script_hashes_eq(jet::current_script_hash(), expected_script_hash);
+}
+
+fn ensure_script_hash(index: u32, is_input_index: bool, expected_script_hash: u256) {
+    let script_hash: u256 = get_script_hash(index, is_input_index);
+
+    check_script_hashes_eq(script_hash, expected_script_hash);
+}
+
+fn ensure_input_and_output_eq(input_index: u32, output_index: u32) {
+    let (input_asset_bits, input_amount): (u256, u64) = get_asset_and_amount(input_index, true);
+    let (output_asset_bits, output_amount): (u256, u64) = get_asset_and_amount(output_index, false);
+
+    check_assets_eq(input_asset_bits, input_asset_bits);
+    check_asset_amounts_eq(input_amount, output_amount);
+}
+
+fn ensure_output_is_op_return(index: u32) {
+    match jet::output_null_datum(index, 0) {
+        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => (),
+        None => panic!(),
+    }
+}
+
+fn ensure_zero_bit(bit: bool) { assert!(jet::eq_1(<bool>::into(bit), 0)); }
+
+fn calculate_program_script_hash(owner: Pubkey) -> u256 {
+    let state_ctx1: Ctx8 = jet::tapdata_init();
+    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, owner);
+    let state_leaf: u256 = jet::sha_256_ctx_8_finalize(state_ctx2);
+
+    let tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), state_leaf);
+
+    // Compute a taptweak
+    let bip0341_key: u256 = 0x50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0;
+    let tweaked_key: u256 = jet::build_taptweak(bip0341_key, tap_node);
+
+    // Turn the taptweak into a script hash
+    let hash_ctx1: Ctx8 = jet::sha_256_ctx_8_init();
+    let hash_ctx2: Ctx8 = jet::sha_256_ctx_8_add_2(hash_ctx1, 0x5120); // Segwit v1, length 32
+    let hash_ctx3: Ctx8 = jet::sha_256_ctx_8_add_32(hash_ctx2, tweaked_key);
+
+    jet::sha_256_ctx_8_finalize(hash_ctx3)
+}
+
+fn verify_owner(owner: Pubkey, sig: Signature) {
+    let program_script_hash: u256 = calculate_program_script_hash(owner);
+    ensure_current_script_hash(program_script_hash);
+
+    jet::bip_0340_verify((owner, jet::sig_all_hash()), sig);
+}
+
+fn verify_metadata_op_return(index: u32, expected_owner: Pubkey) {
+    let op_return_jet_data: Either<(u2, u256), Either<u1, u4>> = unwrap(unwrap(jet::output_null_datum(index, 0)));
+    let (_, op_return_data_hash): (u2, u256) = unwrap_left::<Either<u1, u4>>(op_return_jet_data);
+
+    let expected_hash_ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    let expected_hash_ctx: Ctx8 = jet::sha_256_ctx_8_add_32(expected_hash_ctx, expected_owner);
+    let expected_op_return_data_hash: u256 = jet::sha_256_ctx_8_finalize(expected_hash_ctx);
+
+    assert!(jet::eq_256(op_return_data_hash, expected_op_return_data_hash));
+}
+
+fn ownership_transfer(
+    current_owner: Pubkey,
+    new_owner: Pubkey,
+    owner_sig: Signature,
+    program_output_index: u32
+) {
+    verify_owner(current_owner, owner_sig);
+
+    let new_program_script_hash: u256 = calculate_program_script_hash(new_owner);
+    ensure_script_hash(program_output_index, false, new_program_script_hash);
+
+    ensure_input_and_output_eq(jet::current_index(), program_output_index);
+
+    let (carry, metadata_op_return_output_index): (bool, u32) = jet::add_32(program_output_index, 1);
+    ensure_zero_bit(carry);
+
+    verify_metadata_op_return(metadata_op_return_output_index, new_owner);
+}
+
+fn script_auth_check(owner: Pubkey, owner_sig: Signature, input_script_index: u32) {
+    verify_owner(owner, owner_sig);
+
+    ensure_script_hash(input_script_index, true, param::SCRIPT_HASH);
+}
+
+fn main() {
+    let owner_sig: Signature = witness::SIGNATURE;
+
+    match witness::PATH {
+        Left(params: (Pubkey, Pubkey, u32)) => {
+            let (current_owner, new_owner, program_output_index): (Pubkey, Pubkey, u32) = params;
+            
+            ownership_transfer(current_owner, new_owner, owner_sig, program_output_index);
+        },
+        Right(params: (Pubkey, u32)) => {
+            let (owner, input_script_index): (Pubkey, u32) = params;
+
+            script_auth_check(owner, owner_sig, input_script_index);
+        }
+    }
+}
