@@ -1,5 +1,6 @@
 use simplex::program::{Program, WitnessTrait};
 use simplex::provider::SimplicityNetwork;
+use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature, UTXO,
 };
@@ -51,6 +52,22 @@ pub trait SimplexProgram {
         );
 
         ft
+    }
+
+    fn add_program_issuance_input_with_signature(
+        &self,
+        ft: &mut FinalTransaction,
+        program_utxo: UTXO,
+        issuance_input: IssuanceInput,
+        witness: Box<dyn WitnessTrait>,
+        sig_witness_name: String,
+    ) -> AssetId {
+        ft.add_program_issuance_input(
+            PartialInput::new(program_utxo),
+            ProgramInput::new(Box::new(self.get_program().clone()), witness),
+            issuance_input,
+            RequiredSignature::Witness(sig_witness_name),
+        )
     }
 
     fn add_program_output<'a>(
