@@ -1,6 +1,5 @@
 use simplex::program::Program;
-use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::{provider::SimplicityNetwork, utils::tr_unspendable_key};
+use simplex::provider::SimplicityNetwork;
 
 use crate::artifacts::script_auth::derived_script_auth::ScriptAuthWitness;
 use crate::artifacts::script_auth::{ScriptAuthProgram, derived_script_auth::ScriptAuthArguments};
@@ -27,7 +26,10 @@ pub struct ScriptAuth {
 
 impl ScriptAuth {
     pub fn new(parameters: ScriptAuthParameters) -> Self {
-        Self::from_internal_key(tr_unspendable_key(), parameters)
+        Self {
+            program: ScriptAuthProgram::new(ScriptAuthArguments::from(parameters)),
+            parameters,
+        }
     }
 
     pub fn from_simplex_program(program: &impl SimplexProgram) -> Self {
@@ -35,16 +37,6 @@ impl ScriptAuth {
             script_hash: program.get_script_hash(),
             network: *program.get_network(),
         })
-    }
-
-    pub fn from_internal_key(
-        internal_key: XOnlyPublicKey,
-        parameters: ScriptAuthParameters,
-    ) -> Self {
-        Self {
-            program: ScriptAuthProgram::new(internal_key, ScriptAuthArguments::from(parameters)),
-            parameters,
-        }
     }
 
     pub fn get_script_auth_witness(input_script_index: u32) -> ScriptAuthWitness {
