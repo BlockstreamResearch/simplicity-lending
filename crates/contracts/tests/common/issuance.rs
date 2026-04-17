@@ -31,7 +31,7 @@ pub fn issue_asset(
 
     let asset_entropy = get_random_seed();
 
-    let asset_id = ft.add_issuance_input(
+    let (asset_id, _) = ft.add_issuance_input(
         PartialInput::new(first_utxo.clone()),
         IssuanceInput::new(asset_amount, asset_entropy),
         RequiredSignature::NativeEcdsa,

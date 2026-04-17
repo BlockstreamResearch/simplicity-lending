@@ -1,6 +1,7 @@
 use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature, UTXO};
 
+#[derive(Debug, Clone)]
 pub struct SimplexInput {
     partial_input: PartialInput,
     required_sig: RequiredSignature,

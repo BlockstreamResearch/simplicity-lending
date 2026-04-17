@@ -1,10 +1,9 @@
 use lending_contracts::programs::program::SimplexProgram;
-use lending_contracts::programs::{AssetAuth, AssetAuthParameters};
-use lending_contracts::transactions::asset_auth::{create_asset_auth, unlock_asset_auth};
+use lending_contracts::programs::{AssetAuth, AssetAuthParameters, AssetAuthSchema};
 
 use lending_contracts::transactions::core::SimplexInput;
 use simplex::simplicityhl::elements::Txid;
-use simplex::transaction::{PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, PartialOutput, RequiredSignature};
 
 use crate::asset_auth_tests::common::tx_steps::finalize_and_broadcast;
 
@@ -21,9 +20,17 @@ pub(super) fn create_asset_auth_tx(
     let policy_utxos = filter_signer_utxos_by_asset_id(signer, network.policy_asset());
     let utxo_to_lock = policy_utxos.first().unwrap();
 
-    let (ft, asset_auth) = create_asset_auth(
-        &SimplexInput::new(utxo_to_lock, RequiredSignature::NativeEcdsa),
-        parameters,
+    let mut ft = FinalTransaction::new();
+    let asset_auth = AssetAuth::new(parameters);
+
+    let amount_to_lock = utxo_to_lock.explicit_amount();
+
+    asset_auth.use_schema(
+        &mut ft,
+        AssetAuthSchema::Create {
+            input_to_lock: SimplexInput::new(utxo_to_lock, RequiredSignature::NativeEcdsa),
+            amount_to_lock,
+        },
     );
 
     let txid = finalize_and_broadcast(context, &ft)?;
@@ -42,20 +49,25 @@ pub(super) fn unlock_asset_auth_tx(
         provider.fetch_scripthash_utxos(&asset_auth.get_script_pubkey())?;
     let asset_auth_utxo = found_asset_auth_utxos.first().unwrap();
 
-    let asset_auth_parameters = asset_auth.get_asset_auth_parameters();
+    let asset_auth_parameters = asset_auth.get_parameters();
     let auth_utxos = filter_signer_utxos_by_asset_id(signer, asset_auth_parameters.asset_id);
     let auth_utxo = auth_utxos.first().unwrap();
 
     let signer_script_pubkey = signer.get_address().script_pubkey();
-    let ft = unlock_asset_auth(
-        asset_auth_utxo.clone(),
-        &SimplexInput::new(auth_utxo, RequiredSignature::NativeEcdsa),
-        PartialOutput::new(
-            signer_script_pubkey,
-            asset_auth_utxo.explicit_amount(),
-            asset_auth_utxo.explicit_asset(),
-        ),
-        asset_auth,
+
+    let mut ft = FinalTransaction::new();
+
+    asset_auth.use_schema(
+        &mut ft,
+        AssetAuthSchema::Unlock {
+            program_utxo: asset_auth_utxo.clone(),
+            auth_input: SimplexInput::new(auth_utxo, RequiredSignature::NativeEcdsa),
+            unlocked_output: PartialOutput::new(
+                signer_script_pubkey,
+                asset_auth_utxo.explicit_amount(),
+                asset_auth_utxo.explicit_asset(),
+            ),
+        },
     );
 
     finalize_and_broadcast(context, &ft)

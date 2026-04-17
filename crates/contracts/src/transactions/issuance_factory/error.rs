@@ -1,6 +1,6 @@
 use simplex::simplicityhl::elements::Txid;
 
-use crate::programs::IssuanceFactoryError;
+use crate::programs::issuance_factory::IssuanceFactoryError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum IssuanceFactoryTransactionError {

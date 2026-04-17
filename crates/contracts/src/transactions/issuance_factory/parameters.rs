@@ -1,7 +1,7 @@
 use simplex::{provider::SimplicityNetwork, simplicityhl::elements::Transaction};
 
 use crate::{
-    programs::{IssuanceFactory, IssuanceFactoryParameters},
+    programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters},
     transactions::issuance_factory::IssuanceFactoryTransactionError,
 };
 

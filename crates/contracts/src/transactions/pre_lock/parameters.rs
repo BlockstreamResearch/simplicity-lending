@@ -67,7 +67,7 @@ pub fn extract_pre_lock_parameters_from_tx(
         .unwrap();
 
     let (borrower_pubkey, principal_asset_id) =
-        PreLock::decode_creation_op_return_data(op_return_bytes.to_vec())?;
+        PreLock::decode_creation_op_return_data(op_return_bytes.to_vec()).unwrap();
 
     let pre_lock_parameters = PreLockParameters {
         collateral_asset_id,
