@@ -116,3 +116,69 @@ pub fn is_pre_lock_creation_tx(
 
     Some(pre_lock_parameters)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::is_pre_lock_creation_tx;
+    use crate::esplora_client::EsploraClient;
+    use crate::indexer::handlers::test_utils::{make_tx_with_inputs, normal_output, null_output};
+
+    #[test]
+    fn returns_none_when_inputs_less_than_5() {
+        let tx = make_tx_with_inputs(
+            4,
+            vec![
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                null_output(),
+                normal_output(),
+            ],
+        );
+
+        let client = EsploraClient::new();
+
+        assert!(is_pre_lock_creation_tx(&tx, &client).is_none());
+    }
+
+    #[test]
+    fn returns_none_when_outputs_less_than_7() {
+        let tx = make_tx_with_inputs(
+            5,
+            vec![
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                null_output(),
+            ],
+        );
+
+        let client = EsploraClient::new();
+
+        assert!(is_pre_lock_creation_tx(&tx, &client).is_none());
+    }
+
+    #[test]
+    fn returns_none_when_output_5_is_not_null_data() {
+        let tx = make_tx_with_inputs(
+            5,
+            vec![
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+            ],
+        );
+
+        let client = EsploraClient::new();
+
+        assert!(is_pre_lock_creation_tx(&tx, &client).is_none());
+    }
+}

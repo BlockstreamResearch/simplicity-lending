@@ -51,3 +51,102 @@ pub fn is_loan_liquidation_tx(tx: &Transaction) -> bool {
         && tx.output[3].is_null_data()
         && !tx.output[4].is_null_data()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::is_loan_liquidation_tx;
+    use crate::indexer::handlers::test_utils::{make_tx, normal_output, null_output};
+
+    #[test]
+    fn valid_liquidation_tx_returns_true() {
+        let tx = make_tx(vec![
+            normal_output(),
+            null_output(),
+            null_output(),
+            null_output(),
+            normal_output(),
+        ]);
+
+        assert!(is_loan_liquidation_tx(&tx));
+    }
+
+    #[test]
+    fn output_1_not_null_data_returns_false() {
+        let tx = make_tx(vec![
+            normal_output(),
+            normal_output(),
+            null_output(),
+            null_output(),
+            normal_output(),
+        ]);
+
+        assert!(!is_loan_liquidation_tx(&tx));
+    }
+
+    #[test]
+    fn output_2_not_null_data_returns_false() {
+        let tx = make_tx(vec![
+            normal_output(),
+            null_output(),
+            normal_output(),
+            null_output(),
+            normal_output(),
+        ]);
+
+        assert!(!is_loan_liquidation_tx(&tx));
+    }
+
+    #[test]
+    fn output_3_not_null_data_returns_false() {
+        let tx = make_tx(vec![
+            normal_output(),
+            null_output(),
+            null_output(),
+            normal_output(),
+            normal_output(),
+        ]);
+
+        assert!(!is_loan_liquidation_tx(&tx));
+    }
+
+    #[test]
+    fn output_4_is_null_data_returns_false() {
+        let tx = make_tx(vec![
+            normal_output(),
+            null_output(),
+            null_output(),
+            null_output(),
+            null_output(),
+        ]);
+
+        assert!(!is_loan_liquidation_tx(&tx));
+    }
+
+    #[test]
+    fn output_0_also_null_data_still_returns_true() {
+        let tx = make_tx(vec![
+            null_output(),
+            null_output(),
+            null_output(),
+            null_output(),
+            normal_output(),
+        ]);
+
+        assert!(is_loan_liquidation_tx(&tx));
+    }
+
+    #[test]
+    fn extra_outputs_beyond_index_4_do_not_affect_result() {
+        let tx = make_tx(vec![
+            normal_output(),
+            null_output(),
+            null_output(),
+            null_output(),
+            normal_output(),
+            null_output(),
+            normal_output(),
+        ]);
+
+        assert!(is_loan_liquidation_tx(&tx));
+    }
+}

@@ -91,3 +91,77 @@ pub struct OfferDetailsResponse {
     pub info: OfferListItemFull,
     pub participants: Vec<ParticipantDto>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{OfferListItemFull, OfferListItemShort};
+    use crate::models::{OfferModel, OfferModelShort, OfferStatus};
+    use uuid::Uuid;
+
+    #[test]
+    fn offer_list_item_short_from_model_short_maps_and_formats_fields() {
+        let id = Uuid::new_v4();
+        let model = OfferModelShort {
+            id,
+            collateral_asset_id: vec![0x01, 0x02, 0x03],
+            principal_asset_id: vec![0x04, 0x05, 0x06],
+            collateral_amount: 1000,
+            principal_amount: 500,
+            interest_rate: 250,
+            loan_expiration_time: 123,
+            current_status: OfferStatus::Active,
+            created_at_height: 456,
+            created_at_txid: vec![0xaa, 0xbb, 0xcc],
+        };
+
+        let dto = OfferListItemShort::from(model);
+
+        assert_eq!(dto.id, id);
+        assert_eq!(dto.status, OfferStatus::Active);
+        assert_eq!(dto.collateral_asset, "030201");
+        assert_eq!(dto.principal_asset, "060504");
+        assert_eq!(dto.collateral_amount, 1000);
+        assert_eq!(dto.principal_amount, 500);
+        assert_eq!(dto.interest_rate, 250);
+        assert_eq!(dto.loan_expiration_time, 123);
+        assert_eq!(dto.created_at_height, 456);
+        assert_eq!(dto.created_at_txid, "ccbbaa");
+    }
+
+    #[test]
+    fn offer_list_item_full_from_model_maps_nested_and_extra_fields() {
+        let id = Uuid::new_v4();
+        let model = OfferModel {
+            id,
+            borrower_pubkey: vec![0x11, 0x22],
+            borrower_output_script_hash: vec![0x33, 0x44],
+            collateral_asset_id: vec![0x01, 0x02],
+            principal_asset_id: vec![0x03, 0x04],
+            first_parameters_nft_asset_id: vec![0x05, 0x06],
+            second_parameters_nft_asset_id: vec![0x07, 0x08],
+            borrower_nft_asset_id: vec![0x09, 0x0a],
+            lender_nft_asset_id: vec![0x0b, 0x0c],
+            collateral_amount: 99,
+            principal_amount: 77,
+            interest_rate: 12,
+            loan_expiration_time: 321,
+            current_status: OfferStatus::Pending,
+            created_at_height: 55,
+            created_at_txid: vec![0xde, 0xad],
+        };
+
+        let dto = OfferListItemFull::from(model);
+
+        assert_eq!(dto.base.id, id);
+        assert_eq!(dto.base.status, OfferStatus::Pending);
+        assert_eq!(dto.base.collateral_asset, "0201");
+        assert_eq!(dto.base.principal_asset, "0403");
+        assert_eq!(dto.base.created_at_txid, "adde");
+        assert_eq!(dto.borrower_pubkey, "1122");
+        assert_eq!(dto.borrower_output_script_hash, "3344");
+        assert_eq!(dto.first_parameters_nft_asset, "0605");
+        assert_eq!(dto.second_parameters_nft_asset, "0807");
+        assert_eq!(dto.borrower_nft_asset, "0a09");
+        assert_eq!(dto.lender_nft_asset, "0c0b");
+    }
+}

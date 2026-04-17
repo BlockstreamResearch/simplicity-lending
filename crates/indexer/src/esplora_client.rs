@@ -152,3 +152,29 @@ pub enum EsploraClientError {
     #[error("not found")]
     NotFound,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{DEFAULT_BASE_URL, EsploraClient};
+    use simplex::provider::{ProviderTrait, SimplicityNetwork};
+
+    #[test]
+    fn new_uses_default_base_url_without_trailing_slash() {
+        let client = EsploraClient::new();
+        assert_eq!(client.base_url, DEFAULT_BASE_URL);
+    }
+
+    #[test]
+    fn with_base_url_trims_trailing_slash() {
+        let client = EsploraClient::with_base_url("https://example.com/api///");
+        assert_eq!(client.base_url, "https://example.com/api");
+    }
+
+    #[test]
+    fn to_simplex_provider_returns_liquid_testnet_provider() {
+        let client = EsploraClient::with_base_url("https://example.com/api");
+        let provider = client.to_simplex_provider();
+
+        assert_eq!(*provider.get_network(), SimplicityNetwork::LiquidTestnet);
+    }
+}
