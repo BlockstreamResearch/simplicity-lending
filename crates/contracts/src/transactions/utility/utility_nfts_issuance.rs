@@ -36,7 +36,7 @@ pub fn issue_utility_nfts(
     let mut asset_ids: Vec<AssetId> = Vec::with_capacity(UTILITY_NFTS_COUNT);
 
     for (index, input) in issuance_inputs.iter().enumerate() {
-        let asset_id = ft.add_issuance_input(
+        let (asset_id, _) = ft.add_issuance_input(
             input.partial_input().clone(),
             IssuanceInput::new(utility_nfts_amounts[index], issuance_asset_entropy),
             input.required_sig().clone(),

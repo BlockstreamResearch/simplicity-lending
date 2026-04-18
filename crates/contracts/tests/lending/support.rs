@@ -12,12 +12,12 @@ use simplex::{
     transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO},
 };
 
-use crate::lending_tests::common::{
+use crate::common::{
     tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast, mine_blocks_with_self_send},
     wallet::{AmountFilter, filter_signer_utxos_by_asset_and_amount},
 };
 
-pub(super) use super::common::flows::pre_lock_flow::setup_lending_fixture;
+pub(super) use crate::common::flows::pre_lock_flow::setup_lending_fixture;
 
 pub(super) fn mine_until_height(context: &TestContext, target_height: u32) -> anyhow::Result<()> {
     let current_height = context.get_default_provider().fetch_tip_height()?;

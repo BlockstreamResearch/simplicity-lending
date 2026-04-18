@@ -72,7 +72,7 @@ impl Lending {
         let arguments = LendingArguments::from(parameters);
 
         Self {
-            program: LendingProgram::new(internal_key, arguments),
+            program: LendingProgram::new(arguments).with_pub_key(internal_key),
             parameters,
         }
     }

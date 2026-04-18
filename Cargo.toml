@@ -22,7 +22,7 @@ modular-bitfield = { version = "0.13.1"}
 
 cargo-husky = { version = "1.5.0", default-features = false, features = ["user-hooks"] }
 
-smplx-std = { git = "https://github.com/BlockstreamResearch/smplx", rev = "e84a3ee7d554c5505ee4ded0d5d93c0effb95915" }
+smplx-std = { git = "https://github.com/BlockstreamResearch/smplx", rev = "43c5eb177135446c8c5d6a8064958fddbec08605" }
 
 [patch.crates-io]
 lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "d384a20b8e2dde83ca0d733ba6c22dd3c5daac56" }

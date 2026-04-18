@@ -19,7 +19,7 @@ pub fn issue_preparation_utxos(
     let total_asset_amount = PREPARATION_UTXO_ASSET_AMOUNT * UTILITY_NFTS_COUNT as u64;
     let asset_entropy = get_random_seed();
 
-    let asset_id = ft.add_issuance_input(
+    let (asset_id, _) = ft.add_issuance_input(
         issuance_input.partial_input().clone(),
         IssuanceInput::new(total_asset_amount, asset_entropy),
         issuance_input.required_sig().clone(),

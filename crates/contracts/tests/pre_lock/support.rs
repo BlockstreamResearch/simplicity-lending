@@ -2,11 +2,8 @@ use lending_contracts::{programs::PreLock, transactions::pre_lock::cancel_pre_lo
 use simplex::simplicityhl::elements::{OutPoint, Txid};
 use simplex::transaction::{PartialInput, PartialOutput, RequiredSignature, UTXO};
 
-use super::common::flows::pre_lock_flow;
-use super::common::tx_steps::finalize_strict_and_broadcast;
-use super::common::wallet::{AmountFilter, filter_signer_utxos_by_asset_and_amount};
-
-pub(super) use pre_lock_flow::{create_lending_from_pre_lock_tx, setup_pre_lock};
+use crate::common::tx_steps::finalize_strict_and_broadcast;
+use crate::common::wallet::{AmountFilter, filter_signer_utxos_by_asset_and_amount};
 
 pub(super) fn cancel_pre_lock_tx(
     context: &simplex::TestContext,

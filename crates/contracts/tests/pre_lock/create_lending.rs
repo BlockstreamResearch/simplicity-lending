@@ -1,4 +1,4 @@
-use super::support::{create_lending_from_pre_lock_tx, setup_pre_lock};
+use crate::common::flows::pre_lock_flow::{create_lending_from_pre_lock_tx, setup_pre_lock};
 
 #[simplex::test]
 fn creates_lending_from_pre_lock(context: simplex::TestContext) -> anyhow::Result<()> {

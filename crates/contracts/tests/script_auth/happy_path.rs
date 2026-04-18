@@ -6,8 +6,8 @@ use simplex::simplicityhl::elements::Txid;
 use simplex::transaction::{PartialOutput, RequiredSignature};
 use simplex::utils::hash_script;
 
-use super::common::tx_steps::{finalize_and_broadcast, wait_for_tx};
-use super::common::wallet::split_first_signer_utxo;
+use crate::common::tx_steps::{finalize_and_broadcast, wait_for_tx};
+use crate::common::wallet::split_first_signer_utxo;
 
 pub(super) fn create_script_auth_tx(
     context: &simplex::TestContext,

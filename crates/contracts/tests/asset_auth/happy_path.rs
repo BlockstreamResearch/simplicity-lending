@@ -6,10 +6,9 @@ use lending_contracts::transactions::core::SimplexInput;
 use simplex::simplicityhl::elements::Txid;
 use simplex::transaction::{PartialOutput, RequiredSignature};
 
-use crate::asset_auth_tests::common::tx_steps::finalize_and_broadcast;
-
-use super::common::issuance::issue_asset;
-use super::common::wallet::{filter_signer_utxos_by_asset_id, split_first_signer_utxo};
+use crate::common::issuance::issue_asset;
+use crate::common::tx_steps::finalize_and_broadcast;
+use crate::common::wallet::{filter_signer_utxos_by_asset_id, split_first_signer_utxo};
 
 pub(super) fn create_asset_auth_tx(
     context: &simplex::TestContext,

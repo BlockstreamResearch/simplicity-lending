@@ -117,7 +117,7 @@ impl PreLock {
         let arguments = PreLockArguments::from(parameters);
 
         Self {
-            program: PreLockProgram::new(internal_key, arguments),
+            program: PreLockProgram::new(arguments).with_pub_key(internal_key),
             parameters,
         }
     }

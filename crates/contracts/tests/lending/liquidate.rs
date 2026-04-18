@@ -1,10 +1,8 @@
 use simplex::simplicityhl::elements::OutPoint;
 
-use crate::lending_tests::{
-    common::tx_steps::finalize_strict_and_broadcast, support::get_lending_liquidation_tx,
-};
+use crate::common::tx_steps::finalize_strict_and_broadcast;
 
-use super::support::{mine_until_height, setup_lending_fixture};
+use super::support::{get_lending_liquidation_tx, mine_until_height, setup_lending_fixture};
 
 #[simplex::test]
 fn happy_liquidation_flow(context: simplex::TestContext) -> anyhow::Result<()> {

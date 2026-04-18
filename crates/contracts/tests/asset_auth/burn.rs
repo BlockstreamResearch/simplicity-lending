@@ -1,9 +1,9 @@
 use lending_contracts::programs::AssetAuthParameters;
 
-use super::common::asserts::assert_burn_output;
-use super::common::issuance::issue_asset;
-use super::common::wallet::split_first_signer_utxo;
 use super::happy_path::{create_asset_auth_tx, unlock_asset_auth_tx};
+use crate::common::asserts::assert_burn_output;
+use crate::common::issuance::issue_asset;
+use crate::common::wallet::split_first_signer_utxo;
 
 #[simplex::test]
 fn creates_and_unlocks_asset_auth_with_burn(context: simplex::TestContext) -> anyhow::Result<()> {

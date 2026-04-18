@@ -1,8 +1,7 @@
 use simplex::simplicityhl::elements::OutPoint;
 
-use crate::lending_tests::support::{claim_lender_principal, repay_lending_tx};
-
-use super::support::setup_lending_fixture;
+use super::support::{claim_lender_principal, repay_lending_tx};
+use crate::common::flows::pre_lock_flow::setup_lending_fixture;
 
 #[simplex::test]
 fn lender_principal_claim_flow(context: simplex::TestContext) -> anyhow::Result<()> {
@@ -25,8 +24,9 @@ fn lender_principal_claim_flow(context: simplex::TestContext) -> anyhow::Result<
         .get_default_signer()
         .get_utxos_filter(&|utxo| utxo.outpoint == principal_outpoint, &|_| true)?;
 
-    assert!(
-        signer_principal_utxos.len() == 1,
+    assert_eq!(
+        signer_principal_utxos.len(),
+        1,
         "Failed to find claimed principal UTXO"
     );
 

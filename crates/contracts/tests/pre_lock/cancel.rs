@@ -1,4 +1,5 @@
-use super::support::{cancel_pre_lock_tx, setup_pre_lock};
+use crate::common::flows::pre_lock_flow::setup_pre_lock;
+use crate::pre_lock::support::cancel_pre_lock_tx;
 
 #[simplex::test]
 fn cancels_pre_lock(context: simplex::TestContext) -> anyhow::Result<()> {

@@ -44,7 +44,8 @@ impl AssetAuth {
         parameters: AssetAuthParameters,
     ) -> Self {
         Self {
-            program: AssetAuthProgram::new(internal_key, AssetAuthArguments::from(parameters)),
+            program: AssetAuthProgram::new(AssetAuthArguments::from(parameters))
+                .with_pub_key(internal_key),
             parameters,
         }
     }

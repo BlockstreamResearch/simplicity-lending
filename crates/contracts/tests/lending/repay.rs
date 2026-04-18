@@ -1,8 +1,6 @@
+use super::support::repay_lending_tx;
+use crate::common::flows::pre_lock_flow::setup_lending_fixture;
 use simplex::simplicityhl::elements::OutPoint;
-
-use crate::lending_tests::support::repay_lending_tx;
-
-use super::support::setup_lending_fixture;
 
 #[simplex::test]
 fn loan_repayment_flow(context: simplex::TestContext) -> anyhow::Result<()> {
@@ -20,8 +18,9 @@ fn loan_repayment_flow(context: simplex::TestContext) -> anyhow::Result<()> {
         .get_default_signer()
         .get_utxos_filter(&|utxo| utxo.outpoint == collateral_outpoint, &|_| true)?;
 
-    assert!(
-        signer_collateral_utxos.len() == 1,
+    assert_eq!(
+        signer_collateral_utxos.len(),
+        1,
         "Failed to find collateral UTXO"
     );
 

@@ -42,7 +42,8 @@ impl ScriptAuth {
         parameters: ScriptAuthParameters,
     ) -> Self {
         Self {
-            program: ScriptAuthProgram::new(internal_key, ScriptAuthArguments::from(parameters)),
+            program: ScriptAuthProgram::new(ScriptAuthArguments::from(parameters))
+                .with_pub_key(internal_key),
             parameters,
         }
     }
