@@ -14,7 +14,6 @@ multiple_crate_versions = "allow"
 [workspace.dependencies]
 ring = "0.17.14"
 hex = "0.4.3"
-smplx-std = "0.0.3"
 sha2 = { version = "0.10.9", features = ["compress"] }
 serde = { version = "1.0.228", features = ["derive"]}
 thiserror = { version = "2.0.18" }
@@ -22,3 +21,11 @@ tracing = { version = "0.1.41" }
 modular-bitfield = { version = "0.13.1"}
 
 cargo-husky = { version = "1.5.0", default-features = false, features = ["user-hooks"] }
+
+smplx-std = { git = "https://github.com/BlockstreamResearch/smplx", rev = "e84a3ee7d554c5505ee4ded0d5d93c0effb95915" }
+
+[patch.crates-io]
+lwk_common = { git = "https://github.com/Blockstream/lwk", rev = "d384a20b8e2dde83ca0d733ba6c22dd3c5daac56" }
+lwk_signer = { git = "https://github.com/Blockstream/lwk", rev = "d384a20b8e2dde83ca0d733ba6c22dd3c5daac56" }
+lwk_simplicity = { git = "https://github.com/Blockstream/lwk", rev = "d384a20b8e2dde83ca0d733ba6c22dd3c5daac56" }
+lwk_wollet = { git = "https://github.com/Blockstream/lwk", rev = "d384a20b8e2dde83ca0d733ba6c22dd3c5daac56" }
