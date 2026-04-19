@@ -29,7 +29,7 @@ pub(super) fn mine_until_height(context: &TestContext, target_height: u32) -> an
     Ok(())
 }
 
-pub(super) fn repay_lending_tx(
+pub(crate) fn repay_lending_tx(
     context: &TestContext,
     lending: Lending,
     lending_txid: Txid,
