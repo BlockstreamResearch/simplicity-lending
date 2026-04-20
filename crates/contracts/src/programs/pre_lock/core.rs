@@ -7,35 +7,14 @@ use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
 
 use crate::artifacts::pre_lock::PreLockProgram;
-use crate::programs::pre_lock::error::PreLockError;
+use crate::programs::lending::Lending;
+use crate::programs::pre_lock::{PreLockParameters, PreLockWitnessBranch, error::PreLockError};
 use crate::programs::program::SimplexProgram;
-use crate::programs::script_auth::{ScriptAuth, ScriptAuthSchema, ScriptAuthWitnessParams};
-use crate::programs::{Lending, LendingSchema, PreLockParameters, PreLockWitnessBranch};
+use crate::programs::script_auth::{ScriptAuth, ScriptAuthWitnessParams};
 
 pub struct PreLock {
     program: PreLockProgram,
     parameters: PreLockParameters,
-}
-
-#[derive(Debug, Clone)]
-pub enum PreLockSchema {
-    Create {
-        parameter_amounts_decimals: u8,
-    },
-    CreateLending {
-        program_utxo: UTXO,
-        first_parameters_nft_utxo: UTXO,
-        second_parameters_nft_utxo: UTXO,
-        borrower_nft_utxo: UTXO,
-        lender_nft_utxo: UTXO,
-    },
-    Cancel {
-        program_utxo: UTXO,
-        first_parameters_nft_utxo: UTXO,
-        second_parameters_nft_utxo: UTXO,
-        borrower_nft_utxo: UTXO,
-        lender_nft_utxo: UTXO,
-    },
 }
 
 pub const PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH: usize = 64;
@@ -79,45 +58,7 @@ impl PreLock {
         op_return_data
     }
 
-    pub fn use_schema(&self, ft: &mut FinalTransaction, schema: PreLockSchema) {
-        match schema {
-            PreLockSchema::Create {
-                parameter_amounts_decimals,
-            } => self.use_creation_schema(ft, parameter_amounts_decimals),
-            PreLockSchema::CreateLending {
-                program_utxo,
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-                borrower_nft_utxo,
-                lender_nft_utxo,
-            } => self.use_lending_creation_schema(
-                ft,
-                program_utxo,
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-                borrower_nft_utxo,
-                lender_nft_utxo,
-            ),
-            PreLockSchema::Cancel {
-                program_utxo,
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-                borrower_nft_utxo,
-                lender_nft_utxo,
-            } => self.use_cancellation_schema(
-                ft,
-                program_utxo,
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-                borrower_nft_utxo,
-                lender_nft_utxo,
-            ),
-        }
-    }
-
-    fn use_creation_schema(&self, ft: &mut FinalTransaction, parameter_amounts_decimals: u8) {
-        let utility_nfts_script_auth = ScriptAuth::from_simplex_program(self);
-
+    pub fn attach_creation(&self, ft: &mut FinalTransaction, parameter_amounts_decimals: u8) {
         let (first_parameters_nft_amount, second_parameters_nft_amount) = self
             .parameters
             .offer_parameters
@@ -129,18 +70,20 @@ impl PreLock {
             self.parameters.collateral_asset_id,
             self.parameters.offer_parameters.collateral_amount,
         );
-        utility_nfts_script_auth.add_program_output(
+
+        let utility_nfts_script_auth = ScriptAuth::from_simplex_program(self);
+        utility_nfts_script_auth.attach_creation(
             ft,
             self.parameters.first_parameters_nft_asset_id,
             first_parameters_nft_amount,
         );
-        utility_nfts_script_auth.add_program_output(
+        utility_nfts_script_auth.attach_creation(
             ft,
             self.parameters.second_parameters_nft_asset_id,
             second_parameters_nft_amount,
         );
-        utility_nfts_script_auth.add_program_output(ft, self.parameters.borrower_nft_asset_id, 1);
-        utility_nfts_script_auth.add_program_output(ft, self.parameters.lender_nft_asset_id, 1);
+        utility_nfts_script_auth.attach_creation(ft, self.parameters.borrower_nft_asset_id, 1);
+        utility_nfts_script_auth.attach_creation(ft, self.parameters.lender_nft_asset_id, 1);
 
         let op_return_data = self.encode_creation_op_return_data();
 
@@ -151,7 +94,7 @@ impl PreLock {
         ));
     }
 
-    fn use_lending_creation_schema(
+    pub fn attach_lending_creation(
         &self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
@@ -171,47 +114,29 @@ impl PreLock {
         let utility_nfts_script_auth = ScriptAuth::from_simplex_program(self);
         let utility_nfts_witness_params = ScriptAuthWitnessParams::new(pre_lock_input_index);
 
-        utility_nfts_script_auth.use_schema(
+        utility_nfts_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: first_parameters_nft_utxo.clone(),
-                witness_params: utility_nfts_witness_params,
-            },
+            first_parameters_nft_utxo.clone(),
+            utility_nfts_witness_params,
         );
-        utility_nfts_script_auth.use_schema(
+        utility_nfts_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: second_parameters_nft_utxo.clone(),
-                witness_params: utility_nfts_witness_params,
-            },
+            second_parameters_nft_utxo.clone(),
+            utility_nfts_witness_params,
         );
-        utility_nfts_script_auth.use_schema(
+        utility_nfts_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: borrower_nft_utxo,
-                witness_params: utility_nfts_witness_params,
-            },
+            borrower_nft_utxo,
+            utility_nfts_witness_params,
         );
-        utility_nfts_script_auth.use_schema(
-            ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: lender_nft_utxo,
-                witness_params: utility_nfts_witness_params,
-            },
-        );
+        utility_nfts_script_auth.attach_unlocking(ft, lender_nft_utxo, utility_nfts_witness_params);
 
         let lending = Lending::new(self.parameters.into());
 
-        lending.use_schema(
-            ft,
-            LendingSchema::Create {
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-            },
-        );
+        lending.attach_creation(ft, first_parameters_nft_utxo, second_parameters_nft_utxo);
     }
 
-    fn use_cancellation_schema(
+    pub fn attach_cancellation(
         &self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
@@ -234,34 +159,22 @@ impl PreLock {
         let utility_nfts_script_auth = ScriptAuth::from_simplex_program(self);
         let utility_nfts_witness_params = ScriptAuthWitnessParams::new(pre_lock_input_index);
 
-        utility_nfts_script_auth.use_schema(
+        utility_nfts_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: first_parameters_nft_utxo,
-                witness_params: utility_nfts_witness_params,
-            },
+            first_parameters_nft_utxo,
+            utility_nfts_witness_params,
         );
-        utility_nfts_script_auth.use_schema(
+        utility_nfts_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: second_parameters_nft_utxo,
-                witness_params: utility_nfts_witness_params,
-            },
+            second_parameters_nft_utxo,
+            utility_nfts_witness_params,
         );
-        utility_nfts_script_auth.use_schema(
+        utility_nfts_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: borrower_nft_utxo,
-                witness_params: utility_nfts_witness_params,
-            },
+            borrower_nft_utxo,
+            utility_nfts_witness_params,
         );
-        utility_nfts_script_auth.use_schema(
-            ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: lender_nft_utxo,
-                witness_params: utility_nfts_witness_params,
-            },
-        );
+        utility_nfts_script_auth.attach_unlocking(ft, lender_nft_utxo, utility_nfts_witness_params);
 
         ft.add_output(PartialOutput::new(
             Script::new_op_return(b"burn"),

@@ -5,7 +5,9 @@ use simplex::{
 
 use crate::{
     artifacts::pre_lock::derived_pre_lock::PreLockArguments,
-    programs::{Lending, LendingParameters, program::SimplexProgram, script_auth::ScriptAuth},
+    programs::lending::{Lending, LendingParameters},
+    programs::program::SimplexProgram,
+    programs::script_auth::ScriptAuth,
     utils::LendingOfferParameters,
 };
 

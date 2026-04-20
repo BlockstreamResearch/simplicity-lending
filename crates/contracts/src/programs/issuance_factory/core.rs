@@ -15,21 +15,6 @@ pub struct IssuanceFactory {
     parameters: IssuanceFactoryParameters,
 }
 
-#[derive(Clone)]
-pub enum IssuanceFactorySchema {
-    Create {
-        factory_asset_id: AssetId,
-        factory_asset_amount: u64,
-    },
-    IssueAssets {
-        program_utxo: UTXO,
-        program_issuance_input: IssuanceInput,
-    },
-    RemoveFactory {
-        program_utxo: UTXO,
-    },
-}
-
 pub const ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH: usize = 32;
 
 impl IssuanceFactory {
@@ -68,23 +53,7 @@ impl IssuanceFactory {
         op_return_data
     }
 
-    pub fn use_schema(&self, ft: &mut FinalTransaction, schema: IssuanceFactorySchema) {
-        match schema {
-            IssuanceFactorySchema::Create {
-                factory_asset_id,
-                factory_asset_amount,
-            } => self.use_creation_schema(ft, factory_asset_id, factory_asset_amount),
-            IssuanceFactorySchema::IssueAssets {
-                program_utxo,
-                program_issuance_input,
-            } => self.use_assets_issuing_schema(ft, program_utxo, program_issuance_input),
-            IssuanceFactorySchema::RemoveFactory { program_utxo } => {
-                self.use_factory_removing_schema(ft, program_utxo)
-            }
-        }
-    }
-
-    fn use_creation_schema(
+    pub fn attach_creation(
         &self,
         ft: &mut FinalTransaction,
         factory_asset_id: AssetId,
@@ -101,7 +70,7 @@ impl IssuanceFactory {
         ));
     }
 
-    fn use_assets_issuing_schema(
+    pub fn attach_assets_issuing(
         &self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
@@ -127,13 +96,13 @@ impl IssuanceFactory {
         self.add_program_output(ft, issuance_factory_asset, issuance_factory_amount);
     }
 
-    fn use_factory_removing_schema(&self, ft: &mut FinalTransaction, program_utxo: UTXO) {
+    pub fn attach_factory_removing(&self, ft: &mut FinalTransaction, program_utxo: UTXO) {
         let issuance_factory_amount = program_utxo.explicit_amount();
         let issuance_factory_asset = program_utxo.explicit_asset();
 
         let issuance_factory_output_index = ft.n_outputs() as u32;
 
-        let issuance_factory_witness_branch = IssuanceFactoryWitnessBranch::IssueAssets {
+        let issuance_factory_witness_branch = IssuanceFactoryWitnessBranch::RemoveFactory {
             output_index: issuance_factory_output_index,
         };
 

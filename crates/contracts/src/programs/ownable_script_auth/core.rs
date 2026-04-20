@@ -6,28 +6,14 @@ use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
 
 use crate::artifacts::ownable_script_auth::OwnableScriptAuthProgram;
 
+use crate::programs::ownable_script_auth::{
+    OwnableScriptAuthParameters, OwnableScriptAuthWitnessBranch,
+};
 use crate::programs::program::SimplexProgram;
-use crate::programs::{OwnableScriptAuthParameters, OwnableScriptAuthWitnessBranch};
 
 pub struct OwnableScriptAuth {
     program: OwnableScriptAuthProgram,
     parameters: OwnableScriptAuthParameters,
-}
-
-#[derive(Debug, Clone)]
-pub enum OwnableScriptAuthSchema {
-    Create {
-        asset_id_to_lock: AssetId,
-        amount_to_lock: u64,
-    },
-    OwnershipTransfer {
-        program_utxo: UTXO,
-        new_owner: XOnlyPublicKey,
-    },
-    Unlock {
-        program_utxo: UTXO,
-        auth_input_index: u32,
-    },
 }
 
 impl OwnableScriptAuth {
@@ -47,24 +33,7 @@ impl OwnableScriptAuth {
         &self.parameters
     }
 
-    pub fn use_schema(&mut self, ft: &mut FinalTransaction, schema: OwnableScriptAuthSchema) {
-        match schema {
-            OwnableScriptAuthSchema::Create {
-                asset_id_to_lock,
-                amount_to_lock,
-            } => self.use_creation_schema(ft, asset_id_to_lock, amount_to_lock),
-            OwnableScriptAuthSchema::OwnershipTransfer {
-                program_utxo,
-                new_owner,
-            } => self.use_ownership_transfer_schema(ft, program_utxo, new_owner),
-            OwnableScriptAuthSchema::Unlock {
-                program_utxo,
-                auth_input_index,
-            } => self.use_unlock_schema(ft, program_utxo, auth_input_index),
-        }
-    }
-
-    fn use_creation_schema(
+    pub fn attach_creation(
         &self,
         ft: &mut FinalTransaction,
         asset_id_to_lock: AssetId,
@@ -73,7 +42,7 @@ impl OwnableScriptAuth {
         self.add_program_output(ft, asset_id_to_lock, amount_to_lock);
     }
 
-    fn use_ownership_transfer_schema(
+    pub fn attach_ownership_transfer(
         &mut self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
@@ -108,7 +77,7 @@ impl OwnableScriptAuth {
         ));
     }
 
-    fn use_unlock_schema(
+    pub fn attach_unlocking(
         &self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,

@@ -9,30 +9,12 @@ use crate::artifacts::lending::LendingProgram;
 use crate::programs::{
     lending::{LendingParameters, LendingWitnessBranch},
     program::SimplexProgram,
-    script_auth::{ScriptAuth, ScriptAuthSchema, ScriptAuthWitnessParams},
+    script_auth::{ScriptAuth, ScriptAuthWitnessParams},
 };
 
 pub struct Lending {
     program: LendingProgram,
     parameters: LendingParameters,
-}
-
-#[derive(Debug, Clone)]
-pub enum LendingSchema {
-    Create {
-        first_parameters_nft_utxo: UTXO,
-        second_parameters_nft_utxo: UTXO,
-    },
-    Repay {
-        program_utxo: UTXO,
-        first_parameters_nft_utxo: UTXO,
-        second_parameters_nft_utxo: UTXO,
-    },
-    Liquidate {
-        program_utxo: UTXO,
-        first_parameters_nft_utxo: UTXO,
-        second_parameters_nft_utxo: UTXO,
-    },
 }
 
 impl Lending {
@@ -47,38 +29,7 @@ impl Lending {
         &self.parameters
     }
 
-    pub fn use_schema(&self, ft: &mut FinalTransaction, schema: LendingSchema) {
-        match schema {
-            LendingSchema::Create {
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-            } => {
-                self.use_creation_schema(ft, first_parameters_nft_utxo, second_parameters_nft_utxo)
-            }
-            LendingSchema::Repay {
-                program_utxo,
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-            } => self.use_repayment_schema(
-                ft,
-                program_utxo,
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-            ),
-            LendingSchema::Liquidate {
-                program_utxo,
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-            } => self.use_liquidation_schema(
-                ft,
-                program_utxo,
-                first_parameters_nft_utxo,
-                second_parameters_nft_utxo,
-            ),
-        }
-    }
-
-    fn use_creation_schema(
+    pub fn attach_creation(
         &self,
         ft: &mut FinalTransaction,
         first_parameters_nft_utxo: UTXO,
@@ -94,19 +45,19 @@ impl Lending {
         let first_parameters_nft_amount = first_parameters_nft_utxo.explicit_amount();
         let second_parameters_nft_amount = second_parameters_nft_utxo.explicit_amount();
 
-        parameter_nfts_script_auth.add_program_output(
+        parameter_nfts_script_auth.attach_creation(
             ft,
             self.parameters.first_parameters_nft_asset_id,
             first_parameters_nft_amount,
         );
-        parameter_nfts_script_auth.add_program_output(
+        parameter_nfts_script_auth.attach_creation(
             ft,
             self.parameters.second_parameters_nft_asset_id,
             second_parameters_nft_amount,
         );
     }
 
-    fn use_repayment_schema(
+    pub fn attach_loan_repayment(
         &self,
         ft: &mut FinalTransaction,
         lending_utxo: UTXO,
@@ -126,19 +77,15 @@ impl Lending {
         let parameters_script_auth = ScriptAuth::from_simplex_program(self);
         let parameters_script_auth_witness = ScriptAuthWitnessParams::new(lending_input_index);
 
-        parameters_script_auth.use_schema(
+        parameters_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: first_parameters_nft_utxo,
-                witness_params: parameters_script_auth_witness,
-            },
+            first_parameters_nft_utxo,
+            parameters_script_auth_witness,
         );
-        parameters_script_auth.use_schema(
+        parameters_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: second_parameters_nft_utxo,
-                witness_params: parameters_script_auth_witness,
-            },
+            second_parameters_nft_utxo,
+            parameters_script_auth_witness,
         );
 
         let principal_with_interest = self
@@ -172,7 +119,7 @@ impl Lending {
         ));
     }
 
-    fn use_liquidation_schema(
+    pub fn attach_loan_liquidation(
         &self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
@@ -199,19 +146,15 @@ impl Lending {
         let parameters_script_auth = ScriptAuth::from_simplex_program(self);
         let parameters_script_auth_witness = ScriptAuthWitnessParams::new(lending_input_index);
 
-        parameters_script_auth.use_schema(
+        parameters_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: first_parameters_nft_utxo,
-                witness_params: parameters_script_auth_witness,
-            },
+            first_parameters_nft_utxo,
+            parameters_script_auth_witness,
         );
-        parameters_script_auth.use_schema(
+        parameters_script_auth.attach_unlocking(
             ft,
-            ScriptAuthSchema::Unlock {
-                program_utxo: second_parameters_nft_utxo,
-                witness_params: parameters_script_auth_witness,
-            },
+            second_parameters_nft_utxo,
+            parameters_script_auth_witness,
         );
 
         ft.add_output(PartialOutput::new(

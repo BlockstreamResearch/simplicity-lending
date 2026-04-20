@@ -17,18 +17,6 @@ pub struct ScriptAuth {
     parameters: ScriptAuthParameters,
 }
 
-#[derive(Debug, Clone)]
-pub enum ScriptAuthSchema {
-    Create {
-        asset_id_to_lock: AssetId,
-        amount_to_lock: u64,
-    },
-    Unlock {
-        program_utxo: UTXO,
-        witness_params: ScriptAuthWitnessParams,
-    },
-}
-
 impl ScriptAuth {
     pub fn new(parameters: ScriptAuthParameters) -> Self {
         Self {
@@ -48,20 +36,7 @@ impl ScriptAuth {
         &self.parameters
     }
 
-    pub fn use_schema(&self, ft: &mut FinalTransaction, schema: ScriptAuthSchema) {
-        match schema {
-            ScriptAuthSchema::Create {
-                asset_id_to_lock,
-                amount_to_lock,
-            } => self.use_creation_schema(ft, asset_id_to_lock, amount_to_lock),
-            ScriptAuthSchema::Unlock {
-                program_utxo,
-                witness_params,
-            } => self.use_unlocking_schema(ft, program_utxo, witness_params),
-        }
-    }
-
-    fn use_creation_schema(
+    pub fn attach_creation(
         &self,
         ft: &mut FinalTransaction,
         asset_id_to_lock: AssetId,
@@ -70,7 +45,7 @@ impl ScriptAuth {
         self.add_program_output(ft, asset_id_to_lock, amount_to_lock);
     }
 
-    fn use_unlocking_schema(
+    pub fn attach_unlocking(
         &self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
