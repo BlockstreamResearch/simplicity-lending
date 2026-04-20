@@ -1,19 +1,68 @@
 use anyhow::Result;
-use lending_contracts::programs::{PreLock, ScriptAuth, program::SimplexProgram};
+use lending_contracts::{
+    programs::{PreLock, PreLockParameters, ScriptAuth, program::SimplexProgram},
+    utils::LendingOfferParameters,
+};
 use simplex::{
     simplicityhl::elements::{AssetId, Script},
-    wallet_abi::{ElementsSequence, LockVariant, WalletAbiHarness},
+    utils::hash_script,
+    wallet_abi::{LockVariant, WalletAbiHarness},
 };
 
-use crate::{
-    common::process_req::process_wallet_abi_request,
-    wallet_abi::support::{PARAMETER_NFT_DECIMALS, policy_fee_source, setup_pre_lock_wallet_state},
+use crate::common::{
+    issuance::{issue_asset, issue_preparation_utxos_tx, issue_utility_nfts_tx},
+    process_req::process_wallet_abi_request,
+    tx_steps::wait_for_tx,
+    wallet::split_first_signer_utxo,
 };
+
+const PARAMETER_NFT_DECIMALS: u8 = 1;
+const ISSUED_PRINCIPAL_AMOUNT: u64 = 20_000;
+
+fn setup_pre_lock_parameters(context: &simplex::TestContext) -> Result<PreLockParameters> {
+    let provider = context.get_default_provider();
+    let signer = context.get_default_signer();
+    let network = context.get_network();
+
+    let txid = split_first_signer_utxo(context, vec![2_000, 5_000]);
+    wait_for_tx(context, &txid)?;
+
+    let (txid, preparation_asset_id) = issue_preparation_utxos_tx(context)?;
+    wait_for_tx(context, &txid)?;
+
+    let (txid, principal_asset_id) = issue_asset(context, ISSUED_PRINCIPAL_AMOUNT)?;
+    wait_for_tx(context, &txid)?;
+
+    let current_height = provider.fetch_tip_height()?;
+    let offer_parameters = LendingOfferParameters {
+        collateral_amount: 1_000,
+        principal_amount: 5_000,
+        loan_expiration_time: current_height + 10,
+        principal_interest_rate: 200,
+    };
+
+    let utility_nfts_txid =
+        issue_utility_nfts_tx(context, &offer_parameters, preparation_asset_id)?;
+    wait_for_tx(context, &utility_nfts_txid)?;
+
+    let utility_nfts_tx = provider.fetch_transaction(&utility_nfts_txid)?;
+    Ok(PreLockParameters {
+        collateral_asset_id: network.policy_asset(),
+        principal_asset_id,
+        first_parameters_nft_asset_id: utility_nfts_tx.output[0].asset.explicit().unwrap(),
+        second_parameters_nft_asset_id: utility_nfts_tx.output[1].asset.explicit().unwrap(),
+        borrower_nft_asset_id: utility_nfts_tx.output[2].asset.explicit().unwrap(),
+        lender_nft_asset_id: utility_nfts_tx.output[3].asset.explicit().unwrap(),
+        offer_parameters,
+        borrower_pubkey: signer.get_schnorr_public_key(),
+        borrower_output_script_hash: hash_script(&signer.get_address().script_pubkey()),
+        network: *network,
+    })
+}
 
 #[simplex::test]
 fn wallet_abi_creates_pre_lock(context: simplex::TestContext) -> Result<()> {
-    let setup = setup_pre_lock_wallet_state(&context)?;
-    let pre_lock = PreLock::new(setup.pre_lock_parameters);
+    let pre_lock = PreLock::new(setup_pre_lock_parameters(&context)?);
     let utility_nfts_script_auth = ScriptAuth::from_simplex_program(&pre_lock);
     let (first_parameters_amount, second_parameters_amount) = pre_lock
         .get_pre_lock_parameters()
@@ -26,43 +75,6 @@ fn wallet_abi_creates_pre_lock(context: simplex::TestContext) -> Result<()> {
         &harness,
         harness
             .tx()
-            .wallet_input_exact(
-                "collateral-input",
-                pre_lock.get_pre_lock_parameters().collateral_asset_id,
-                pre_lock
-                    .get_pre_lock_parameters()
-                    .offer_parameters
-                    .collateral_amount,
-            )
-            .wallet_input_exact(
-                "first-parameter-input",
-                pre_lock
-                    .get_pre_lock_parameters()
-                    .first_parameters_nft_asset_id,
-                first_parameters_amount,
-            )
-            .wallet_input_exact(
-                "second-parameter-input",
-                pre_lock
-                    .get_pre_lock_parameters()
-                    .second_parameters_nft_asset_id,
-                second_parameters_amount,
-            )
-            .wallet_input_exact(
-                "borrower-nft-input",
-                pre_lock.get_pre_lock_parameters().borrower_nft_asset_id,
-                1,
-            )
-            .wallet_input_exact(
-                "lender-nft-input",
-                pre_lock.get_pre_lock_parameters().lender_nft_asset_id,
-                1,
-            )
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-            )
             .raw_output(
                 "locked-collateral",
                 LockVariant::Script {

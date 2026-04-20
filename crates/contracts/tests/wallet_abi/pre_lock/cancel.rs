@@ -2,7 +2,7 @@ use anyhow::Result;
 use lending_contracts::programs::ScriptAuth;
 use simplex::{
     simplicityhl::elements::Script,
-    wallet_abi::{ElementsSequence, InputUnblinding, LockVariant, WalletAbiHarness},
+    wallet_abi::{InputUnblinding, LockVariant, WalletAbiHarness},
 };
 
 use crate::{
@@ -10,9 +10,7 @@ use crate::{
         asserts::assert_burn_output, flows::pre_lock_flow::setup_pre_lock,
         process_req::process_wallet_abi_request, tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
-    wallet_abi::support::{
-        policy_fee_source, pre_lock_cancellation_finalizer, script_auth_finalizer,
-    },
+    wallet_abi::{pre_lock::pre_lock_cancellation_finalizer, script_auth::script_auth_finalizer},
 };
 
 #[simplex::test]
@@ -61,11 +59,6 @@ fn wallet_abi_cancels_pre_lock(context: simplex::TestContext) -> Result<()> {
             &lender_nft_utxo,
             InputUnblinding::Explicit,
             script_auth_finalizer,
-        )
-        .raw_wallet_input(
-            "fee-input",
-            policy_fee_source(&harness),
-            ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
         )
         .explicit_output(
             "returned-collateral",

@@ -1,14 +1,31 @@
 use anyhow::Result;
-use lending_contracts::programs::{ScriptAuth, ScriptAuthParameters, program::SimplexProgram};
+use lending_contracts::{
+    artifacts::script_auth::{ScriptAuthProgram, derived_script_auth::ScriptAuthArguments},
+    programs::{ScriptAuth, ScriptAuthParameters, program::SimplexProgram},
+};
 use simplex::{
+    program::{ArgumentsTrait, WitnessTrait},
     utils::hash_script,
-    wallet_abi::{ElementsSequence, InputUnblinding, LockVariant, WalletAbiHarness},
+    wallet_abi::{
+        FinalizerSpec, InputUnblinding, LockVariant, SimfArguments, SimfWitness, WalletAbiHarness,
+    },
 };
 
-use crate::{
-    common::process_req::process_wallet_abi_request,
-    wallet_abi::support::{policy_fee_source, script_auth_finalizer},
-};
+use crate::common::process_req::process_wallet_abi_request;
+
+pub(crate) fn script_auth_finalizer(
+    harness: &WalletAbiHarness,
+    script_auth: &ScriptAuth,
+    input_script_index: u32,
+) -> Result<FinalizerSpec> {
+    Ok(harness.simf_finalizer(
+        ScriptAuthProgram::SOURCE,
+        &SimfArguments::new(
+            ScriptAuthArguments::from(*script_auth.get_script_auth_parameters()).build_arguments(),
+        ),
+        &SimfWitness::new(ScriptAuth::get_script_auth_witness(input_script_index).build_witness()),
+    )?)
+}
 
 #[simplex::test]
 fn wallet_abi_creates_and_unlocks_script_auth(context: simplex::TestContext) -> Result<()> {
@@ -16,7 +33,7 @@ fn wallet_abi_creates_and_unlocks_script_auth(context: simplex::TestContext) -> 
     let policy_asset = harness.network().policy_asset();
     let locked_amount = 1_000;
 
-    let _ = harness.fund_signer_lbtc(locked_amount)?;
+    let _ = harness.fund_signer_lbtc(5_000)?;
     let _ = harness.fund_signer_lbtc(200_000)?;
 
     let signer_script = harness.signer_script();
@@ -29,12 +46,6 @@ fn wallet_abi_creates_and_unlocks_script_auth(context: simplex::TestContext) -> 
         &harness,
         harness
             .tx()
-            .wallet_input_exact("locked-input", policy_asset, locked_amount)
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-            )
             .raw_output(
                 "locked-script",
                 LockVariant::Script {
@@ -54,6 +65,10 @@ fn wallet_abi_creates_and_unlocks_script_auth(context: simplex::TestContext) -> 
         locked_script.txout.script_pubkey,
         script_auth.get_script_pubkey()
     );
+    assert!(
+        created.tx.output.len() > 2,
+        "expected fee and change outputs when oversized wallet inputs are selected"
+    );
 
     let unlocked = process_wallet_abi_request(
         &harness,
@@ -64,11 +79,6 @@ fn wallet_abi_creates_and_unlocks_script_auth(context: simplex::TestContext) -> 
                 &locked_script,
                 InputUnblinding::Explicit,
                 script_auth_finalizer(&harness, &script_auth, 1)?,
-            )
-            .raw_wallet_input(
-                "auth-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
             )
             .explicit_output(
                 "unlocked-output",

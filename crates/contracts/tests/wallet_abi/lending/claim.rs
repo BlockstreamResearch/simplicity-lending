@@ -1,7 +1,10 @@
 use anyhow::Result;
 use simplex::{
     simplicityhl::elements::Script,
-    wallet_abi::{ElementsSequence, InputUnblinding, LockVariant, WalletAbiHarness},
+    wallet_abi::{
+        AmountFilter, AssetFilter, InputSchema, InputUnblinding, LockFilter, LockVariant,
+        UTXOSource, WalletAbiHarness, WalletSourceFilter,
+    },
 };
 
 use crate::{
@@ -10,7 +13,7 @@ use crate::{
         process_req::process_wallet_abi_request, tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
     lending::support::repay_lending_tx,
-    wallet_abi::support::{asset_auth_finalizer, policy_fee_source},
+    wallet_abi::asset_auth::asset_auth_finalizer,
 };
 
 #[simplex::test]
@@ -39,12 +42,19 @@ fn wallet_abi_claims_lender_principal(context: simplex::TestContext) -> Result<(
                 InputUnblinding::Explicit,
                 asset_auth_finalizer(&harness, &lender_principal_asset_auth)?,
             )
-            .wallet_input_exact("lender-nft", lending_parameters.lender_nft_asset_id, 1)
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-            )
+            .raw_input_schema(InputSchema {
+                id: "lender-nft".to_string(),
+                utxo_source: UTXOSource::Wallet {
+                    filter: WalletSourceFilter {
+                        amount: AmountFilter::None,
+                        asset: AssetFilter::Exact {
+                            asset_id: lending_parameters.lender_nft_asset_id,
+                        },
+                        lock: LockFilter::None,
+                    },
+                },
+                ..InputSchema::default()
+            })
             .explicit_output(
                 "claimed-principal",
                 harness.signer_script(),

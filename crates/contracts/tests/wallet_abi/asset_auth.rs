@@ -1,18 +1,40 @@
 use anyhow::Result;
-use lending_contracts::programs::{AssetAuth, AssetAuthParameters, program::SimplexProgram};
+use lending_contracts::{
+    artifacts::asset_auth::{AssetAuthProgram, derived_asset_auth::AssetAuthArguments},
+    programs::{AssetAuth, AssetAuthParameters, AssetAuthWitnessParams, program::SimplexProgram},
+};
 use simplex::{
+    program::{ArgumentsTrait, WitnessTrait},
     simplicityhl::elements::Script,
-    wallet_abi::{ElementsSequence, InputUnblinding, LockVariant, WalletAbiHarness},
+    wallet_abi::{
+        AmountFilter, AssetFilter, FinalizerSpec, InputSchema, InputUnblinding, LockFilter,
+        LockVariant, SimfArguments, SimfWitness, UTXOSource, WalletAbiHarness, WalletSourceFilter,
+    },
 };
 
-use crate::{
-    common::{
-        asserts::assert_burn_output, issuance::issue_asset,
-        process_req::process_wallet_abi_request, tx_steps::wait_for_tx,
-        wallet::split_first_signer_utxo,
-    },
-    wallet_abi::support::{asset_auth_finalizer, policy_fee_source},
+use crate::common::{
+    asserts::assert_burn_output, issuance::issue_asset, process_req::process_wallet_abi_request,
+    tx_steps::wait_for_tx, wallet::split_first_signer_utxo,
 };
+
+pub(crate) fn asset_auth_finalizer(
+    harness: &WalletAbiHarness,
+    asset_auth: &AssetAuth,
+) -> Result<FinalizerSpec> {
+    Ok(harness.simf_finalizer(
+        AssetAuthProgram::SOURCE,
+        &SimfArguments::new(
+            AssetAuthArguments::from(*asset_auth.get_asset_auth_parameters()).build_arguments(),
+        ),
+        &SimfWitness::new(
+            AssetAuth::get_asset_auth_witness(&AssetAuthWitnessParams {
+                input_asset_index: 1,
+                output_asset_index: 1,
+            })
+            .build_witness(),
+        ),
+    )?)
+}
 
 fn create_asset_auth_output(
     harness: &WalletAbiHarness,
@@ -25,12 +47,6 @@ fn create_asset_auth_output(
         harness,
         harness
             .tx()
-            .wallet_input_exact("locked-input", policy_asset, locked_amount)
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-            )
             .raw_output(
                 "locked-script",
                 LockVariant::Script {
@@ -49,7 +65,7 @@ fn wallet_abi_creates_and_unlocks_asset_auth_without_burn(
 ) -> Result<()> {
     let locked_amount = 1_000;
 
-    let txid = split_first_signer_utxo(&context, vec![locked_amount, 5_000, 200_000]);
+    let txid = split_first_signer_utxo(&context, vec![5_000, 200_000]);
     wait_for_tx(&context, &txid)?;
 
     let (txid, auth_asset_id) = issue_asset(&context, 1)?;
@@ -78,12 +94,19 @@ fn wallet_abi_creates_and_unlocks_asset_auth_without_burn(
                 InputUnblinding::Explicit,
                 asset_auth_finalizer(&harness, &asset_auth)?,
             )
-            .wallet_input_exact("auth-input", auth_asset_id, 1)
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-            )
+            .raw_input_schema(InputSchema {
+                id: "auth-input".to_string(),
+                utxo_source: UTXOSource::Wallet {
+                    filter: WalletSourceFilter {
+                        amount: AmountFilter::None,
+                        asset: AssetFilter::Exact {
+                            asset_id: auth_asset_id,
+                        },
+                        lock: LockFilter::None,
+                    },
+                },
+                ..InputSchema::default()
+            })
             .explicit_output(
                 "unlocked-output",
                 harness.signer_script(),
@@ -122,7 +145,7 @@ fn wallet_abi_creates_and_unlocks_asset_auth_with_burn(
 ) -> Result<()> {
     let locked_amount = 1_000;
 
-    let txid = split_first_signer_utxo(&context, vec![locked_amount, 5_000, 200_000]);
+    let txid = split_first_signer_utxo(&context, vec![5_000, 200_000]);
     wait_for_tx(&context, &txid)?;
 
     let (txid, auth_asset_id) = issue_asset(&context, 1)?;
@@ -151,12 +174,19 @@ fn wallet_abi_creates_and_unlocks_asset_auth_with_burn(
                 InputUnblinding::Explicit,
                 asset_auth_finalizer(&harness, &asset_auth)?,
             )
-            .wallet_input_exact("auth-input", auth_asset_id, 1)
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-            )
+            .raw_input_schema(InputSchema {
+                id: "auth-input".to_string(),
+                utxo_source: UTXOSource::Wallet {
+                    filter: WalletSourceFilter {
+                        amount: AmountFilter::None,
+                        asset: AssetFilter::Exact {
+                            asset_id: auth_asset_id,
+                        },
+                        lock: LockFilter::None,
+                    },
+                },
+                ..InputSchema::default()
+            })
             .explicit_output(
                 "unlocked-output",
                 harness.signer_script(),

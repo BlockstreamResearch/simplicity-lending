@@ -1,8 +1,11 @@
 use anyhow::Result;
-use lending_contracts::programs::program::SimplexProgram;
+use lending_contracts::programs::{ScriptAuth, program::SimplexProgram};
 use simplex::{
     simplicityhl::elements::Script,
-    wallet_abi::{ElementsSequence, InputUnblinding, LockVariant, WalletAbiHarness},
+    wallet_abi::{
+        AmountFilter, AssetFilter, InputSchema, InputUnblinding, LockFilter, LockVariant,
+        UTXOSource, WalletAbiHarness, WalletSourceFilter,
+    },
 };
 
 use crate::{
@@ -10,10 +13,9 @@ use crate::{
         asserts::assert_burn_output, flows::pre_lock_flow::setup_lending_fixture,
         process_req::process_wallet_abi_request, tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
-    wallet_abi::support::{
-        ensure_exact_asset_utxo, lender_principal_asset_auth, lending_repayment_finalizer,
-        policy_fee_source, principal_with_interest, script_auth_finalizer,
-        script_auth_from_lending,
+    wallet_abi::{
+        asset_auth::asset_auth_finalizer, lending::lending_repayment_finalizer,
+        script_auth::script_auth_finalizer,
     },
 };
 
@@ -23,15 +25,12 @@ fn wallet_abi_repays_loan(context: simplex::TestContext) -> Result<()> {
     wait_for_tx(&context, &fixture.lending_txid)?;
 
     let lending_parameters = *fixture.lending.get_lending_parameters();
-    let principal_with_interest = principal_with_interest(&fixture.lending);
-    ensure_exact_asset_utxo(
-        &context,
-        lending_parameters.principal_asset_id,
-        principal_with_interest,
-    )?;
+    let principal_with_interest = lending_parameters
+        .offer_parameters
+        .calculate_principal_with_interest();
 
-    let parameters_script_auth = script_auth_from_lending(&fixture.lending);
-    let lender_principal_asset_auth = lender_principal_asset_auth(&fixture.lending);
+    let parameters_script_auth = ScriptAuth::from_simplex_program(&fixture.lending);
+    let lender_principal_asset_auth = lending_parameters.get_lender_principal_asset_auth();
     let lending_utxo = fetch_output_utxo(&context, fixture.lending_txid, 0)?;
     let first_parameters_nft_utxo = fetch_output_utxo(&context, fixture.lending_txid, 2)?;
     let second_parameters_nft_utxo = fetch_output_utxo(&context, fixture.lending_txid, 3)?;
@@ -61,17 +60,19 @@ fn wallet_abi_repays_loan(context: simplex::TestContext) -> Result<()> {
                 InputUnblinding::Explicit,
                 parameters_finalizer,
             )
-            .wallet_input_exact("borrower-nft", lending_parameters.borrower_nft_asset_id, 1)
-            .wallet_input_exact(
-                "principal-input",
-                lending_parameters.principal_asset_id,
-                principal_with_interest,
-            )
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-            )
+            .raw_input_schema(InputSchema {
+                id: "borrower-nft".to_string(),
+                utxo_source: UTXOSource::Wallet {
+                    filter: WalletSourceFilter {
+                        amount: AmountFilter::None,
+                        asset: AssetFilter::Exact {
+                            asset_id: lending_parameters.borrower_nft_asset_id,
+                        },
+                        lock: LockFilter::None,
+                    },
+                },
+                ..InputSchema::default()
+            })
             .explicit_output(
                 "returned-collateral",
                 harness.signer_script(),
@@ -80,10 +81,7 @@ fn wallet_abi_repays_loan(context: simplex::TestContext) -> Result<()> {
             )
             .finalizer_output(
                 "locked-lender-principal",
-                crate::wallet_abi::support::asset_auth_finalizer(
-                    &harness,
-                    &lender_principal_asset_auth,
-                )?,
+                asset_auth_finalizer(&harness, &lender_principal_asset_auth)?,
                 lending_parameters.principal_asset_id,
                 principal_with_interest,
             )

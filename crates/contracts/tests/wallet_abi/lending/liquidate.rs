@@ -1,15 +1,16 @@
 use anyhow::Result;
-use simplex::wallet_abi::{ElementsSequence, InputUnblinding, LockVariant, WalletAbiHarness};
+use lending_contracts::programs::ScriptAuth;
+use simplex::wallet_abi::{
+    AmountFilter, AssetFilter, InputSchema, InputUnblinding, LockFilter, LockVariant, UTXOSource,
+    WalletAbiHarness, WalletSourceFilter,
+};
 
 use crate::{
     common::{
         asserts::assert_burn_output, flows::pre_lock_flow::setup_lending_fixture,
         process_req::process_wallet_abi_request, tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
-    wallet_abi::support::{
-        lending_liquidation_finalizer, policy_fee_source, script_auth_finalizer,
-        script_auth_from_lending,
-    },
+    wallet_abi::{lending::lending_liquidation_finalizer, script_auth::script_auth_finalizer},
 };
 
 #[simplex::test]
@@ -18,7 +19,7 @@ fn wallet_abi_liquidates_loan_after_expiry(context: simplex::TestContext) -> Res
     wait_for_tx(&context, &fixture.lending_txid)?;
 
     let lending_parameters = *fixture.lending.get_lending_parameters();
-    let parameters_script_auth = script_auth_from_lending(&fixture.lending);
+    let parameters_script_auth = ScriptAuth::from_simplex_program(&fixture.lending);
     let lending_utxo = fetch_output_utxo(&context, fixture.lending_txid, 0)?;
     let first_parameters_nft_utxo = fetch_output_utxo(&context, fixture.lending_txid, 2)?;
     let second_parameters_nft_utxo = fetch_output_utxo(&context, fixture.lending_txid, 3)?;
@@ -49,12 +50,19 @@ fn wallet_abi_liquidates_loan_after_expiry(context: simplex::TestContext) -> Res
                 InputUnblinding::Explicit,
                 parameters_finalizer,
             )
-            .wallet_input_exact("lender-nft", lending_parameters.lender_nft_asset_id, 1)
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-            )
+            .raw_input_schema(InputSchema {
+                id: "lender-nft".to_string(),
+                utxo_source: UTXOSource::Wallet {
+                    filter: WalletSourceFilter {
+                        amount: AmountFilter::None,
+                        asset: AssetFilter::Exact {
+                            asset_id: lending_parameters.lender_nft_asset_id,
+                        },
+                        lock: LockFilter::None,
+                    },
+                },
+                ..InputSchema::default()
+            })
             .lock_time_height(lending_parameters.offer_parameters.loan_expiration_time)?
             .explicit_output(
                 "returned-collateral",
@@ -135,7 +143,7 @@ fn wallet_abi_rejects_loan_liquidation_before_expiry(context: simplex::TestConte
     wait_for_tx(&context, &fixture.lending_txid)?;
 
     let lending_parameters = *fixture.lending.get_lending_parameters();
-    let parameters_script_auth = script_auth_from_lending(&fixture.lending);
+    let parameters_script_auth = ScriptAuth::from_simplex_program(&fixture.lending);
     let lending_utxo = fetch_output_utxo(&context, fixture.lending_txid, 0)?;
     let first_parameters_nft_utxo = fetch_output_utxo(&context, fixture.lending_txid, 2)?;
     let second_parameters_nft_utxo = fetch_output_utxo(&context, fixture.lending_txid, 3)?;
@@ -164,12 +172,19 @@ fn wallet_abi_rejects_loan_liquidation_before_expiry(context: simplex::TestConte
             InputUnblinding::Explicit,
             parameters_finalizer,
         )
-        .wallet_input_exact("lender-nft", lending_parameters.lender_nft_asset_id, 1)
-        .raw_wallet_input(
-            "fee-input",
-            policy_fee_source(&harness),
-            ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
-        )
+        .raw_input_schema(InputSchema {
+            id: "lender-nft".to_string(),
+            utxo_source: UTXOSource::Wallet {
+                filter: WalletSourceFilter {
+                    amount: AmountFilter::None,
+                    asset: AssetFilter::Exact {
+                        asset_id: lending_parameters.lender_nft_asset_id,
+                    },
+                    lock: LockFilter::None,
+                },
+            },
+            ..InputSchema::default()
+        })
         .lock_time_height(lending_parameters.offer_parameters.loan_expiration_time)?
         .explicit_output(
             "returned-collateral",

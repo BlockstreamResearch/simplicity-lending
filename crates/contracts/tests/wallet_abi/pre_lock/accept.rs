@@ -1,15 +1,15 @@
 use anyhow::Result;
 use lending_contracts::programs::{Lending, ScriptAuth, program::SimplexProgram};
-use simplex::wallet_abi::{ElementsSequence, InputUnblinding, WalletAbiHarness};
+use simplex::wallet_abi::{InputUnblinding, WalletAbiHarness};
 
 use crate::{
     common::{
         flows::pre_lock_flow::setup_pre_lock, process_req::process_wallet_abi_request,
         tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
-    wallet_abi::support::{
-        ensure_exact_asset_utxo, lending_repayment_finalizer, policy_fee_source,
-        pre_lock_lending_creation_finalizer, script_auth_finalizer, script_auth_from_lending,
+    wallet_abi::{
+        lending::lending_repayment_finalizer, pre_lock::pre_lock_lending_creation_finalizer,
+        script_auth::script_auth_finalizer,
     },
 };
 
@@ -20,15 +20,10 @@ fn wallet_abi_creates_lending_from_pre_lock(context: simplex::TestContext) -> Re
 
     let pre_lock_parameters = *pre_lock.get_pre_lock_parameters();
     let borrower_script = context.get_default_signer().get_address().script_pubkey();
-    ensure_exact_asset_utxo(
-        &context,
-        pre_lock_parameters.principal_asset_id,
-        pre_lock_parameters.offer_parameters.principal_amount,
-    )?;
 
     let lending = Lending::new(pre_lock_parameters.into());
     let utility_nfts_script_auth = ScriptAuth::from_simplex_program(&pre_lock);
-    let parameter_nfts_script_auth = script_auth_from_lending(&lending);
+    let parameter_nfts_script_auth = ScriptAuth::from_simplex_program(&lending);
     let collateral_utxo = fetch_output_utxo(&context, pre_lock_txid, 0)?;
     let first_parameters_nft_utxo = fetch_output_utxo(&context, pre_lock_txid, 1)?;
     let second_parameters_nft_utxo = fetch_output_utxo(&context, pre_lock_txid, 2)?;
@@ -73,16 +68,6 @@ fn wallet_abi_creates_lending_from_pre_lock(context: simplex::TestContext) -> Re
                 &lender_nft_utxo,
                 InputUnblinding::Explicit,
                 utility_nfts_finalizer.clone(),
-            )
-            .wallet_input_exact(
-                "principal-input",
-                pre_lock_parameters.principal_asset_id,
-                pre_lock_parameters.offer_parameters.principal_amount,
-            )
-            .raw_wallet_input(
-                "fee-input",
-                policy_fee_source(&harness),
-                ElementsSequence::ENABLE_LOCKTIME_NO_RBF,
             )
             .finalizer_output(
                 "locked-collateral",
