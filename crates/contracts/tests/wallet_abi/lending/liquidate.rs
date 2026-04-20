@@ -4,10 +4,10 @@ use simplex::wallet_abi::{ElementsSequence, InputUnblinding, LockVariant, Wallet
 use crate::{
     common::{
         asserts::assert_burn_output, flows::pre_lock_flow::setup_lending_fixture,
-        process_req::process_wallet_abi_request, tx_steps::wait_for_tx,
+        process_req::process_wallet_abi_request, tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
     wallet_abi::support::{
-        fetch_output_utxo, lending_liquidation_finalizer, policy_fee_source, script_auth_finalizer,
+        lending_liquidation_finalizer, policy_fee_source, script_auth_finalizer,
         script_auth_from_lending,
     },
 };

@@ -16,11 +16,7 @@ use lending_contracts::{
 };
 use simplex::{
     program::{ArgumentsTrait, WitnessTrait},
-    simplicityhl::{
-        WitnessValues,
-        elements::{AssetId, OutPoint, Txid},
-    },
-    transaction::UTXO,
+    simplicityhl::{WitnessValues, elements::AssetId},
     utils::hash_script,
     wallet_abi::{
         AmountFilter as WalletAmountFilter, AssetFilter, FinalizerSpec, LockFilter,
@@ -111,21 +107,6 @@ pub fn setup_pre_lock_wallet_state(context: &simplex::TestContext) -> Result<Pre
 
     Ok(PreLockWalletSetup {
         pre_lock_parameters,
-    })
-}
-
-pub fn fetch_output_utxo(context: &simplex::TestContext, txid: Txid, vout: u32) -> Result<UTXO> {
-    let tx = context.get_default_provider().fetch_transaction(&txid)?;
-    let txout = tx
-        .output
-        .get(vout as usize)
-        .cloned()
-        .ok_or_else(|| anyhow!("missing tx output {txid}:{vout}"))?;
-
-    Ok(UTXO {
-        outpoint: OutPoint::new(txid, vout),
-        txout,
-        secrets: None,
     })
 }
 

@@ -5,10 +5,10 @@ use simplex::wallet_abi::{ElementsSequence, InputUnblinding, WalletAbiHarness};
 use crate::{
     common::{
         flows::pre_lock_flow::setup_pre_lock, process_req::process_wallet_abi_request,
-        tx_steps::wait_for_tx,
+        tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
     wallet_abi::support::{
-        ensure_exact_asset_utxo, fetch_output_utxo, lending_repayment_finalizer, policy_fee_source,
+        ensure_exact_asset_utxo, lending_repayment_finalizer, policy_fee_source,
         pre_lock_lending_creation_finalizer, script_auth_finalizer, script_auth_from_lending,
     },
 };

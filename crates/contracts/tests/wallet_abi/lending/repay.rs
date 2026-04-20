@@ -8,12 +8,12 @@ use simplex::{
 use crate::{
     common::{
         asserts::assert_burn_output, flows::pre_lock_flow::setup_lending_fixture,
-        process_req::process_wallet_abi_request, tx_steps::wait_for_tx,
+        process_req::process_wallet_abi_request, tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
     wallet_abi::support::{
-        ensure_exact_asset_utxo, fetch_output_utxo, lender_principal_asset_auth,
-        lending_repayment_finalizer, policy_fee_source, principal_with_interest,
-        script_auth_finalizer, script_auth_from_lending,
+        ensure_exact_asset_utxo, lender_principal_asset_auth, lending_repayment_finalizer,
+        policy_fee_source, principal_with_interest, script_auth_finalizer,
+        script_auth_from_lending,
     },
 };
 

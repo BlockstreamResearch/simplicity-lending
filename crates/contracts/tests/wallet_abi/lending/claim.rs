@@ -7,10 +7,10 @@ use simplex::{
 use crate::{
     common::{
         asserts::assert_burn_output, flows::pre_lock_flow::setup_lending_fixture,
-        process_req::process_wallet_abi_request, tx_steps::wait_for_tx,
+        process_req::process_wallet_abi_request, tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
     lending::support::repay_lending_tx,
-    wallet_abi::support::{asset_auth_finalizer, fetch_output_utxo, policy_fee_source},
+    wallet_abi::support::{asset_auth_finalizer, policy_fee_source},
 };
 
 #[simplex::test]

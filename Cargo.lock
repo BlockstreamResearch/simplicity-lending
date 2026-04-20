@@ -3727,7 +3727,7 @@ dependencies = [
 [[package]]
 name = "smplx-build"
 version = "0.0.3"
-source = "git+https://github.com/BlockstreamResearch/smplx?rev=43c5eb177135446c8c5d6a8064958fddbec08605#43c5eb177135446c8c5d6a8064958fddbec08605"
+source = "git+https://github.com/BlockstreamResearch/smplx?rev=b289c562661c52e8dc87d0145213a089a32de1cc#b289c562661c52e8dc87d0145213a089a32de1cc"
 dependencies = [
  "glob",
  "globwalk",
@@ -3745,7 +3745,7 @@ dependencies = [
 [[package]]
 name = "smplx-macros"
 version = "0.0.3"
-source = "git+https://github.com/BlockstreamResearch/smplx?rev=43c5eb177135446c8c5d6a8064958fddbec08605#43c5eb177135446c8c5d6a8064958fddbec08605"
+source = "git+https://github.com/BlockstreamResearch/smplx?rev=b289c562661c52e8dc87d0145213a089a32de1cc#b289c562661c52e8dc87d0145213a089a32de1cc"
 dependencies = [
  "smplx-build",
  "smplx-test",
@@ -3755,7 +3755,7 @@ dependencies = [
 [[package]]
 name = "smplx-regtest"
 version = "0.0.3"
-source = "git+https://github.com/BlockstreamResearch/smplx?rev=43c5eb177135446c8c5d6a8064958fddbec08605#43c5eb177135446c8c5d6a8064958fddbec08605"
+source = "git+https://github.com/BlockstreamResearch/smplx?rev=b289c562661c52e8dc87d0145213a089a32de1cc#b289c562661c52e8dc87d0145213a089a32de1cc"
 dependencies = [
  "electrsd",
  "serde",
@@ -3767,7 +3767,7 @@ dependencies = [
 [[package]]
 name = "smplx-sdk"
 version = "0.0.3"
-source = "git+https://github.com/BlockstreamResearch/smplx?rev=43c5eb177135446c8c5d6a8064958fddbec08605#43c5eb177135446c8c5d6a8064958fddbec08605"
+source = "git+https://github.com/BlockstreamResearch/smplx?rev=b289c562661c52e8dc87d0145213a089a32de1cc#b289c562661c52e8dc87d0145213a089a32de1cc"
 dependencies = [
  "bip39",
  "bitcoin_hashes",
@@ -3786,7 +3786,7 @@ dependencies = [
 [[package]]
 name = "smplx-std"
 version = "0.0.3"
-source = "git+https://github.com/BlockstreamResearch/smplx?rev=43c5eb177135446c8c5d6a8064958fddbec08605#43c5eb177135446c8c5d6a8064958fddbec08605"
+source = "git+https://github.com/BlockstreamResearch/smplx?rev=b289c562661c52e8dc87d0145213a089a32de1cc#b289c562661c52e8dc87d0145213a089a32de1cc"
 dependencies = [
  "either",
  "lwk_common",
@@ -3803,7 +3803,7 @@ dependencies = [
 [[package]]
 name = "smplx-test"
 version = "0.0.3"
-source = "git+https://github.com/BlockstreamResearch/smplx?rev=43c5eb177135446c8c5d6a8064958fddbec08605#43c5eb177135446c8c5d6a8064958fddbec08605"
+source = "git+https://github.com/BlockstreamResearch/smplx?rev=b289c562661c52e8dc87d0145213a089a32de1cc#b289c562661c52e8dc87d0145213a089a32de1cc"
 dependencies = [
  "electrsd",
  "futures",

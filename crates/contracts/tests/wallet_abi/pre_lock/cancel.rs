@@ -8,11 +8,10 @@ use simplex::{
 use crate::{
     common::{
         asserts::assert_burn_output, flows::pre_lock_flow::setup_pre_lock,
-        process_req::process_wallet_abi_request, tx_steps::wait_for_tx,
+        process_req::process_wallet_abi_request, tx_steps::wait_for_tx, utxo::fetch_output_utxo,
     },
     wallet_abi::support::{
-        fetch_output_utxo, policy_fee_source, pre_lock_cancellation_finalizer,
-        script_auth_finalizer,
+        policy_fee_source, pre_lock_cancellation_finalizer, script_auth_finalizer,
     },
 };
 
