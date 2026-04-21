@@ -122,11 +122,23 @@ export function LenderRoute() {
   }, [esplora])
 
   useEffect(() => {
-    void loadSupplyOffers()
+    let cancelled = false
+    void Promise.resolve().then(() => {
+      if (!cancelled) void loadSupplyOffers()
+    })
+    return () => {
+      cancelled = true
+    }
   }, [loadSupplyOffers])
 
   useEffect(() => {
-    void loadPendingOffers()
+    let cancelled = false
+    void Promise.resolve().then(() => {
+      if (!cancelled) void loadPendingOffers()
+    })
+    return () => {
+      cancelled = true
+    }
   }, [loadPendingOffers])
 
   const offerExpired =
@@ -189,7 +201,9 @@ export function LenderRoute() {
                   <div className="flex flex-wrap gap-3">
                     <PrimaryButton
                       disabled={
-                        requestAction.action.status === 'running' || selectedScope !== 'pending'
+                        requestAction.action.status === 'running' ||
+                        selectedScope !== 'pending' ||
+                        offerExpired
                       }
                       onClick={() =>
                         requestAction.run(

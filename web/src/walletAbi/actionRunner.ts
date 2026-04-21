@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
   WalletAbiStatus,
   walletAbiJsonString,
@@ -42,6 +42,10 @@ export interface WalletAbiBuiltRequest<TMeta = unknown> {
   meta?: TMeta
 }
 
+function isDroppedSessionRequest(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('wallet session disconnected')
+}
+
 function extractTxInfo(response: WalletAbiTxCreateResponse) {
   if (response.status() !== WalletAbiStatus.Ok) {
     return { txId: null, txHex: null }
@@ -61,8 +65,13 @@ function extractTxInfo(response: WalletAbiTxCreateResponse) {
 export function useWalletAbiActionRunner() {
   const session = useWalletAbiSession()
   const [action, setAction] = useState<WalletAbiActionState>(DEFAULT_STATE)
+  const runGenerationRef = useRef(0)
+  const inFlightRef = useRef(false)
+  const sessionInactive = session.status === 'disconnecting' || session.status === 'disconnected'
 
   const reset = useCallback(() => {
+    runGenerationRef.current += 1
+    inFlightRef.current = false
     setAction(DEFAULT_STATE)
   }, [])
 
@@ -77,7 +86,21 @@ export function useWalletAbiActionRunner() {
         txHex: string | null
       }) => Promise<void> | void
     ) => {
-      setAction({
+      if (inFlightRef.current) {
+        traceStage(`[wallet-abi] ${label}:ignored request already running`)
+        return
+      }
+
+      inFlightRef.current = true
+      const runGeneration = ++runGenerationRef.current
+
+      const setActionIfCurrent = (nextAction: WalletAbiActionState) => {
+        if (runGeneration === runGenerationRef.current) {
+          setAction(nextAction)
+        }
+      }
+
+      setActionIfCurrent({
         status: 'running',
         label,
         requestJson: null,
@@ -100,7 +123,7 @@ export function useWalletAbiActionRunner() {
         const responseJson = formatJson(value.toJSON())
         const { txId, txHex } = extractTxInfo(value)
 
-        setAction({
+        setActionIfCurrent({
           status: value.status() === WalletAbiStatus.Ok ? 'success' : 'error',
           label,
           requestJson,
@@ -109,6 +132,10 @@ export function useWalletAbiActionRunner() {
           txHex,
           error: value.errorInfo()?.message() ?? null,
         })
+
+        if (runGeneration !== runGenerationRef.current) {
+          return
+        }
 
         traceStage(`[wallet-abi] ${label}:success status=${value.status()}`)
         await onSuccess?.({
@@ -120,7 +147,11 @@ export function useWalletAbiActionRunner() {
       } catch (error) {
         traceStage(`[wallet-abi] ${label}:error`)
         console.error(`[wallet-abi] ${label}:error`, error)
-        setAction({
+        if (isDroppedSessionRequest(error)) {
+          setActionIfCurrent(DEFAULT_STATE)
+          return
+        }
+        setActionIfCurrent({
           status: 'error',
           label,
           requestJson: null,
@@ -129,13 +160,15 @@ export function useWalletAbiActionRunner() {
           txHex: null,
           error: error instanceof Error ? error.message : String(error),
         })
+      } finally {
+        inFlightRef.current = false
       }
     },
     [session]
   )
 
   return {
-    action,
+    action: sessionInactive ? DEFAULT_STATE : action,
     reset,
     run,
   }

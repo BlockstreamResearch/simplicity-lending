@@ -74,7 +74,7 @@ export function getOfferStatusUi(params: {
 }): OfferStatusUi {
   const baseStatus = normalizeStatus(params.status)
   if (
-    baseStatus === 'active' &&
+    (baseStatus === 'active' || baseStatus === 'pending') &&
     params.currentBlockHeight != null &&
     typeof params.loanExpirationTime === 'number' &&
     params.loanExpirationTime <= params.currentBlockHeight

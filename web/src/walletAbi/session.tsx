@@ -69,7 +69,13 @@ interface WalletAbiContextValue {
 
 const WalletAbiContext = createContext<WalletAbiContextValue | null>(null)
 
-const DEFAULT_TIMEOUT_MS = 120_000
+const DEFAULT_TIMEOUT_MS = 180_000
+const DISCONNECTED_REQUEST_ERROR =
+  'Wallet ABI request was dropped because the wallet session disconnected.'
+const DUPLICATE_PROCESS_REQUEST_ERROR =
+  'A Wallet ABI request is already waiting for wallet approval. Approve, reject, wait for timeout, or disconnect before sending another request.'
+
+type WalletAbiProcessRequestResult = Awaited<ReturnType<WalletAbiContextValue['processRequest']>>
 
 interface WalletAbiSessionBootstrap {
   controller: WalletAbiSessionController
@@ -218,9 +224,28 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
   const clientRef = useRef<WalletAbiClient | null>(null)
   const connectPromiseRef = useRef<Promise<void> | null>(null)
   const disconnectPromiseRef = useRef<Promise<void> | null>(null)
+  const processRequestPromiseRef = useRef<Promise<WalletAbiProcessRequestResult> | null>(null)
   const connectGenerationRef = useRef(0)
+  const requestGenerationRef = useRef(0)
+  const pendingRequestRejectorsRef = useRef(new Set<(reason: Error) => void>())
   const manualDisconnectRef = useRef(false)
   const rpcIdRef = useRef(0)
+
+  const invalidatePendingRequests = useCallback((message = DISCONNECTED_REQUEST_ERROR) => {
+    requestGenerationRef.current += 1
+    processRequestPromiseRef.current = null
+    setIdentityLoading(false)
+
+    if (pendingRequestRejectorsRef.current.size === 0) {
+      return
+    }
+
+    const reason = new Error(message)
+    for (const reject of pendingRequestRejectorsRef.current) {
+      reject(reason)
+    }
+    pendingRequestRejectorsRef.current.clear()
+  }, [])
 
   const nextRpcId = useCallback(() => {
     rpcIdRef.current += 1
@@ -239,6 +264,7 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
     const requester = requesterRef.current
     if (!requester) return
 
+    const requestGeneration = requestGenerationRef.current
     setIdentityLoading(true)
     try {
       const [addressResponse, pubkeyResponse] = await Promise.all([
@@ -246,15 +272,19 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
         requester.request(createGetRawSigningXOnlyPubkeyRequest(nextRpcId())),
       ])
 
+      if (requestGeneration !== requestGenerationRef.current) return
       setReceiveAddress(parseGetSignerReceiveAddressResponse(addressResponse))
       setSigningXOnlyPubkey(parseGetRawSigningXOnlyPubkeyResponse(pubkeyResponse))
       setError(null)
     } catch (nextError) {
+      if (requestGeneration !== requestGenerationRef.current) return
       setReceiveAddress(null)
       setSigningXOnlyPubkey(null)
       setError(normalizeErrorMessage(nextError))
     } finally {
-      setIdentityLoading(false)
+      if (requestGeneration === requestGenerationRef.current) {
+        setIdentityLoading(false)
+      }
     }
   }, [nextRpcId])
 
@@ -303,6 +333,7 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
           },
           onDisconnected: () => {
             if (!active) return
+            invalidatePendingRequests()
             setSessionTopic(null)
             setReceiveAddress(null)
             setSigningXOnlyPubkey(null)
@@ -324,7 +355,7 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
       active = false
       unsubscribe?.()
     }
-  }, [appNetwork, projectId, refreshIdentity, storagePrefix])
+  }, [appNetwork, invalidatePendingRequests, projectId, refreshIdentity, storagePrefix])
 
   const connect = useCallback(async () => {
     const client = clientRef.current
@@ -397,6 +428,7 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
       connectGenerationRef.current += 1
       manualDisconnectRef.current = true
       connectPromiseRef.current = null
+      invalidatePendingRequests()
       setStatus('disconnecting')
       setError(null)
       try {
@@ -417,7 +449,7 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
 
     disconnectPromiseRef.current = promise
     return promise
-  }, [])
+  }, [invalidatePendingRequests])
 
   const callWithEnvelope = useCallback(
     async <T,>(
@@ -425,11 +457,49 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
       parse: (response: WalletAbiJsonRpcResponse) => T
     ) => {
       const requester = ensureRequester()
-      const response = await requester.request(request)
+      const controller = controllerRef.current
+      if (!controller?.session()) {
+        throw new Error('WalletConnect session is not connected.')
+      }
 
-      return {
-        response,
-        value: parse(response),
+      const requestGeneration = requestGenerationRef.current
+      let rejectOnInvalidation: (reason: Error) => void = () => undefined
+      const invalidated = new Promise<never>((_, reject) => {
+        rejectOnInvalidation = reject
+      })
+
+      pendingRequestRejectorsRef.current.add(rejectOnInvalidation)
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+      const timedOut = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              `Wallet ABI request timed out after ${String(DEFAULT_TIMEOUT_MS / 1000)} seconds.`
+            )
+          )
+        }, DEFAULT_TIMEOUT_MS)
+      })
+
+      try {
+        const response = await Promise.race([
+          Promise.resolve(requester.request(request)),
+          invalidated,
+          timedOut,
+        ])
+
+        if (requestGeneration !== requestGenerationRef.current || !controllerRef.current?.session()) {
+          throw new Error(DISCONNECTED_REQUEST_ERROR)
+        }
+
+        return {
+          response,
+          value: parse(response),
+        }
+      } finally {
+        if (timeoutId != null) {
+          clearTimeout(timeoutId)
+        }
+        pendingRequestRejectorsRef.current.delete(rejectOnInvalidation)
       }
     },
     [ensureRequester]
@@ -454,8 +524,23 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
   )
 
   const processRequest = useCallback(
-    (request: WalletAbiTxCreateRequest) =>
-      callWithEnvelope(createProcessRequest(nextRpcId(), request), parseProcessRequestResponse),
+    (request: WalletAbiTxCreateRequest) => {
+      if (processRequestPromiseRef.current != null) {
+        return Promise.reject(new Error(DUPLICATE_PROCESS_REQUEST_ERROR))
+      }
+
+      const promise = callWithEnvelope(
+        createProcessRequest(nextRpcId(), request),
+        parseProcessRequestResponse
+      ).finally(() => {
+        if (processRequestPromiseRef.current === promise) {
+          processRequestPromiseRef.current = null
+        }
+      })
+
+      processRequestPromiseRef.current = promise
+      return promise
+    },
     [callWithEnvelope, nextRpcId]
   )
 
