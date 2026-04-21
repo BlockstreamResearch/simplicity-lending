@@ -1,0 +1,26 @@
+FROM node:24-bookworm AS builder
+
+WORKDIR /app/web
+
+COPY web/package.json web/package-lock.json ./
+
+RUN npm install --no-audit --no-fund
+
+COPY web/.prettierignore web/.prettierrc web/eslint.config.js web/index.html web/postcss.config.js web/simplicity-covenants.config.json web/tailwind.config.js web/tsconfig.app.json web/tsconfig.json web/tsconfig.node.json web/vite.config.ts ./
+COPY web/public ./public
+COPY web/src ./src
+COPY crates/contracts/src /app/crates/contracts/src
+COPY crates/contracts/simf /app/crates/contracts/simf
+
+RUN npm run build
+
+FROM nginx:1.27-alpine
+
+RUN apk add --no-cache gettext
+
+COPY --from=builder /app/web/dist /usr/share/nginx/html
+COPY deployment/configs /deployment/configs
+COPY deployment/scripts/render-web-config.sh /deployment/render-web-config.sh
+
+ENTRYPOINT ["/deployment/render-web-config.sh"]
+CMD ["nginx", "-g", "daemon off;"]

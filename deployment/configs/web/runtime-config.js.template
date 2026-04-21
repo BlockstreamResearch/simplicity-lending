@@ -1,0 +1,7 @@
+window.__SIMPLICITY_LENDING_CONFIG__ = {
+  apiBaseUrl: '/api',
+  reownProjectId: '${REOWN_PROJECT_ID}',
+  walletAbiNetwork: '${WALLET_ABI_NETWORK}',
+  esploraBaseUrl: '/esplora',
+  esploraExplorerUrl: '${WEB_ESPLORA_EXPLORER_URL}',
+}
