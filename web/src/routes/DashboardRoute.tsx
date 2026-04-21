@@ -76,6 +76,10 @@ export function DashboardRoute() {
   const walletReady = session.status === 'connected' && Boolean(session.receiveAddress)
   const borrowerReady = walletReady && Boolean(session.signingXOnlyPubkey)
   const lenderIdentity = session.signingXOnlyPubkey ?? session.receiveAddress
+  const borrowOfferIds = useMemo(
+    () => new Set(borrowOffers.map((offer) => offer.id)),
+    [borrowOffers]
+  )
 
   const loadBorrowOffers = useCallback(async () => {
     if (!session.receiveAddress || !session.signingXOnlyPubkey) {
@@ -300,6 +304,23 @@ export function DashboardRoute() {
               currentBlockHeight={currentBlockHeight}
               onRetry={loadBorrowOffers}
               emptyMessage="No borrower positions yet."
+              renderActions={(offer) =>
+                offer.status === 'active' ? (
+                  <Link
+                    to={`/borrower?offer=${encodeURIComponent(offer.id)}`}
+                    className="inline-flex rounded-full bg-neutral-950 px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800"
+                  >
+                    Repay
+                  </Link>
+                ) : (
+                  <Link
+                    to={`/borrower?offer=${encodeURIComponent(offer.id)}`}
+                    className="inline-flex rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+                  >
+                    Manage
+                  </Link>
+                )
+              }
             />
           ) : (
             <PersonalOrdersPlaceholder message="Connect wallet to load your borrower positions." />
@@ -328,6 +349,16 @@ export function DashboardRoute() {
               currentBlockHeight={currentBlockHeight}
               onRetry={loadSupplyOffers}
               emptyMessage="No lender positions yet."
+              renderActions={(offer) =>
+                borrowOfferIds.has(offer.id) && offer.status === 'active' ? (
+                  <Link
+                    to={`/borrower?offer=${encodeURIComponent(offer.id)}`}
+                    className="inline-flex rounded-full bg-neutral-950 px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800"
+                  >
+                    Repay
+                  </Link>
+                ) : null
+              }
             />
           ) : (
             <PersonalOrdersPlaceholder message="Connect wallet to load your supply." />

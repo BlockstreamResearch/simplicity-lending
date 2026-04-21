@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { RouteScaffold } from './RouteScaffold'
 import {
   ActionStateCard,
@@ -43,10 +43,12 @@ function summarizeSetup(state: ReturnType<typeof useBorrowerFlowState>['state'])
 }
 
 export function BorrowerRoute() {
+  const [searchParams] = useSearchParams()
   const session = useWalletAbiSession()
   const borrowerState = useBorrowerFlowState(session.receiveAddress)
   const requestAction = useWalletAbiActionRunner()
   const esplora = useMemo(() => new EsploraClient(), [])
+  const requestedOfferId = searchParams.get('offer')
 
   const [principalAssetId, setPrincipalAssetId] = useState('')
   const [offers, setOffers] = useState<OfferShort[]>([])
@@ -111,6 +113,14 @@ export function BorrowerRoute() {
   useEffect(() => {
     void loadOffers()
   }, [loadOffers])
+
+  useEffect(() => {
+    if (!requestedOfferId) return
+    const requestedOffer = offers.find((offer) => offer.id === requestedOfferId)
+    if (requestedOffer && selectedOffer?.id !== requestedOffer.id) {
+      setSelectedOffer(requestedOffer)
+    }
+  }, [offers, requestedOfferId, selectedOffer?.id])
 
   return (
     <RouteScaffold

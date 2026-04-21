@@ -4,7 +4,7 @@
  * Used on Dashboard and Borrower page.
  */
 
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { EsploraClient } from '../api/esplora'
 import type { OfferShort } from '../types/offers'
 import { CopyIcon } from './CopyIcon'
@@ -59,6 +59,7 @@ export interface OfferTableProps {
   emptyMessage?: string
   /** When set, rows are clickable and this is called with the offer. */
   onOfferClick?: (offer: OfferShort) => void
+  renderActions?: (offer: OfferShort) => ReactNode
 }
 
 export function OfferTable({
@@ -69,10 +70,12 @@ export function OfferTable({
   onRetry,
   emptyMessage = 'No offers yet',
   onOfferClick,
+  renderActions,
 }: OfferTableProps) {
   const esplora = useMemo(() => new EsploraClient(), [])
   const errorMessage =
     error && error.toLowerCase().includes('failed to fetch') ? 'Load failed' : error
+  const columnCount = renderActions ? 9 : 8
 
   return (
     <>
@@ -119,19 +122,24 @@ export function OfferTable({
               <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">
                 Status <span className="text-gray-400">↕</span>
               </th>
+              {renderActions ? (
+                <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">
+                  Action
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr className="border-t border-gray-200">
-                <td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-500">
+                <td colSpan={columnCount} className="px-3 py-6 text-center text-sm text-gray-500">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && offers.length === 0 && !error && (
               <tr className="border-t border-gray-200">
-                <td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-500">
+                <td colSpan={columnCount} className="px-3 py-6 text-center text-sm text-gray-500">
                   {emptyMessage}
                 </td>
               </tr>
@@ -226,6 +234,11 @@ export function OfferTable({
                         currentBlockHeight={currentBlockHeight}
                       />
                     </td>
+                    {renderActions ? (
+                      <td className="px-3 py-2 text-sm text-gray-900">
+                        {renderActions(offer)}
+                      </td>
+                    ) : null}
                   </tr>
                 )
               })}
