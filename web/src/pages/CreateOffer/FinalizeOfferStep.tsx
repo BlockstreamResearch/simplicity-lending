@@ -9,7 +9,12 @@ import type { ScripthashUtxoEntry } from '../../api/esplora'
 import type { EsploraTx } from '../../api/esplora'
 import { EsploraApiError } from '../../api/esplora'
 import { formatBroadcastError } from '../../utils/parseBroadcastError'
-import { P2PK_NETWORK, POLICY_ASSET_ID, getP2pkAddressFromSecret } from '../../utility/addressP2pk'
+import {
+  P2PK_NETWORK,
+  POLICY_ASSET_ID,
+  getP2pkAddressFromSecret,
+  getScriptPubkeyHexFromAddress,
+} from '../../utility/addressP2pk'
 import { parseSeedHex, deriveSecretKeyFromIndex } from '../../utility/seed'
 import { buildLendingParamsFromParameterNFTs } from '../../utility/parametersEncoding'
 import { buildPreLockArguments } from '../../utility/preLockArguments'
@@ -222,6 +227,7 @@ export function FinalizeOfferStep({
         secondParametersNftAssetId: secondParamsNftAssetId,
         lendingParams,
         borrowerPubKey,
+        borrowerOutputScriptHex: await getScriptPubkeyHexFromAddress(accountAddress ?? ''),
         network: P2PK_NETWORK,
       })
 
@@ -234,8 +240,8 @@ export function FinalizeOfferStep({
         secondParametersNftAssetId: secondParamsNftAssetId,
         lendingCovHash: covenantResult.lendingCovHash,
         parametersNftOutputScriptHash: covenantResult.parametersNftOutputScriptHash,
-        borrowerNftOutputScriptHash: covenantResult.borrowerP2trScriptHash,
-        principalOutputScriptHash: covenantResult.borrowerP2trScriptHash,
+        borrowerNftOutputScriptHash: covenantResult.borrowerOutputScriptHash,
+        principalOutputScriptHash: covenantResult.borrowerOutputScriptHash,
         borrowerPubKey,
         lendingParams,
       })
@@ -324,6 +330,7 @@ export function FinalizeOfferStep({
     feeAmount,
     seedHex,
     accountIndex,
+    accountAddress,
     esplora,
   ])
 

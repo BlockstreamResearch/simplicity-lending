@@ -6,7 +6,7 @@
 import type { EsploraTx } from '../api/esplora'
 import { getSource, getLwk, createP2trAddress } from '../simplicity'
 import type { P2pkNetwork } from '../simplicity'
-import { getScriptPubkeyHexFromAddress, getP2pkAddressFromPublicKey } from './addressP2pk'
+import { getScriptPubkeyHexFromAddress } from './addressP2pk'
 import { hashScriptPubkeyHex } from '../api/esplora'
 import { getTaprootUnspendableInternalKey } from './taprootUnspendableKey'
 import {
@@ -17,8 +17,14 @@ import {
 } from '../simplicity/covenants'
 import { buildPreLockArguments as buildPreLockArgumentsObj } from './preLockArguments'
 import type { LendingParams, PreLockArguments } from './preLockArguments'
-import { getScriptHexFromVout, parseOpReturn64, assetIdDisplayToInternal } from './hex'
-import { requireVout, requireAssetHex } from './esploraPrevout'
+import {
+  assetIdDisplayToInternal,
+  bytesToHex,
+  getScriptHexFromVout,
+  normalizeHex,
+  parseOpReturn64,
+} from './hex'
+import { requireVout, requireAssetHex, requireVinPrevout } from './esploraPrevout'
 import type { OfferShort } from '../types/offers'
 
 export interface ComputePreLockCovenantHashesParams {
@@ -30,6 +36,7 @@ export interface ComputePreLockCovenantHashesParams {
   secondParametersNftAssetId: Uint8Array
   lendingParams: LendingParams
   borrowerPubKey: Uint8Array
+  borrowerOutputScriptHex: string
   network?: P2pkNetwork
 }
 
@@ -37,8 +44,8 @@ export interface PreLockCovenantHashes {
   principalAuthScriptHash: Uint8Array
   lendingCovHash: Uint8Array
   parametersNftOutputScriptHash: Uint8Array
-  /** Hash of borrower P2TR script (for principal and borrower NFT outputs). */
-  borrowerP2trScriptHash: Uint8Array
+  /** Hash of borrower wallet output script (for principal and borrower NFT outputs). */
+  borrowerOutputScriptHash: Uint8Array
   /** Hash of PreLock script (used for ScriptAuth utility NFTs). */
   preLockScriptHash: Uint8Array
   preLockAddressScriptPubkey?: Uint8Array
@@ -109,10 +116,7 @@ export async function computePreLockCovenantHashes(
   const parametersNftScriptHex = await getScriptPubkeyHexFromAddress(scriptAuthParamsAddress)
   const parametersNftOutputScriptHash = await hashScriptPubkeyHex(parametersNftScriptHex)
 
-  const borrowerP2trAddress = await getP2pkAddressFromPublicKey(params.borrowerPubKey, network)
-  const borrowerP2trScriptHash = await hashScriptPubkeyHex(
-    await getScriptPubkeyHexFromAddress(borrowerP2trAddress)
-  )
+  const borrowerOutputScriptHash = await hashScriptPubkeyHex(params.borrowerOutputScriptHex)
 
   // 4. PreLockArguments and PreLock address
   const preLockArguments = buildPreLockArgumentsObj({
@@ -124,8 +128,8 @@ export async function computePreLockCovenantHashes(
     secondParametersNftAssetId: params.secondParametersNftAssetId,
     lendingCovHash,
     parametersNftOutputScriptHash,
-    borrowerNftOutputScriptHash: borrowerP2trScriptHash,
-    principalOutputScriptHash: borrowerP2trScriptHash,
+    borrowerNftOutputScriptHash: borrowerOutputScriptHash,
+    principalOutputScriptHash: borrowerOutputScriptHash,
     borrowerPubKey: params.borrowerPubKey,
     lendingParams: params.lendingParams,
   })
@@ -153,7 +157,7 @@ export async function computePreLockCovenantHashes(
     principalAuthScriptHash,
     lendingCovHash,
     parametersNftOutputScriptHash,
-    borrowerP2trScriptHash,
+    borrowerOutputScriptHash,
     preLockScriptHash,
     preLockAddressScriptPubkey: new Uint8Array(0), // optional, callers use preLockScriptPubkeyHex
     utilityNftsOutputScriptPubkey: new Uint8Array(0),
@@ -175,6 +179,7 @@ export async function buildPreLockArgumentsFromOfferCreation(
 ): Promise<{
   preLockArguments: PreLockArguments
   lendingCovHash: Uint8Array
+  principalAuthScriptHash: Uint8Array
   lendingScriptPubkeyHex: string
   parametersNftScriptPubkeyHex: string
   borrowerScriptPubkeyHex: string
@@ -215,6 +220,13 @@ export async function buildPreLockArgumentsFromOfferCreation(
   const lenderNftAssetId = assetIdDisplayToInternal(lenderNftAssetHex)
   const firstParametersNftAssetId = assetIdDisplayToInternal(firstParamsAssetHex)
   const secondParametersNftAssetId = assetIdDisplayToInternal(secondParamsAssetHex)
+  const borrowerCollateralPrevout = requireVinPrevout(
+    offerCreationTx,
+    0,
+    'Borrower collateral input',
+    'offer creation tx'
+  )
+  const borrowerScriptPubkeyHex = getScriptHexFromVout(borrowerCollateralPrevout)
 
   const hashes = await computePreLockCovenantHashes({
     collateralAssetId,
@@ -225,11 +237,17 @@ export async function buildPreLockArgumentsFromOfferCreation(
     secondParametersNftAssetId,
     lendingParams,
     borrowerPubKey,
+    borrowerOutputScriptHex: borrowerScriptPubkeyHex,
     network,
   })
 
-  const borrowerAddress = await getP2pkAddressFromPublicKey(borrowerPubKey, network)
-  const borrowerScriptPubkeyHex = await getScriptPubkeyHexFromAddress(borrowerAddress)
+  if (offer.borrower_output_script_hash) {
+    const expectedHash = normalizeHex(offer.borrower_output_script_hash)
+    const actualHash = normalizeHex(bytesToHex(hashes.borrowerOutputScriptHash))
+    if (expectedHash && expectedHash !== actualHash) {
+      throw new Error('Offer borrower output script hash does not match collateral input prevout.')
+    }
+  }
 
   const preLockArguments = buildPreLockArgumentsObj({
     collateralAssetId,
@@ -240,8 +258,8 @@ export async function buildPreLockArgumentsFromOfferCreation(
     secondParametersNftAssetId,
     lendingCovHash: hashes.lendingCovHash,
     parametersNftOutputScriptHash: hashes.parametersNftOutputScriptHash,
-    borrowerNftOutputScriptHash: hashes.borrowerP2trScriptHash,
-    principalOutputScriptHash: hashes.borrowerP2trScriptHash,
+    borrowerNftOutputScriptHash: hashes.borrowerOutputScriptHash,
+    principalOutputScriptHash: hashes.borrowerOutputScriptHash,
     borrowerPubKey,
     lendingParams,
   })
@@ -249,6 +267,7 @@ export async function buildPreLockArgumentsFromOfferCreation(
   return {
     preLockArguments,
     lendingCovHash: hashes.lendingCovHash,
+    principalAuthScriptHash: hashes.principalAuthScriptHash,
     lendingScriptPubkeyHex: hashes.lendingScriptPubkeyHex,
     parametersNftScriptPubkeyHex: hashes.parametersNftScriptPubkeyHex,
     borrowerScriptPubkeyHex,

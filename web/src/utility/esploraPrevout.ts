@@ -20,6 +20,17 @@ export function requireVout(
   return out
 }
 
+export function requireVinPrevout(
+  tx: EsploraTx,
+  vin: number,
+  label: string,
+  context: string = 'transaction'
+): EsploraVout {
+  const input = tx.vin?.[vin]
+  if (!input?.prevout) throw new Error(`${label} vin ${vin} prevout missing in ${context}`)
+  return input.prevout
+}
+
 export function requireAssetHex(vout: EsploraVout, label: string): string {
   const hex = normalizeHex(vout.asset ?? '')
   if (!hex || hex.length !== 64)
