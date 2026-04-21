@@ -2,16 +2,13 @@ use std::str::FromStr;
 
 use clap::Subcommand;
 
-use lending_contracts::programs::{PreLock, PreLockParameters};
-use lending_contracts::transactions::core::SimplexInput;
-use lending_contracts::transactions::pre_lock::{
-    cancel_pre_lock, create_lending_from_pre_lock, create_pre_lock,
-    extract_pre_lock_parameters_from_tx,
-};
+use lending_contracts::programs::pre_lock::{PreLock, PreLockParameters};
 use lending_contracts::utils::{FirstNFTParameters, LendingOfferParameters, SecondNFTParameters};
 use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
-use simplex::transaction::{PartialOutput, RequiredSignature, UTXO};
+use simplex::transaction::{
+    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
+};
 use simplex::utils::hash_script;
 
 use crate::cli::CliContext;
@@ -19,6 +16,7 @@ use crate::commands::pre_lock::PreLockCommandError;
 
 #[derive(Debug, Subcommand)]
 pub enum PreLockCommand {
+    /// Finish offer creation process
     Create {
         /// Utility NFTs issuance txid
         #[arg(long = "utility-nfts-issuance-txid")]
@@ -30,11 +28,13 @@ pub enum PreLockCommand {
         #[arg(long = "principal-asset-id-hex-be")]
         principal_asset_id_hex_be: String,
     },
+    /// Accept offer as a lender
     CreateLending {
         /// PreLock covenant creation txid
         #[arg(long = "pre-lock-creation-txid")]
         pre_lock_creation_txid: Txid,
     },
+    /// Cancel offer as a borrower
     CancelOffer {
         /// PreLock covenant creation txid
         #[arg(long = "pre-lock-creation-txid")]
@@ -51,7 +51,7 @@ impl CliPreLock {
                 utility_nfts_issuance_txid,
                 collateral_asset_id_hex_be,
                 principal_asset_id_hex_be,
-            } => CliPreLock::create_pre_lock_tx(
+            } => CliPreLock::create_pre_lock(
                 context,
                 *utility_nfts_issuance_txid,
                 collateral_asset_id_hex_be,
@@ -59,14 +59,14 @@ impl CliPreLock {
             ),
             PreLockCommand::CreateLending {
                 pre_lock_creation_txid,
-            } => CliPreLock::create_lending_from_pre_lock_tx(context, *pre_lock_creation_txid),
+            } => CliPreLock::create_lending_from_pre_lock(context, *pre_lock_creation_txid),
             PreLockCommand::CancelOffer {
                 pre_lock_creation_txid,
-            } => CliPreLock::cancel_pre_lock_tx(context, *pre_lock_creation_txid),
+            } => CliPreLock::cancel_pre_lock(context, *pre_lock_creation_txid),
         }
     }
 
-    fn create_pre_lock_tx(
+    fn create_pre_lock(
         context: CliContext,
         utility_nfts_issuance_txid: Txid,
         collateral_asset_id_hex_be: &str,
@@ -138,44 +138,54 @@ impl CliPreLock {
             ));
         }
 
-        let collateral_utxo = collateral_utxos.first().unwrap();
+        let pre_lock = PreLock::new(pre_lock_parameters);
 
-        let (ft, _) = create_pre_lock(
-            &SimplexInput::new(collateral_utxo, RequiredSignature::NativeEcdsa),
-            &SimplexInput::new(
-                &UTXO {
-                    outpoint: OutPoint::new(utility_nfts_issuance_txid, 0),
-                    txout: utility_nfts_tx.output[0].clone(),
-                    secrets: None,
-                },
-                RequiredSignature::NativeEcdsa,
-            ),
-            &SimplexInput::new(
-                &UTXO {
-                    outpoint: OutPoint::new(utility_nfts_issuance_txid, 1),
-                    txout: utility_nfts_tx.output[1].clone(),
-                    secrets: None,
-                },
-                RequiredSignature::NativeEcdsa,
-            ),
-            &SimplexInput::new(
-                &UTXO {
-                    outpoint: OutPoint::new(utility_nfts_issuance_txid, 2),
-                    txout: utility_nfts_tx.output[2].clone(),
-                    secrets: None,
-                },
-                RequiredSignature::NativeEcdsa,
-            ),
-            &SimplexInput::new(
-                &UTXO {
-                    outpoint: OutPoint::new(utility_nfts_issuance_txid, 3),
-                    txout: utility_nfts_tx.output[3].clone(),
-                    secrets: None,
-                },
-                RequiredSignature::NativeEcdsa,
-            ),
-            pre_lock_parameters,
+        let collateral_utxo = collateral_utxos[0].clone();
+        let first_parameters_utxo = UTXO {
+            outpoint: OutPoint::new(utility_nfts_issuance_txid, 0),
+            txout: utility_nfts_tx.output[0].clone(),
+            secrets: None,
+        };
+        let second_parameters_utxo = UTXO {
+            outpoint: OutPoint::new(utility_nfts_issuance_txid, 1),
+            txout: utility_nfts_tx.output[1].clone(),
+            secrets: None,
+        };
+        let borrower_nft_utxo = UTXO {
+            outpoint: OutPoint::new(utility_nfts_issuance_txid, 2),
+            txout: utility_nfts_tx.output[2].clone(),
+            secrets: None,
+        };
+        let lender_nft_utxo = UTXO {
+            outpoint: OutPoint::new(utility_nfts_issuance_txid, 3),
+            txout: utility_nfts_tx.output[3].clone(),
+            secrets: None,
+        };
+
+        let mut ft = FinalTransaction::new();
+
+        ft.add_input(
+            PartialInput::new(collateral_utxo.clone()),
+            RequiredSignature::NativeEcdsa,
         );
+        ft.add_input(
+            PartialInput::new(first_parameters_utxo.clone()),
+            RequiredSignature::NativeEcdsa,
+        );
+        ft.add_input(
+            PartialInput::new(second_parameters_utxo.clone()),
+            RequiredSignature::NativeEcdsa,
+        );
+        ft.add_input(
+            PartialInput::new(borrower_nft_utxo.clone()),
+            RequiredSignature::NativeEcdsa,
+        );
+        ft.add_input(
+            PartialInput::new(lender_nft_utxo.clone()),
+            RequiredSignature::NativeEcdsa,
+        );
+
+        pre_lock.attach_creation(&mut ft, 1);
 
         println!(
             "Creating Lending offer with next parameters: {:?}",
@@ -191,7 +201,7 @@ impl CliPreLock {
         Ok(())
     }
 
-    fn create_lending_from_pre_lock_tx(
+    fn create_lending_from_pre_lock(
         context: CliContext,
         pre_lock_creation_txid: Txid,
     ) -> Result<(), PreLockCommandError> {
@@ -199,27 +209,33 @@ impl CliPreLock {
             .esplora_provider
             .fetch_transaction(&pre_lock_creation_txid)?;
 
-        let pre_lock_parameters =
-            extract_pre_lock_parameters_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
-        let pre_lock = PreLock::new(pre_lock_parameters);
+        let pre_lock = PreLock::try_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
+        let pre_lock_parameters = pre_lock.get_parameters();
 
-        let principal_utxos = context.signer.get_utxos_filter(
-            &|utxo| {
-                utxo.explicit_asset() == pre_lock_parameters.principal_asset_id
-                    && utxo.explicit_amount()
-                        == pre_lock_parameters.offer_parameters.principal_amount
-            },
-            &|_| true,
-        )?;
+        let principal_utxos = context
+            .signer
+            .get_utxos_asset(pre_lock_parameters.principal_asset_id)?;
 
-        if principal_utxos.is_empty() {
-            return Err(PreLockCommandError::NoSuitablePrincipalUTXOsFound(
-                pre_lock_parameters.offer_parameters.principal_amount,
-            ));
+        let mut principal_inputs: Vec<(UTXO, RequiredSignature)> = Vec::new();
+        let mut total_principal_inputs_amount = 0;
+
+        for utxo in principal_utxos {
+            total_principal_inputs_amount += utxo.explicit_amount();
+            principal_inputs.push((utxo, RequiredSignature::NativeEcdsa));
+
+            if total_principal_inputs_amount
+                >= pre_lock_parameters.offer_parameters.principal_amount
+            {
+                break;
+            }
         }
 
-        let principal_utxo = principal_utxos.first().unwrap();
-        let signer_script_pubkey = context.signer.get_address().script_pubkey();
+        if total_principal_inputs_amount < pre_lock_parameters.offer_parameters.principal_amount {
+            return Err(PreLockCommandError::NotEnoughPrincipalToAcceptOffer {
+                expected_amount: pre_lock_parameters.offer_parameters.principal_amount,
+                actual_amount: total_principal_inputs_amount,
+            });
+        }
 
         let prev_collateral_outpoint = pre_lock_creation_tx.input[0].previous_output;
         let pre_collateral_tx = context
@@ -228,44 +244,73 @@ impl CliPreLock {
         let borrower_output_script =
             &pre_collateral_tx.output[prev_collateral_outpoint.vout as usize].script_pubkey;
 
-        let (ft, _) = create_lending_from_pre_lock(
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 0),
-                txout: pre_lock_creation_tx.output[0].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 1),
-                txout: pre_lock_creation_tx.output[1].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 2),
-                txout: pre_lock_creation_tx.output[2].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 3),
-                txout: pre_lock_creation_tx.output[3].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 4),
-                txout: pre_lock_creation_tx.output[4].clone(),
-                secrets: None,
-            },
-            vec![&SimplexInput::new(
-                principal_utxo,
-                RequiredSignature::NativeEcdsa,
-            )],
-            PartialOutput::new(
-                signer_script_pubkey.clone(),
-                1,
-                pre_lock_parameters.lender_nft_asset_id,
-            ),
-            borrower_output_script.clone(),
-            pre_lock,
+        let pre_lock_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 0),
+            txout: pre_lock_creation_tx.output[0].clone(),
+            secrets: None,
+        };
+        let first_parameters_nft_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 1),
+            txout: pre_lock_creation_tx.output[1].clone(),
+            secrets: None,
+        };
+        let second_parameters_nft_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 2),
+            txout: pre_lock_creation_tx.output[2].clone(),
+            secrets: None,
+        };
+        let borrower_nft_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 3),
+            txout: pre_lock_creation_tx.output[3].clone(),
+            secrets: None,
+        };
+        let lender_nft_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 4),
+            txout: pre_lock_creation_tx.output[4].clone(),
+            secrets: None,
+        };
+
+        let mut ft = FinalTransaction::new();
+
+        pre_lock.attach_lending_creation(
+            &mut ft,
+            pre_lock_utxo,
+            first_parameters_nft_utxo,
+            second_parameters_nft_utxo,
+            borrower_nft_utxo,
+            lender_nft_utxo,
         );
+
+        for input in principal_inputs {
+            ft.add_input(PartialInput::new(input.0), input.1);
+        }
+
+        ft.add_output(PartialOutput::new(
+            borrower_output_script.clone(),
+            1,
+            pre_lock_parameters.borrower_nft_asset_id,
+        ));
+
+        ft.add_output(PartialOutput::new(
+            context.signer.get_address().script_pubkey(),
+            1,
+            pre_lock_parameters.lender_nft_asset_id,
+        ));
+
+        ft.add_output(PartialOutput::new(
+            borrower_output_script.clone(),
+            pre_lock_parameters.offer_parameters.principal_amount,
+            pre_lock_parameters.principal_asset_id,
+        ));
+
+        if total_principal_inputs_amount > pre_lock_parameters.offer_parameters.principal_amount {
+            ft.add_output(PartialOutput::new(
+                context.signer.get_address().script_pubkey(),
+                total_principal_inputs_amount
+                    - pre_lock_parameters.offer_parameters.principal_amount,
+                pre_lock_parameters.principal_asset_id,
+            ));
+        }
 
         println!("Activating Lending offer...");
 
@@ -278,7 +323,7 @@ impl CliPreLock {
         Ok(())
     }
 
-    fn cancel_pre_lock_tx(
+    fn cancel_pre_lock(
         context: CliContext,
         pre_lock_creation_txid: Txid,
     ) -> Result<(), PreLockCommandError> {
@@ -286,42 +331,50 @@ impl CliPreLock {
             .esplora_provider
             .fetch_transaction(&pre_lock_creation_txid)?;
 
-        let pre_lock_parameters =
-            extract_pre_lock_parameters_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
-        let pre_lock = PreLock::new(pre_lock_parameters);
+        let pre_lock = PreLock::try_from_tx(&pre_lock_creation_tx, &context.esplora_provider)?;
+        let pre_lock_parameters = pre_lock.get_parameters();
 
-        let ft = cancel_pre_lock(
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 0),
-                txout: pre_lock_creation_tx.output[0].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 1),
-                txout: pre_lock_creation_tx.output[1].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 2),
-                txout: pre_lock_creation_tx.output[2].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 3),
-                txout: pre_lock_creation_tx.output[3].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(pre_lock_creation_txid, 4),
-                txout: pre_lock_creation_tx.output[4].clone(),
-                secrets: None,
-            },
-            PartialOutput::new(
-                context.signer.get_address().script_pubkey(),
-                pre_lock_parameters.offer_parameters.collateral_amount,
-                pre_lock_parameters.collateral_asset_id,
-            ),
-            pre_lock,
+        let pre_lock_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 0),
+            txout: pre_lock_creation_tx.output[0].clone(),
+            secrets: None,
+        };
+        let first_parameters_nft_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 1),
+            txout: pre_lock_creation_tx.output[1].clone(),
+            secrets: None,
+        };
+        let second_parameters_nft_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 2),
+            txout: pre_lock_creation_tx.output[2].clone(),
+            secrets: None,
+        };
+        let borrower_nft_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 3),
+            txout: pre_lock_creation_tx.output[3].clone(),
+            secrets: None,
+        };
+        let lender_nft_utxo = UTXO {
+            outpoint: OutPoint::new(pre_lock_creation_txid, 4),
+            txout: pre_lock_creation_tx.output[4].clone(),
+            secrets: None,
+        };
+
+        let mut ft = FinalTransaction::new();
+
+        ft.add_output(PartialOutput::new(
+            context.signer.get_address().script_pubkey(),
+            pre_lock_parameters.offer_parameters.collateral_amount,
+            pre_lock_parameters.collateral_asset_id,
+        ));
+
+        pre_lock.attach_cancellation(
+            &mut ft,
+            pre_lock_utxo,
+            first_parameters_nft_utxo,
+            second_parameters_nft_utxo,
+            borrower_nft_utxo,
+            lender_nft_utxo,
         );
 
         println!("Cancelling Lending offer...");

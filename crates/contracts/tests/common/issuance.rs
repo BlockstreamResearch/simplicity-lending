@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use lending_contracts::programs::pre_lock::UTILITY_NFTS_COUNT;
 use lending_contracts::utils::{LendingOfferParameters, get_random_seed};
 
 use simplex::simplicityhl::elements::{AssetId, Txid};
@@ -9,7 +10,6 @@ use simplex::transaction::{
 use super::tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast};
 
 pub const PREPARATION_UTXO_ASSET_AMOUNT: u64 = 10;
-pub const UTILITY_NFTS_COUNT: usize = 4;
 
 pub fn issue_asset(
     context: &simplex::TestContext,

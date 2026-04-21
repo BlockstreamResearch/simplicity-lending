@@ -40,32 +40,32 @@ impl Lending {
             .asset
             .explicit()
             .ok_or_else(LendingError::ConfidentialAssetsAreNotSupported)?;
-        let principal_asset_id = tx.output[1]
+        let first_parameters_nft_asset_id = tx.output[1]
+            .asset
+            .explicit()
+            .expect("Utility NFT must be explicit");
+        let second_parameters_nft_asset_id = tx.output[2]
+            .asset
+            .explicit()
+            .expect("Utility NFT must be explicit");
+        let borrower_nft_asset_id = tx.output[3]
+            .asset
+            .explicit()
+            .expect("Utility NFT must be explicit");
+        let lender_nft_asset_id = tx.output[4]
+            .asset
+            .explicit()
+            .expect("Utility NFT must be explicit");
+        let principal_asset_id = tx.output[5]
             .asset
             .explicit()
             .ok_or_else(LendingError::ConfidentialAssetsAreNotSupported)?;
-        let first_parameters_nft_asset_id = tx.output[2]
-            .asset
-            .explicit()
-            .expect("Utility NFT must be explicit");
-        let second_parameters_nft_asset_id = tx.output[3]
-            .asset
-            .explicit()
-            .expect("Utility NFT must be explicit");
-        let borrower_nft_asset_id = tx.output[4]
-            .asset
-            .explicit()
-            .expect("Utility NFT must be explicit");
-        let lender_nft_asset_id = tx.output[5]
-            .asset
-            .explicit()
-            .expect("Utility NFT must be explicit");
 
-        let first_parameters_nft_amount = tx.output[2]
+        let first_parameters_nft_amount = tx.output[1]
             .value
             .explicit()
             .expect("Parameter NFT must have explicit amount");
-        let second_parameters_nft_amount = tx.output[3]
+        let second_parameters_nft_amount = tx.output[2]
             .value
             .explicit()
             .expect("Parameter NFT must have explicit amount");

@@ -1,4 +1,4 @@
-use lending_contracts::transactions::utility::UtilityTransactionError;
+use lending_contracts::utils::ParametersError;
 use simplex::{
     provider::ProviderError, signer::SignerError, simplicityhl::simplicity::hex::HexToArrayError,
 };
@@ -8,8 +8,8 @@ pub enum UtilityCommandError {
     #[error("Invalid preparation UTXOs count: expected - {expected}, actual - {actual}")]
     InvalidPreparationUTXOsCount { expected: usize, actual: usize },
 
-    #[error("Failed to build utility transaction: {0}")]
-    UtilityTransaction(#[from] UtilityTransactionError),
+    #[error("Parameters error: {0}")]
+    Parameters(#[from] ParametersError),
 
     #[error("Simplex Signer error: {0}")]
     Signer(#[from] SignerError),

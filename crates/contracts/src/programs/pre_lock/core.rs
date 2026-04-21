@@ -19,6 +19,7 @@ pub struct PreLock {
     parameters: PreLockParameters,
 }
 
+pub const UTILITY_NFTS_COUNT: usize = 4;
 pub const PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH: usize = 64;
 
 impl PreLock {

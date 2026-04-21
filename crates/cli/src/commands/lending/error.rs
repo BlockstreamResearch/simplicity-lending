@@ -1,4 +1,4 @@
-use lending_contracts::transactions::lending::LendingTransactionError;
+use lending_contracts::programs::lending::LendingError;
 use simplex::{
     provider::ProviderError,
     signer::SignerError,
@@ -29,8 +29,8 @@ pub enum LendingCommandError {
         actual_amount: u64,
     },
 
-    #[error("Failed to build lending transaction: {0}")]
-    LendingTransaction(#[from] LendingTransactionError),
+    #[error("Lending error: {0}")]
+    Lending(#[from] LendingError),
 
     #[error("Simplex Signer error: {0}")]
     Signer(#[from] SignerError),
