@@ -1,13 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CopyIcon } from './CopyIcon'
-import { ButtonPrimary, ButtonIconNeutral } from './Button'
 
-const P2PK_NETWORK: 'testnet' | 'mainnet' = 'testnet'
 const EXPLORER_ADDRESS_URL = 'https://blockstream.info/liquidtestnet/address/'
 
-function shortAddress(addr: string, head = 8, tail = 3): string {
+function shortAddress(addr: string, head = 8, tail = 4): string {
   if (addr.length <= head + tail) return addr
-  return addr.slice(0, head) + '…' + addr.slice(-tail)
+  return `${addr.slice(0, head)}…${addr.slice(-tail)}`
 }
 
 function ExternalLinkIcon({ className }: { className?: string }) {
@@ -23,107 +21,141 @@ function ExternalLinkIcon({ className }: { className?: string }) {
   )
 }
 
-type Props = {
-  accountIndex: number
-  accountAddress: string | null
-  addressLoading: boolean
-  onAccountIndexChange: (index: number) => void
-  onDisconnect: () => void
-}
-
 export function AccountMenu({
-  accountIndex,
-  accountAddress,
-  addressLoading,
-  onAccountIndexChange,
+  status,
+  address,
+  error,
+  onConnect,
   onDisconnect,
-}: Props) {
+  onRefresh,
+}: {
+  status: 'initializing' | 'disconnected' | 'connecting' | 'connected' | 'disconnecting' | 'error'
+  address: string | null
+  error: string | null
+  onConnect: () => Promise<void>
+  onDisconnect: () => Promise<void>
+  onRefresh: () => Promise<void>
+}) {
   const [isOpen, setIsOpen] = useState(false)
-  const [indexInput, setIndexInput] = useState(String(accountIndex))
+  const [activeAction, setActiveAction] = useState<'connect' | 'disconnect' | 'refresh' | null>(
+    null
+  )
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setIndexInput(String(accountIndex))
-  }, [accountIndex])
-
-  useEffect(() => {
     if (!isOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsOpen(false)
       }
     }
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
 
-  const handleCopyAddress = () => {
-    if (accountAddress) {
-      void navigator.clipboard.writeText(accountAddress)
+  const handleCopyAddress = async () => {
+    if (!address) return
+    await navigator.clipboard.writeText(address)
+  }
+
+  const handleConnect = async () => {
+    setActiveAction('connect')
+    try {
+      await onConnect()
+      setIsOpen(false)
+    } finally {
+      setActiveAction(null)
     }
   }
 
-  const handleApplyIndex = () => {
-    const n = parseInt(indexInput, 10)
-    if (!Number.isNaN(n) && n >= 0) {
-      onAccountIndexChange(n)
-    } else {
-      setIndexInput(String(accountIndex))
+  const handleDisconnect = async () => {
+    setActiveAction('disconnect')
+    try {
+      await onDisconnect()
+      setIsOpen(false)
+    } finally {
+      setActiveAction(null)
     }
   }
 
-  const handleDisconnect = () => {
-    setIsOpen(false)
-    onDisconnect()
+  const handleRefresh = async () => {
+    setActiveAction('refresh')
+    try {
+      await onRefresh()
+    } finally {
+      setActiveAction(null)
+    }
   }
 
-  const label = addressLoading
-    ? 'Loading…'
-    : accountAddress
-      ? shortAddress(accountAddress)
-      : `Account ${accountIndex}`
+  const label =
+    status === 'connected' && address
+      ? shortAddress(address)
+      : status === 'connecting' || status === 'disconnecting'
+        ? 'Wallet…'
+        : 'Connect Wallet'
 
   return (
     <div className="relative" ref={menuRef}>
       <button
         type="button"
-        onClick={() => setIsOpen((o) => !o)}
-        className="rounded-lg bg-[#5F3DC4] px-3 py-1.5 text-sm font-medium text-white
-                   hover:bg-[#4f36a8] focus:ring-2 focus:ring-[#5F3DC4] focus:ring-offset-1
-                   font-mono max-w-[180px] truncate"
-        title={accountAddress ?? undefined}
+        onClick={() => setIsOpen((open) => !open)}
+        className="rounded-full bg-neutral-950 px-5 py-3 text-base font-medium text-white hover:bg-neutral-800 sm:px-6"
       >
         {label}
       </button>
 
-      {isOpen && (
+      {isOpen ? (
         <div
-          className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-gray-200 bg-white py-4 px-4 shadow-lg z-50"
+          className="absolute right-0 top-full z-50 mt-3 w-[21.5rem] max-w-[calc(100vw-2rem)] rounded-[1.6rem] border border-neutral-200 bg-white p-5 shadow-[0_24px_64px_rgba(0,0,0,0.14)] sm:w-[23rem] sm:p-6"
           role="dialog"
-          aria-label="Account menu"
+          aria-label="Wallet session menu"
         >
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">
-                Address (P2PK, {P2PK_NETWORK})
-              </p>
-              {addressLoading ? (
-                <p className="text-sm text-gray-500">Loading…</p>
-              ) : accountAddress ? (
-                <div className="flex items-center gap-1">
-                  <code className="flex-1 min-w-0 text-xs font-mono text-gray-800 break-all bg-gray-50 px-2 py-1.5 rounded">
-                    {accountAddress}
+          <div className="space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="max-w-[11.5rem] sm:max-w-[13.5rem]">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
+                  Wallet Session
+                </p>
+                <p className="mt-2 text-sm text-neutral-600">
+                  {status === 'connected'
+                    ? 'Connected through WalletConnect.'
+                    : 'Use the Blockstream app to approve Wallet ABI requests.'}
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-3.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.2em] ${
+                  status === 'connected'
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : status === 'error'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-stone-100 text-stone-600'
+                }`}
+              >
+                {status}
+              </span>
+            </div>
+
+            {address ? (
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">
+                  Receive Address
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 break-all rounded-xl bg-white px-3 py-2 font-mono text-xs text-neutral-800 shadow-sm">
+                    {address}
                   </code>
-                  <ButtonIconNeutral
-                    onClick={handleCopyAddress}
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyAddress()}
                     title="Copy address"
                     aria-label="Copy address"
-                    className="shrink-0"
+                    className="shrink-0 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
                   >
                     <CopyIcon className="h-4 w-4" />
-                  </ButtonIconNeutral>
+                  </button>
                   <a
-                    href={`${EXPLORER_ADDRESS_URL}${encodeURIComponent(accountAddress)}`}
+                    href={`${EXPLORER_ADDRESS_URL}${encodeURIComponent(address)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="View in explorer"
@@ -133,38 +165,72 @@ export function AccountMenu({
                     <ExternalLinkIcon className="h-4 w-4" />
                   </a>
                 </div>
-              ) : (
-                <p className="text-sm text-gray-500">Failed to load address</p>
-              )}
-            </div>
-
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">Account index</p>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  value={indexInput}
-                  onChange={(e) => setIndexInput(e.target.value)}
-                  onBlur={handleApplyIndex}
-                  onKeyDown={(e) => e.key === 'Enter' && handleApplyIndex()}
-                  className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-900
-                             [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                />
-                <ButtonPrimary size="sm" onClick={handleApplyIndex}>
-                  Switch
-                </ButtonPrimary>
               </div>
-            </div>
+            ) : null}
 
-            <div className="pt-2 border-t border-gray-200">
-              <ButtonPrimary size="md" className="w-full" onClick={handleDisconnect}>
-                Disconnect
-              </ButtonPrimary>
+            {error ? (
+              <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              {status === 'connected' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleRefresh()}
+                    disabled={activeAction != null || status !== 'connected'}
+                    className="rounded-full border border-neutral-300 bg-white px-5 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Refresh Identity
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDisconnect()}
+                    disabled={activeAction === 'disconnect'}
+                    className="rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Disconnect
+                  </button>
+                </>
+              ) : status === 'connecting' || status === 'disconnecting' || status === 'error' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleConnect()}
+                    disabled={
+                      status !== 'error' ||
+                      activeAction === 'connect' ||
+                      activeAction === 'disconnect'
+                    }
+                    className="rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Reconnect
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDisconnect()}
+                    disabled={status === 'disconnecting' || activeAction === 'disconnect'}
+                    className="rounded-full border border-neutral-300 bg-white px-5 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Drop Connection
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleConnect()}
+                  disabled={activeAction != null || status === 'initializing'}
+                  className="rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Connect Blockstream Wallet
+                </button>
+              )}
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -6,15 +6,18 @@ Demo frontend for the Simplicity Lending protocol. Uses the [Indexer](../crates/
 
 - Node.js 18+
 - [Indexer API](../crates/indexer/README.md) running (API mode, port 8000). The app uses `VITE_API_URL` (default `http://localhost:8000`); see `.env.example`.
-
-> [!NOTE]
-> `lwk_web` is a local file dependency. To build it: clone [Blockstream/lwk](https://github.com/Blockstream/lwk), then from the LWK repo run `cd lwk_wasm && RUSTFLAGS='--cfg web_sys_unstable_apis' wasm-pack build --target web --out-dir pkg_web --features simplicity,serial`. Update the `lwk_web` path in `package.json` to point to your `pkg_web` output directory.
+- A valid WalletConnect Project ID in `VITE_WALLETCONNECT_PROJECT_ID`
+- Local Wallet ABI packages built under:
+  - `/Volumes/Somebody/Desktop/Simp/lwk/lwk_wasm/npm/packages/wallet-abi-sdk`
+  - `/Volumes/Somebody/Desktop/Simp/lwk/lwk_wasm/npm/packages/wallet-abi-web`
 
 ## Setup
 
 ```bash
 npm install
 ```
+
+Create `web/.env.local` for local-only overrides. The tracked `.env.example` stays generic; local builds should place the WalletConnect project id in `.env.local`.
 
 ## Run
 
@@ -25,6 +28,8 @@ npm run dev
 ```
 
 Open the URL shown (e.g. http://localhost:5173).
+
+Connect with the Blockstream app from the browser UI. The web app now uses Wallet ABI requests over WalletConnect instead of a browser-stored seed signer.
 
 ## Scripts
 
