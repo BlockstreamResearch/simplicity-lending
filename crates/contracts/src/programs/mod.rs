@@ -1,7 +1,7 @@
-mod asset_auth;
-mod issuance_factory;
-mod lending;
-mod ownable_script_auth;
-mod pre_lock;
+pub mod asset_auth;
+pub mod issuance_factory;
+pub mod lending;
+pub mod ownable_script_auth;
+pub mod pre_lock;
 pub mod program;
-mod script_auth;
+pub mod script_auth;

@@ -62,12 +62,14 @@ pub trait SimplexProgram {
         witness: Box<dyn WitnessTrait>,
         sig_witness_name: String,
     ) -> AssetId {
-        ft.add_program_issuance_input(
+        let (asset_id, _) = ft.add_program_issuance_input(
             PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
             issuance_input,
             RequiredSignature::Witness(sig_witness_name),
-        )
+        );
+
+        asset_id
     }
 
     fn add_program_output<'a>(

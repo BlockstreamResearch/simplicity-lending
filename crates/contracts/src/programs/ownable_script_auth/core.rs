@@ -40,6 +40,12 @@ impl OwnableScriptAuth {
         amount_to_lock: u64,
     ) {
         self.add_program_output(ft, asset_id_to_lock, amount_to_lock);
+
+        ft.add_output(PartialOutput::new(
+            Script::new_op_return(self.parameters.owner_pubkey.serialize().as_slice()),
+            0,
+            AssetId::default(),
+        ));
     }
 
     pub fn attach_ownership_transfer(

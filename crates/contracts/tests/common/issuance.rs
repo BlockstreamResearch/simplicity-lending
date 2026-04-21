@@ -10,12 +10,7 @@ use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, partial_input::IssuanceInput,
 };
 
-use super::{
-    tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast},
-    wallet::{
-        AmountFilter, filter_signer_utxos_by_asset_and_amount, filter_signer_utxos_by_asset_id,
-    },
-};
+use super::tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast};
 
 pub fn issue_asset(
     context: &simplex::TestContext,
@@ -25,9 +20,7 @@ pub fn issue_asset(
 
     let mut ft = FinalTransaction::new();
 
-    let policy_utxos =
-        filter_signer_utxos_by_asset_id(signer, context.get_network().policy_asset());
-    let first_utxo = policy_utxos.first().unwrap();
+    let first_utxo = signer.get_utxos_asset(context.get_network().policy_asset())?[0].clone();
 
     let asset_entropy = get_random_seed();
 
@@ -85,7 +78,7 @@ pub fn issue_utility_nfts_tx(
     let signer = context.get_default_signer();
 
     let signer_script_pubkey = signer.get_address().script_pubkey();
-    let issuance_utxos = filter_signer_utxos_by_asset_id(signer, preparation_asset_id);
+    let issuance_utxos = signer.get_utxos_asset(preparation_asset_id)?;
 
     assert_eq!(issuance_utxos.len(), UTILITY_NFTS_COUNT);
 
@@ -103,12 +96,15 @@ pub fn issue_utility_nfts_tx(
         issuance_asset_entropy,
     )?;
 
-    let signer_policy_utxos = filter_signer_utxos_by_asset_and_amount(
-        signer,
-        context.get_network().policy_asset(),
-        100_000,
-        AmountFilter::LessThan,
-    );
+    let signer_policy_utxos = signer.get_utxos_filter(
+        &|utxo| {
+                utxo.explicit_asset() == context.get_network().policy_asset()
+                    && utxo.explicit_amount()
+                        <= 100_000
+            },
+            &|_| true,
+    )?;
+
     let fee_utxo = signer_policy_utxos.first().unwrap();
 
     ft.add_input(
