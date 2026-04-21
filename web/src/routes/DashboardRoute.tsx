@@ -12,6 +12,7 @@ import { OfferTable } from '../components/OfferTable'
 import type { OfferShort } from '../types/offers'
 import { getScriptPubkeyHexFromAddress } from '../utility/addressP2pk'
 import { useWalletAbiSession } from '../walletAbi/session'
+import { loadLenderFlowState, trackLenderScriptPubkey } from '../walletAbi/storage'
 import { RouteScaffold } from './RouteScaffold'
 
 function StatCard({
@@ -59,18 +60,22 @@ export function DashboardRoute() {
   const [borrowOffers, setBorrowOffers] = useState<OfferShort[]>([])
   const [supplyOffers, setSupplyOffers] = useState<OfferShort[]>([])
   const [pendingOffers, setPendingOffers] = useState<OfferShort[]>([])
+  const [allOffers, setAllOffers] = useState<OfferShort[]>([])
 
   const [loadingBorrow, setLoadingBorrow] = useState(false)
   const [loadingSupply, setLoadingSupply] = useState(false)
   const [loadingPending, setLoadingPending] = useState(false)
+  const [loadingAll, setLoadingAll] = useState(false)
 
   const [borrowError, setBorrowError] = useState<string | null>(null)
   const [supplyError, setSupplyError] = useState<string | null>(null)
   const [pendingError, setPendingError] = useState<string | null>(null)
+  const [allError, setAllError] = useState<string | null>(null)
   const [currentBlockHeight, setCurrentBlockHeight] = useState<number | null>(null)
 
   const walletReady = session.status === 'connected' && Boolean(session.receiveAddress)
   const borrowerReady = walletReady && Boolean(session.signingXOnlyPubkey)
+  const lenderIdentity = session.signingXOnlyPubkey ?? session.receiveAddress
 
   const loadBorrowOffers = useCallback(async () => {
     if (!session.receiveAddress || !session.signingXOnlyPubkey) {
@@ -103,8 +108,7 @@ export function DashboardRoute() {
       const borrowerByScriptIds = new Set(borrowerByScript.map((offer) => offer.id))
       const pendingByPubkey = offersWithParticipants
         .filter(
-          (offer) =>
-            idsByBorrowerPubkey.includes(offer.id) && !borrowerByScriptIds.has(offer.id)
+          (offer) => idsByBorrowerPubkey.includes(offer.id) && !borrowerByScriptIds.has(offer.id)
         )
         .map(({ participants, ...offer }) => {
           void participants
@@ -134,16 +138,45 @@ export function DashboardRoute() {
 
     try {
       const scriptPubkeyHex = await getScriptPubkeyHexFromAddress(session.receiveAddress)
-      const [ids, height] = await Promise.all([
-        fetchOfferIdsByScript(scriptPubkeyHex),
+      const lenderState = trackLenderScriptPubkey(lenderIdentity, scriptPubkeyHex)
+      const scriptPubkeys = [
+        ...new Set(
+          [scriptPubkeyHex, ...lenderState.scriptPubkeys].map((script) => script.toLowerCase())
+        ),
+      ]
+
+      const [idsByScript, height, activeOffers] = await Promise.all([
+        Promise.all(scriptPubkeys.map((script) => fetchOfferIdsByScript(script))),
         esplora.getLatestBlockHeight().catch(() => null),
+        fetchOffers({ status: 'active', limit: 20, offset: 0 }).catch(() => []),
       ])
+      const storedOfferIds = loadLenderFlowState(lenderIdentity).offerIds
+      const ids = [...new Set([...idsByScript.flat(), ...storedOfferIds])]
       const offersWithParticipants =
         ids.length === 0 ? [] : await fetchOfferDetailsBatchWithParticipants(ids)
 
-      setSupplyOffers(
-        filterOffersByParticipantRole(offersWithParticipants, scriptPubkeyHex, 'lender')
-      )
+      const scriptSet = new Set(scriptPubkeys)
+      const offerById = new Map<string, OfferShort>()
+      for (const offer of offersWithParticipants) {
+        const isKnownLender = offer.participants.some(
+          (participant) =>
+            participant.participant_type === 'lender' &&
+            scriptSet.has(participant.script_pubkey.trim().toLowerCase())
+        )
+        if (isKnownLender || storedOfferIds.includes(offer.id)) {
+          offerById.set(offer.id, offer)
+        }
+      }
+
+      if (offerById.size === 0 && height != null) {
+        for (const offer of activeOffers) {
+          if (offer.loan_expiration_time <= height) {
+            offerById.set(offer.id, offer)
+          }
+        }
+      }
+
+      setSupplyOffers([...offerById.values()])
       setCurrentBlockHeight((current) => height ?? current)
     } catch (nextError) {
       setSupplyError(nextError instanceof Error ? nextError.message : String(nextError))
@@ -151,7 +184,7 @@ export function DashboardRoute() {
     } finally {
       setLoadingSupply(false)
     }
-  }, [esplora, session.receiveAddress])
+  }, [esplora, lenderIdentity, session.receiveAddress])
 
   const loadPendingOffers = useCallback(async () => {
     setLoadingPending(true)
@@ -172,6 +205,25 @@ export function DashboardRoute() {
     }
   }, [esplora])
 
+  const loadAllOffers = useCallback(async () => {
+    setLoadingAll(true)
+    setAllError(null)
+
+    try {
+      const [offers, height] = await Promise.all([
+        fetchOffers({ limit: 100, offset: 0 }),
+        esplora.getLatestBlockHeight().catch(() => null),
+      ])
+      setAllOffers(offers)
+      setCurrentBlockHeight((current) => height ?? current)
+    } catch (nextError) {
+      setAllError(nextError instanceof Error ? nextError.message : String(nextError))
+      setAllOffers([])
+    } finally {
+      setLoadingAll(false)
+    }
+  }, [esplora])
+
   useEffect(() => {
     void loadBorrowOffers()
   }, [loadBorrowOffers])
@@ -183,6 +235,10 @@ export function DashboardRoute() {
   useEffect(() => {
     void loadPendingOffers()
   }, [loadPendingOffers])
+
+  useEffect(() => {
+    void loadAllOffers()
+  }, [loadAllOffers])
 
   return (
     <div className="space-y-8">
@@ -301,6 +357,31 @@ export function DashboardRoute() {
           currentBlockHeight={currentBlockHeight}
           onRetry={loadPendingOffers}
           emptyMessage="No pending market orders are available right now."
+        />
+      </section>
+
+      <section className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.06)]">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-neutral-500">
+              All Orders
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadAllOffers()}
+            className="rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            Refresh
+          </button>
+        </div>
+        <OfferTable
+          offers={allOffers}
+          loading={loadingAll}
+          error={allError}
+          currentBlockHeight={currentBlockHeight}
+          onRetry={loadAllOffers}
+          emptyMessage="No orders are available yet."
         />
       </section>
     </div>

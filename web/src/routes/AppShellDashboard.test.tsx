@@ -53,7 +53,7 @@ describe('AppShell', () => {
 })
 
 describe('DashboardRoute', () => {
-  it('renders the three order streams and a compact connect prompt while disconnected', () => {
+  it('renders order streams and a compact connect prompt while disconnected', () => {
     useWalletAbiSessionMock.mockReturnValue({
       status: 'disconnected',
       receiveAddress: null,
@@ -72,6 +72,7 @@ describe('DashboardRoute', () => {
     expect(html).toContain('Your Borrows')
     expect(html).toContain('Your Supply')
     expect(html).toContain('Pending Market Orders')
+    expect(html).toContain('All Orders')
     expect(html).toContain('Connect wallet to load your borrower positions.')
     expect(html).not.toContain('/test')
   })
