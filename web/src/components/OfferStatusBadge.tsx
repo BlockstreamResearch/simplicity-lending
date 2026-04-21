@@ -23,7 +23,7 @@ export function OfferStatusBadge({
   return (
     <span
       className={[
-        'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium',
+        'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium',
         ui.chipClassName,
         ui.textClassName,
         className ?? '',
@@ -32,7 +32,7 @@ export function OfferStatusBadge({
         .trim()}
     >
       <span
-        className={['h-2.5 w-2.5 rounded-full', ui.dotClassName].join(' ')}
+        className={['h-2.5 w-2.5 shrink-0 rounded-full', ui.dotClassName].join(' ')}
         aria-hidden="true"
       />
       <span>{ui.label}</span>

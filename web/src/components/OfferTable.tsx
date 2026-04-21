@@ -119,7 +119,7 @@ export function OfferTable({
               <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">
                 Expiration <span className="text-gray-400">↕</span>
               </th>
-              <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700">
+              <th className="min-w-[9.5rem] px-3 py-2 pr-5 text-left text-sm font-semibold text-gray-700">
                 Status <span className="text-gray-400">↕</span>
               </th>
               {renderActions ? (
@@ -227,7 +227,7 @@ export function OfferTable({
                         <span className="block text-gray-500">{expiry.inTimeStr}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-900">
+                    <td className="min-w-[9.5rem] px-3 py-2 pr-5 text-sm text-gray-900">
                       <OfferStatusBadge
                         status={offer.status}
                         loanExpirationTime={offer.loan_expiration_time}
