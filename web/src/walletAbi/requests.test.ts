@@ -12,6 +12,7 @@ import {
   createAcceptOfferRequest,
   createLiquidateLoanRequest,
   createPreLockRequest,
+  createRepayLoanRequest,
 } from './requests'
 
 const ACCEPT_OFFER: OfferShort = {
@@ -224,5 +225,24 @@ describe('createLiquidateLoanRequest', () => {
     expect(outpoint?.txid().toString()).toBe(LENDING_TX.txid)
     expect(outpoint?.vout()).toBe(5)
     expect(lenderNftInput?.finalizer().kind()).toBe('wallet')
+  })
+})
+
+describe('createRepayLoanRequest', () => {
+  it('uses the exact borrower NFT outpoint instead of a wallet asset filter', async () => {
+    const { request } = await createRepayLoanRequest({
+      offer: { ...ACCEPT_OFFER, status: 'active' },
+      lendingTx: LENDING_TX,
+      borrowerAddress: 'tex1qqd5r4kvfumft7glm8t7nlm8npju8dzkpjjjz7k',
+    })
+
+    const borrowerNftInput = request.params().inputs()[3]
+
+    expect(borrowerNftInput?.id()).toBe('borrower-nft')
+    expect(borrowerNftInput?.utxoSource().kind()).toBe('provided')
+    const outpoint = borrowerNftInput?.utxoSource().providedOutpoint()
+    expect(outpoint?.txid().toString()).toBe(LENDING_TX.txid)
+    expect(outpoint?.vout()).toBe(4)
+    expect(borrowerNftInput?.finalizer().kind()).toBe('wallet')
   })
 })

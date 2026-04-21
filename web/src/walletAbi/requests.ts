@@ -818,11 +818,10 @@ export async function createRepayLoanRequest(params: {
         0
       )
     )
-    .walletInputByFilter(
+    .providedInput(
       'borrower-nft',
-      walletAbiWalletFilter({
-        assetIdHex: String(context.borrowerNftPrevout.asset ?? ''),
-      })
+      walletAbiOutPoint(params.lendingTx.txid, 4),
+      WalletAbiFinalizerSpec.wallet()
     )
     .explicitOutput(
       'returned-collateral',
