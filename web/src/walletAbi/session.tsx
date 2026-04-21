@@ -18,10 +18,7 @@ import {
   type WalletAbiTxCreateResponse,
 } from 'lwk_wallet_abi_sdk'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  getWalletAbiTransportNetwork,
-  getWalletConnectProjectId,
-} from '../config/runtimeConfig'
+import { getWalletAbiTransportNetwork, getWalletConnectProjectId } from '../config/runtimeConfig'
 
 export type WalletConnectionStatus =
   | 'initializing'
@@ -63,9 +60,7 @@ interface WalletAbiContextValue {
     value: string
     response: WalletAbiJsonRpcResponse
   }>
-  processRequest: (
-    request: WalletAbiTxCreateRequest
-  ) => Promise<{
+  processRequest: (request: WalletAbiTxCreateRequest) => Promise<{
     value: WalletAbiTxCreateResponse
     response: WalletAbiJsonRpcResponse
   }>
@@ -208,9 +203,7 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
   const storagePrefix =
     import.meta.env.VITE_WALLETCONNECT_STORAGE_PREFIX?.trim() || 'simplicity-lending'
 
-  const [status, setStatus] = useState<WalletConnectionStatus>(
-    projectId ? 'initializing' : 'error'
-  )
+  const [status, setStatus] = useState<WalletConnectionStatus>(projectId ? 'initializing' : 'error')
   const [error, setError] = useState<string | null>(
     projectId ? null : 'WalletConnect project id is required.'
   )
@@ -225,6 +218,8 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
   const clientRef = useRef<WalletAbiClient | null>(null)
   const connectPromiseRef = useRef<Promise<void> | null>(null)
   const disconnectPromiseRef = useRef<Promise<void> | null>(null)
+  const connectGenerationRef = useRef(0)
+  const manualDisconnectRef = useRef(false)
   const rpcIdRef = useRef(0)
 
   const nextRpcId = useCallback(() => {
@@ -294,6 +289,10 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
         unsubscribe = controller.subscribe({
           onConnected: () => {
             if (!active) return
+            if (manualDisconnectRef.current) {
+              void controller.disconnect()
+              return
+            }
             setSessionTopic(controller.session()?.topic ?? null)
             setStatus('connected')
             void refreshIdentity()
@@ -346,14 +345,32 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
     }
 
     const promise = (async () => {
+      const connectGeneration = ++connectGenerationRef.current
+      manualDisconnectRef.current = false
       setStatus('connecting')
       setError(null)
       try {
         await client.connect()
+        if (connectGeneration !== connectGenerationRef.current || manualDisconnectRef.current) {
+          await client.disconnect().catch(() => undefined)
+          await controller.disconnect().catch(() => undefined)
+          setReceiveAddress(null)
+          setSigningXOnlyPubkey(null)
+          setSessionTopic(null)
+          setStatus('disconnected')
+          return
+        }
         setSessionTopic(controller.session()?.topic ?? null)
         setStatus('connected')
         await refreshIdentity()
       } catch (nextError) {
+        if (connectGeneration !== connectGenerationRef.current || manualDisconnectRef.current) {
+          setReceiveAddress(null)
+          setSigningXOnlyPubkey(null)
+          setSessionTopic(null)
+          setStatus('disconnected')
+          return
+        }
         setStatus('disconnected')
         setError(normalizeErrorMessage(nextError))
         throw nextError
@@ -367,8 +384,8 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
   }, [refreshIdentity])
 
   const disconnect = useCallback(async () => {
-    const client = clientRef.current
-    if (!client) {
+    const controller = controllerRef.current
+    if (!controller) {
       return
     }
 
@@ -377,10 +394,14 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
     }
 
     const promise = (async () => {
+      connectGenerationRef.current += 1
+      manualDisconnectRef.current = true
+      connectPromiseRef.current = null
       setStatus('disconnecting')
       setError(null)
       try {
-        await client.disconnect()
+        await controller.disconnect()
+        await clientRef.current?.disconnect().catch(() => undefined)
         setReceiveAddress(null)
         setSigningXOnlyPubkey(null)
         setSessionTopic(null)
@@ -399,7 +420,10 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const callWithEnvelope = useCallback(
-    async <T,>(request: WalletAbiJsonRpcRequest, parse: (response: WalletAbiJsonRpcResponse) => T) => {
+    async <T,>(
+      request: WalletAbiJsonRpcRequest,
+      parse: (response: WalletAbiJsonRpcResponse) => T
+    ) => {
       const requester = ensureRequester()
       const response = await requester.request(request)
 
@@ -412,7 +436,11 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
   )
 
   const getSignerReceiveAddress = useCallback(
-    () => callWithEnvelope(createGetSignerReceiveAddressRequest(nextRpcId()), parseGetSignerReceiveAddressResponse),
+    () =>
+      callWithEnvelope(
+        createGetSignerReceiveAddressRequest(nextRpcId()),
+        parseGetSignerReceiveAddressResponse
+      ),
     [callWithEnvelope, nextRpcId]
   )
 
@@ -440,7 +468,9 @@ export function WalletAbiProvider({ children }: { children: React.ReactNode }) {
     await clientRef.current?.connect()
     const result = await controller.request({
       method: envelope.method,
-      ...(Object.prototype.hasOwnProperty.call(envelope, 'params') ? { params: envelope.params } : {}),
+      ...(Object.prototype.hasOwnProperty.call(envelope, 'params')
+        ? { params: envelope.params }
+        : {}),
     })
 
     return {
