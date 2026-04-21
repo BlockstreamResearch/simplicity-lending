@@ -1,4 +1,5 @@
-use simplex::simplicityhl::elements::{AssetId, Script};
+use simplex::provider::ProviderTrait;
+use simplex::simplicityhl::elements::{AssetId, Script, Transaction};
 use simplex::simplicityhl::elements::{hex::ToHex, schnorr::XOnlyPublicKey};
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
@@ -15,6 +16,9 @@ pub struct IssuanceFactory {
     parameters: IssuanceFactoryParameters,
 }
 
+// TODO: encode constants to the factory asset amount
+pub const PRE_LOCK_ISSUING_UTXOS_COUNT: u8 = 2;
+pub const PRE_LOCK_REISSUANCE_FLAGS: u64 = 0;
 pub const ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH: usize = 32;
 
 impl IssuanceFactory {
@@ -23,6 +27,40 @@ impl IssuanceFactory {
             program: IssuanceFactoryProgram::new(parameters.build_arguments()),
             parameters,
         }
+    }
+
+    pub fn try_from_tx(
+        tx: &Transaction,
+        provider: &impl ProviderTrait,
+    ) -> Result<Self, IssuanceFactoryError> {
+        if tx.output.len() < 2 || !tx.output[1].is_null_data() {
+            return Err(IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(
+                tx.txid(),
+            ));
+        }
+
+        let mut op_return_instr_iter = tx.output[5].script_pubkey.instructions_minimal();
+
+        op_return_instr_iter.next();
+
+        let op_return_bytes = op_return_instr_iter
+            .next()
+            .unwrap()
+            .unwrap()
+            .push_bytes()
+            .unwrap();
+
+        let owner_pubkey =
+            IssuanceFactory::decode_creation_op_return_data(op_return_bytes.to_vec())?;
+
+        let issuance_factory_parameters = IssuanceFactoryParameters {
+            issuing_utxos_count: PRE_LOCK_ISSUING_UTXOS_COUNT,
+            reissuance_flags: PRE_LOCK_REISSUANCE_FLAGS,
+            owner_pubkey,
+            network: *provider.get_network(),
+        };
+
+        Ok(Self::new(issuance_factory_parameters))
     }
 
     pub fn get_parameters(&self) -> &IssuanceFactoryParameters {

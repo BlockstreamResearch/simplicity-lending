@@ -1,15 +1,18 @@
 use simplex::{
     program::Program,
-    provider::SimplicityNetwork,
-    simplicityhl::elements::{LockTime, Script, Sequence},
+    provider::{ProviderTrait, SimplicityNetwork},
+    simplicityhl::elements::{LockTime, Script, Sequence, Transaction},
     transaction::{FinalTransaction, PartialInput, PartialOutput, UTXO},
 };
 
-use crate::artifacts::lending::LendingProgram;
 use crate::programs::{
-    lending::{LendingParameters, LendingWitnessBranch},
+    lending::{LendingError, LendingParameters, LendingWitnessBranch},
     program::SimplexProgram,
     script_auth::{ScriptAuth, ScriptAuthWitnessParams},
+};
+use crate::{
+    artifacts::lending::LendingProgram,
+    utils::{FirstNFTParameters, LendingOfferParameters, SecondNFTParameters},
 };
 
 pub struct Lending {
@@ -23,6 +26,67 @@ impl Lending {
             program: LendingProgram::new(parameters.build_arguments()),
             parameters,
         }
+    }
+
+    pub fn try_from_tx(
+        tx: &Transaction,
+        provider: &impl ProviderTrait,
+    ) -> Result<Self, LendingError> {
+        if tx.input.len() < 7 || tx.output.len() < 7 {
+            return Err(LendingError::NotALendingCreationTx(tx.txid()));
+        }
+
+        let collateral_asset_id = tx.output[0]
+            .asset
+            .explicit()
+            .ok_or_else(LendingError::ConfidentialAssetsAreNotSupported)?;
+        let principal_asset_id = tx.output[1]
+            .asset
+            .explicit()
+            .ok_or_else(LendingError::ConfidentialAssetsAreNotSupported)?;
+        let first_parameters_nft_asset_id = tx.output[2]
+            .asset
+            .explicit()
+            .expect("Utility NFT must be explicit");
+        let second_parameters_nft_asset_id = tx.output[3]
+            .asset
+            .explicit()
+            .expect("Utility NFT must be explicit");
+        let borrower_nft_asset_id = tx.output[4]
+            .asset
+            .explicit()
+            .expect("Utility NFT must be explicit");
+        let lender_nft_asset_id = tx.output[5]
+            .asset
+            .explicit()
+            .expect("Utility NFT must be explicit");
+
+        let first_parameters_nft_amount = tx.output[2]
+            .value
+            .explicit()
+            .expect("Parameter NFT must have explicit amount");
+        let second_parameters_nft_amount = tx.output[3]
+            .value
+            .explicit()
+            .expect("Parameter NFT must have explicit amount");
+
+        let offer_parameters = LendingOfferParameters::build_from_parameters_nfts(
+            &FirstNFTParameters::decode(first_parameters_nft_amount),
+            &SecondNFTParameters::decode(second_parameters_nft_amount),
+        );
+
+        let lending_parameters = LendingParameters {
+            collateral_asset_id,
+            principal_asset_id,
+            first_parameters_nft_asset_id,
+            second_parameters_nft_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+            offer_parameters,
+            network: *provider.get_network(),
+        };
+
+        Ok(Self::new(lending_parameters))
     }
 
     pub fn get_parameters(&self) -> &LendingParameters {
