@@ -35,7 +35,10 @@ pub async fn handle_pre_lock_creation(
 
     let offer_model = OfferModel::new(&pre_lock_params, block_height, txid);
 
-    db::insert_offer(sql_tx, &offer_model).await?;
+    if db::insert_offer(sql_tx, &offer_model).await?.is_none() {
+        tracing::debug!(%txid, "Pre-lock offer already indexed, skipping");
+        return Ok(());
+    }
 
     let pre_lock_outpoint = OutPoint { txid, vout: 0 };
     let pre_lock_offer_utxo = OfferUtxoModel {

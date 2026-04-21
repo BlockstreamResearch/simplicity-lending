@@ -107,6 +107,11 @@ jobs:
           cd crates/indexer
           SKIP_DOCKER=true ./scripts/init_db.sh
 
+      - name: Run indexer tests
+        env:
+          DATABASE_URL: postgres://${{ env.APP_USER }}:${{ env.APP_USER_PWD }}@localhost:5432/${{ env.APP_DB_NAME }}
+        run: cargo test -p lending-indexer
+
       - name: Run simplex tests
         shell: bash
         run: |

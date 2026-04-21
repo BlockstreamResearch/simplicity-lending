@@ -52,6 +52,10 @@ pub async fn handle_loan_repayment(
 }
 
 pub fn is_loan_repayment_tx(tx: &Transaction) -> bool {
+    if tx.output.len() < 5 {
+        return false;
+    }
+
     !tx.output[1].is_null_data()
         && tx.output[2].is_null_data()
         && tx.output[3].is_null_data()
