@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RouteScaffold } from './RouteScaffold'
-import {
-  ActionStateCard,
-  ConnectionGate,
-  PrimaryButton,
-  SectionCard,
-} from './RouteWidgets'
+import { ActionStateCard, ConnectionGate, PrimaryButton, SectionCard } from './RouteWidgets'
 import { useWalletAbiSession } from '../walletAbi/session'
 import { useWalletAbiActionRunner } from '../walletAbi/actionRunner'
 import {
@@ -18,12 +13,16 @@ import {
   fetchOfferIdsByScript,
   fetchOffers,
   fetchOfferUtxos,
-  filterOffersByParticipantRole,
 } from '../api/client'
 import { EsploraClient } from '../api/esplora'
 import { getScriptPubkeyHexFromAddress } from '../utility/addressP2pk'
 import { OfferTable } from '../components/OfferTable'
 import type { OfferShort } from '../types/offers'
+import {
+  loadLenderFlowState,
+  trackLenderOfferId,
+  trackLenderScriptPubkey,
+} from '../walletAbi/storage'
 
 export function LenderRoute() {
   const session = useWalletAbiSession()
@@ -41,6 +40,7 @@ export function LenderRoute() {
   const [selectedScope, setSelectedScope] = useState<'pending' | 'supply' | null>(null)
 
   const connected = session.status === 'connected' && Boolean(session.receiveAddress)
+  const lenderIdentity = session.signingXOnlyPubkey ?? session.receiveAddress
 
   const loadSupplyOffers = useCallback(async () => {
     if (!session.receiveAddress) {
@@ -54,13 +54,45 @@ export function LenderRoute() {
 
     try {
       const scriptPubkeyHex = await getScriptPubkeyHexFromAddress(session.receiveAddress)
-      const [ids, height] = await Promise.all([
-        fetchOfferIdsByScript(scriptPubkeyHex),
+      const lenderState = trackLenderScriptPubkey(lenderIdentity, scriptPubkeyHex)
+      const scriptPubkeys = [
+        ...new Set(
+          [scriptPubkeyHex, ...lenderState.scriptPubkeys].map((script) => script.toLowerCase())
+        ),
+      ]
+
+      const [idsByScript, height, activeOffers] = await Promise.all([
+        Promise.all(scriptPubkeys.map((script) => fetchOfferIdsByScript(script))),
         esplora.getLatestBlockHeight().catch(() => null),
+        fetchOffers({ status: 'active', limit: 20, offset: 0 }).catch(() => []),
       ])
+      const storedOfferIds = loadLenderFlowState(lenderIdentity).offerIds
+      const ids = [...new Set([...idsByScript.flat(), ...storedOfferIds])]
       const withParticipants =
         ids.length === 0 ? [] : await fetchOfferDetailsBatchWithParticipants(ids)
-      setSupplyOffers(filterOffersByParticipantRole(withParticipants, scriptPubkeyHex, 'lender'))
+
+      const scriptSet = new Set(scriptPubkeys)
+      const offerById = new Map<string, OfferShort>()
+      for (const offer of withParticipants) {
+        const isKnownLender = offer.participants.some(
+          (participant) =>
+            participant.participant_type === 'lender' &&
+            scriptSet.has(participant.script_pubkey.trim().toLowerCase())
+        )
+        if (isKnownLender || storedOfferIds.includes(offer.id)) {
+          offerById.set(offer.id, offer)
+        }
+      }
+
+      if (offerById.size === 0 && height != null) {
+        for (const offer of activeOffers) {
+          if (offer.loan_expiration_time <= height) {
+            offerById.set(offer.id, offer)
+          }
+        }
+      }
+
+      setSupplyOffers([...offerById.values()])
       setCurrentBlockHeight(height)
     } catch (nextError) {
       setSupplyError(nextError instanceof Error ? nextError.message : String(nextError))
@@ -68,7 +100,7 @@ export function LenderRoute() {
     } finally {
       setLoadingSupply(false)
     }
-  }, [esplora, session.receiveAddress])
+  }, [esplora, lenderIdentity, session.receiveAddress])
 
   const loadPendingOffers = useCallback(async () => {
     setLoadingPending(true)
@@ -128,10 +160,7 @@ export function LenderRoute() {
             />
           </SectionCard>
 
-          <SectionCard
-            title="Pending Offers"
-            description="Select a pending offer to fund."
-          >
+          <SectionCard title="Pending Offers" description="Select a pending offer to fund.">
             <OfferTable
               offers={pendingOffers}
               loading={loadingPending}
@@ -166,14 +195,21 @@ export function LenderRoute() {
                         requestAction.run(
                           'accept offer',
                           async () => {
-                            const offerCreationTx = await esplora.getTx(selectedOffer.created_at_txid)
+                            const lenderAddress = session.receiveAddress!
+                            const lenderScriptPubkey =
+                              await getScriptPubkeyHexFromAddress(lenderAddress)
+                            trackLenderScriptPubkey(lenderIdentity, lenderScriptPubkey)
+                            const offerCreationTx = await esplora.getTx(
+                              selectedOffer.created_at_txid
+                            )
                             return createAcceptOfferRequest({
                               offer: selectedOffer,
                               offerCreationTx,
-                              lenderAddress: session.receiveAddress!,
+                              lenderAddress,
                             })
                           },
                           async () => {
+                            trackLenderOfferId(lenderIdentity, selectedOffer.id)
                             await loadSupplyOffers()
                             await loadPendingOffers()
                           }
@@ -201,7 +237,9 @@ export function LenderRoute() {
                               .reverse()
                               .find((utxo) => utxo.utxo_type === 'lending')
                             if (!repaymentUtxo || !lendingUtxo) {
-                              throw new Error('Required repayment or lending transaction not found.')
+                              throw new Error(
+                                'Required repayment or lending transaction not found.'
+                              )
                             }
 
                             const [repaymentTx, lendingTx] = await Promise.all([
