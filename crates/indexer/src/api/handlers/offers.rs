@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::api::{ApiError, AppState, OfferFilters, db, dto::OfferDetailsResponse};
 use crate::api::{
-    db::fetch_pending_offer_ids_by_borrower_pubkey,
+    db::fetch_offer_ids_by_borrower_pubkey,
     dto::{BatchIdsRequest, OfferListItemFull, OfferListItemShort, PendingOffersQuery},
 };
 
@@ -65,7 +65,7 @@ pub async fn get_offer_details_batch(
     Ok(Json(result))
 }
 
-#[tracing::instrument(name = "Get pending offers by borrower pubkey", skip(state, query))]
+#[tracing::instrument(name = "Get offers by borrower pubkey", skip(state, query))]
 pub async fn get_pending_offers_by_borrower(
     State(state): State<Arc<AppState>>,
     Query(query): Query<PendingOffersQuery>,
@@ -74,7 +74,7 @@ pub async fn get_pending_offers_by_borrower(
         .map_err(|_| ApiError::BadRequest("Invalid borrower_pubkey hex".to_string()))?;
 
     let offer_ids =
-        fetch_pending_offer_ids_by_borrower_pubkey(&state.db, &borrower_pubkey.serialize()).await?;
+        fetch_offer_ids_by_borrower_pubkey(&state.db, &borrower_pubkey.serialize()).await?;
 
     Ok(Json(offer_ids))
 }

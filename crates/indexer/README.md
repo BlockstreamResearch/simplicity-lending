@@ -183,7 +183,7 @@ The following parameters are available for `/offers` and `/offers/full` endpoint
 | `GET` | `/offers` | Get list of offers with short information | `status`, `asset`, `limit`, `offset` |
 | `GET` | `/offers/full` | Get list of offers with full information | `status`, `asset`, `limit`, `offset` |
 | `GET` | `/offers/by-script` | Find offer IDs by `script_pubkey` | `script_pubkey` (query param) |
-| `GET` | `/offers/by-borrower-pubkey` | Find offer IDs where the given key is the borrower (e.g. pending offers) | `borrower_pubkey` (query param, 32-byte hex) |
+| `GET` | `/offers/by-borrower-pubkey` | Find offer IDs where the given key is the borrower | `borrower_pubkey` (query param, 32-byte hex) |
 | `POST` | `/offers/batch` | Get detailed information for multiple offers | JSON Body (list of UUIDs in `ids` field) |
 | `GET` | `/offers/{id}` | Get comprehensive details for a single offer | — |
 | `GET` | `/offers/{id}/participants` | Get the latest (current) participants of an offer | — |

@@ -85,7 +85,7 @@ export async function fetchOfferIdsByScript(scriptPubkeyHex: string): Promise<st
   return arr.map((id) => String(id))
 }
 
-/** Fetch offer IDs where the given key is the borrower (e.g. pending offers created by this user). Expects 32-byte hex (64 chars). */
+/** Fetch offer IDs where the given key is the borrower. Expects 32-byte hex (64 chars). */
 export async function fetchOfferIdsByBorrowerPubkey(borrowerPubkeyHex: string): Promise<string[]> {
   const hex = borrowerPubkeyHex.trim().toLowerCase().replace(/^0x/, '')
   const url = new URL(buildApiUrl('/offers/by-borrower-pubkey'))
