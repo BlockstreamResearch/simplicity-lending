@@ -86,5 +86,8 @@ export async function getScriptPubkeyHexFromAddress(address: string): Promise<st
   const addr = new lwk.Address(address)
   const unconf = addr.toUnconfidential()
   const script = unconf.scriptPubkey()
+  if (!script) {
+    throw new Error('Address has no scriptPubkey.')
+  }
   return bytesToHex(script.bytes())
 }

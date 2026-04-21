@@ -7,8 +7,14 @@ import type {
   ParticipantDto,
   ParticipantType,
 } from '../types/offers'
+import { getApiBaseUrl } from '../config/runtimeConfig'
+import { buildConfiguredUrl } from './url'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE = getApiBaseUrl()
+
+function buildApiUrl(path: string): string {
+  return buildConfiguredUrl(API_BASE, path)
+}
 
 /** Parse u64 from JSON (number or string) to bigint; JSON has no native BigInt */
 function toBigInt(v: unknown): bigint {
@@ -22,6 +28,8 @@ function normalizeOffer(raw: Record<string, unknown>): OfferShort {
   return {
     id: String(raw.id ?? ''),
     status: (raw.status as OfferStatus) ?? 'pending',
+    borrower_output_script_hash:
+      raw.borrower_output_script_hash != null ? String(raw.borrower_output_script_hash) : undefined,
     collateral_asset: String(raw.collateral_asset ?? ''),
     principal_asset: String(raw.principal_asset ?? ''),
     collateral_amount: toBigInt(raw.collateral_amount),
@@ -38,7 +46,7 @@ export async function fetchOffers(params?: {
   limit?: number
   offset?: number
 }): Promise<OfferShort[]> {
-  const url = new URL(`${API_BASE}/offers`)
+  const url = new URL(buildApiUrl('/offers'))
   if (params?.status) url.searchParams.set('status', params.status)
   if (params?.limit != null) url.searchParams.set('limit', String(params.limit))
   if (params?.offset != null) url.searchParams.set('offset', String(params.offset))
@@ -68,7 +76,7 @@ async function throwIfNotOk(res: Response): Promise<void> {
 }
 
 export async function fetchOfferIdsByScript(scriptPubkeyHex: string): Promise<string[]> {
-  const url = new URL(`${API_BASE}/offers/by-script`)
+  const url = new URL(buildApiUrl('/offers/by-script'))
   url.searchParams.set('script_pubkey', scriptPubkeyHex)
   const res = await fetch(url.toString())
   await throwIfNotOk(res)
@@ -80,7 +88,7 @@ export async function fetchOfferIdsByScript(scriptPubkeyHex: string): Promise<st
 /** Fetch offer IDs where the given key is the borrower (e.g. pending offers created by this user). Expects 32-byte hex (64 chars). */
 export async function fetchOfferIdsByBorrowerPubkey(borrowerPubkeyHex: string): Promise<string[]> {
   const hex = borrowerPubkeyHex.trim().toLowerCase().replace(/^0x/, '')
-  const url = new URL(`${API_BASE}/offers/by-borrower-pubkey`)
+  const url = new URL(buildApiUrl('/offers/by-borrower-pubkey'))
   url.searchParams.set('borrower_pubkey', hex)
   const res = await fetch(url.toString())
   await throwIfNotOk(res)
@@ -126,6 +134,7 @@ export function filterOffersByParticipantRole(
       (o): OfferShort => ({
         id: o.id,
         status: o.status,
+        borrower_output_script_hash: o.borrower_output_script_hash,
         collateral_asset: o.collateral_asset,
         principal_asset: o.principal_asset,
         collateral_amount: o.collateral_amount,
@@ -139,7 +148,7 @@ export function filterOffersByParticipantRole(
 }
 
 export async function fetchOfferDetailsBatch(ids: string[]): Promise<OfferShort[]> {
-  const res = await fetch(`${API_BASE}/offers/batch`, {
+  const res = await fetch(buildApiUrl('/offers/batch'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids }),
@@ -152,7 +161,7 @@ export async function fetchOfferDetailsBatch(ids: string[]): Promise<OfferShort[
 export async function fetchOfferDetailsBatchWithParticipants(
   ids: string[]
 ): Promise<OfferWithParticipants[]> {
-  const res = await fetch(`${API_BASE}/offers/batch`, {
+  const res = await fetch(buildApiUrl('/offers/batch'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids }),
@@ -176,7 +185,7 @@ function normalizeOfferUtxo(raw: Record<string, unknown>): OfferUtxo {
 
 /** Fetch UTXO history for an offer (GET /offers/:id/utxos). Used e.g. to get Lending UTXO for liquidation. */
 export async function fetchOfferUtxos(offerId: string): Promise<OfferUtxo[]> {
-  const res = await fetch(`${API_BASE}/offers/${encodeURIComponent(offerId)}/utxos`)
+  const res = await fetch(buildApiUrl(`/offers/${encodeURIComponent(offerId)}/utxos`))
   await throwIfNotOk(res)
   const data: unknown[] = await res.json()
   return data.map((row) => normalizeOfferUtxo(row as Record<string, unknown>))
@@ -200,7 +209,9 @@ function normalizeOfferParticipant(raw: Record<string, unknown>): OfferParticipa
 
 /** Fetch participant movement history (GET /offers/:id/participants/history). Used to get current Lender/Borrower NFT (txid, vout) from indexer. */
 export async function fetchOfferParticipantsHistory(offerId: string): Promise<OfferParticipant[]> {
-  const res = await fetch(`${API_BASE}/offers/${encodeURIComponent(offerId)}/participants/history`)
+  const res = await fetch(
+    buildApiUrl(`/offers/${encodeURIComponent(offerId)}/participants/history`)
+  )
   await throwIfNotOk(res)
   const data: unknown[] = await res.json()
   return data.map((row) => normalizeOfferParticipant(row as Record<string, unknown>))

@@ -1,28 +1,37 @@
 /**
  * Esplora HTTP API client for chain data.
  * Mirrors the indexer's EsploraClient (crates/indexer/src/esplora_client.rs).
- * Base URL from env VITE_ESPLORA_BASE_URL (required).
- * Explorer URL for tx links from VITE_ESPLORA_EXPLORER_URL (optional; falls back to API base URL).
+ * Base URL from env VITE_ESPLORA_BASE_URL (defaults to Blockstream Liquid Testnet API).
+ * Explorer URL for tx links from VITE_ESPLORA_EXPLORER_URL (optional; defaults to Blockstream Liquid Testnet explorer).
  * Results use default JS types (string, number, string[], Uint8Array).
  */
 
+import { getEsploraApiBaseUrl, getEsploraExplorerBaseUrl } from '../config/runtimeConfig'
+
 /** Default request timeout in milliseconds. */
 export const DEFAULT_TIMEOUT_MS = 30_000
+const DEFAULT_ESPLORA_BASE_URL = 'https://blockstream.info/liquidtestnet/api'
+const DEFAULT_ESPLORA_EXPLORER_URL = 'https://blockstream.info/liquidtestnet'
 
 function getBaseUrl(): string {
-  const env = import.meta.env.VITE_ESPLORA_BASE_URL
+  const env = getEsploraApiBaseUrl()
   if (typeof env !== 'string' || !env.trim()) {
-    throw new EsploraApiError('VITE_ESPLORA_BASE_URL is not set')
+    return DEFAULT_ESPLORA_BASE_URL
   }
   return env.trim().replace(/\/+$/, '')
 }
 
 function getExplorerBaseUrl(apiBaseUrl: string): string {
-  const env = import.meta.env.VITE_ESPLORA_EXPLORER_URL
+  const env = getEsploraExplorerBaseUrl()
   if (typeof env === 'string' && env.trim()) {
     return env.trim().replace(/\/+$/, '')
   }
-  return apiBaseUrl
+
+  if (apiBaseUrl === DEFAULT_ESPLORA_BASE_URL) {
+    return DEFAULT_ESPLORA_EXPLORER_URL
+  }
+
+  return apiBaseUrl.replace(/\/api$/, '')
 }
 
 export class EsploraApiError extends Error {
@@ -345,11 +354,16 @@ export interface EsploraVout {
   [key: string]: unknown
 }
 
+export interface EsploraVin {
+  prevout?: EsploraVout
+  [key: string]: unknown
+}
+
 /** Full transaction from GET /tx/:txid. */
 export interface EsploraTx {
   txid: string
   vout: EsploraVout[]
-  vin?: unknown[]
+  vin?: EsploraVin[]
   [key: string]: unknown
 }
 

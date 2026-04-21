@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import wasmPlugin from 'vite-plugin-wasm'
 import path from 'path'
 import fs from 'fs'
 
@@ -39,33 +40,15 @@ export default defineConfig({
   // Vitest extension (see vitest.config reference or run vitest for tests)
   // @ts-expect-error - Vite's UserConfigExport doesn't include Vitest's 'test'
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     globals: true,
   },
   plugins: [
+    (wasmPlugin as unknown as () => unknown)() as never,
     react(),
     simplicitySourcesPlugin(),
-    {
-      name: 'lwk-wasm-dev',
-      configureServer(server) {
-        server.middlewares.use('/lwk_wasm_bg.wasm', (_req, res, next) => {
-          const wasmPath = path.resolve(server.config.root, 'node_modules/lwk_web/lwk_wasm_bg.wasm')
-          if (!fs.existsSync(wasmPath)) return next()
-          res.setHeader('Content-Type', 'application/wasm')
-          fs.createReadStream(wasmPath).pipe(res)
-        })
-      },
-    },
   ],
   build: {
-    rollupOptions: {
-      output: {
-        // LWK resolves wasm via new URL('lwk_wasm_bg.wasm', import.meta.url) — keep name stable
-        assetFileNames: (assetInfo) =>
-          assetInfo.name?.endsWith('.wasm')
-            ? 'assets/lwk_wasm_bg.wasm'
-            : 'assets/[name]-[hash][extname]',
-      },
-    },
+    target: 'esnext',
   },
 })

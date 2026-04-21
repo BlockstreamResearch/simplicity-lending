@@ -14,9 +14,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "lwk_web": "file:../lwk_wasm/pkg_web",
+    "helpers_wallet_abi_web": "0.16.1",
+    "lwk_wallet_abi_sdk": "0.16.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.5",
+    "wallet_abi_sdk_core_web": "0.16.1"
   },
   "devDependencies": {
     "vitest": "^2.1.0",
@@ -37,6 +40,7 @@
     "tailwindcss": "^4.2.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vite-plugin-wasm": "^3.5.0"
   }
 }

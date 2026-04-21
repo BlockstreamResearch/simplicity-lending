@@ -1,66 +1,219 @@
 /**
  * LWK (Liquid Wallet Kit) integration for Simplicity programs.
- * - Initializes wasm once, exposes program creation and P2TR address helpers.
+ * - Initializes Wallet ABI core wasm once, exposes program creation and P2TR address helpers.
  */
 
-let lwkInit: Promise<typeof import('lwk_web')> | null = null
-
-function getWasmUrl(): string {
-  if (import.meta.env.DEV) return '/lwk_wasm_bg.wasm'
-  return `${import.meta.env.BASE_URL}assets/lwk_wasm_bg.wasm`
-}
-
-export async function getLwk(): Promise<typeof import('lwk_web')> {
-  if (!lwkInit) {
-    lwkInit = (async () => {
-      const lwk = await import('lwk_web')
-      if (typeof lwk.default === 'function') await lwk.default(getWasmUrl())
-      return lwk
-    })()
-  }
-  return lwkInit
-}
+import { loadLwkWalletAbiWeb } from 'helpers_wallet_abi_web'
 
 export type P2pkNetwork = 'mainnet' | 'testnet'
 
-/** LWK module (return type of getLwk()). Use for typing lwk argument across the app. */
-export type Lwk = Awaited<ReturnType<typeof getLwk>>
+export interface LwkAddress {
+  scriptPubkey(): LwkScript | null | undefined
+  toUnconfidential(): LwkAddress
+  toString(): string
+}
 
-/** Instance of LWK SimplicityArguments. */
-export type LwkSimplicityArguments = InstanceType<Lwk['SimplicityArguments']>
+export interface LwkAssetId {
+  toString(): string
+}
 
-/** Instance of LWK XOnlyPublicKey. */
-export type LwkXOnlyPublicKey = InstanceType<Lwk['XOnlyPublicKey']>
+export type LwkContractHash = object
 
-/** Instance of LWK Script. */
-export type LwkScript = InstanceType<Lwk['Script']>
+export type LwkLockTime = object
 
-/** Instance of LWK TxOut (use instead of InstanceType<Lwk['TxOut']> — TxOut has a private constructor). */
-export type LwkTxOut = ReturnType<Lwk['TxOut']['fromExplicit']>
+export type LwkOutPoint = object
+
+export interface LwkScript {
+  bytes(): Uint8Array
+  toString(): string
+}
+
+export interface LwkSimplicityArguments {
+  addValue(name: string, value: LwkSimplicityTypedValue): LwkSimplicityArguments
+  free(): void
+  [Symbol.dispose](): void
+}
+
+export interface LwkSimplicityProgram {
+  createP2trAddress(internalKey: LwkXOnlyPublicKey, network: LwkNetwork): LwkAddress
+  getSighashAll(
+    tx: LwkTransaction,
+    internalKey: LwkXOnlyPublicKey,
+    prevouts: LwkTxOutArray,
+    inputIndex: number,
+    network: LwkNetwork
+  ): string
+  finalizeTransaction(
+    tx: LwkTransaction,
+    internalKey: LwkXOnlyPublicKey,
+    prevouts: LwkTxOutArray,
+    inputIndex: number,
+    witnessValues: LwkSimplicityWitnessValues,
+    network: LwkNetwork,
+    logLevel: number
+  ): LwkTransaction
+}
+
+export type LwkSimplicityType = object
+
+export type LwkSimplicityTypedValue = object
+
+export interface LwkSimplicityWitnessValues {
+  addValue(name: string, value: LwkSimplicityTypedValue): LwkSimplicityWitnessValues
+  free(): void
+  [Symbol.dispose](): void
+}
+
+export interface LwkTxSequence {
+  toConsensusU32?(): number
+  to_consensus_u32?(): number
+}
+
+export interface LwkTxOut {
+  asset(): LwkAssetId | undefined
+  value(): bigint | undefined
+  scriptPubkey(): LwkScript
+}
 
 /** Array of LWK TxOut (e.g. for getSighashAll / finalizeTransaction prevouts). */
 export type LwkTxOutArray = LwkTxOut[]
 
-/** Instance of LWK SimplicityProgram. */
-export type LwkSimplicityProgram = InstanceType<Lwk['SimplicityProgram']>
+export type LwkTxid = object
 
-/** Instance of LWK SimplicityTypedValue. */
-export type LwkSimplicityTypedValue = InstanceType<Lwk['SimplicityTypedValue']>
+export interface LwkXOnlyPublicKey {
+  toHex(): string
+}
 
-/** Instance of LWK SimplicityWitnessValues. */
-export type LwkSimplicityWitnessValues = InstanceType<Lwk['SimplicityWitnessValues']>
+export interface LwkKeypair {
+  xOnlyPublicKey(): LwkXOnlyPublicKey
+  signSchnorr(sighashHex: string): string
+}
 
-/** Instance of LWK SimplicityType (for parsing type strings). */
-export type LwkSimplicityType = InstanceType<Lwk['SimplicityType']>
+export interface LwkNetwork {
+  policyAsset(): LwkAssetId
+}
 
-/** Instance of LWK Keypair. */
-export type LwkKeypair = InstanceType<Lwk['Keypair']>
+export interface LwkTransaction {
+  toString(): string
+  readonly outputs: LwkTxOut[]
+}
 
-/** LWK Network (return type of Network.mainnet() / Network.testnet()). */
-export type LwkNetwork = ReturnType<Lwk['Network']['mainnet']>
+interface LwkPsetBuilderInstance {
+  addInput(input: unknown): LwkPsetBuilderInstance
+  addOutput(output: unknown): LwkPsetBuilderInstance
+  setFallbackLocktime(lockTime: LwkLockTime): LwkPsetBuilderInstance
+  build(): unknown
+}
 
-/** LWK transaction type (first argument of getSighashAll / return of finalizeTransaction). */
-export type LwkTransaction = Parameters<InstanceType<Lwk['SimplicityProgram']>['getSighashAll']>[0]
+interface LwkPsetInputBuilderInstance {
+  witnessUtxo(txOut: LwkTxOut): LwkPsetInputBuilderInstance
+  sequence(sequence: LwkTxSequence): LwkPsetInputBuilderInstance
+  issuanceValueAmount(amount: bigint): LwkPsetInputBuilderInstance
+  issuanceAssetEntropy(contractHash: LwkContractHash): LwkPsetInputBuilderInstance
+  blindedIssuance(value: boolean): LwkPsetInputBuilderInstance
+  build(): unknown
+}
+
+interface LwkPsetOutputBuilderInstance {
+  build(): unknown
+}
+
+/** LWK module (return type of getLwk()). Use for typing lwk argument across the app. */
+export interface Lwk {
+  Address: {
+    new (address: string): LwkAddress
+  }
+  AssetId: {
+    new (assetIdHex: string): LwkAssetId
+  }
+  ContractHash: {
+    fromBytes(bytes: Uint8Array): LwkContractHash
+  }
+  Keypair: {
+    new (secretKey: Uint8Array): LwkKeypair
+  }
+  LockTime: {
+    from_height(height: number): LwkLockTime
+  }
+  Network: {
+    mainnet(): LwkNetwork
+    testnet(): LwkNetwork
+  }
+  OutPoint: {
+    fromParts(txid: LwkTxid, vout: number): LwkOutPoint
+  }
+  PsetBuilder: {
+    newV2(): LwkPsetBuilderInstance
+  }
+  PsetInputBuilder: {
+    fromPrevout(outpoint: LwkOutPoint): LwkPsetInputBuilderInstance
+  }
+  PsetOutputBuilder: {
+    newExplicit(
+      script: LwkScript,
+      amount: bigint,
+      assetId: LwkAssetId
+    ): LwkPsetOutputBuilderInstance
+  }
+  Script: {
+    new (scriptHex: string): LwkScript
+    empty(): LwkScript
+  }
+  SimplicityArguments: {
+    new (): LwkSimplicityArguments
+  }
+  SimplicityLogLevel: {
+    None: number
+  }
+  SimplicityProgram: {
+    new (source: string, args: LwkSimplicityArguments): LwkSimplicityProgram
+  }
+  SimplicityType: {
+    new (typeString: string): LwkSimplicityType
+  }
+  SimplicityTypedValue: {
+    new (value: string, type: LwkSimplicityType): LwkSimplicityTypedValue
+    fromBoolean(value: boolean): LwkSimplicityTypedValue
+    fromByteArrayHex(value: string): LwkSimplicityTypedValue
+    fromU16(value: number): LwkSimplicityTypedValue
+    fromU32(value: number): LwkSimplicityTypedValue
+    fromU64(value: bigint): LwkSimplicityTypedValue
+    fromU256Hex(value: string): LwkSimplicityTypedValue
+  }
+  SimplicityWitnessValues: {
+    new (): LwkSimplicityWitnessValues
+  }
+  Transaction: {
+    fromString(txHex: string): LwkTransaction
+  }
+  TxId?: unknown
+  TxOut: {
+    fromExplicit(script: LwkScript, assetId: LwkAssetId, value: bigint): LwkTxOut
+  }
+  TxSequence: {
+    enableLocktimeNoRbf?(): LwkTxSequence
+    enable_locktime_no_rbf?(): LwkTxSequence
+  }
+  Txid: {
+    new (txidHex: string): LwkTxid
+  }
+  XOnlyPublicKey: {
+    fromBytes(bytes: Uint8Array): LwkXOnlyPublicKey
+  }
+  assetIdFromIssuance(outpoint: LwkOutPoint, contractHash: LwkContractHash): LwkAssetId
+}
+
+let lwkInit: Promise<Lwk> | null = null
+
+export async function getLwk(): Promise<Lwk> {
+  if (!lwkInit) {
+    lwkInit = (async () => {
+      await loadLwkWalletAbiWeb()
+      return (await import('wallet_abi_sdk_core_web')) as unknown as Lwk
+    })()
+  }
+  return lwkInit
+}
 
 /** PSET that can yield the unsigned transaction for LWK signing (extractTx). */
 export interface PsetWithExtractTx {

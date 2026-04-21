@@ -18,6 +18,7 @@ export interface ParticipantDto {
 export interface OfferShort {
   id: string
   status: OfferStatus
+  borrower_output_script_hash?: string
   collateral_asset: string
   principal_asset: string
   collateral_amount: bigint
