@@ -6,6 +6,8 @@ import type { Lwk, LwkSimplicityArguments, LwkSimplicityWitnessValues } from '..
 import type { PreLockArguments } from '../../utility/preLockArguments'
 import { bytes32ToHex } from '../../utility/hex'
 
+const DUMMY_SIGNATURE_HEX = '01'.repeat(64)
+
 export function buildPreLockArguments(lwk: Lwk, args: PreLockArguments): LwkSimplicityArguments {
   const SimplicityArguments = lwk.SimplicityArguments
   const SimplicityTypedValue = lwk.SimplicityTypedValue
@@ -68,8 +70,8 @@ export interface BuildPreLockWitnessParams {
 }
 
 /**
- * Build PreLock witness. PATH = Left(()) for LendingCreation, Right(signature) for PreLockCancellation.
- * Type PATH is Either<(), Signature>.
+ * Build PreLock witness. PATH = Left(()) for LendingCreation, Right(()) for PreLockCancellation.
+ * SIGNATURE is a separate witness; LendingCreation still supplies the Rust dummy value.
  */
 export function buildPreLockWitness(
   lwk: Lwk,
@@ -77,16 +79,20 @@ export function buildPreLockWitness(
 ): LwkSimplicityWitnessValues {
   const { SimplicityType, SimplicityTypedValue, SimplicityWitnessValues } = lwk
 
-  const pathType = new SimplicityType('Either<(), Signature>')
+  const pathType = SimplicityType.fromString('Either<(), ()>')
 
   const pathValue =
     params.branch === 'LendingCreation'
-      ? new SimplicityTypedValue('Left(())', pathType)
-      : new SimplicityTypedValue(`Right(0x${params.cancellationSignatureHex ?? ''})`, pathType)
+      ? SimplicityTypedValue.parse('Left(())', pathType)
+      : SimplicityTypedValue.parse('Right(())', pathType)
+  const signatureHex =
+    params.branch === 'PreLockCancellation' && params.cancellationSignatureHex
+      ? params.cancellationSignatureHex
+      : DUMMY_SIGNATURE_HEX
 
   let witness = new SimplicityWitnessValues()
-  const next = witness.addValue('PATH', pathValue)
-  witness = next
+  witness = witness.addValue('PATH', pathValue)
+  witness = witness.addValue('SIGNATURE', SimplicityTypedValue.fromByteArrayHex(signatureHex))
 
   return witness
 }

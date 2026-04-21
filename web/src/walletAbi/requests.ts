@@ -20,12 +20,17 @@ import {
   buildLendingArguments,
   buildLendingWitness,
   buildPreLockArguments as buildPreLockSimplicityArguments,
+  buildPreLockWitness,
   buildScriptAuthArguments,
   buildScriptAuthWitness,
 } from '../simplicity/covenants'
 import { getLwk, getSource } from '../simplicity'
 import { calculatePrincipalWithInterest } from '../tx/loanRepayment/principalWithInterest'
-import { getScriptPubkeyHexFromAddress, P2PK_NETWORK, POLICY_ASSET_ID } from '../utility/addressP2pk'
+import {
+  getScriptPubkeyHexFromAddress,
+  P2PK_NETWORK,
+  POLICY_ASSET_ID,
+} from '../utility/addressP2pk'
 import {
   encodeFirstNFTParameters,
   encodeSecondNFTParameters,
@@ -33,16 +38,20 @@ import {
   toBaseAmount,
 } from '../utility/parametersEncoding'
 import { buildPreLockArguments, type PreLockArguments } from '../utility/preLockArguments'
-import { buildPreLockArgumentsFromOfferCreation, computePreLockCovenantHashes } from '../utility/preLockCovenants'
+import {
+  buildPreLockArgumentsFromOfferCreation,
+  computePreLockCovenantHashes,
+} from '../utility/preLockCovenants'
 import { OP_RETURN_BURN_SCRIPT_HEX, requireVout } from '../utility/esploraPrevout'
 import { getTaprootUnspendableInternalKey } from '../utility/taprootUnspendableKey'
-import { assetIdDisplayToInternal, bytesToHex, getScriptHexFromVout, hexToBytes32 } from '../utility/hex'
-import type { OfferShort } from '../types/offers'
 import {
-  WalletAbiRequestBuilder,
-  walletAbiOutPoint,
-  walletAbiWalletFilter,
-} from './requestBuilder'
+  assetIdDisplayToInternal,
+  bytesToHex,
+  getScriptHexFromVout,
+  hexToBytes32,
+} from '../utility/hex'
+import type { OfferShort } from '../types/offers'
+import { WalletAbiRequestBuilder, walletAbiOutPoint, walletAbiWalletFilter } from './requestBuilder'
 
 const PREPARATION_OUTPUT_AMOUNT = 10n
 const PREPARATION_OUTPUT_COUNT = 4
@@ -108,8 +117,8 @@ async function runtimeSimfFinalizer(
 async function buildPreLockPathWitness(branch: 'LendingCreation' | 'PreLockCancellation') {
   const lwk = await getLwk()
   const witness = new lwk.SimplicityWitnessValues()
-  const pathType = new lwk.SimplicityType('Either<(), ()>')
-  const pathValue = new lwk.SimplicityTypedValue(
+  const pathType = lwk.SimplicityType.fromString('Either<(), ()>')
+  const pathValue = lwk.SimplicityTypedValue.parse(
     branch === 'LendingCreation' ? 'Left(())' : 'Right(())',
     pathType
   )
@@ -152,7 +161,7 @@ async function buildPreLockLendingCreationFinalizer(preLockArguments: PreLockArg
   return simfFinalizer(
     getSource('pre_lock'),
     buildPreLockSimplicityArguments(lwk, preLockArguments),
-    await buildPreLockPathWitness('LendingCreation')
+    buildPreLockWitness(lwk, { branch: 'LendingCreation' })
   )
 }
 
@@ -165,11 +174,18 @@ async function buildPreLockCancellationFinalizer(
     getSource('pre_lock'),
     buildPreLockSimplicityArguments(lwk, preLockArguments),
     await buildPreLockPathWitness('PreLockCancellation'),
-    [WalletAbiRuntimeSimfWitness.sigHashAll('SIGNATURE', xOnlyPublicKeyFromString(borrowerPubkeyHex))]
+    [
+      WalletAbiRuntimeSimfWitness.sigHashAll(
+        'SIGNATURE',
+        xOnlyPublicKeyFromString(borrowerPubkeyHex)
+      ),
+    ]
   )
 }
 
-async function buildLendingRepaymentFinalizer(lendingArgs: Parameters<typeof buildLendingArguments>[1]) {
+async function buildLendingRepaymentFinalizer(
+  lendingArgs: Parameters<typeof buildLendingArguments>[1]
+) {
   const lwk = await getLwk()
   return simfFinalizer(
     getSource('lending'),
@@ -178,7 +194,9 @@ async function buildLendingRepaymentFinalizer(lendingArgs: Parameters<typeof bui
   )
 }
 
-async function buildLendingLiquidationFinalizer(lendingArgs: Parameters<typeof buildLendingArguments>[1]) {
+async function buildLendingLiquidationFinalizer(
+  lendingArgs: Parameters<typeof buildLendingArguments>[1]
+) {
   const lwk = await getLwk()
   return simfFinalizer(
     getSource('lending'),
@@ -208,8 +226,12 @@ async function buildLendingArgs(offer: OfferShort, lendingTx: EsploraTx) {
   const principalAssetId = assetIdDisplayToInternal(offer.principal_asset)
   const borrowerNftAssetId = assetIdDisplayToInternal(String(borrowerNftPrevout.asset ?? ''))
   const lenderNftAssetId = assetIdDisplayToInternal(String(lenderNftPrevout.asset ?? ''))
-  const firstParametersNftAssetId = assetIdDisplayToInternal(String(firstParametersPrevout.asset ?? ''))
-  const secondParametersNftAssetId = assetIdDisplayToInternal(String(secondParametersPrevout.asset ?? ''))
+  const firstParametersNftAssetId = assetIdDisplayToInternal(
+    String(firstParametersPrevout.asset ?? '')
+  )
+  const secondParametersNftAssetId = assetIdDisplayToInternal(
+    String(secondParametersPrevout.asset ?? '')
+  )
 
   const lwk = await getLwk()
   const lenderPrincipalAssetAuthArgs = buildAssetAuthArguments(lwk, {
@@ -388,7 +410,12 @@ export async function createIssueUtilityNftsRequest(params: {
   traceStage('[wallet-abi] issue:new-issuance:lender')
   builder.newIssuanceAssetOutput('first-parameters-nft', recipientScript, 0, firstParametersAmount)
   traceStage('[wallet-abi] issue:new-output:first')
-  builder.newIssuanceAssetOutput('second-parameters-nft', recipientScript, 1, secondParametersAmount)
+  builder.newIssuanceAssetOutput(
+    'second-parameters-nft',
+    recipientScript,
+    1,
+    secondParametersAmount
+  )
   traceStage('[wallet-abi] issue:new-output:second')
   builder.newIssuanceAssetOutput('borrower-nft', recipientScript, 2, 1n)
   traceStage('[wallet-abi] issue:new-output:borrower')
@@ -537,9 +564,10 @@ export async function createCancelPreLockRequest(params: {
     P2PK_NETWORK
   )
   const preLockScriptHash = await hashScriptPubkeyHex(
-    getScriptHexFromVout(requireVout(params.offerCreationTx, 0, 'PreLock', 'offer creation transaction'))
+    getScriptHexFromVout(
+      requireVout(params.offerCreationTx, 0, 'PreLock', 'offer creation transaction')
+    )
   )
-  const utilityNftsFinalizer = await buildScriptAuthFinalizer(preLockScriptHash, 0)
   const builder = new WalletAbiRequestBuilder()
     .providedInput(
       'locked-collateral',
@@ -550,25 +578,25 @@ export async function createCancelPreLockRequest(params: {
     .providedInput(
       'first-parameter-nft',
       walletAbiOutPoint(params.offerCreationTx.txid, 1),
-      utilityNftsFinalizer,
+      await buildScriptAuthFinalizer(preLockScriptHash, 0),
       WalletAbiInputUnblinding.explicit()
     )
     .providedInput(
       'second-parameter-nft',
       walletAbiOutPoint(params.offerCreationTx.txid, 2),
-      utilityNftsFinalizer,
+      await buildScriptAuthFinalizer(preLockScriptHash, 0),
       WalletAbiInputUnblinding.explicit()
     )
     .providedInput(
       'borrower-nft',
       walletAbiOutPoint(params.offerCreationTx.txid, 3),
-      utilityNftsFinalizer,
+      await buildScriptAuthFinalizer(preLockScriptHash, 0),
       WalletAbiInputUnblinding.explicit()
     )
     .providedInput(
       'lender-nft',
       walletAbiOutPoint(params.offerCreationTx.txid, 4),
-      utilityNftsFinalizer,
+      await buildScriptAuthFinalizer(preLockScriptHash, 0),
       WalletAbiInputUnblinding.explicit()
     )
     .explicitOutput(
@@ -580,25 +608,43 @@ export async function createCancelPreLockRequest(params: {
     .rawOutput(
       'burned-first-parameter-nft',
       burnLock(),
-      String(requireVout(params.offerCreationTx, 1, 'First parameter NFT', 'offer creation transaction').asset ?? ''),
-      BigInt(requireVout(params.offerCreationTx, 1, 'First parameter NFT', 'offer creation transaction').value ?? 0)
+      String(
+        requireVout(params.offerCreationTx, 1, 'First parameter NFT', 'offer creation transaction')
+          .asset ?? ''
+      ),
+      BigInt(
+        requireVout(params.offerCreationTx, 1, 'First parameter NFT', 'offer creation transaction')
+          .value ?? 0
+      )
     )
     .rawOutput(
       'burned-second-parameter-nft',
       burnLock(),
-      String(requireVout(params.offerCreationTx, 2, 'Second parameter NFT', 'offer creation transaction').asset ?? ''),
-      BigInt(requireVout(params.offerCreationTx, 2, 'Second parameter NFT', 'offer creation transaction').value ?? 0)
+      String(
+        requireVout(params.offerCreationTx, 2, 'Second parameter NFT', 'offer creation transaction')
+          .asset ?? ''
+      ),
+      BigInt(
+        requireVout(params.offerCreationTx, 2, 'Second parameter NFT', 'offer creation transaction')
+          .value ?? 0
+      )
     )
     .rawOutput(
       'burned-borrower-nft',
       burnLock(),
-      String(requireVout(params.offerCreationTx, 3, 'Borrower NFT', 'offer creation transaction').asset ?? ''),
+      String(
+        requireVout(params.offerCreationTx, 3, 'Borrower NFT', 'offer creation transaction')
+          .asset ?? ''
+      ),
       1n
     )
     .rawOutput(
       'burned-lender-nft',
       burnLock(),
-      String(requireVout(params.offerCreationTx, 4, 'Lender NFT', 'offer creation transaction').asset ?? ''),
+      String(
+        requireVout(params.offerCreationTx, 4, 'Lender NFT', 'offer creation transaction').asset ??
+          ''
+      ),
       1n
     )
 
@@ -617,13 +663,17 @@ export async function createAcceptOfferRequest(params: {
     lendingScriptPubkeyHex,
     parametersNftScriptPubkeyHex,
     borrowerScriptPubkeyHex,
-  } = await buildPreLockArgumentsFromOfferCreation(params.offer, params.offerCreationTx, P2PK_NETWORK)
+  } = await buildPreLockArgumentsFromOfferCreation(
+    params.offer,
+    params.offerCreationTx,
+    P2PK_NETWORK
+  )
 
   const preLockScriptHash = await hashScriptPubkeyHex(
-    getScriptHexFromVout(requireVout(params.offerCreationTx, 0, 'PreLock', 'offer creation transaction'))
+    getScriptHexFromVout(
+      requireVout(params.offerCreationTx, 0, 'PreLock', 'offer creation transaction')
+    )
   )
-  const utilityNftsFinalizer = await buildScriptAuthFinalizer(preLockScriptHash, 0)
-  const parameterNftsFinalizer = await buildScriptAuthFinalizer(lendingCovHash, 0)
   const lendingFinalizer = await buildLendingRepaymentFinalizer({
     collateralAssetId: preLockArguments.collateralAssetId,
     principalAssetId: preLockArguments.principalAssetId,
@@ -646,10 +696,26 @@ export async function createAcceptOfferRequest(params: {
       walletAbiOutPoint(params.offerCreationTx.txid, 0),
       await buildPreLockLendingCreationFinalizer(preLockArguments)
     )
-    .providedInput('first-parameter-nft', walletAbiOutPoint(params.offerCreationTx.txid, 1), utilityNftsFinalizer)
-    .providedInput('second-parameter-nft', walletAbiOutPoint(params.offerCreationTx.txid, 2), utilityNftsFinalizer)
-    .providedInput('borrower-nft', walletAbiOutPoint(params.offerCreationTx.txid, 3), utilityNftsFinalizer)
-    .providedInput('lender-nft', walletAbiOutPoint(params.offerCreationTx.txid, 4), utilityNftsFinalizer)
+    .providedInput(
+      'first-parameter-nft',
+      walletAbiOutPoint(params.offerCreationTx.txid, 1),
+      await buildScriptAuthFinalizer(preLockScriptHash, 0)
+    )
+    .providedInput(
+      'second-parameter-nft',
+      walletAbiOutPoint(params.offerCreationTx.txid, 2),
+      await buildScriptAuthFinalizer(preLockScriptHash, 0)
+    )
+    .providedInput(
+      'borrower-nft',
+      walletAbiOutPoint(params.offerCreationTx.txid, 3),
+      await buildScriptAuthFinalizer(preLockScriptHash, 0)
+    )
+    .providedInput(
+      'lender-nft',
+      walletAbiOutPoint(params.offerCreationTx.txid, 4),
+      await buildScriptAuthFinalizer(preLockScriptHash, 0)
+    )
     .finalizerOutput(
       'locked-collateral',
       lendingFinalizer,
@@ -664,26 +730,44 @@ export async function createAcceptOfferRequest(params: {
     )
     .finalizerOutput(
       'locked-first-parameter-nft',
-      parameterNftsFinalizer,
-      String(requireVout(params.offerCreationTx, 1, 'First parameter NFT', 'offer creation transaction').asset ?? ''),
-      BigInt(requireVout(params.offerCreationTx, 1, 'First parameter NFT', 'offer creation transaction').value ?? 0)
+      await buildScriptAuthFinalizer(lendingCovHash, 0),
+      String(
+        requireVout(params.offerCreationTx, 1, 'First parameter NFT', 'offer creation transaction')
+          .asset ?? ''
+      ),
+      BigInt(
+        requireVout(params.offerCreationTx, 1, 'First parameter NFT', 'offer creation transaction')
+          .value ?? 0
+      )
     )
     .finalizerOutput(
       'locked-second-parameter-nft',
-      parameterNftsFinalizer,
-      String(requireVout(params.offerCreationTx, 2, 'Second parameter NFT', 'offer creation transaction').asset ?? ''),
-      BigInt(requireVout(params.offerCreationTx, 2, 'Second parameter NFT', 'offer creation transaction').value ?? 0)
+      await buildScriptAuthFinalizer(lendingCovHash, 0),
+      String(
+        requireVout(params.offerCreationTx, 2, 'Second parameter NFT', 'offer creation transaction')
+          .asset ?? ''
+      ),
+      BigInt(
+        requireVout(params.offerCreationTx, 2, 'Second parameter NFT', 'offer creation transaction')
+          .value ?? 0
+      )
     )
     .explicitOutput(
       'borrower-nft-output',
       scriptFromHex(borrowerScriptPubkeyHex),
-      String(requireVout(params.offerCreationTx, 3, 'Borrower NFT', 'offer creation transaction').asset ?? ''),
+      String(
+        requireVout(params.offerCreationTx, 3, 'Borrower NFT', 'offer creation transaction')
+          .asset ?? ''
+      ),
       1n
     )
     .explicitOutput(
       'lender-nft-output',
       await explicitScript(params.lenderAddress),
-      String(requireVout(params.offerCreationTx, 4, 'Lender NFT', 'offer creation transaction').asset ?? ''),
+      String(
+        requireVout(params.offerCreationTx, 4, 'Lender NFT', 'offer creation transaction').asset ??
+          ''
+      ),
       1n
     )
 
@@ -853,11 +937,10 @@ export async function createLiquidateLoanRequest(params: {
       walletAbiOutPoint(params.lendingTx.txid, 3),
       await buildScriptAuthFinalizer(lendingScriptHash, 0)
     )
-    .walletInputByFilter(
+    .providedInput(
       'lender-nft',
-      walletAbiWalletFilter({
-        assetIdHex: params.lenderNftAssetId,
-      })
+      walletAbiOutPoint(params.lendingTx.txid, 5),
+      WalletAbiFinalizerSpec.wallet()
     )
     .lockTimeHeight(params.offer.loan_expiration_time)
     .explicitOutput(
