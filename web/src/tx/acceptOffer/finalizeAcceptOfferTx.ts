@@ -57,10 +57,10 @@ export async function finalizeAcceptOfferTx(
   const keypair = new Keypair(lenderSecretKey)
   const p2pkInternalKey = keypair.xOnlyPublicKey()
   const p2pkArgs = buildP2pkArguments(lwk, { publicKeyHex: p2pkInternalKey.toHex() })
-  const p2pkProgram = new SimplicityProgram(getSource('p2pk'), p2pkArgs)
+  const p2pkProgram = SimplicityProgram.load(getSource('p2pk'), p2pkArgs)
 
   const preLockArgs = buildPreLockSimplicityArgs(lwk, preLockArguments)
-  const preLockProgram = new SimplicityProgram(getSource('pre_lock'), preLockArgs)
+  const preLockProgram = SimplicityProgram.load(getSource('pre_lock'), preLockArgs)
   const preLockWitness = buildPreLockWitness(lwk, { branch: 'LendingCreation' })
 
   const preLockScriptHex = prevouts[0]?.scriptpubkey ?? prevouts[0]?.scriptpubkey_hex ?? ''
@@ -69,7 +69,7 @@ export async function finalizeAcceptOfferTx(
   }
   const preLockInputScriptHash = await hashScriptPubkeyHex(preLockScriptHex)
   const scriptAuthArgs = buildScriptAuthArguments(lwk, { scriptHash: preLockInputScriptHash })
-  const scriptAuthProgram = new SimplicityProgram(getSource('script_auth'), scriptAuthArgs)
+  const scriptAuthProgram = SimplicityProgram.load(getSource('script_auth'), scriptAuthArgs)
   const scriptAuthInternalKey = getTaprootUnspendableInternalKey(lwk)
   const scriptAuthWitness = buildScriptAuthWitness(lwk, { inputScriptIndex: 0 })
 

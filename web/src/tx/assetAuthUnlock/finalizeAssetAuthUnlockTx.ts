@@ -50,14 +50,14 @@ export async function finalizeAssetAuthUnlockTx(
   const keypair = new Keypair(lenderSecretKey)
   const p2pkInternalKey = keypair.xOnlyPublicKey()
   const p2pkArgs = buildP2pkArguments(lwk, { publicKeyHex: p2pkInternalKey.toHex() })
-  const p2pkProgram = new SimplicityProgram(getSource('p2pk'), p2pkArgs)
+  const p2pkProgram = SimplicityProgram.load(getSource('p2pk'), p2pkArgs)
 
   const assetAuthArgsLwk = buildAssetAuthArguments(lwk, {
     assetId: assetAuthArguments.assetId,
     assetAmount: assetAuthArguments.assetAmount,
     withAssetBurn: assetAuthArguments.withAssetBurn,
   })
-  const assetAuthProgram = new SimplicityProgram(getSource('asset_auth'), assetAuthArgsLwk)
+  const assetAuthProgram = SimplicityProgram.load(getSource('asset_auth'), assetAuthArgsLwk)
   const assetAuthWitness = buildAssetAuthWitness(lwk, {
     inputAssetIndex: 1,
     outputAssetIndex: 1,

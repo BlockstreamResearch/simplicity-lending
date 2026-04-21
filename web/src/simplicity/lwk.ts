@@ -166,19 +166,19 @@ export interface Lwk {
     None: number
   }
   SimplicityProgram: {
-    new (source: string, args: LwkSimplicityArguments): LwkSimplicityProgram
+    load(source: string, args: LwkSimplicityArguments): LwkSimplicityProgram
   }
   SimplicityType: {
-    new (typeString: string): LwkSimplicityType
+    fromString(typeString: string): LwkSimplicityType
   }
   SimplicityTypedValue: {
-    new (value: string, type: LwkSimplicityType): LwkSimplicityTypedValue
     fromBoolean(value: boolean): LwkSimplicityTypedValue
     fromByteArrayHex(value: string): LwkSimplicityTypedValue
     fromU16(value: number): LwkSimplicityTypedValue
     fromU32(value: number): LwkSimplicityTypedValue
     fromU64(value: bigint): LwkSimplicityTypedValue
     fromU256Hex(value: string): LwkSimplicityTypedValue
+    parse(value: string, type: LwkSimplicityType): LwkSimplicityTypedValue
   }
   SimplicityWitnessValues: {
     new (): LwkSimplicityWitnessValues
@@ -233,7 +233,7 @@ export interface CreateP2trAddressParams {
 export async function createP2trAddress(params: CreateP2trAddressParams): Promise<string> {
   const lwk = await getLwk()
   const { SimplicityProgram, Network } = lwk
-  const program = new SimplicityProgram(params.source, params.args)
+  const program = SimplicityProgram.load(params.source, params.args)
   const net = params.network === 'mainnet' ? Network.mainnet() : Network.testnet()
   const address = program.createP2trAddress(params.internalKey, net)
   return address.toString()

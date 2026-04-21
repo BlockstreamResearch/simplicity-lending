@@ -54,7 +54,7 @@ export async function finalizeLoanLiquidationTx(
   const keypair = new Keypair(lenderSecretKey)
   const p2pkInternalKey = keypair.xOnlyPublicKey()
   const p2pkArgs = buildP2pkArguments(lwk, { publicKeyHex: p2pkInternalKey.toHex() })
-  const p2pkProgram = new SimplicityProgram(getSource('p2pk'), p2pkArgs)
+  const p2pkProgram = SimplicityProgram.load(getSource('p2pk'), p2pkArgs)
 
   const lendingArgsLwk = buildLendingArguments(lwk, {
     collateralAssetId: lendingArgs.collateralAssetId,
@@ -66,11 +66,11 @@ export async function finalizeLoanLiquidationTx(
     lenderPrincipalCovHash: lendingArgs.lenderPrincipalCovHash,
     lendingParams: lendingArgs.lendingParams,
   })
-  const lendingProgram = new SimplicityProgram(getSource('lending'), lendingArgsLwk)
+  const lendingProgram = SimplicityProgram.load(getSource('lending'), lendingArgsLwk)
   const lendingWitness = buildLendingWitness(lwk, { branch: 'LoanLiquidation' })
 
   const scriptAuthArgs = buildScriptAuthArguments(lwk, { scriptHash: lendingCovHash })
-  const scriptAuthProgram = new SimplicityProgram(getSource('script_auth'), scriptAuthArgs)
+  const scriptAuthProgram = SimplicityProgram.load(getSource('script_auth'), scriptAuthArgs)
   const scriptAuthInternalKey = getTaprootUnspendableInternalKey(lwk)
   const scriptAuthWitness = buildScriptAuthWitness(lwk, { inputScriptIndex: 0 })
 

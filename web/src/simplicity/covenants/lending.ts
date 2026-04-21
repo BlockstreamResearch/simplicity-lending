@@ -73,9 +73,9 @@ export function buildLendingWitness(
 ): LwkSimplicityWitnessValues {
   const { SimplicityType, SimplicityTypedValue, SimplicityWitnessValues } = lwk
 
-  const pathType = new SimplicityType('Either<(), ()>')
+  const pathType = SimplicityType.fromString('Either<(), ()>')
   const branchStr = params.branch === 'LoanRepayment' ? 'Left(())' : 'Right(())'
-  const pathValue = new SimplicityTypedValue(branchStr, pathType)
+  const pathValue = SimplicityTypedValue.parse(branchStr, pathType)
 
   let witness = new SimplicityWitnessValues()
   witness = witness.addValue('PATH', pathValue)

@@ -40,7 +40,7 @@ export function signP2pkInputs(params: SignP2pkInputsParams): string {
     'PUBLIC_KEY',
     SimplicityTypedValue.fromU256Hex(internalKey.toHex())
   )
-  const program = new SimplicityProgram(getSource('p2pk'), args)
+  const program = SimplicityProgram.load(getSource('p2pk'), args)
 
   let tx: LwkTransaction = pset.extractTx()
 
