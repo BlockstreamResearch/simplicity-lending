@@ -159,11 +159,11 @@ export async function buildAcceptOfferTx(
 
   // Outputs (same order as Rust builder).
   api.addOutputWithScript(lendingScriptPubkeyHex, preLockValue, preLockAssetHex)
-  api.addOutputWithScript(borrowerScriptPubkeyHex, principalValue, principalAssetHex)
   api.addOutputWithScript(parametersNftScriptPubkeyHex, firstParamsValue, firstParamsAssetHex)
   api.addOutputWithScript(parametersNftScriptPubkeyHex, secondParamsValue, secondParamsAssetHex)
   api.addOutputWithScript(borrowerScriptPubkeyHex, borrowerNftValue, borrowerNftAssetHex)
   api.addOutputWithScript(lenderNftOutputScriptHex, lenderNftValue, lenderNftAssetHex)
+  api.addOutputWithScript(borrowerScriptPubkeyHex, principalValue, principalAssetHex)
 
   const feeChange = feeValue - feeAmount
   if (feeChange > 0n) {

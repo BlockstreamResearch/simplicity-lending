@@ -24,7 +24,7 @@ RUN npm install --no-audit --no-fund
 # Copy application sources
 WORKDIR /app
 COPY web ./web
-COPY crates/contracts/src ./crates/contracts/src
+COPY crates/contracts/simf ./crates/contracts/simf
 
 WORKDIR /app/web
 ARG VITE_API_URL

@@ -15,7 +15,7 @@ pub(super) fn setup_ownable_script_auth(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let txid = split_first_signer_utxo(&context, vec![1000, 5000, 10000]);
+    let txid = split_first_signer_utxo(context, vec![1000, 5000, 10000]);
     provider.wait(&txid)?;
 
     let signer_script_pubkey = signer.get_address().script_pubkey();

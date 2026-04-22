@@ -52,11 +52,11 @@ pub async fn handle_lending_creation(
 }
 
 pub fn is_lending_creation_tx(tx: &Transaction, expected_principal_asset: &[u8]) -> bool {
-    if tx.output.len() < 7 || tx.input.len() < 7 {
+    if tx.output.len() < 7 || tx.input.len() < 6 {
         return false;
     }
 
-    if let Some(asset_id) = tx.output[1].asset.explicit() {
+    if let Some(asset_id) = tx.output[5].asset.explicit() {
         return asset_id.into_inner().0.to_vec() == expected_principal_asset;
     }
 

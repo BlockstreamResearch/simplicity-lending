@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{Txid, hashes::Hash};
 
-use lending_contracts::programs::PreLockParameters;
+use lending_contracts::programs::pre_lock::PreLockParameters;
 
 use crate::models::{ParticipantType, UtxoType};
 

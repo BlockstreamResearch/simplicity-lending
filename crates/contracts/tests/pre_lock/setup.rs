@@ -22,13 +22,13 @@ pub(super) fn setup_pre_lock(
     );
     provider.wait(&txid)?;
 
-    let (txid, principal_asset_id) = issue_asset(&context, principal_asset_amount)?;
+    let (txid, principal_asset_id) = issue_asset(context, principal_asset_amount)?;
     provider.wait(&txid)?;
 
-    let (txid, preparation_asset_id) = issue_preparation_utxos_tx(&context)?;
+    let (txid, preparation_asset_id) = issue_preparation_utxos_tx(context)?;
     provider.wait(&txid)?;
 
-    let txid = issue_utility_nfts_tx(&context, &offer_parameters, preparation_asset_id)?;
+    let txid = issue_utility_nfts_tx(context, &offer_parameters, preparation_asset_id)?;
     provider.wait(&txid)?;
 
     let utility_nfts_creation_tx = provider.fetch_transaction(&txid)?;
@@ -51,7 +51,7 @@ pub(super) fn setup_pre_lock(
         offer_parameters,
         principal_asset_id,
         borrower_pubkey: signer.get_schnorr_public_key(),
-        borrower_output_script_hash: borrower_output_script_hash,
+        borrower_output_script_hash,
         network: *provider.get_network(),
     };
 
