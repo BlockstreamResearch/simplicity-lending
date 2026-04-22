@@ -19,10 +19,15 @@ pub struct AppState {
     pub db: PgPool,
 }
 
+async fn healthcheck() -> &'static str {
+    "ok"
+}
+
 pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
     let state = Arc::new(AppState { db: db_pool });
 
     let app = Router::new()
+        .route("/health", get(healthcheck))
         .route("/offers", get(get_offers_short_info))
         .route("/offers/full", get(get_offers_full_info))
         .route("/offers/batch", post(get_offer_details_batch))

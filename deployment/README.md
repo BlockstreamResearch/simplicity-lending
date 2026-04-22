@@ -94,5 +94,6 @@ Once the stack is running, verify:
 
 - `http://localhost:${WEB_PORT}/`
 - `http://localhost:${WEB_PORT}/runtime-config.js`
+- `http://localhost:${WEB_PORT}/api/health`
 - `http://localhost:${WEB_PORT}/api/offers?limit=1`
 - `http://localhost:${WEB_PORT}/esplora/blocks/tip/height`
