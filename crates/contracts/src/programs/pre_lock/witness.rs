@@ -15,12 +15,9 @@ impl PreLockWitnessBranch {
     pub fn build_witness(&self) -> Box<PreLockWitness> {
         let path = match self {
             PreLockWitnessBranch::LendingCreation => Left(()),
-            PreLockWitnessBranch::PreLockCancellation => Right(()),
+            PreLockWitnessBranch::PreLockCancellation => Right(DUMMY_SIGNATURE),
         };
 
-        Box::new(PreLockWitness {
-            path,
-            signature: DUMMY_SIGNATURE,
-        })
+        Box::new(PreLockWitness { path })
     }
 }

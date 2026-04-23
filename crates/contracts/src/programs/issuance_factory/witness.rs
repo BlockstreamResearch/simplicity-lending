@@ -13,17 +13,15 @@ pub enum IssuanceFactoryWitnessBranch {
 
 impl IssuanceFactoryWitnessBranch {
     pub fn build_witness(&self) -> Box<IssuanceFactoryWitness> {
-        let (output_index, path) = match self {
-            IssuanceFactoryWitnessBranch::IssueAssets { output_index } => (*output_index, Left(())),
+        let path = match self {
+            IssuanceFactoryWitnessBranch::IssueAssets { output_index } => {
+                Left((*output_index, DUMMY_SIGNATURE))
+            }
             IssuanceFactoryWitnessBranch::RemoveFactory { output_index } => {
-                (*output_index, Right(()))
+                Right((*output_index, DUMMY_SIGNATURE))
             }
         };
 
-        Box::new(IssuanceFactoryWitness {
-            path,
-            output_index,
-            signature: DUMMY_SIGNATURE,
-        })
+        Box::new(IssuanceFactoryWitness { path })
     }
 }

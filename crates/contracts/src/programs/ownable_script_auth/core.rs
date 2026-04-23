@@ -2,7 +2,7 @@ use simplex::program::Program;
 use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
 use simplex::simplicityhl::elements::{AssetId, Script};
-use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
+use simplex::transaction::{FinalTransaction, PartialOutput, RequiredSignature, UTXO};
 
 use crate::artifacts::ownable_script_auth::OwnableScriptAuthProgram;
 
@@ -69,7 +69,7 @@ impl OwnableScriptAuth {
             ft,
             program_utxo,
             witness_branch.build_witness(),
-            "SIGNATURE".into(),
+            RequiredSignature::witness_with_path("PATH", &["Left", "2"]),
         );
 
         self.apply_ownership_transfer(new_owner);
@@ -98,7 +98,7 @@ impl OwnableScriptAuth {
             ft,
             program_utxo.clone(),
             witness_branch.build_witness(),
-            "SIGNATURE".into(),
+            RequiredSignature::witness_with_path("PATH", &["Right", "1"]),
         );
     }
 

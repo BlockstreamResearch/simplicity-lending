@@ -68,8 +68,8 @@ export interface BuildPreLockWitnessParams {
 }
 
 /**
- * Build PreLock witness. PATH = Left(()) for LendingCreation, Right(()) for PreLockCancellation.
- * Type PATH is Either<(), ()>; SIGNATURE is used only on PreLockCancellation branch.
+ * Build PreLock witness. PATH = Left(()) for LendingCreation, Right(Signature) for PreLockCancellation.
+ * Type PATH is Either<(), Signature>.
  */
 export function buildPreLockWitness(
   lwk: Lwk,
@@ -77,26 +77,22 @@ export function buildPreLockWitness(
 ): LwkSimplicityWitnessValues {
   const { SimplicityType, SimplicityTypedValue, SimplicityWitnessValues } = lwk
 
-  const pathType = SimplicityType.fromString('Either<(), ()>')
+  const pathType = SimplicityType.fromString('Either<(), Signature>')
 
-  const pathValue =
-    params.branch === 'LendingCreation'
-      ? SimplicityTypedValue.parse('Left(())', pathType)
-      : SimplicityTypedValue.parse(`Right(())`, pathType)
+  let pathExpr = 'Left(())'
+  if (params.branch === 'PreLockCancellation') {
+    if (!params.cancellationSignatureHex) {
+      throw new Error('cancellationSignatureHex is required for PreLockCancellation branch')
+    }
+    const sigHex = params.cancellationSignatureHex.startsWith('0x')
+      ? params.cancellationSignatureHex
+      : `0x${params.cancellationSignatureHex}`
+    pathExpr = `Right(${sigHex})`
+  }
+  const pathValue = SimplicityTypedValue.parse(pathExpr, pathType)
 
   let witness = new SimplicityWitnessValues()
   witness = witness.addValue('PATH', pathValue)
-
-  const signatureHex =
-    params.branch === 'PreLockCancellation'
-      ? params.cancellationSignatureHex
-      : '00'.repeat(64)
-
-  if (!signatureHex) {
-    throw new Error('cancellationSignatureHex is required for PreLockCancellation branch')
-  }
-
-  witness = witness.addValue('SIGNATURE', SimplicityTypedValue.fromByteArrayHex(signatureHex))
 
   return witness
 }

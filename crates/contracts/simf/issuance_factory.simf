@@ -146,14 +146,15 @@ fn remove_factory(output_index: u32, owner_sig: Signature) {
 }
 
 fn main() {
-    let owner_sig: Signature = witness::SIGNATURE;
-    let output_index: u32 = witness::OUTPUT_INDEX;
-
     match witness::PATH {
-        Left(params: ()) => {
+        Left(params: (u32, Signature)) => {
+            let (output_index, owner_sig): (u32, Signature) = params;
+
             issue_new_assets(output_index, owner_sig);
         },
-        Right(params: ()) => {
+        Right(params: (u32, Signature)) => {
+            let (output_index, owner_sig): (u32, Signature) = params;
+
             remove_factory(output_index, owner_sig);
         }
     }

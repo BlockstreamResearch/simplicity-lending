@@ -4,7 +4,7 @@ use simplex::provider::{ProviderTrait, SimplicityNetwork};
 use simplex::simplicityhl::elements::{
     AssetId, Script, Transaction, hex::ToHex, secp256k1_zkp::XOnlyPublicKey,
 };
-use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
+use simplex::transaction::{FinalTransaction, PartialOutput, RequiredSignature, UTXO};
 use simplex::utils::hash_script;
 
 use crate::artifacts::pre_lock::PreLockProgram;
@@ -235,7 +235,7 @@ impl PreLock {
             ft,
             program_utxo,
             PreLockWitnessBranch::PreLockCancellation.build_witness(),
-            "SIGNATURE".into(),
+            RequiredSignature::witness_with_path("PATH", &["Right"]),
         );
 
         let utility_nfts_script_auth = ScriptAuth::from_simplex_program(self);

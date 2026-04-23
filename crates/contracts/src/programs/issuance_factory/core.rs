@@ -2,7 +2,7 @@ use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::{AssetId, Script, Transaction};
 use simplex::simplicityhl::elements::{hex::ToHex, schnorr::XOnlyPublicKey};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialOutput, UTXO};
+use simplex::transaction::{FinalTransaction, PartialOutput, RequiredSignature, UTXO};
 use simplex::{program::Program, provider::SimplicityNetwork};
 
 use crate::artifacts::issuance_factory::IssuanceFactoryProgram;
@@ -128,7 +128,7 @@ impl IssuanceFactory {
             program_utxo,
             program_issuance_input,
             issuance_factory_witness_branch.build_witness(),
-            "SIGNATURE".into(),
+            RequiredSignature::witness_with_path("PATH", &["Left", "1"]),
         );
 
         self.add_program_output(ft, issuance_factory_asset, issuance_factory_amount);
@@ -148,7 +148,7 @@ impl IssuanceFactory {
             ft,
             program_utxo,
             issuance_factory_witness_branch.build_witness(),
-            "SIGNATURE".into(),
+            RequiredSignature::witness_with_path("PATH", &["Right", "1"]),
         );
 
         ft.add_output(PartialOutput::new(

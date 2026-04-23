@@ -29,17 +29,15 @@ impl OwnableScriptAuthWitnessBranch {
             } => Left((
                 current_owner.serialize(),
                 new_owner.serialize(),
+                DUMMY_SIGNATURE,
                 *program_output_index,
             )),
             OwnableScriptAuthWitnessBranch::ScriptAuthUnlock {
                 owner,
                 input_script_index,
-            } => Right((owner.serialize(), *input_script_index)),
+            } => Right((owner.serialize(), DUMMY_SIGNATURE, *input_script_index)),
         };
 
-        Box::new(OwnableScriptAuthWitness {
-            path,
-            signature: DUMMY_SIGNATURE,
-        })
+        Box::new(OwnableScriptAuthWitness { path })
     }
 }

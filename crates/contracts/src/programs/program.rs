@@ -43,12 +43,12 @@ pub trait SimplexProgram {
         ft: &'a mut FinalTransaction,
         program_utxo: UTXO,
         witness: Box<dyn WitnessTrait>,
-        sig_witness_name: String,
+        required_signature: RequiredSignature,
     ) -> &'a mut FinalTransaction {
         ft.add_program_input(
             PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
-            RequiredSignature::Witness(sig_witness_name),
+            required_signature,
         );
 
         ft
@@ -60,13 +60,13 @@ pub trait SimplexProgram {
         program_utxo: UTXO,
         issuance_input: IssuanceInput,
         witness: Box<dyn WitnessTrait>,
-        sig_witness_name: String,
+        required_signature: RequiredSignature,
     ) -> AssetId {
         let (asset_id, _) = ft.add_program_issuance_input(
             PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
             issuance_input,
-            RequiredSignature::Witness(sig_witness_name),
+            required_signature,
         );
 
         asset_id

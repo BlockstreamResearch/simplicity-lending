@@ -225,9 +225,8 @@ fn main() {
         Left(params: ()) => {
             create_lending_path();
         },
-        Right(params: ()) => {
-            let sig: Signature = witness::SIGNATURE;
-            cancel_pre_lock_path(sig);
+        Right(cancellation_sig: Signature) => {
+            cancel_pre_lock_path(cancellation_sig);
         }
     }
 }
