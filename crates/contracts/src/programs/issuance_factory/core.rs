@@ -161,7 +161,7 @@ impl IssuanceFactory {
 
 impl SimplexProgram for IssuanceFactory {
     fn get_program(&self) -> &Program {
-        self.program.get_program()
+        self.program.as_ref()
     }
 
     fn get_network(&self) -> &SimplicityNetwork {
