@@ -1,0 +1,161 @@
+// Helper getters
+
+fn get_script_hash(index: u32, is_input_index: bool) -> u256 {
+    let script_hash: u256 = match is_input_index {
+        true => unwrap(jet::input_script_hash(index)),
+        false => unwrap(jet::output_script_hash(index)),
+    };
+
+    script_hash
+}
+
+fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
+    let pair: (Asset1, Amount1) = match is_input_index {
+        true => unwrap(jet::input_amount(index)),
+        false => unwrap(jet::output_amount(index)),
+    };
+    let (asset, amount): (Asset1, Amount1) = pair;
+    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_bits, amount)
+}
+
+// Check helpers
+
+fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
+    assert!(jet::eq_64(asset_amount_1, asset_amount_2));
+}
+
+fn check_assets_eq(asset_bits_1: u256, asset_bits_2: u256) {
+    assert!(jet::eq_256(asset_bits_1, asset_bits_2));
+}
+
+fn check_script_hashes_eq(script_1: u256, script_2: u256) {
+    assert!(jet::eq_256(script_1, script_2));
+}
+
+fn check_flags_eq(flag_1: bool, flag_2: bool) {
+    assert!(jet::eq_1(<bool>::into(flag_1), <bool>::into(flag_2)));
+}
+
+fn ensure_asset_with_amount(index: u32, is_input_index: bool, expected_asset_bits: u256, expected_amount: u64) {
+    let (asset_bits, amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
+
+    check_assets_eq(asset_bits, expected_asset_bits);
+    check_asset_amounts_eq(amount, expected_amount);
+}
+
+fn ensure_input_and_output_eq(input_index: u32, output_index: u32) {
+    let (input_asset_bits, input_amount): (u256, u64) = get_asset_and_amount(input_index, true);
+    let (output_asset_bits, output_amount): (u256, u64) = get_asset_and_amount(output_index, false);
+
+    check_assets_eq(input_asset_bits, input_asset_bits);
+    check_asset_amounts_eq(input_amount, output_amount);
+}
+
+fn ensure_input_and_output_script_hashes_eq(input_index: u32, output_index: u32) {
+    let input_script_hash: u256 = get_script_hash(input_index, true);
+    let output_script_hash: u256 = get_script_hash(output_index, false);
+
+    check_script_hashes_eq(input_script_hash, output_script_hash);
+}
+
+fn ensure_output_is_op_return(index: u32) {
+    match jet::output_null_datum(index, 0) {
+        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => (),
+        None => panic!(),
+    }
+}
+
+fn ensure_zero_bit(bit: bool) { assert!(jet::eq_1(<bool>::into(bit), 0)); }
+
+// Main paths logic
+
+fn get_reissuance_flag(index: u8) -> bool {
+    let shifted: u64 = jet::right_shift_64(index, param::REISSUANCE_FLAGS);
+    let bit_val: u1 = jet::rightmost_64_1(shifted);
+
+    <u1>::into(bit_val)
+}
+
+fn verify_issuance(input_index: u32, output_index: u32, reissuance_flag: bool) {
+    let contract_hash: u256 = unwrap(unwrap(jet::new_issuance_contract(input_index)));
+    let outpoint: Outpoint = unwrap(jet::input_prev_outpoint(input_index));
+    let issuance_entropy: u256 = jet::calculate_issuance_entropy(outpoint, contract_hash);
+
+    let has_reissuance: bool = unwrap(unwrap(jet::issuance(input_index)));
+
+    assert!(jet::eq_1(<bool>::into(has_reissuance), <bool>::into(reissuance_flag)));
+
+    match has_reissuance {
+        true => {
+            let conf_token: ExplicitAsset = jet::calculate_confidential_token(issuance_entropy);
+        },
+        false => {},
+    };
+
+    let issuance_amount: Amount1 = unwrap(unwrap(jet::issuance_asset_amount(input_index)));
+    let issuance_asset: ExplicitAsset = unwrap(unwrap(jet::issuance_asset(input_index)));
+
+    let issuance_amount: u64 = unwrap_right::<(u1, u256)>(issuance_amount);
+
+    ensure_asset_with_amount(output_index, false, issuance_asset, issuance_amount);
+}
+
+fn verify_issuance_step(acc: (), start_output_index: u32, i: u8) -> Either<(), ()> {
+    match jet::le_8(param::ISSUING_UTXOS_COUNT, i) {
+        true => Left(()),
+        false => {
+            let step_index: u32 = <(u16, u16)>::into((0, <(u8, u8)>::into((0, i))));
+
+            let (carry, input_index): (bool, u32) = jet::add_32(jet::current_index(), step_index);
+            ensure_zero_bit(carry);
+
+            let (carry, output_index): (bool, u32) = jet::add_32(start_output_index, step_index);
+            ensure_zero_bit(carry);
+
+            verify_issuance(input_index, output_index, get_reissuance_flag(i));
+
+            Right(())
+        }
+    }
+}
+
+fn issue_new_assets(output_index: u32, owner_sig: Signature) {
+    let current_index: u32 = jet::current_index();
+
+    assert!(jet::eq_32(current_index, 0));
+    jet::bip_0340_verify((param::FACTORY_OWNER_PUBKEY, jet::sig_all_hash()), owner_sig);
+
+    ensure_input_and_output_script_hashes_eq(current_index, output_index);
+
+    let (carry, issued_outputs_start_index): (bool, u32) = jet::add_32(output_index, 1);
+    ensure_zero_bit(carry);
+
+    unwrap_left::<()>(for_while::<verify_issuance_step>((), issued_outputs_start_index));
+}
+
+fn remove_factory(output_index: u32, owner_sig: Signature) {
+    let current_index: u32 = jet::current_index();
+
+    assert!(jet::eq_32(current_index, 0));
+    jet::bip_0340_verify((param::FACTORY_OWNER_PUBKEY, jet::sig_all_hash()), owner_sig);
+
+    ensure_output_is_op_return(output_index);
+    ensure_input_and_output_eq(current_index, output_index);
+}
+
+fn main() {
+    match witness::PATH {
+        Left(params: (u32, Signature)) => {
+            let (output_index, owner_sig): (u32, Signature) = params;
+
+            issue_new_assets(output_index, owner_sig);
+        },
+        Right(params: (u32, Signature)) => {
+            let (output_index, owner_sig): (u32, Signature) = params;
+
+            remove_factory(output_index, owner_sig);
+        }
+    }
+}

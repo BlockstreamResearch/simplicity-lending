@@ -50,10 +50,7 @@ pub fn is_loan_liquidation_tx(tx: &Transaction) -> bool {
         return false;
     }
 
-    tx.output[1].is_null_data()
-        && tx.output[2].is_null_data()
-        && tx.output[3].is_null_data()
-        && !tx.output[4].is_null_data()
+    tx.output[1].is_null_data() && tx.output[2].is_null_data() && tx.output[3].is_null_data()
 }
 
 #[cfg(test)]

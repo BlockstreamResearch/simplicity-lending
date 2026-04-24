@@ -124,16 +124,14 @@ fn script_auth_check(owner: Pubkey, owner_sig: Signature, input_script_index: u3
 }
 
 fn main() {
-    let owner_sig: Signature = witness::SIGNATURE;
-
     match witness::PATH {
-        Left(params: (Pubkey, Pubkey, u32)) => {
-            let (current_owner, new_owner, program_output_index): (Pubkey, Pubkey, u32) = params;
+        Left(params: (Pubkey, Pubkey, Signature, u32)) => {
+            let (current_owner, new_owner, owner_sig, program_output_index): (Pubkey, Pubkey, Signature, u32) = params;
             
             ownership_transfer(current_owner, new_owner, owner_sig, program_output_index);
         },
-        Right(params: (Pubkey, u32)) => {
-            let (owner, input_script_index): (Pubkey, u32) = params;
+        Right(params: (Pubkey, Signature, u32)) => {
+            let (owner, owner_sig, input_script_index): (Pubkey, Signature, u32) = params;
 
             script_auth_check(owner, owner_sig, input_script_index);
         }

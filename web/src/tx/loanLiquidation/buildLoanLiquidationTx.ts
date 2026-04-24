@@ -29,7 +29,7 @@ export interface LoanLiquidationUtxo {
 }
 
 export interface BuildLoanLiquidationTxParams {
-  /** Lending creation tx (accept-offer tx). Vouts: 0=Lending, 2=FirstParams, 3=SecondParams; vout 4=Borrower NFT (asset only). */
+  /** Lending creation tx (accept-offer tx). Vouts: 0=Lending, 1=FirstParams, 2=SecondParams; vout 3=Borrower NFT (asset only). */
   lendingTx: EsploraTx
   /** Current Lender NFT UTXO (from indexer participants — may have moved since accept-offer). */
   lenderNftUtxo: LoanLiquidationUtxo
@@ -82,10 +82,10 @@ export async function buildLoanLiquidationTx(
 
   if (feeAmount <= 0n) throw new Error('Fee amount must be at least 1')
 
-  // Lending creation tx vouts: 0=Lending, 2=First params, 3=Second params, 4=Borrower NFT (asset id only). Lender NFT from lenderNftUtxo (indexer).
+  // Lending creation tx vouts: 0=Lending, 1=First params, 2=Second params, 3=Borrower NFT (asset id only). Lender NFT from lenderNftUtxo (indexer).
   const lendingPrevout = requireVout(lendingTx, 0, 'Lending', 'lending tx')
-  const firstParamsPrevout = requireVout(lendingTx, 2, 'First parameters NFT', 'lending tx')
-  const secondParamsPrevout = requireVout(lendingTx, 3, 'Second parameters NFT', 'lending tx')
+  const firstParamsPrevout = requireVout(lendingTx, 1, 'First parameters NFT', 'lending tx')
+  const secondParamsPrevout = requireVout(lendingTx, 2, 'Second parameters NFT', 'lending tx')
   const lenderNftPrevout = lenderNftUtxo.prevout
 
   const lendingAssetHex = requireAssetHex(lendingPrevout, 'Lending')
@@ -112,8 +112,8 @@ export async function buildLoanLiquidationTx(
     throw new Error(`Fee UTXO value ${feeValue} is less than fee ${feeAmount}`)
   }
 
-  // Borrower NFT asset from same tx (vout 4) for Lending args
-  const borrowerNftPrevout = requireVout(lendingTx, 4, 'Borrower NFT', 'lending tx')
+  // Borrower NFT asset from same tx (vout 3) for Lending args
+  const borrowerNftPrevout = requireVout(lendingTx, 3, 'Borrower NFT', 'lending tx')
   const borrowerNftAssetHex = requireAssetHex(borrowerNftPrevout, 'Borrower NFT')
 
   const lendingParams = {
@@ -177,8 +177,8 @@ export async function buildLoanLiquidationTx(
   const txid = lendingTx.txid.trim()
   // All inputs need sequence enabling locktime so nLockTime is enforced (mirrors pst.rs ENABLE_LOCKTIME_NO_RBF for every input).
   api.addInputWithLocktimeSequence({ txid, vout: 0 }, lendingPrevout)
-  api.addInputWithLocktimeSequence({ txid, vout: 2 }, firstParamsPrevout)
-  api.addInputWithLocktimeSequence({ txid, vout: 3 }, secondParamsPrevout)
+  api.addInputWithLocktimeSequence({ txid, vout: 1 }, firstParamsPrevout)
+  api.addInputWithLocktimeSequence({ txid, vout: 2 }, secondParamsPrevout)
   api.addInputWithLocktimeSequence(lenderNftUtxo.outpoint, lenderNftPrevout)
   api.addInputWithLocktimeSequence(feeUtxo.outpoint, feeUtxo.prevout)
 

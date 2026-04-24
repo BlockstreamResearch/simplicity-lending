@@ -1,8 +1,5 @@
 #![allow(dead_code)]
-use lending_contracts::transactions::core::SimplexInput;
-use lending_contracts::transactions::utility::{
-    UTILITY_NFTS_COUNT, issue_preparation_utxos, issue_utility_nfts,
-};
+use lending_contracts::programs::pre_lock::UTILITY_NFTS_COUNT;
 use lending_contracts::utils::{LendingOfferParameters, get_random_seed};
 
 use simplex::simplicityhl::elements::{AssetId, Txid};
@@ -10,12 +7,9 @@ use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, partial_input::IssuanceInput,
 };
 
-use super::{
-    tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast},
-    wallet::{
-        AmountFilter, filter_signer_utxos_by_asset_and_amount, filter_signer_utxos_by_asset_id,
-    },
-};
+use super::tx_steps::{finalize_and_broadcast, finalize_strict_and_broadcast};
+
+pub const PREPARATION_UTXO_ASSET_AMOUNT: u64 = 10;
 
 pub fn issue_asset(
     context: &simplex::TestContext,
@@ -25,13 +19,11 @@ pub fn issue_asset(
 
     let mut ft = FinalTransaction::new();
 
-    let policy_utxos =
-        filter_signer_utxos_by_asset_id(signer, context.get_network().policy_asset());
-    let first_utxo = policy_utxos.first().unwrap();
+    let first_utxo = signer.get_utxos_asset(context.get_network().policy_asset())?[0].clone();
 
     let asset_entropy = get_random_seed();
 
-    let asset_id = ft.add_issuance_input(
+    let (asset_id, _) = ft.add_issuance_input(
         PartialInput::new(first_utxo.clone()),
         IssuanceInput::new(asset_amount, asset_entropy),
         RequiredSignature::NativeEcdsa,
@@ -61,16 +53,34 @@ pub fn issue_preparation_utxos_tx(
 ) -> anyhow::Result<(Txid, AssetId)> {
     let signer = context.get_default_signer();
 
-    let signer_script_pubkey = signer.get_address().script_pubkey();
+    let first_utxo = signer.get_utxos()?[0].clone();
 
-    let signer_utxos = signer.get_utxos().unwrap();
-    let first_utxo = signer_utxos.first().unwrap();
+    let mut ft = FinalTransaction::new();
 
-    let (ft, asset_id) = issue_preparation_utxos(
-        &SimplexInput::new(first_utxo, RequiredSignature::NativeEcdsa),
-        signer_script_pubkey,
-        *context.get_network(),
+    let total_asset_amount = PREPARATION_UTXO_ASSET_AMOUNT * UTILITY_NFTS_COUNT as u64;
+    let asset_entropy = get_random_seed();
+
+    let (asset_id, _) = ft.add_issuance_input(
+        PartialInput::new(first_utxo.clone()),
+        IssuanceInput::new(total_asset_amount, asset_entropy),
+        RequiredSignature::NativeEcdsa,
     );
+
+    for _ in 0..UTILITY_NFTS_COUNT {
+        ft.add_output(PartialOutput::new(
+            signer.get_address().script_pubkey(),
+            PREPARATION_UTXO_ASSET_AMOUNT,
+            asset_id,
+        ));
+    }
+
+    if first_utxo.explicit_asset() != context.get_network().policy_asset() {
+        ft.add_output(PartialOutput::new(
+            signer.get_address().script_pubkey(),
+            first_utxo.explicit_amount(),
+            first_utxo.explicit_asset(),
+        ));
+    }
 
     let txid = finalize_and_broadcast(context, &ft)?;
 
@@ -85,30 +95,58 @@ pub fn issue_utility_nfts_tx(
     let signer = context.get_default_signer();
 
     let signer_script_pubkey = signer.get_address().script_pubkey();
-    let issuance_utxos = filter_signer_utxos_by_asset_id(signer, preparation_asset_id);
+    let issuance_utxos = signer.get_utxos_asset(preparation_asset_id)?;
 
     assert_eq!(issuance_utxos.len(), UTILITY_NFTS_COUNT);
 
-    let issuance_inputs = issuance_utxos
-        .iter()
-        .map(|utxo| SimplexInput::new(utxo, RequiredSignature::NativeEcdsa))
-        .collect();
+    let mut ft = FinalTransaction::new();
+
+    let (first_parameters_nft_amount, second_parameters_nft_amount) =
+        offer_params.encode_parameters_nft_amounts(1)?;
+
+    let utility_nfts_amounts = [
+        first_parameters_nft_amount,
+        second_parameters_nft_amount,
+        1,
+        1,
+    ];
+    let mut asset_ids: Vec<AssetId> = Vec::with_capacity(UTILITY_NFTS_COUNT);
 
     let issuance_asset_entropy = get_random_seed();
-    let mut ft = issue_utility_nfts(
-        issuance_inputs,
-        signer_script_pubkey,
-        offer_params,
-        1,
-        issuance_asset_entropy,
+
+    for (index, utxo) in issuance_utxos.iter().enumerate() {
+        let (asset_id, _) = ft.add_issuance_input(
+            PartialInput::new(utxo.clone()),
+            IssuanceInput::new(utility_nfts_amounts[index], issuance_asset_entropy),
+            RequiredSignature::NativeEcdsa,
+        );
+        asset_ids.push(asset_id);
+    }
+
+    for (index, asset_id) in asset_ids.into_iter().enumerate() {
+        ft.add_output(PartialOutput::new(
+            signer_script_pubkey.clone(),
+            utility_nfts_amounts[index],
+            asset_id,
+        ));
+    }
+
+    for utxo in issuance_utxos {
+        ft.add_output(PartialOutput::new(
+            signer_script_pubkey.clone(),
+            utxo.explicit_amount(),
+            utxo.explicit_asset(),
+        ));
+    }
+
+    let signer_policy_utxos = signer.get_utxos_filter(
+        &|utxo| {
+            utxo.explicit_asset() == context.get_network().policy_asset()
+                && utxo.explicit_amount() <= 100_000
+        },
+        &|_| true,
     )?;
 
-    let signer_policy_utxos = filter_signer_utxos_by_asset_and_amount(
-        signer,
-        context.get_network().policy_asset(),
-        100_000,
-        AmountFilter::LessThan,
-    );
     let fee_utxo = signer_policy_utxos.first().unwrap();
 
     ft.add_input(

@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use clap::Subcommand;
-use lending_contracts::transactions::core::SimplexInput;
 use simplex::{
     provider::ProviderTrait,
     simplicityhl::elements::{Address, AssetId, OutPoint, hex::ToHex},
@@ -12,6 +11,7 @@ use crate::{cli::CliContext, commands::account::AccountCommandError};
 
 #[derive(Debug, Subcommand)]
 pub enum AccountCommand {
+    /// Send policy asset to another account
     SendPolicyAsset {
         /// Recipient address (Liquid testnet bech32m)
         #[arg(long = "to-address")]
@@ -20,6 +20,7 @@ pub enum AccountCommand {
         #[arg(long = "amount")]
         amount: u64,
     },
+    /// Send arbitrary asset to another account
     SendAsset {
         /// Recipient address (Liquid testnet bech32m)
         #[arg(long = "to-address")]
@@ -31,6 +32,7 @@ pub enum AccountCommand {
         #[arg(long = "amount")]
         amount: u64,
     },
+    /// Split specific UTXO to different parts
     SplitUTXO {
         /// UTXO to split
         #[arg(long = "outpoint")]
@@ -39,7 +41,9 @@ pub enum AccountCommand {
         #[arg(long = "amounts", value_delimiter = ',', num_args = 1..)]
         amounts: Vec<u64>,
     },
+    /// Show current account info
     ShowAccountInfo,
+    /// Show account UTXOs
     ShowAccountUTXOS,
 }
 
@@ -96,10 +100,8 @@ impl Account {
         let mut total_inputs_amount = 0;
 
         for utxo in asset_utxos {
-            let input = SimplexInput::new(&utxo, RequiredSignature::NativeEcdsa);
-
-            total_inputs_amount += input.explicit_amount();
-            inputs.push(input);
+            total_inputs_amount += utxo.explicit_amount();
+            inputs.push((utxo, RequiredSignature::NativeEcdsa));
 
             if total_inputs_amount >= amount {
                 break;
@@ -117,7 +119,7 @@ impl Account {
         let mut ft = FinalTransaction::new();
 
         for input in inputs {
-            ft.add_input(input.partial_input().clone(), input.required_sig().clone());
+            ft.add_input(PartialInput::new(input.0), input.1);
         }
 
         ft.add_output(PartialOutput::new(

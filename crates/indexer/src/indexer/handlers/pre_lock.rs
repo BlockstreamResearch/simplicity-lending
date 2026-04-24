@@ -1,7 +1,7 @@
+use lending_contracts::programs::program::SimplexProgram;
 use simplex::simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
 
-use lending_contracts::programs::{PreLock, PreLockParameters, program::SimplexProgram};
-use lending_contracts::transactions::pre_lock::extract_pre_lock_parameters_from_tx;
+use lending_contracts::programs::pre_lock::{PreLock, PreLockParameters};
 
 use crate::esplora_client::EsploraClient;
 use crate::indexer::{cache::UtxoCache, db};
@@ -107,17 +107,15 @@ pub fn is_pre_lock_creation_tx(
     tx: &Transaction,
     client: &EsploraClient,
 ) -> Option<PreLockParameters> {
-    let pre_lock_parameters =
-        extract_pre_lock_parameters_from_tx(tx, &client.to_simplex_provider()).ok()?;
+    let pre_lock = PreLock::try_from_tx(tx, &client.to_simplex_provider()).ok()?;
 
-    let pre_lock = PreLock::new(pre_lock_parameters);
     let pre_lock_script_pubkey = pre_lock.get_script_pubkey();
 
     if tx.output.first().unwrap().script_pubkey != pre_lock_script_pubkey {
         return None;
     }
 
-    Some(pre_lock_parameters)
+    Some(*pre_lock.get_parameters())
 }
 
 #[cfg(test)]

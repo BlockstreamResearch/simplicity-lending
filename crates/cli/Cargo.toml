@@ -18,7 +18,7 @@ workspace = true
 thiserror = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
-simplex = { workspace = true }
+smplx-std = { workspace = true }
 
 anyhow = "1"
 dotenvy = "0.15"

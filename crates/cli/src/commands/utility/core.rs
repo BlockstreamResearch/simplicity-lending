@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use clap::Subcommand;
 
-use lending_contracts::transactions::core::SimplexInput;
+use lending_contracts::programs::pre_lock::UTILITY_NFTS_COUNT;
 use lending_contracts::utils::{LendingOfferParameters, get_random_seed};
 use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::AssetId;
@@ -10,21 +10,20 @@ use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
-use lending_contracts::transactions::utility::{
-    UTILITY_NFTS_COUNT, issue_preparation_utxos, issue_utility_nfts,
-};
-
 use crate::cli::CliContext;
 use crate::commands::utility::UtilityCommandError;
 
 #[derive(Debug, Subcommand)]
 pub enum UtilityCommand {
+    /// Issue arbitrary amount of new asset
     IssueAsset {
         /// Asset amount to issue
         #[arg(long = "asset-amount")]
         asset_amount: u64,
     },
+    /// Issue preparation UTXOs for the Utility NFTs issuance process
     IssuePreparationUTXOS,
+    /// Issue Utility NFTs for the loan offer
     IssueUtilityNfts {
         /// Preparation UTXOs asset ID in hexadecimal (big-endian)
         #[arg(long = "preparation-utxos-asset-id-hex-be")]
@@ -43,6 +42,8 @@ pub enum UtilityCommand {
         principal_interest_rate: u16,
     },
 }
+
+const PREPARATION_UTXO_ASSET_AMOUNT: u64 = 10;
 
 pub struct Utility {}
 
@@ -88,7 +89,7 @@ impl Utility {
 
         let mut ft = FinalTransaction::new();
 
-        let asset_id = ft.add_issuance_input(
+        let (asset_id, _) = ft.add_issuance_input(
             PartialInput::new(first_utxo.clone()),
             IssuanceInput::new(asset_amount, asset_entropy),
             RequiredSignature::NativeEcdsa,
@@ -122,16 +123,29 @@ impl Utility {
 
         let policy_utxos = context
             .signer
-            .get_utxos_asset(context.esplora_provider.network.policy_asset())?;
+            .get_utxos_asset(context.get_network().policy_asset())?;
         let issuance_utxo = policy_utxos
             .first()
             .expect("Must be at least one policy asset UTXO to issue preparation utxos");
 
-        let (ft, asset_id) = issue_preparation_utxos(
-            &SimplexInput::new(issuance_utxo, RequiredSignature::NativeEcdsa),
-            signer_script_pubkey,
-            context.get_network(),
+        let mut ft = FinalTransaction::new();
+
+        let total_asset_amount = PREPARATION_UTXO_ASSET_AMOUNT * UTILITY_NFTS_COUNT as u64;
+        let asset_entropy = get_random_seed();
+
+        let (asset_id, _) = ft.add_issuance_input(
+            PartialInput::new(issuance_utxo.clone()),
+            IssuanceInput::new(total_asset_amount, asset_entropy),
+            RequiredSignature::NativeEcdsa,
         );
+
+        for _ in 0..UTILITY_NFTS_COUNT {
+            ft.add_output(PartialOutput::new(
+                signer_script_pubkey.clone(),
+                PREPARATION_UTXO_ASSET_AMOUNT,
+                asset_id,
+            ));
+        }
 
         println!(
             "Issuing preparation UTXOs with the {} asset id...",
@@ -163,19 +177,45 @@ impl Utility {
             });
         }
 
-        let issuance_inputs = issuance_utxos
-            .iter()
-            .map(|utxo| SimplexInput::new(utxo, RequiredSignature::NativeEcdsa))
-            .collect();
+        let mut ft = FinalTransaction::new();
+
+        let (first_parameters_nft_amount, second_parameters_nft_amount) =
+            offer_parameters.encode_parameters_nft_amounts(1)?;
+
+        let utility_nfts_amounts = [
+            first_parameters_nft_amount,
+            second_parameters_nft_amount,
+            1,
+            1,
+        ];
+        let mut asset_ids: Vec<AssetId> = Vec::with_capacity(UTILITY_NFTS_COUNT);
 
         let issuance_asset_entropy = get_random_seed();
-        let ft = issue_utility_nfts(
-            issuance_inputs,
-            signer_script_pubkey,
-            &offer_parameters,
-            1,
-            issuance_asset_entropy,
-        )?;
+
+        for (index, utxo) in issuance_utxos.iter().enumerate() {
+            let (asset_id, _) = ft.add_issuance_input(
+                PartialInput::new(utxo.clone()),
+                IssuanceInput::new(utility_nfts_amounts[index], issuance_asset_entropy),
+                RequiredSignature::NativeEcdsa,
+            );
+            asset_ids.push(asset_id);
+        }
+
+        for (index, asset_id) in asset_ids.into_iter().enumerate() {
+            ft.add_output(PartialOutput::new(
+                signer_script_pubkey.clone(),
+                utility_nfts_amounts[index],
+                asset_id,
+            ));
+        }
+
+        for utxo in issuance_utxos {
+            ft.add_output(PartialOutput::new(
+                signer_script_pubkey.clone(),
+                utxo.explicit_amount(),
+                utxo.explicit_asset(),
+            ));
+        }
 
         println!(
             "Issuing utility NFTs with the next offer parameters: {:?}",
