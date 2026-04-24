@@ -1,30 +1,31 @@
 use clap::Subcommand;
 
-use lending_contracts::programs::Lending;
-use lending_contracts::transactions::asset_auth::unlock_asset_auth;
-use lending_contracts::transactions::core::SimplexInput;
-use lending_contracts::transactions::lending::{
-    extract_lending_parameters_from_tx, liquidate_loan, repay_loan,
-};
+use lending_contracts::programs::asset_auth::AssetAuthWitnessParams;
+use lending_contracts::programs::lending::Lending;
 use simplex::provider::ProviderTrait;
-use simplex::simplicityhl::elements::{OutPoint, Txid};
-use simplex::transaction::{PartialOutput, RequiredSignature, UTXO};
+use simplex::simplicityhl::elements::{OutPoint, Script, Txid};
+use simplex::transaction::{
+    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
+};
 
 use crate::cli::CliContext;
 use crate::commands::lending::LendingCommandError;
 
 #[derive(Debug, Subcommand)]
 pub enum LendingCommand {
+    /// Repay loan offer as a borrower
     Repay {
         /// Lending covenant creation txid
         #[arg(long = "lending-creation-txid")]
         lending_creation_txid: Txid,
     },
+    /// Liquidate loan offer as a lender
     Liquidate {
         /// Lending covenant creation txid
         #[arg(long = "lending-creation-txid")]
         lending_creation_txid: Txid,
     },
+    /// Claim repaid principal assets as a lender
     Claim {
         /// Lending covenant creation txid
         #[arg(long = "lending-creation-txid")]
@@ -65,9 +66,8 @@ impl CliLending {
             .esplora_provider
             .fetch_transaction(&lending_creation_txid)?;
 
-        let lending_parameters =
-            extract_lending_parameters_from_tx(&lending_creation_tx, &context.esplora_provider)?;
-        let lending = Lending::new(lending_parameters);
+        let lending = Lending::try_from_tx(&lending_creation_tx, &context.esplora_provider)?;
+        let lending_parameters = lending.get_parameters();
 
         let borrower_nft_utxos = context
             .signer
@@ -77,62 +77,80 @@ impl CliLending {
             return Err(LendingCommandError::NotABorrower(lending_creation_txid));
         }
 
-        let borrower_nft_utxo = borrower_nft_utxos.first().unwrap();
+        let borrower_nft_utxo = borrower_nft_utxos[0].clone();
 
         let principal_utxos = context
             .signer
             .get_utxos_asset(lending_parameters.principal_asset_id)?;
 
-        let mut principal_inputs: Vec<SimplexInput> = Vec::new();
-        let mut total_inputs_amount = 0;
+        let mut principal_inputs: Vec<(UTXO, RequiredSignature)> = Vec::new();
+        let mut total_principal_inputs_amount = 0;
 
         let principal_with_interest = lending_parameters
             .offer_parameters
             .calculate_principal_with_interest();
 
         for utxo in principal_utxos {
-            let input = SimplexInput::new(&utxo, RequiredSignature::NativeEcdsa);
+            total_principal_inputs_amount += utxo.explicit_amount();
+            principal_inputs.push((utxo, RequiredSignature::NativeEcdsa));
 
-            total_inputs_amount += input.explicit_amount();
-            principal_inputs.push(input);
-
-            if total_inputs_amount >= principal_with_interest {
+            if total_principal_inputs_amount >= principal_with_interest {
                 break;
             }
         }
 
-        if total_inputs_amount < principal_with_interest {
+        if total_principal_inputs_amount < principal_with_interest {
             return Err(LendingCommandError::NotEnoughPrincipalToRepay {
                 expected_amount: principal_with_interest,
-                actual_amount: total_inputs_amount,
+                actual_amount: total_principal_inputs_amount,
             });
         }
 
-        let ft = repay_loan(
-            UTXO {
-                outpoint: OutPoint::new(lending_creation_txid, 0),
-                txout: lending_creation_tx.output[0].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(lending_creation_txid, 2),
-                txout: lending_creation_tx.output[2].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(lending_creation_txid, 3),
-                txout: lending_creation_tx.output[3].clone(),
-                secrets: None,
-            },
-            &SimplexInput::new(borrower_nft_utxo, RequiredSignature::NativeEcdsa),
-            principal_inputs,
-            PartialOutput::new(
-                context.signer.get_address().script_pubkey(),
-                lending_parameters.offer_parameters.collateral_amount,
-                lending_parameters.collateral_asset_id,
-            ),
-            lending,
-        )?;
+        let lending_utxo = UTXO {
+            outpoint: OutPoint::new(lending_creation_txid, 0),
+            txout: lending_creation_tx.output[0].clone(),
+            secrets: None,
+        };
+        let first_parameters_nft_utxo = UTXO {
+            outpoint: OutPoint::new(lending_creation_txid, 1),
+            txout: lending_creation_tx.output[1].clone(),
+            secrets: None,
+        };
+        let second_parameters_nft_utxo = UTXO {
+            outpoint: OutPoint::new(lending_creation_txid, 2),
+            txout: lending_creation_tx.output[2].clone(),
+            secrets: None,
+        };
+
+        let mut ft = FinalTransaction::new();
+
+        ft.add_output(PartialOutput::new(
+            context.signer.get_address().script_pubkey(),
+            lending_parameters.offer_parameters.collateral_amount,
+            lending_parameters.collateral_asset_id,
+        ));
+
+        lending.attach_loan_repayment(
+            &mut ft,
+            lending_utxo,
+            first_parameters_nft_utxo,
+            second_parameters_nft_utxo,
+        );
+
+        ft.add_input(
+            PartialInput::new(borrower_nft_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
+
+        for principal_input in principal_inputs {
+            ft.add_input(PartialInput::new(principal_input.0), principal_input.1);
+        }
+
+        ft.add_output(PartialOutput::new(
+            context.signer.get_address().script_pubkey(),
+            total_principal_inputs_amount - principal_with_interest,
+            lending_parameters.principal_asset_id,
+        ));
 
         println!("Repaying the loan...");
 
@@ -153,9 +171,8 @@ impl CliLending {
             .esplora_provider
             .fetch_transaction(&lending_creation_txid)?;
 
-        let lending_parameters =
-            extract_lending_parameters_from_tx(&lending_creation_tx, &context.esplora_provider)?;
-        let lending = Lending::new(lending_parameters);
+        let lending = Lending::try_from_tx(&lending_creation_tx, &context.esplora_provider)?;
+        let lending_parameters = lending.get_parameters();
 
         let lender_nft_utxos = context
             .signer
@@ -165,7 +182,7 @@ impl CliLending {
             return Err(LendingCommandError::NotALender(lending_creation_txid));
         }
 
-        let lender_nft_utxo = lender_nft_utxos.first().unwrap();
+        let lender_nft_utxo = lender_nft_utxos[0].clone();
 
         let current_height = context.esplora_provider.fetch_tip_height()?;
 
@@ -176,30 +193,41 @@ impl CliLending {
             });
         }
 
-        let ft = liquidate_loan(
-            UTXO {
-                outpoint: OutPoint::new(lending_creation_txid, 0),
-                txout: lending_creation_tx.output[0].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(lending_creation_txid, 2),
-                txout: lending_creation_tx.output[2].clone(),
-                secrets: None,
-            },
-            UTXO {
-                outpoint: OutPoint::new(lending_creation_txid, 3),
-                txout: lending_creation_tx.output[3].clone(),
-                secrets: None,
-            },
-            &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
-            PartialOutput::new(
-                context.signer.get_address().script_pubkey(),
-                lending_parameters.offer_parameters.collateral_amount,
-                lending_parameters.collateral_asset_id,
-            ),
-            lending,
-        )?;
+        let lending_utxo = UTXO {
+            outpoint: OutPoint::new(lending_creation_txid, 0),
+            txout: lending_creation_tx.output[0].clone(),
+            secrets: None,
+        };
+        let first_parameters_nft_utxo = UTXO {
+            outpoint: OutPoint::new(lending_creation_txid, 1),
+            txout: lending_creation_tx.output[1].clone(),
+            secrets: None,
+        };
+        let second_parameters_nft_utxo = UTXO {
+            outpoint: OutPoint::new(lending_creation_txid, 2),
+            txout: lending_creation_tx.output[2].clone(),
+            secrets: None,
+        };
+
+        let mut ft = FinalTransaction::new();
+
+        ft.add_output(PartialOutput::new(
+            context.signer.get_address().script_pubkey(),
+            lending_parameters.offer_parameters.collateral_amount,
+            lending_parameters.collateral_asset_id,
+        ));
+
+        lending.attach_loan_liquidation(
+            &mut ft,
+            lending_utxo,
+            first_parameters_nft_utxo,
+            second_parameters_nft_utxo,
+        );
+
+        ft.add_input(
+            PartialInput::new(lender_nft_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
 
         println!("Liquidating the loan...");
 
@@ -221,8 +249,8 @@ impl CliLending {
             .esplora_provider
             .fetch_transaction(&lending_creation_txid)?;
 
-        let lending_parameters =
-            extract_lending_parameters_from_tx(&lending_creation_tx, &context.esplora_provider)?;
+        let lending = Lending::try_from_tx(&lending_creation_tx, &context.esplora_provider)?;
+        let lending_parameters = lending.get_parameters();
 
         let lender_nft_utxos = context
             .signer
@@ -232,7 +260,7 @@ impl CliLending {
             return Err(LendingCommandError::NotALender(lending_creation_txid));
         }
 
-        let lender_nft_utxo = lender_nft_utxos.first().unwrap();
+        let lender_nft_utxo = lender_nft_utxos[0].clone();
 
         let principal_asset_auth = lending_parameters.get_lender_principal_asset_auth();
         let principal_with_interest = lending_parameters
@@ -243,20 +271,35 @@ impl CliLending {
             .esplora_provider
             .fetch_transaction(&lending_repayment_txid)?;
 
-        let ft = unlock_asset_auth(
-            UTXO {
-                outpoint: OutPoint::new(lending_repayment_txid, 1),
-                txout: lending_repayment_tx.output[1].clone(),
-                secrets: None,
-            },
-            &SimplexInput::new(lender_nft_utxo, RequiredSignature::NativeEcdsa),
-            PartialOutput::new(
-                context.signer.get_address().script_pubkey(),
-                principal_with_interest,
-                lending_parameters.principal_asset_id,
-            ),
-            principal_asset_auth,
+        let principal_asset_auth_witness_params = AssetAuthWitnessParams::new(1, 1);
+        let principal_asset_auth_utxo = UTXO {
+            outpoint: OutPoint::new(lending_repayment_txid, 1),
+            txout: lending_repayment_tx.output[1].clone(),
+            secrets: None,
+        };
+
+        let mut ft = FinalTransaction::new();
+
+        principal_asset_auth.attach_unlocking(
+            &mut ft,
+            principal_asset_auth_utxo,
+            principal_asset_auth_witness_params,
         );
+
+        ft.add_input(
+            PartialInput::new(lender_nft_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
+        ft.add_output(PartialOutput::new(
+            context.signer.get_address().script_pubkey(),
+            principal_with_interest,
+            lending_parameters.principal_asset_id,
+        ));
+        ft.add_output(PartialOutput::new(
+            Script::new_op_return(b"burn"),
+            1,
+            lending_parameters.lender_nft_asset_id,
+        ));
 
         println!("Claiming principal with interest...");
 

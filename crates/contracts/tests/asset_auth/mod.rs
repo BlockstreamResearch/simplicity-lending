@@ -1,5 +1,6 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-mod burn;
-mod happy_path;
+mod setup;
+mod unlock_failure_flows;
+mod unlock_success_flows;

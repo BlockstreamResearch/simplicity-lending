@@ -95,10 +95,10 @@ export async function buildLoanRepaymentTx(
   )
 
   const lendingPrevout = requireVout(lendingTx, 0, 'Lending', 'lending tx')
-  const firstParamsPrevout = requireVout(lendingTx, 2, 'First parameters NFT', 'lending tx')
-  const secondParamsPrevout = requireVout(lendingTx, 3, 'Second parameters NFT', 'lending tx')
+  const firstParamsPrevout = requireVout(lendingTx, 1, 'First parameters NFT', 'lending tx')
+  const secondParamsPrevout = requireVout(lendingTx, 2, 'Second parameters NFT', 'lending tx')
   const borrowerNftPrevout = borrowerNftUtxo.prevout
-  const lenderNftPrevout = requireVout(lendingTx, 5, 'Lender NFT', 'lending tx')
+  const lenderNftPrevout = requireVout(lendingTx, 4, 'Lender NFT', 'lending tx')
 
   const lendingAssetHex = requireAssetHex(lendingPrevout, 'Lending')
   const lendingValue = requireValue(lendingPrevout, 'Lending')
@@ -197,8 +197,8 @@ export async function buildLoanRepaymentTx(
 
   const txid = lendingTx.txid.trim()
   api.addInput({ txid, vout: 0 }, lendingPrevout)
-  api.addInput({ txid, vout: 2 }, firstParamsPrevout)
-  api.addInput({ txid, vout: 3 }, secondParamsPrevout)
+  api.addInput({ txid, vout: 1 }, firstParamsPrevout)
+  api.addInput({ txid, vout: 2 }, secondParamsPrevout)
   api.addInput(borrowerNftUtxo.outpoint, borrowerNftPrevout)
   for (const u of principalUtxos) {
     api.addInput(u.outpoint, u.prevout)

@@ -118,16 +118,16 @@ export async function createPsetBuilder(network: PsetNetwork): Promise<PsetBuild
       const seq =
         (TxSequence as { enableLocktimeNoRbf?: () => unknown }).enableLocktimeNoRbf?.() ??
         (TxSequence as { enable_locktime_no_rbf?: () => unknown }).enable_locktime_no_rbf?.()
-      const psetInput =
-        seq != null &&
-        typeof (seq as { to_consensus_u32?: unknown }).to_consensus_u32 === 'function'
-          ? PsetInputBuilder.fromPrevout(op)
-              .witnessUtxo(txOut)
-              .sequence(
-                seq as Parameters<ReturnType<typeof PsetInputBuilder.fromPrevout>['sequence']>[0]
-              )
-              .build()
-          : PsetInputBuilder.fromPrevout(op).witnessUtxo(txOut).build()
+      if (seq == null) {
+        throw new Error(
+          'LWK TxSequence locktime helper is unavailable (expected enableLocktimeNoRbf/enable_locktime_no_rbf). Refusing to add input without locktime-enabled sequence.'
+        )
+      }
+
+      const psetInput = PsetInputBuilder.fromPrevout(op)
+        .witnessUtxo(txOut)
+        .sequence(seq as Parameters<ReturnType<typeof PsetInputBuilder.fromPrevout>['sequence']>[0])
+        .build()
       builder = builder.addInput(psetInput)
     },
 

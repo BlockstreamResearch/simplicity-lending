@@ -32,7 +32,7 @@ tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
 serde = { version= "1", features = ["derive"]}
 
 hex = { workspace = true }
-simplex = { workspace = true }
+smplx-std = { workspace = true }
 
 lending-contracts = { path = "../contracts" }
 

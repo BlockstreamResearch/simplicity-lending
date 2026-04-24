@@ -171,10 +171,10 @@ fn create_lending_path() {
     assert!(jet::eq_32(jet::current_index(), 0));
 
     ensure_input_and_output_assets_with_amount_eq(0, 0, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
-    let first_parameters_amount: u64 = ensure_input_and_output_assets_eq(1, 2, param::FIRST_PARAMETERS_NFT_ASSET_ID);
-    let second_parameters_amount: u64 = ensure_input_and_output_assets_eq(2, 3, param::SECOND_PARAMETERS_NFT_ASSET_ID);
-    ensure_input_and_output_assets_with_amount_eq(3, 4, param::BORROWER_NFT_ASSET_ID, 1);
-    ensure_input_and_output_assets_with_amount_eq(4, 5, param::LENDER_NFT_ASSET_ID, 1);
+    let first_parameters_amount: u64 = ensure_input_and_output_assets_eq(1, 1, param::FIRST_PARAMETERS_NFT_ASSET_ID);
+    let second_parameters_amount: u64 = ensure_input_and_output_assets_eq(2, 2, param::SECOND_PARAMETERS_NFT_ASSET_ID);
+    ensure_input_and_output_assets_with_amount_eq(3, 3, param::BORROWER_NFT_ASSET_ID, 1);
+    ensure_input_and_output_assets_with_amount_eq(4, 4, param::LENDER_NFT_ASSET_ID, 1);
 
     let (
         collateral_amount,
@@ -185,13 +185,13 @@ fn create_lending_path() {
 
     validate_lending_params(collateral_amount, principal_amount, loan_expiration_time, interest_rate);
 
-    ensure_asset_with_amount(1, false, param::PRINCIPAL_ASSET_ID, param::PRINCIPAL_AMOUNT);
+    ensure_asset_with_amount(5, false, param::PRINCIPAL_ASSET_ID, param::PRINCIPAL_AMOUNT);
 
     ensure_script_hash(0, false, param::LENDING_COV_HASH);  // Lending covenant script hash
-    ensure_script_hash(1, false, param::PRINCIPAL_OUTPUT_SCRIPT_HASH); // P2PKH script created with the BORROWER_PUB_KEY
+    ensure_script_hash(1, false, param::PARAMETERS_NFT_OUTPUT_SCRIPT_HASH); // ScriptAuth covenant script hash with the LENDING_COV_HASH as auth script
     ensure_script_hash(2, false, param::PARAMETERS_NFT_OUTPUT_SCRIPT_HASH); // ScriptAuth covenant script hash with the LENDING_COV_HASH as auth script
-    ensure_script_hash(3, false, param::PARAMETERS_NFT_OUTPUT_SCRIPT_HASH); // ScriptAuth covenant script hash with the LENDING_COV_HASH as auth script
-    ensure_script_hash(4, false, param::BORROWER_NFT_OUTPUT_SCRIPT_HASH); // P2PKH script created with the BORROWER_PUB_KEY
+    ensure_script_hash(3, false, param::BORROWER_NFT_OUTPUT_SCRIPT_HASH); // P2PKH script created with the BORROWER_PUB_KEY
+    ensure_script_hash(5, false, param::PRINCIPAL_OUTPUT_SCRIPT_HASH); // P2PKH script created with the BORROWER_PUB_KEY
 }
 
 fn cancel_pre_lock_path(sig: Signature) {
@@ -225,9 +225,8 @@ fn main() {
         Left(params: ()) => {
             create_lending_path();
         },
-        Right(params: ()) => {
-            let sig: Signature = witness::SIGNATURE;
-            cancel_pre_lock_path(sig);
+        Right(cancellation_sig: Signature) => {
+            cancel_pre_lock_path(cancellation_sig);
         }
     }
 }
