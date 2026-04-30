@@ -2,7 +2,9 @@ use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::{AssetId, Script, Transaction};
 use simplex::simplicityhl::elements::{hex::ToHex, schnorr::XOnlyPublicKey};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialOutput, RequiredSignature, UTXO};
+use simplex::transaction::{
+    FinalTransaction, IssuanceDetails, PartialOutput, RequiredSignature, UTXO,
+};
 use simplex::{program::Program, provider::SimplicityNetwork};
 
 use crate::artifacts::issuance_factory::IssuanceFactoryProgram;
@@ -16,7 +18,7 @@ pub struct IssuanceFactory {
     parameters: IssuanceFactoryParameters,
 }
 
-// TODO: encode constants to the factory asset amount
+// TODO: encode constants to the factory asset amount or creation OP_RETURN
 pub const PRE_LOCK_ISSUING_UTXOS_COUNT: u8 = 2;
 pub const PRE_LOCK_REISSUANCE_FLAGS: u64 = 0;
 pub const ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH: usize = 32;
@@ -113,7 +115,7 @@ impl IssuanceFactory {
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
         program_issuance_input: IssuanceInput,
-    ) {
+    ) -> IssuanceDetails {
         let issuance_factory_amount = program_utxo.explicit_amount();
         let issuance_factory_asset = program_utxo.explicit_asset();
 
@@ -123,7 +125,7 @@ impl IssuanceFactory {
             output_index: issuance_factory_output_index,
         };
 
-        self.add_program_issuance_input_with_signature(
+        let issuance_details = self.add_program_issuance_input_with_signature(
             ft,
             program_utxo,
             program_issuance_input,
@@ -132,6 +134,8 @@ impl IssuanceFactory {
         );
 
         self.add_program_output(ft, issuance_factory_asset, issuance_factory_amount);
+
+        issuance_details
     }
 
     pub fn attach_factory_removing(&self, ft: &mut FinalTransaction, program_utxo: UTXO) {

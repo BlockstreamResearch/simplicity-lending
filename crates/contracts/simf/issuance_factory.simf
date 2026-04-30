@@ -38,6 +38,10 @@ fn check_flags_eq(flag_1: bool, flag_2: bool) {
     assert!(jet::eq_1(<bool>::into(flag_1), <bool>::into(flag_2)));
 }
 
+fn ensure_non_zero_amount(amount: u64) {
+    assert!(jet::some_64(amount));
+}
+
 fn ensure_asset_with_amount(index: u32, is_input_index: bool, expected_asset_bits: u256, expected_amount: u64) {
     let (asset_bits, amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
 
@@ -69,6 +73,14 @@ fn ensure_output_is_op_return(index: u32) {
 
 fn ensure_zero_bit(bit: bool) { assert!(jet::eq_1(<bool>::into(bit), 0)); }
 
+// Math helpers
+
+fn safe_add_32(first: u32, second: u32) -> u32 {
+    let (carry, result): (bool, u32) = jet::add_32(first, second);
+
+    result
+}
+
 // Main paths logic
 
 fn get_reissuance_flag(index: u8) -> bool {
@@ -83,15 +95,16 @@ fn verify_issuance(input_index: u32, output_index: u32, reissuance_flag: bool) {
     let outpoint: Outpoint = unwrap(jet::input_prev_outpoint(input_index));
     let issuance_entropy: u256 = jet::calculate_issuance_entropy(outpoint, contract_hash);
 
-    let has_reissuance: bool = unwrap(unwrap(jet::issuance(input_index)));
+    let explicit_reissuance_tokens_amount: u64 = unwrap_right::<(u1, u256)>(unwrap(unwrap(jet::issuance_token_amount(input_index))));
 
-    assert!(jet::eq_1(<bool>::into(has_reissuance), <bool>::into(reissuance_flag)));
-
-    match has_reissuance {
+    match reissuance_flag {
+        // TODO: Add confidential reissuance tokens verification
         true => {
-            let conf_token: ExplicitAsset = jet::calculate_confidential_token(issuance_entropy);
+            ensure_non_zero_amount(explicit_reissuance_tokens_amount);
         },
-        false => {},
+        false => {
+            check_asset_amounts_eq(explicit_reissuance_tokens_amount, 0);
+        },
     };
 
     let issuance_amount: Amount1 = unwrap(unwrap(jet::issuance_asset_amount(input_index)));
@@ -108,11 +121,8 @@ fn verify_issuance_step(acc: (), start_output_index: u32, i: u8) -> Either<(), (
         false => {
             let step_index: u32 = <(u16, u16)>::into((0, <(u8, u8)>::into((0, i))));
 
-            let (carry, input_index): (bool, u32) = jet::add_32(jet::current_index(), step_index);
-            ensure_zero_bit(carry);
-
-            let (carry, output_index): (bool, u32) = jet::add_32(start_output_index, step_index);
-            ensure_zero_bit(carry);
+            let input_index: u32 = safe_add_32(jet::current_index(), step_index);
+            let output_index: u32 = safe_add_32(start_output_index, step_index);
 
             verify_issuance(input_index, output_index, get_reissuance_flag(i));
 

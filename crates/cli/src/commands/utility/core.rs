@@ -89,9 +89,9 @@ impl Utility {
 
         let mut ft = FinalTransaction::new();
 
-        let (asset_id, _) = ft.add_issuance_input(
+        let issuance_details = ft.add_issuance_input(
             PartialInput::new(first_utxo.clone()),
-            IssuanceInput::new(asset_amount, asset_entropy),
+            IssuanceInput::new_issuance(asset_amount, 0, asset_entropy),
             RequiredSignature::NativeEcdsa,
         );
 
@@ -100,12 +100,12 @@ impl Utility {
         ft.add_output(PartialOutput::new(
             signer_script_pubkey.clone(),
             asset_amount,
-            asset_id,
+            issuance_details.asset_id,
         ));
 
         println!(
             "Issuing new asset with id - {} and amount - {}",
-            asset_id.to_hex(),
+            issuance_details.asset_id.to_hex(),
             asset_amount,
         );
 
@@ -133,9 +133,9 @@ impl Utility {
         let total_asset_amount = PREPARATION_UTXO_ASSET_AMOUNT * UTILITY_NFTS_COUNT as u64;
         let asset_entropy = get_random_seed();
 
-        let (asset_id, _) = ft.add_issuance_input(
+        let issuance_details = ft.add_issuance_input(
             PartialInput::new(issuance_utxo.clone()),
-            IssuanceInput::new(total_asset_amount, asset_entropy),
+            IssuanceInput::new_issuance(total_asset_amount, 0, asset_entropy),
             RequiredSignature::NativeEcdsa,
         );
 
@@ -143,13 +143,13 @@ impl Utility {
             ft.add_output(PartialOutput::new(
                 signer_script_pubkey.clone(),
                 PREPARATION_UTXO_ASSET_AMOUNT,
-                asset_id,
+                issuance_details.asset_id,
             ));
         }
 
         println!(
             "Issuing preparation UTXOs with the {} asset id...",
-            asset_id.to_hex()
+            issuance_details.asset_id.to_hex()
         );
 
         let (tx, _) = context.signer.finalize(&ft)?;
@@ -193,12 +193,12 @@ impl Utility {
         let issuance_asset_entropy = get_random_seed();
 
         for (index, utxo) in issuance_utxos.iter().enumerate() {
-            let (asset_id, _) = ft.add_issuance_input(
+            let issuance_details = ft.add_issuance_input(
                 PartialInput::new(utxo.clone()),
-                IssuanceInput::new(utility_nfts_amounts[index], issuance_asset_entropy),
+                IssuanceInput::new_issuance(utility_nfts_amounts[index], 0, issuance_asset_entropy),
                 RequiredSignature::NativeEcdsa,
             );
-            asset_ids.push(asset_id);
+            asset_ids.push(issuance_details.asset_id);
         }
 
         for (index, asset_id) in asset_ids.into_iter().enumerate() {

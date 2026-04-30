@@ -64,10 +64,9 @@ fn fails_to_unlock_when_auth_input_amount_is_invalid(
         auth_utxo.explicit_asset(),
     ));
 
-    // TODO: Update Simplex to write more fail test cases
-    // let result = signer.finalize(&ft);
+    let result = signer.finalize(&ft);
 
-    // assert!(result.is_err(), "Must fail but it does not");
+    assert!(result.is_err(), "Must fail but it does not");
 
     Ok(())
 }
