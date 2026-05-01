@@ -2,7 +2,8 @@ use simplex::program::{Program, WitnessTrait};
 use simplex::provider::SimplicityNetwork;
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature, UTXO,
+    FinalTransaction, IssuanceDetails, PartialInput, PartialOutput, ProgramInput,
+    RequiredSignature, UTXO,
 };
 
 use simplex::simplicityhl::elements::{AssetId, Script};
@@ -61,15 +62,13 @@ pub trait SimplexProgram {
         issuance_input: IssuanceInput,
         witness: Box<dyn WitnessTrait>,
         required_signature: RequiredSignature,
-    ) -> AssetId {
-        let (asset_id, _) = ft.add_program_issuance_input(
+    ) -> IssuanceDetails {
+        ft.add_program_issuance_input(
             PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
             issuance_input,
             required_signature,
-        );
-
-        asset_id
+        )
     }
 
     fn add_program_output<'a>(
