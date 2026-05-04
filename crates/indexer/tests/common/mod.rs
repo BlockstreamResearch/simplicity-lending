@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
-use std::env;
-use std::str::FromStr;
-
+use anyhow::Context;
 use lending_indexer::indexer::{
     insert_offer, insert_offer_utxo, insert_participant_utxo, update_offer_status,
 };
@@ -14,6 +12,7 @@ use simplex::simplicityhl::elements::{
     hashes::Hash, secp256k1_zkp::XOnlyPublicKey,
 };
 use sqlx::PgPool;
+use std::str::FromStr;
 use uuid::Uuid;
 
 pub const FIXED_BORROWER_PUBKEY_HEX: &str =
@@ -30,10 +29,10 @@ pub fn fixed_borrower_pubkey_bytes() -> Vec<u8> {
 /// truncated. Panics (instead of silent-skip) when `DATABASE_URL` is not
 /// configured. Silent-skip would mask a completely empty test run in CI.
 pub async fn test_pool() -> anyhow::Result<PgPool> {
-    let database_url = env::var("DATABASE_URL").expect(
-        "DATABASE_URL must be set for integration tests. \
-         See crates/indexer/scripts/init_db.sh",
-    );
+    let _ = dotenvy::dotenv();
+
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL must be set in the environment or .env for integration tests")?;
 
     let pool = PgPool::connect(&database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;

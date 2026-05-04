@@ -51,4 +51,5 @@ features = [
 [dev-dependencies]
 anyhow = "1"
 cargo-husky = { workspace = true }
+dotenvy = "0.15"
 serial_test = "3"

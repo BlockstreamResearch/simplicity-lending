@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SQLX_OFFLINE: true
+      SIMPLEX_VERSION: v0.0.3
 
     steps:
       - name: Checkout
@@ -40,7 +41,7 @@ jobs:
           BASE_DIR="${XDG_CONFIG_HOME:-$HOME}"
           SIMPLEX_DIR="${SIMPLEX_DIR:-$BASE_DIR/.simplex}"
           SIMPLEX_BIN_DIR="$SIMPLEX_DIR/bin"
-          "$SIMPLEX_BIN_DIR/simplexup"
+          "$SIMPLEX_BIN_DIR/simplexup" --install "$SIMPLEX_VERSION"
           echo "$SIMPLEX_BIN_DIR" >> "$GITHUB_PATH"
           "$SIMPLEX_BIN_DIR/simplex" --version
 

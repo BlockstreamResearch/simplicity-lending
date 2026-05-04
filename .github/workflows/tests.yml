@@ -12,6 +12,7 @@ env:
   SQLX_VERSION: 0.8.0
   SQLX_FEATURES: "rustls,postgres"
   SQLX_FEATURES_KEY: "rustls-postgres"
+  SIMPLEX_VERSION: v0.0.3
   APP_USER: app
   APP_USER_PWD: secret
   APP_DB_NAME: lending-indexer
@@ -79,7 +80,7 @@ jobs:
           BASE_DIR="${XDG_CONFIG_HOME:-$HOME}"
           SIMPLEX_DIR="${SIMPLEX_DIR:-$BASE_DIR/.simplex}"
           SIMPLEX_BIN_DIR="$SIMPLEX_DIR/bin"
-          "$SIMPLEX_BIN_DIR/simplexup"
+          "$SIMPLEX_BIN_DIR/simplexup" --install "$SIMPLEX_VERSION"
           echo "$SIMPLEX_BIN_DIR" >> "$GITHUB_PATH"
           "$SIMPLEX_BIN_DIR/simplex" --version
 

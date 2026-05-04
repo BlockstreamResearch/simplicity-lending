@@ -26,7 +26,8 @@ use lending_indexer::models::{
 use serial_test::serial;
 use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::{
-    AssetId, OutPoint, Script, TxOut, Txid, encode, hashes::Hash, secp256k1_zkp::XOnlyPublicKey,
+    AssetId, OutPoint, Script, Transaction, TxOut, Txid, encode, hashes::Hash,
+    secp256k1_zkp::XOnlyPublicKey,
 };
 use sqlx::{PgPool, Row};
 use tokio::net::TcpListener;
@@ -44,6 +45,16 @@ struct MockEsploraState {
     block_hash: String,
     txids: Vec<String>,
     tx_bytes_by_id: HashMap<String, Vec<u8>>,
+}
+
+async fn start_mock_server(app: Router) -> anyhow::Result<(String, tokio::task::JoinHandle<()>)> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let handle = tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    Ok((format!("http://{addr}"), handle))
 }
 
 async fn start_mock_esplora(
@@ -84,13 +95,7 @@ async fn start_mock_esplora(
         .route("/tx/{txid}/raw", get(get_raw_tx))
         .with_state(Arc::new(state));
 
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-    let handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    });
-
-    Ok((format!("http://{addr}"), handle))
+    start_mock_server(app).await
 }
 
 async fn seed_offer_with_pre_lock(
@@ -207,6 +212,19 @@ async fn sync_state_row_count(pool: &PgPool) -> anyhow::Result<i64> {
     Ok(row.get::<i64, _>("c"))
 }
 
+async fn process_tx_and_commit(
+    pool: &PgPool,
+    tx: &Transaction,
+    cache: &mut UtxoCache,
+    client: &EsploraClient,
+    block_height: u64,
+) -> anyhow::Result<()> {
+    let mut sql_tx = pool.begin().await?;
+    process_tx(&mut sql_tx, tx, cache, client, block_height).await?;
+    sql_tx.commit().await?;
+    Ok(())
+}
+
 #[tokio::test]
 #[serial]
 async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
@@ -229,11 +247,7 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
     // Pad to 7 inputs so the tx matches the shape of a real lending-creation
     // spend even if the dispatcher later adds an input-count guard.
     let lending_tx = padded_tx_with_inputs(vec![pre_lock_outpoint], vec![normal_output(); 5]);
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &lending_tx, &mut cache, &client, 101).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &lending_tx, &mut cache, &client, 101).await?;
 
     // Dispatch: output[1] non-null + [2, 3, 4] null-data -> repayment path.
     let lending_outpoint = OutPoint {
@@ -250,22 +264,14 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
             null_data_output(),
         ],
     );
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &repayment_tx, &mut cache, &client, 102).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &repayment_tx, &mut cache, &client, 102).await?;
 
     let repayment_outpoint = OutPoint {
         txid: repayment_tx.txid(),
         vout: 1,
     };
     let claim_tx = tx_with_input(repayment_outpoint, vec![normal_output(), normal_output()]);
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &claim_tx, &mut cache, &client, 103).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &claim_tx, &mut cache, &client, 103).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "claimed");
 
@@ -306,11 +312,7 @@ async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Res
     );
 
     let lending_tx = padded_tx_with_inputs(vec![pre_lock_outpoint], vec![normal_output(); 5]);
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &lending_tx, &mut cache, &client, 201).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &lending_tx, &mut cache, &client, 201).await?;
 
     // Dispatch: outputs [1, 2, 3] null-data, [4] non-null -> liquidation path.
     let lending_outpoint = OutPoint {
@@ -327,11 +329,7 @@ async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Res
             normal_output(),
         ],
     );
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &liquidation_tx, &mut cache, &client, 202).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &liquidation_tx, &mut cache, &client, 202).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "liquidated");
     // Pins: liquidation handler inserts the post-liquidation utxo as already
@@ -377,11 +375,7 @@ async fn process_tx_prelock_to_cancellation_sets_status_and_archives() -> anyhow
             null_data_output(),
         ],
     );
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &cancellation_tx, &mut cache, &client, 401).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &cancellation_tx, &mut cache, &client, 401).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "cancelled");
     assert_eq!(
@@ -427,11 +421,7 @@ async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Resu
         borrower_outpoint,
         vec![explicit_asset_output(7, non_op_return_script())],
     );
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &move_tx, &mut cache, &client, 502).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &move_tx, &mut cache, &client, 502).await?;
 
     let new_borrower_outpoint = OutPoint {
         txid: move_tx.txid(),
@@ -454,11 +444,7 @@ async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Resu
         new_borrower_outpoint,
         vec![explicit_asset_output(7, Script::new_op_return(b"burn"))],
     );
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &burn_tx, &mut cache, &client, 503).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &burn_tx, &mut cache, &client, 503).await?;
 
     assert!(cache.get(&new_borrower_outpoint).is_none());
     assert_eq!(
@@ -511,18 +497,14 @@ async fn participant_move_without_target_asset_marks_spent_without_new_utxo() ->
         borrower_outpoint,
         vec![explicit_asset_output(9, non_op_return_script())],
     );
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(
-            &mut sql_tx,
-            &move_without_target_asset_tx,
-            &mut cache,
-            &client,
-            532,
-        )
-        .await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(
+        &pool,
+        &move_without_target_asset_tx,
+        &mut cache,
+        &client,
+        532,
+    )
+    .await?;
 
     assert!(cache.get(&borrower_outpoint).is_none());
     assert_eq!(
@@ -589,9 +571,7 @@ async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyho
         ],
     );
 
-    let mut sql_tx = pool.begin().await?;
-    process_tx(&mut sql_tx, &combined_tx, &mut cache, &client, 522).await?;
-    sql_tx.commit().await?;
+    process_tx_and_commit(&pool, &combined_tx, &mut cache, &client, 522).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "active");
 
@@ -877,13 +857,9 @@ async fn process_block_returns_error_on_esplora_http_500() -> anyhow::Result<()>
     let mut cache = UtxoCache::new();
 
     let app = Router::new().route("/block-height/{height}", get(block_height_500));
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-    let server_handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    });
+    let (base_url, server_handle) = start_mock_server(app).await?;
 
-    let client = EsploraClient::with_base_url(&format!("http://{addr}"));
+    let client = EsploraClient::with_base_url(&base_url);
     let result = process_block(&pool, &client, &mut cache, 900).await;
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
@@ -1112,81 +1088,73 @@ async fn handle_pre_lock_creation_with_malformed_outputs_returns_error() -> anyh
     Ok(())
 }
 
-/// Pins: a UTXO created by tx1 must be visible to tx2 via `cache.get`
-/// BEFORE `commit_block` is called. We use lending_creation -> repayment
-/// within one block instead of pre-lock -> lending because the latter
-/// needs the full Simplex contract machinery (see module comment above).
+/// Pins: a participant NFT created earlier in the block must be visible to a
+/// later tx via `cache.get` BEFORE `commit_block` is called.
 #[tokio::test]
 #[serial]
-async fn same_block_create_and_spend_routes_through_pending_cache() -> anyhow::Result<()> {
+async fn same_block_participant_transfer_routes_through_pending_cache() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
+    let client = EsploraClient::new();
 
-    let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(0x40, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 4_000).await?;
-    cache.insert(
-        pre_lock_outpoint,
-        ActiveUtxo {
-            offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
-        },
+    let params = synthesized_pre_lock_parameters();
+    let pre_lock_tx = pre_lock_shaped_tx(
+        outpoint_with_txid_byte(0x40, 0),
+        Script::from(vec![0x51]),
+        Script::from(vec![0x52]),
     );
+    let borrower_outpoint = OutPoint {
+        txid: pre_lock_tx.txid(),
+        vout: 3,
+    };
+    let lender_outpoint = OutPoint {
+        txid: pre_lock_tx.txid(),
+        vout: 4,
+    };
 
-    let lending_tx = padded_tx_with_inputs(vec![pre_lock_outpoint], vec![normal_output(); 5]);
-    let lending_outpoint = OutPoint {
-        txid: lending_tx.txid(),
+    // tx2 must see `borrower_outpoint` via the pending-ops map; `commit_block`
+    // has not run yet. Asset byte 0xbb matches `synthesized_pre_lock_parameters`.
+    let borrower_move_tx = tx_with_input(
+        borrower_outpoint,
+        vec![explicit_asset_output(0xbb, non_op_return_script())],
+    );
+    let moved_borrower_outpoint = OutPoint {
+        txid: borrower_move_tx.txid(),
         vout: 0,
     };
 
-    // tx2 must see `lending_outpoint` via the pending-ops map; `commit_block`
-    // has not run yet.
-    let repayment_tx = tx_with_input(
-        lending_outpoint,
-        vec![
-            normal_output(),
-            normal_output(),
-            null_data_output(),
-            null_data_output(),
-            null_data_output(),
-        ],
-    );
-    let repayment_outpoint = OutPoint {
-        txid: repayment_tx.txid(),
-        vout: 1,
-    };
+    let mut sql_tx = pool.begin().await?;
+    cache.begin_block();
 
-    let mut tx_bytes_by_id = HashMap::new();
-    tx_bytes_by_id.insert(
-        lending_tx.txid().to_string(),
-        encode::serialize(&lending_tx),
-    );
-    tx_bytes_by_id.insert(
-        repayment_tx.txid().to_string(),
-        encode::serialize(&repayment_tx),
-    );
-
-    let (base_url, server_handle) = start_mock_esplora(MockEsploraState {
-        block_hash: "integration-same-block-visibility".to_string(),
-        txids: vec![
-            lending_tx.txid().to_string(),
-            repayment_tx.txid().to_string(),
-        ],
-        tx_bytes_by_id,
-    })
+    handle_pre_lock_creation(&mut sql_tx, &mut cache, params, &pre_lock_tx, 4_001).await?;
+    process_tx(&mut sql_tx, &borrower_move_tx, &mut cache, &client, 4_001).await?;
+    upsert_sync_state(
+        &mut sql_tx,
+        4_001,
+        "integration-same-block-participant-visibility".to_string(),
+    )
     .await?;
-    let client = EsploraClient::with_base_url(&base_url);
+    sql_tx.commit().await?;
+    cache.commit_block();
 
-    process_block(&pool, &client, &mut cache, 4_001).await?;
-
-    assert_eq!(current_status(&pool, offer_id).await?, "repaid");
-    assert!(cache.get(&pre_lock_outpoint).is_none());
-    // Created + spent within one block -> net absent from the committed cache.
-    assert!(cache.get(&lending_outpoint).is_none());
-    assert!(cache.get(&repayment_outpoint).is_some());
+    let offer_row = sqlx::query("SELECT id, current_status::text AS s FROM offers")
+        .fetch_one(&pool)
+        .await?;
+    let offer_id: Uuid = offer_row.get("id");
+    assert_eq!(offer_row.get::<String, _>("s"), "pending");
+    assert!(cache.get(&borrower_outpoint).is_none());
+    assert!(cache.get(&moved_borrower_outpoint).is_some());
+    assert!(cache.get(&lender_outpoint).is_some());
+    assert_eq!(
+        count_participants(&pool, offer_id, "borrower", Some(false)).await?,
+        1
+    );
+    assert_eq!(
+        count_participants(&pool, offer_id, "borrower", Some(true)).await?,
+        1
+    );
     assert_eq!(sync_state_row_count(&pool).await?, 1);
 
-    server_handle.abort();
     Ok(())
 }
 
@@ -1232,11 +1200,7 @@ async fn lender_nft_movement_updates_history() -> anyhow::Result<()> {
             non_op_return_script(),
         )],
     );
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &move_tx, &mut cache, &client, 5_002).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &move_tx, &mut cache, &client, 5_002).await?;
 
     let moved_outpoint = OutPoint {
         txid: move_tx.txid(),
@@ -1452,13 +1416,9 @@ async fn process_block_propagates_esplora_block_txids_500() -> anyhow::Result<()
     let app = Router::new()
         .route("/block-height/{height}", get(block_hash_ok))
         .route("/block/{hash}/txids", get(block_txids_500));
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-    let server_handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    });
+    let (base_url, server_handle) = start_mock_server(app).await?;
 
-    let client = EsploraClient::with_base_url(&format!("http://{addr}"));
+    let client = EsploraClient::with_base_url(&base_url);
     let result = process_block(&pool, &client, &mut cache, 9_100).await;
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
@@ -1489,13 +1449,9 @@ async fn process_block_propagates_esplora_tx_raw_500() -> anyhow::Result<()> {
         .route("/block-height/{height}", get(block_hash_ok))
         .route("/block/{hash}/txids", get(block_txids_ok))
         .route("/tx/{txid}/raw", get(tx_raw_500));
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-    let server_handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    });
+    let (base_url, server_handle) = start_mock_server(app).await?;
 
-    let client = EsploraClient::with_base_url(&format!("http://{addr}"));
+    let client = EsploraClient::with_base_url(&base_url);
     let result = process_block(&pool, &client, &mut cache, 9_200).await;
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
@@ -1534,11 +1490,7 @@ async fn spent_utxo_does_not_reroute_from_cache() -> anyhow::Result<()> {
     // Deliberately do NOT seed the cache: load_utxo_cache would have excluded
     // this spent outpoint. A tx that now spends it must be ignored entirely.
     let stale_spend_tx = tx_with_input(spent_pre_lock_outpoint, vec![normal_output(); 5]);
-    {
-        let mut sql_tx = pool.begin().await?;
-        process_tx(&mut sql_tx, &stale_spend_tx, &mut cache, &client, 10_100).await?;
-        sql_tx.commit().await?;
-    }
+    process_tx_and_commit(&pool, &stale_spend_tx, &mut cache, &client, 10_100).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "cancelled");
     assert_eq!(

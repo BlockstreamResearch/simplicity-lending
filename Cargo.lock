@@ -1687,6 +1687,7 @@ dependencies = [
  "axum",
  "cargo-husky",
  "config",
+ "dotenvy",
  "hex",
  "lending-contracts",
  "reqwest",
