@@ -23,7 +23,10 @@ fn fails_to_remove_issuance_factory_with_invalid_signer(
 
     let result = random_signer.finalize(&ft);
 
-    assert!(result.is_err(), "Must fail but it does not");
+    assert!(
+        result.is_err(),
+        "expected finalize to fail, but it succeeded"
+    );
 
     Ok(())
 }

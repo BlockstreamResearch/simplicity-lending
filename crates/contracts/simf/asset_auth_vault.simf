@@ -20,6 +20,13 @@ fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
     (asset_bits, amount)
 }
 
+fn is_op_return(output_index: u32) -> bool {
+    match jet::output_null_datum(output_index, 0) {
+        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => true,
+        None => false,
+    }
+}
+
 // Check helpers
 
 fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
@@ -34,11 +41,16 @@ fn check_script_hashes_eq(script_1: u256, script_2: u256) {
     assert!(jet::eq_256(script_1, script_2));
 }
 
+fn check_flags_eq(flag_1: bool, flag_2: bool) {
+    assert!(jet::eq_1(<bool>::into(flag_1), <bool>::into(flag_2)));
+}
+
 fn ensure_output_is_op_return(index: u32) {
-    match jet::output_null_datum(index, 0) {
-        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => (),
-        None => panic!(),
-    }
+    check_flags_eq(is_op_return(index), true);
+}
+
+fn ensure_output_is_not_an_op_return(index: u32) {
+    check_flags_eq(is_op_return(index), false);
 }
 
 fn ensure_asset_and_amount_ge(index: u32, is_input_index: bool, expected_asset_bits: u256, expected_amount: u64) {
@@ -73,16 +85,6 @@ fn safe_add_64(first: u64, second: u64) -> u64 {
 
 // Auth logic
 
-fn auth_check(
-    input_asset_index: u32,
-    output_asset_index: u32,
-    expected_asset_id: u256,
-    expected_minimal_asset_amount: u64
-) {
-    ensure_asset_and_amount_ge(input_asset_index, true, expected_asset_id, expected_minimal_asset_amount);
-    ensure_asset_and_amount_ge(output_asset_index, false, expected_asset_id, expected_minimal_asset_amount);
-}
-
 fn auth_with_burn_check(
     input_asset_index: u32,
     output_asset_index: u32,
@@ -90,13 +92,16 @@ fn auth_with_burn_check(
     expected_minimal_asset_amount: u64,
     with_asset_burn: bool
 ) {
-    auth_check(input_asset_index, output_asset_index, expected_asset_id, expected_minimal_asset_amount);
+    ensure_asset_and_amount_ge(input_asset_index, true, expected_asset_id, expected_minimal_asset_amount);
+    ensure_asset_and_amount_ge(output_asset_index, false, expected_asset_id, expected_minimal_asset_amount);
 
     match with_asset_burn {
         true => {
             ensure_output_is_op_return(output_asset_index);
         },
-        false => {},
+        false => {
+            ensure_output_is_not_an_op_return(output_asset_index)
+        },
     }
 }
 
@@ -119,11 +124,12 @@ fn withdraw_all(input_keeper_index: u32, output_keeper_index: u32) {
 fn withdraw_part(input_keeper_index: u32, output_keeper_index: u32, vault_output_index: u32, amount_to_withdraw: u64) {
     ensure_finalization(false);
 
-    auth_check(
+    auth_with_burn_check(
         input_keeper_index,
         output_keeper_index,
         param::KEEPER_AUTH_ASSET_ID,
-        param::KEEPER_AUTH_ASSET_AMOUNT
+        param::KEEPER_AUTH_ASSET_AMOUNT,
+        false
     );
 
     ensure_output_script_hash(vault_output_index, jet::current_script_hash());
@@ -141,11 +147,12 @@ fn withdraw_part(input_keeper_index: u32, output_keeper_index: u32, vault_output
 fn supply(input_supplier_index: u32, output_supplier_index: u32, vault_output_index: u32, amount_to_supply: u64) {
     ensure_finalization(false);
 
-    auth_check(
+    auth_with_burn_check(
         input_supplier_index,
         output_supplier_index,
         param::SUPPLIER_AUTH_ASSET_ID,
-        1 // Allow any amount of the supplier auth asset
+        1, // Allow any amount of the supplier auth asset
+        false
     );
 
     ensure_output_script_hash(vault_output_index, jet::current_script_hash());

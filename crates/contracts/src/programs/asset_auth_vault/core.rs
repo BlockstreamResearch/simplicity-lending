@@ -53,8 +53,6 @@ impl AssetAuthVault {
         input_keeper_index: u32,
         output_keeper_index: u32,
     ) {
-        self.ensure_finalized_vault();
-
         let withdraw_all_witness_branch = AssetAuthVaultWitnessBranch::WithdrawAll {
             input_keeper_index,
             output_keeper_index,
@@ -75,8 +73,6 @@ impl AssetAuthVault {
         output_keeper_index: u32,
         amount_to_withdraw: u64,
     ) {
-        self.ensure_non_finalized_vault();
-
         let current_vault_amount = program_utxo.explicit_amount();
 
         assert!(
@@ -112,8 +108,6 @@ impl AssetAuthVault {
         output_supplier_index: u32,
         amount_to_supply: u64,
     ) {
-        self.ensure_non_finalized_vault();
-
         assert!(amount_to_supply > 0, "Zero amount to supply");
 
         let new_vault_amount = program_utxo.explicit_amount() + amount_to_supply;
@@ -140,8 +134,6 @@ impl AssetAuthVault {
         output_supplier_index: u32,
         amount_to_supply: u64,
     ) -> AssetAuthVault {
-        self.ensure_non_finalized_vault();
-
         assert!(amount_to_supply > 0, "Zero amount to supply");
 
         let new_vault_amount = program_utxo.explicit_amount() + amount_to_supply;
@@ -160,20 +152,9 @@ impl AssetAuthVault {
         let finalized_vault =
             AssetAuthVault::new_finalized(self.parameters.to_finalized_parameters());
 
-        finalized_vault.add_program_output(ft, self.parameters.vault_asset_id, new_vault_amount);
+        finalized_vault.attach_creation(ft, new_vault_amount);
 
         finalized_vault
-    }
-
-    fn ensure_finalized_vault(&self) {
-        assert!(self.parameters.is_finalized(), "Not a finalized vault");
-    }
-
-    fn ensure_non_finalized_vault(&self) {
-        assert!(
-            !self.parameters.is_finalized(),
-            "Vault is already finalized"
-        );
     }
 }
 
