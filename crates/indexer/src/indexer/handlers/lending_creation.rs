@@ -62,3 +62,105 @@ pub fn is_lending_creation_tx(tx: &Transaction, expected_principal_asset: &[u8])
 
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::is_lending_creation_tx;
+    use crate::indexer::handlers::test_utils::{
+        explicit_asset_output, make_tx_with_inputs, normal_output,
+    };
+
+    #[test]
+    fn valid_lending_creation_tx_returns_true() {
+        let expected_asset = vec![7_u8; 32];
+        let tx = make_tx_with_inputs(
+            7,
+            vec![
+                normal_output(),
+                explicit_asset_output(7),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+            ],
+        );
+
+        assert!(is_lending_creation_tx(&tx, &expected_asset));
+    }
+
+    #[test]
+    fn inputs_less_than_7_returns_false() {
+        let expected_asset = vec![7_u8; 32];
+        let tx = make_tx_with_inputs(
+            6,
+            vec![
+                normal_output(),
+                explicit_asset_output(7),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+            ],
+        );
+
+        assert!(!is_lending_creation_tx(&tx, &expected_asset));
+    }
+
+    #[test]
+    fn outputs_less_than_7_returns_false() {
+        let expected_asset = vec![7_u8; 32];
+        let tx = make_tx_with_inputs(
+            7,
+            vec![
+                normal_output(),
+                explicit_asset_output(7),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+            ],
+        );
+
+        assert!(!is_lending_creation_tx(&tx, &expected_asset));
+    }
+
+    #[test]
+    fn output_1_asset_mismatch_returns_false() {
+        let expected_asset = vec![7_u8; 32];
+        let tx = make_tx_with_inputs(
+            7,
+            vec![
+                normal_output(),
+                explicit_asset_output(8),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+            ],
+        );
+
+        assert!(!is_lending_creation_tx(&tx, &expected_asset));
+    }
+
+    #[test]
+    fn output_1_non_explicit_asset_returns_false() {
+        let expected_asset = vec![7_u8; 32];
+        let tx = make_tx_with_inputs(
+            7,
+            vec![
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+            ],
+        );
+
+        assert!(!is_lending_creation_tx(&tx, &expected_asset));
+    }
+}

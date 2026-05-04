@@ -95,3 +95,50 @@ impl TryFrom<String> for Environment {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{DatabaseSettings, Environment};
+
+    #[test]
+    fn connection_string_builds_expected_postgres_url() {
+        let settings = DatabaseSettings {
+            username: "postgres".to_string(),
+            password: "password".to_string(),
+            port: 5432,
+            host: "localhost".to_string(),
+            database_name: "lending-indexer".to_string(),
+        };
+
+        assert_eq!(
+            settings.connection_string(),
+            "postgres://postgres:password@localhost:5432/lending-indexer"
+        );
+    }
+
+    #[test]
+    fn environment_try_from_is_case_insensitive() {
+        assert!(matches!(
+            Environment::try_from("LoCaL".to_string()),
+            Ok(Environment::Local)
+        ));
+        assert!(matches!(
+            Environment::try_from("PRODUCTION".to_string()),
+            Ok(Environment::Production)
+        ));
+    }
+
+    #[test]
+    fn environment_try_from_invalid_returns_error() {
+        let result = Environment::try_from("staging".to_string());
+        assert!(result.is_err());
+        let err = result.err().unwrap_or_default();
+        assert!(err.contains("not a supported environment"));
+    }
+
+    #[test]
+    fn environment_as_str_returns_expected_values() {
+        assert_eq!(Environment::Local.as_str(), "local");
+        assert_eq!(Environment::Production.as_str(), "production");
+    }
+}

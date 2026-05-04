@@ -6,6 +6,8 @@ pub mod offers;
 pub mod participants;
 pub mod pre_lock;
 pub mod repayment_claim;
+#[cfg(test)]
+pub(crate) mod test_utils;
 
 pub use lending_creation::*;
 pub use loan_liquidation::*;

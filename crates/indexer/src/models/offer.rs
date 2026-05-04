@@ -111,3 +111,100 @@ pub struct OfferModelShort {
     pub created_at_height: i64,
     pub created_at_txid: Vec<u8>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{OfferModel, OfferStatus};
+    use lending_contracts::{programs::PreLockParameters, utils::LendingOfferParameters};
+    use simplex::{
+        provider::SimplicityNetwork,
+        simplicityhl::elements::{AssetId, Txid, hashes::Hash, secp256k1_zkp::XOnlyPublicKey},
+    };
+    use std::str::FromStr;
+
+    fn make_pre_lock_params() -> PreLockParameters {
+        PreLockParameters {
+            collateral_asset_id: AssetId::from_slice(&[1_u8; 32]).expect("asset"),
+            principal_asset_id: AssetId::from_slice(&[2_u8; 32]).expect("asset"),
+            first_parameters_nft_asset_id: AssetId::from_slice(&[3_u8; 32]).expect("asset"),
+            second_parameters_nft_asset_id: AssetId::from_slice(&[4_u8; 32]).expect("asset"),
+            borrower_nft_asset_id: AssetId::from_slice(&[5_u8; 32]).expect("asset"),
+            lender_nft_asset_id: AssetId::from_slice(&[6_u8; 32]).expect("asset"),
+            offer_parameters: LendingOfferParameters {
+                collateral_amount: 1_000,
+                principal_amount: 500,
+                loan_expiration_time: 12_345,
+                principal_interest_rate: 250,
+            },
+            borrower_pubkey: XOnlyPublicKey::from_str(
+                "7c7db0528e8b7b58e698ac104764f6852d74b5a7335bffcdad0ce799dd7742ec",
+            )
+            .expect("valid xonly key"),
+            borrower_output_script_hash: [9_u8; 32],
+            network: SimplicityNetwork::LiquidTestnet,
+        }
+    }
+
+    #[test]
+    fn offer_model_new_maps_all_fields_from_pre_lock_parameters() {
+        let params = make_pre_lock_params();
+        let block_height = 777_u64;
+        let txid = Txid::from_slice(&[10_u8; 32]).expect("txid");
+
+        let model = OfferModel::new(&params, block_height, txid);
+
+        assert_eq!(
+            model.borrower_pubkey,
+            params.borrower_pubkey.serialize().to_vec()
+        );
+        assert_eq!(
+            model.borrower_output_script_hash,
+            params.borrower_output_script_hash.to_vec()
+        );
+        assert_eq!(
+            model.collateral_asset_id,
+            params.collateral_asset_id.into_inner().0.to_vec()
+        );
+        assert_eq!(
+            model.principal_asset_id,
+            params.principal_asset_id.into_inner().0.to_vec()
+        );
+        assert_eq!(
+            model.first_parameters_nft_asset_id,
+            params.first_parameters_nft_asset_id.into_inner().0.to_vec()
+        );
+        assert_eq!(
+            model.second_parameters_nft_asset_id,
+            params
+                .second_parameters_nft_asset_id
+                .into_inner()
+                .0
+                .to_vec()
+        );
+        assert_eq!(
+            model.borrower_nft_asset_id,
+            params.borrower_nft_asset_id.into_inner().0.to_vec()
+        );
+        assert_eq!(
+            model.lender_nft_asset_id,
+            params.lender_nft_asset_id.into_inner().0.to_vec()
+        );
+        assert_eq!(model.collateral_amount, 1_000);
+        assert_eq!(model.principal_amount, 500);
+        assert_eq!(model.interest_rate, 250);
+        assert_eq!(model.loan_expiration_time, 12_345);
+        assert_eq!(model.current_status, OfferStatus::Pending);
+        assert_eq!(model.created_at_height, block_height as i64);
+        assert_eq!(model.created_at_txid, txid.as_byte_array().to_vec());
+    }
+
+    #[test]
+    fn offer_model_new_generates_non_nil_offer_id() {
+        let params = make_pre_lock_params();
+        let txid = Txid::from_slice(&[11_u8; 32]).expect("txid");
+
+        let model = OfferModel::new(&params, 1, txid);
+
+        assert_ne!(model.id, uuid::Uuid::nil());
+    }
+}
