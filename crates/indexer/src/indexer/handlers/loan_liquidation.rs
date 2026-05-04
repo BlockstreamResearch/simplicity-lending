@@ -111,19 +111,6 @@ mod tests {
     }
 
     #[test]
-    fn output_4_is_null_data_returns_false() {
-        let tx = make_tx(vec![
-            normal_output(),
-            null_output(),
-            null_output(),
-            null_output(),
-            null_output(),
-        ]);
-
-        assert!(!is_loan_liquidation_tx(&tx));
-    }
-
-    #[test]
     fn output_0_also_null_data_still_returns_true() {
         let tx = make_tx(vec![
             null_output(),

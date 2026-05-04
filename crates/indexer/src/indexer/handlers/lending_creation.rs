@@ -77,11 +77,11 @@ mod tests {
             7,
             vec![
                 normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
+                normal_output(),
                 explicit_asset_output(7),
-                normal_output(),
-                normal_output(),
-                normal_output(),
-                normal_output(),
                 normal_output(),
             ],
         );

@@ -14,7 +14,7 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use lending_contracts::{programs::PreLockParameters, utils::LendingOfferParameters};
+use lending_contracts::{programs::pre_lock::PreLockParameters, utils::LendingOfferParameters};
 use lending_indexer::esplora_client::EsploraClient;
 use lending_indexer::indexer::{
     UtxoCache, get_last_indexed_height, handle_pre_lock_creation, load_utxo_cache, process_block,

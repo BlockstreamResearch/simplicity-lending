@@ -115,7 +115,7 @@ pub struct OfferModelShort {
 #[cfg(test)]
 mod tests {
     use super::{OfferModel, OfferStatus};
-    use lending_contracts::{programs::PreLockParameters, utils::LendingOfferParameters};
+    use lending_contracts::{programs::pre_lock::PreLockParameters, utils::LendingOfferParameters};
     use simplex::{
         provider::SimplicityNetwork,
         simplicityhl::elements::{AssetId, Txid, hashes::Hash, secp256k1_zkp::XOnlyPublicKey},
