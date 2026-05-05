@@ -27,6 +27,14 @@ fn is_op_return(output_index: u32) -> bool {
     }
 }
 
+// Math helpers
+
+fn safe_add_64(first: u64, second: u64) -> u64 {
+    let (carry, result): (bool, u64) = jet::add_64(first, second);
+
+    result
+}
+
 // Check helpers
 
 fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
@@ -75,12 +83,13 @@ fn ensure_vault_asset(index: u32, is_input_index: bool) -> u64 {
     vault_amount
 }
 
-// Math helpers
+fn ensure_vault_amount_after_supplying(vault_output_index: u32, amount_to_supply: u64) {
+    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
+    let output_vault_amount: u64 = ensure_vault_asset(vault_output_index, false);
 
-fn safe_add_64(first: u64, second: u64) -> u64 {
-    let (carry, result): (bool, u64) = jet::add_64(first, second);
+    let expected_output_vault_amount: u64 = safe_add_64(vault_amount, amount_to_supply);
 
-    result
+    check_asset_amounts_eq(output_vault_amount, expected_output_vault_amount);
 }
 
 // Auth logic
@@ -157,12 +166,7 @@ fn supply(input_supplier_index: u32, output_supplier_index: u32, vault_output_in
 
     ensure_output_script_hash(vault_output_index, jet::current_script_hash());
 
-    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
-    let output_vault_amount: u64 = ensure_vault_asset(vault_output_index, false);
-
-    let expected_output_vault_amount: u64 = safe_add_64(vault_amount, amount_to_supply);
-
-    check_asset_amounts_eq(output_vault_amount, expected_output_vault_amount);
+    ensure_vault_amount_after_supplying(vault_output_index, amount_to_supply);
 }
 
 fn final_supply(
@@ -183,12 +187,7 @@ fn final_supply(
 
     ensure_output_script_hash(finalized_vault_output_index, param::FINALIZED_VAULT_COV_HASH);
 
-    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
-    let output_vault_amount: u64 = ensure_vault_asset(finalized_vault_output_index, false);
-
-    let expected_output_vault_amount: u64 = safe_add_64(vault_amount, amount_to_supply);
-
-    check_asset_amounts_eq(output_vault_amount, expected_output_vault_amount);
+    ensure_vault_amount_after_supplying(finalized_vault_output_index, amount_to_supply);
 }
 
 fn main() {

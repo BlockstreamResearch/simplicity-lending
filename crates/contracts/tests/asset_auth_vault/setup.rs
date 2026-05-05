@@ -4,6 +4,7 @@ use lending_contracts::programs::asset_auth_vault::{
 
 use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::utils::get_random_seed;
+use simplex::signer::Signer;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{
@@ -151,6 +152,48 @@ pub(super) fn setup_asset_auth_vault(
     Ok(asset_auth_vault)
 }
 
+pub(super) fn fund_keeper(
+    context: &simplex::TestContext,
+    keeper: &Signer,
+    keeper_asset_id: AssetId,
+) -> anyhow::Result<()> {
+    let provider = context.get_default_provider();
+    let signer = context.get_default_signer();
+
+    let keeper_auth_utxo = signer.get_utxos_asset(keeper_asset_id)?[0].clone();
+    let policy_utxo = signer.get_utxos_asset(context.get_network().policy_asset())?[0].clone();
+
+    let keeper_auth_amount = keeper_auth_utxo.explicit_amount();
+    let policy_amount_to_send = policy_utxo.explicit_amount() / 2;
+
+    let mut ft = FinalTransaction::new();
+
+    ft.add_input(
+        PartialInput::new(keeper_auth_utxo),
+        RequiredSignature::NativeEcdsa,
+    );
+    ft.add_input(
+        PartialInput::new(policy_utxo),
+        RequiredSignature::NativeEcdsa,
+    );
+
+    ft.add_output(PartialOutput::new(
+        keeper.get_address().script_pubkey(),
+        keeper_auth_amount,
+        keeper_asset_id,
+    ));
+    ft.add_output(PartialOutput::new(
+        keeper.get_address().script_pubkey(),
+        policy_amount_to_send,
+        context.get_network().policy_asset(),
+    ));
+
+    let txid = finalize_and_broadcast(context, &ft)?;
+    provider.wait(&txid)?;
+
+    Ok(())
+}
+
 pub(super) fn final_supply(
     context: &simplex::TestContext,
     asset_auth_vault: &ActiveAssetAuthVault,
@@ -208,6 +251,59 @@ pub(super) fn final_supply(
     provider.wait(&txid)?;
 
     Ok(finalized_vault)
+}
+
+pub(super) fn supply(
+    context: &simplex::TestContext,
+    asset_auth_vault: &ActiveAssetAuthVault,
+    amount_to_supply: u64,
+) -> anyhow::Result<()> {
+    let provider = context.get_default_provider();
+    let signer = context.get_default_signer();
+
+    let vault_parameters = *asset_auth_vault.get_parameters();
+
+    let asset_auth_vault_utxo =
+        provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
+
+    let utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
+    let vault_asset_utxo_amount = utxo_to_supply.explicit_amount();
+
+    assert!(vault_asset_utxo_amount >= amount_to_supply);
+
+    let supplier_auth_utxo = signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
+
+    let mut ft = FinalTransaction::new();
+
+    ft.add_input(
+        PartialInput::new(supplier_auth_utxo.clone()),
+        RequiredSignature::NativeEcdsa,
+    );
+    ft.add_input(
+        PartialInput::new(utxo_to_supply),
+        RequiredSignature::NativeEcdsa,
+    );
+
+    asset_auth_vault.attach_supplying(&mut ft, asset_auth_vault_utxo, 0, 1, amount_to_supply);
+
+    ft.add_output(PartialOutput::new(
+        signer.get_address().script_pubkey(),
+        supplier_auth_utxo.explicit_amount(),
+        supplier_auth_utxo.explicit_asset(),
+    ));
+
+    if vault_asset_utxo_amount > amount_to_supply {
+        ft.add_output(PartialOutput::new(
+            signer.get_address().script_pubkey(),
+            vault_asset_utxo_amount - amount_to_supply,
+            vault_parameters.vault_asset_id,
+        ));
+    }
+
+    let txid = finalize_and_broadcast(context, &ft)?;
+    provider.wait(&txid)?;
+
+    Ok(())
 }
 
 pub(super) fn check_vault_amount(
