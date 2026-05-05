@@ -66,7 +66,10 @@ fn fails_to_unlock_when_auth_input_amount_is_invalid(
 
     let result = signer.finalize(&ft);
 
-    assert!(result.is_err(), "Must fail but it does not");
+    assert!(
+        result.is_err(),
+        "expected finalize to fail, but it succeeded"
+    );
 
     Ok(())
 }

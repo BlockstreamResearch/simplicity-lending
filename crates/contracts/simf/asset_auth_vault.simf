@@ -1,0 +1,244 @@
+// Helper getters
+
+fn get_script_hash(index: u32, is_input_index: bool) -> u256 {
+    let script_hash: u256 = match is_input_index {
+        true => unwrap(jet::input_script_hash(index)),
+        false => unwrap(jet::output_script_hash(index)),
+    };
+
+    script_hash
+}
+
+fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
+    let pair: (Asset1, Amount1) = match is_input_index {
+        true => unwrap(jet::input_amount(index)),
+        false => unwrap(jet::output_amount(index)),
+    };
+    let (asset, amount): (Asset1, Amount1) = pair;
+    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_bits, amount)
+}
+
+fn is_op_return(output_index: u32) -> bool {
+    match jet::output_null_datum(output_index, 0) {
+        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => true,
+        None => false,
+    }
+}
+
+// Math helpers
+
+fn safe_add_64(first: u64, second: u64) -> u64 {
+    let (carry, result): (bool, u64) = jet::add_64(first, second);
+
+    result
+}
+
+// Check helpers
+
+fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
+    assert!(jet::eq_64(asset_amount_1, asset_amount_2));
+}
+
+fn check_assets_eq(asset_bits_1: u256, asset_bits_2: u256) {
+    assert!(jet::eq_256(asset_bits_1, asset_bits_2));
+}
+
+fn check_script_hashes_eq(script_1: u256, script_2: u256) {
+    assert!(jet::eq_256(script_1, script_2));
+}
+
+fn check_flags_eq(flag_1: bool, flag_2: bool) {
+    assert!(jet::eq_1(<bool>::into(flag_1), <bool>::into(flag_2)));
+}
+
+fn ensure_output_is_op_return(index: u32) {
+    check_flags_eq(is_op_return(index), true);
+}
+
+fn ensure_output_is_not_an_op_return(index: u32) {
+    check_flags_eq(is_op_return(index), false);
+}
+
+fn ensure_asset_and_amount_ge(index: u32, is_input_index: bool, expected_asset_bits: u256, expected_amount: u64) {
+    let (asset_bits, amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
+    assert!(jet::eq_256(asset_bits, expected_asset_bits));
+    assert!(jet::le_64(expected_amount, amount));
+}
+
+fn ensure_active_status(expected_status: bool) {
+    assert!(jet::eq_1(<bool>::into(expected_status), <bool>::into(param::IS_ACTIVE)));
+}
+
+fn ensure_output_script_hash(index: u32, expected_script_hash: u256) {
+    check_script_hashes_eq(get_script_hash(index, false), expected_script_hash);
+}
+
+fn ensure_vault_asset(index: u32, is_input_index: bool) -> u64 {
+    let (vault_asset_id, vault_amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
+
+    check_assets_eq(vault_asset_id, param::VAULT_ASSET_ID);
+
+    vault_amount
+}
+
+fn ensure_vault_amount_after_supplying(vault_output_index: u32, amount_to_supply: u64) {
+    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
+    let output_vault_amount: u64 = ensure_vault_asset(vault_output_index, false);
+
+    let expected_output_vault_amount: u64 = safe_add_64(vault_amount, amount_to_supply);
+
+    check_asset_amounts_eq(output_vault_amount, expected_output_vault_amount);
+}
+
+// Auth logic
+
+fn auth_with_burn_check(
+    input_asset_index: u32,
+    output_asset_index: u32,
+    expected_asset_id: u256,
+    expected_minimal_asset_amount: u64,
+    with_asset_burn: bool
+) {
+    ensure_asset_and_amount_ge(input_asset_index, true, expected_asset_id, expected_minimal_asset_amount);
+    ensure_asset_and_amount_ge(output_asset_index, false, expected_asset_id, expected_minimal_asset_amount);
+
+    match with_asset_burn {
+        true => {
+            ensure_output_is_op_return(output_asset_index);
+        },
+        false => {
+            ensure_output_is_not_an_op_return(output_asset_index)
+        },
+    }
+}
+
+// Main paths logic
+
+fn withdraw_all(input_keeper_index: u32, output_keeper_index: u32) {
+    ensure_active_status(false);
+
+    auth_with_burn_check(
+        input_keeper_index,
+        output_keeper_index,
+        param::KEEPER_AUTH_ASSET_ID,
+        param::KEEPER_AUTH_ASSET_AMOUNT,
+        param::WITH_KEEPER_ASSET_BURN
+    );
+
+    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
+}
+
+fn withdraw_part(input_keeper_index: u32, output_keeper_index: u32, vault_output_index: u32, amount_to_withdraw: u64) {
+    ensure_active_status(true);
+
+    auth_with_burn_check(
+        input_keeper_index,
+        output_keeper_index,
+        param::KEEPER_AUTH_ASSET_ID,
+        param::KEEPER_AUTH_ASSET_AMOUNT,
+        false
+    );
+
+    ensure_output_script_hash(vault_output_index, jet::current_script_hash());
+
+    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
+    let output_vault_amount: u64 = ensure_vault_asset(vault_output_index, false);
+
+    assert!(jet::lt_64(amount_to_withdraw, vault_amount));
+
+    let (carry, vault_change): (bool, u64) = jet::subtract_64(vault_amount, amount_to_withdraw);
+
+    check_asset_amounts_eq(output_vault_amount, vault_change);
+}
+
+fn supply(input_supplier_index: u32, output_supplier_index: u32, vault_output_index: u32, amount_to_supply: u64) {
+    ensure_active_status(true);
+
+    auth_with_burn_check(
+        input_supplier_index,
+        output_supplier_index,
+        param::SUPPLIER_AUTH_ASSET_ID,
+        1, // Allow any amount of the supplier auth asset
+        false
+    );
+
+    ensure_output_script_hash(vault_output_index, jet::current_script_hash());
+
+    ensure_vault_amount_after_supplying(vault_output_index, amount_to_supply);
+}
+
+fn final_supply(
+    input_supplier_index: u32,
+    output_supplier_index: u32,
+    finalized_vault_output_index: u32,
+    amount_to_supply: u64
+) {
+    ensure_active_status(true);
+
+    auth_with_burn_check(
+        input_supplier_index,
+        output_supplier_index,
+        param::SUPPLIER_AUTH_ASSET_ID,
+        1, // Allow any amount of the supplier auth asset
+        param::WITH_SUPPLIER_ASSET_BURN
+    );
+
+    ensure_output_script_hash(finalized_vault_output_index, param::FINALIZED_VAULT_COV_HASH);
+
+    ensure_vault_amount_after_supplying(finalized_vault_output_index, amount_to_supply);
+}
+
+fn main() {
+    match witness::PATH {
+        Left(withdraw_params: Either<(u32, u32), (u32, u32, u32, u64)>) => {
+            match withdraw_params {
+                Left(withdraw_all_params: (u32, u32)) => {
+                    let (input_keeper_index, output_keeper_index): (u32, u32) = withdraw_all_params;
+
+                    withdraw_all(input_keeper_index, output_keeper_index);
+                },
+                Right(withdraw_part_params: (u32, u32, u32, u64)) => {
+                    let (
+                        input_keeper_index,
+                        output_keeper_index,
+                        vault_output_index,
+                        amount_to_withdraw,
+                    ): (u32, u32, u32, u64) = withdraw_part_params;
+
+                    withdraw_part(input_keeper_index, output_keeper_index, vault_output_index, amount_to_withdraw);
+                },
+            }
+        },
+        Right(supply_params: Either<(u32, u32, u32, u64), (u32, u32, u32, u64)>) => {
+            match supply_params {
+                Left(supply_params: (u32, u32, u32, u64)) => {
+                    let (
+                        input_supplier_index,
+                        output_supplier_index,
+                        vault_output_index,
+                        amount_to_supply,
+                    ): (u32, u32, u32, u64) = supply_params;
+
+                    supply(input_supplier_index, output_supplier_index, vault_output_index, amount_to_supply);
+                },
+                Right(final_supply_params: (u32, u32, u32, u64)) => {
+                    let (
+                        input_supplier_index,
+                        output_supplier_index,
+                        finalized_vault_output_index,
+                        amount_to_supply,
+                    ): (u32, u32, u32, u64) = final_supply_params;
+
+                    final_supply(
+                        input_supplier_index,
+                        output_supplier_index,
+                        finalized_vault_output_index,
+                        amount_to_supply
+                    );
+                }
+            }
+        },
+    }
+}

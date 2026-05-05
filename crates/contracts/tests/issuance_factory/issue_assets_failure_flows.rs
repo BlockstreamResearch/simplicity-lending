@@ -51,7 +51,10 @@ fn fails_to_issue_wrong_assets_number(context: simplex::TestContext) -> anyhow::
 
     let result = signer.finalize(&ft);
 
-    assert!(result.is_err(), "Must fail but it does not");
+    assert!(
+        result.is_err(),
+        "expected finalize to fail, but it succeeded"
+    );
 
     Ok(())
 }
@@ -112,7 +115,10 @@ fn fails_to_issue_assets_with_reissuance_tokens(
 
     let result = signer.finalize(&ft);
 
-    assert!(result.is_err(), "Must fail but it does not");
+    assert!(
+        result.is_err(),
+        "expected finalize to fail, but it succeeded"
+    );
 
     Ok(())
 }
@@ -164,7 +170,10 @@ fn fails_to_issue_assets_without_reissuance_tokens(
 
     let result = signer.finalize(&ft);
 
-    assert!(result.is_err(), "Must fail but it does not");
+    assert!(
+        result.is_err(),
+        "expected finalize to fail, but it succeeded"
+    );
 
     Ok(())
 }
