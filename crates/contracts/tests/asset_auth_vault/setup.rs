@@ -1,4 +1,6 @@
-use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
+use lending_contracts::programs::asset_auth_vault::{
+    ActiveAssetAuthVault, FinalizedAssetAuthVault, FinalizedAssetAuthVaultParameters,
+};
 
 use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::utils::get_random_seed;
@@ -119,8 +121,8 @@ pub(super) fn make_confidential(
 
 pub(super) fn setup_asset_auth_vault(
     context: &simplex::TestContext,
-    vault_parameters: AssetAuthVaultParameters,
-) -> anyhow::Result<AssetAuthVault> {
+    vault_parameters: FinalizedAssetAuthVaultParameters,
+) -> anyhow::Result<ActiveAssetAuthVault> {
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
@@ -134,7 +136,7 @@ pub(super) fn setup_asset_auth_vault(
         RequiredSignature::NativeEcdsa,
     );
 
-    let asset_auth_vault = AssetAuthVault::new_active(vault_parameters);
+    let asset_auth_vault = ActiveAssetAuthVault::from_finalized_vault(vault_parameters);
 
     asset_auth_vault.attach_creation(&mut ft, vault_asset_amount);
 
@@ -151,9 +153,9 @@ pub(super) fn setup_asset_auth_vault(
 
 pub(super) fn final_supply(
     context: &simplex::TestContext,
-    asset_auth_vault: &AssetAuthVault,
+    asset_auth_vault: &ActiveAssetAuthVault,
     amount_to_supply: u64,
-) -> anyhow::Result<AssetAuthVault> {
+) -> anyhow::Result<FinalizedAssetAuthVault> {
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
@@ -210,7 +212,7 @@ pub(super) fn final_supply(
 
 pub(super) fn check_vault_amount(
     context: &simplex::TestContext,
-    vault: &AssetAuthVault,
+    vault: &impl SimplexProgram,
     expected_amount: u64,
 ) -> anyhow::Result<()> {
     let provider = context.get_default_provider();

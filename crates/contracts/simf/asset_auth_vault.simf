@@ -59,8 +59,8 @@ fn ensure_asset_and_amount_ge(index: u32, is_input_index: bool, expected_asset_b
     assert!(jet::le_64(expected_amount, amount));
 }
 
-fn ensure_finalization(expected_state: bool) {
-    assert!(jet::eq_1(<bool>::into(expected_state), <bool>::into(param::IS_FINALIZED)));
+fn ensure_active_status(expected_status: bool) {
+    assert!(jet::eq_1(<bool>::into(expected_status), <bool>::into(param::IS_ACTIVE)));
 }
 
 fn ensure_output_script_hash(index: u32, expected_script_hash: u256) {
@@ -108,7 +108,7 @@ fn auth_with_burn_check(
 // Main paths logic
 
 fn withdraw_all(input_keeper_index: u32, output_keeper_index: u32) {
-    ensure_finalization(true);
+    ensure_active_status(false);
 
     auth_with_burn_check(
         input_keeper_index,
@@ -122,7 +122,7 @@ fn withdraw_all(input_keeper_index: u32, output_keeper_index: u32) {
 }
 
 fn withdraw_part(input_keeper_index: u32, output_keeper_index: u32, vault_output_index: u32, amount_to_withdraw: u64) {
-    ensure_finalization(false);
+    ensure_active_status(true);
 
     auth_with_burn_check(
         input_keeper_index,
@@ -145,7 +145,7 @@ fn withdraw_part(input_keeper_index: u32, output_keeper_index: u32, vault_output
 }
 
 fn supply(input_supplier_index: u32, output_supplier_index: u32, vault_output_index: u32, amount_to_supply: u64) {
-    ensure_finalization(false);
+    ensure_active_status(true);
 
     auth_with_burn_check(
         input_supplier_index,
@@ -171,7 +171,7 @@ fn final_supply(
     finalized_vault_output_index: u32,
     amount_to_supply: u64
 ) {
-    ensure_finalization(false);
+    ensure_active_status(true);
 
     auth_with_burn_check(
         input_supplier_index,

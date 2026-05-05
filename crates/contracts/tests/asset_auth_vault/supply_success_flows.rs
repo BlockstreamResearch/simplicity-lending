@@ -1,4 +1,6 @@
-use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
+use lending_contracts::programs::asset_auth_vault::{
+    ActiveAssetAuthVault, ActiveAssetAuthVaultParameters, FinalizedAssetAuthVaultParameters,
+};
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
@@ -12,25 +14,26 @@ use super::setup::{
 fn default_vault_supplying_setup(
     context: &simplex::TestContext,
     vault_asset_amounts: Vec<u64>,
-) -> anyhow::Result<(AssetAuthVault, AssetAuthVaultParameters)> {
-    let (supplier_auth_asset_id, keeper_auth_asset_id) = issue_auth_assets(context, 1, 1)?;
+) -> anyhow::Result<(ActiveAssetAuthVault, ActiveAssetAuthVaultParameters)> {
+    let (supplier_asset_id, keeper_asset_id) = issue_auth_assets(context, 1, 1)?;
 
     let vault_asset_amount = 1_000_000;
     let vault_asset_id = prepare_vault_asset(context, vault_asset_amount, vault_asset_amounts)?;
 
-    let vault_parameters = AssetAuthVaultParameters::new(
+    let vault_parameters = FinalizedAssetAuthVaultParameters {
         vault_asset_id,
-        keeper_auth_asset_id,
-        supplier_auth_asset_id,
-        1,
-        false,
-        false,
-        *context.get_network(),
-    );
+        keeper_asset_id,
+        supplier_asset_id,
+        keeper_min_asset_amount: 1,
+        with_keeper_asset_burn: false,
+        with_supplier_asset_burn: false,
+        network: *context.get_network(),
+    };
 
     let asset_auth_vault = setup_asset_auth_vault(context, vault_parameters)?;
+    let active_vault_parameters = *asset_auth_vault.get_parameters();
 
-    Ok((asset_auth_vault, vault_parameters))
+    Ok((asset_auth_vault, active_vault_parameters))
 }
 
 #[simplex::test]
