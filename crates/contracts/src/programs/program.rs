@@ -1,3 +1,4 @@
+use ring::digest::{SHA256, digest};
 use simplex::program::{Program, WitnessTrait};
 use simplex::provider::SimplicityNetwork;
 use simplex::transaction::partial_input::IssuanceInput;
@@ -94,7 +95,17 @@ pub trait SimplexProgram {
         self.get_program().get_script_hash(self.get_network())
     }
 
+    fn get_program_source_code_hash(&self) -> [u8; 4] {
+        let source_code_hash = digest(&SHA256, self.get_program_source_code().as_bytes());
+        let mut hash_prefix = [0; 4];
+        hash_prefix.copy_from_slice(&source_code_hash.as_ref()[..4]);
+
+        hash_prefix
+    }
+
     fn get_program(&self) -> &Program;
 
     fn get_network(&self) -> &SimplicityNetwork;
+
+    fn get_program_source_code(&self) -> &'static str;
 }
