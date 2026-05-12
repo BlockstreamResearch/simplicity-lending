@@ -20,6 +20,40 @@ fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
     (asset_bits, amount)
 }
 
+fn is_op_return(output_index: u32) -> bool {
+    match jet::output_null_datum(output_index, 0) {
+        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => true,
+        None => false,
+    }
+}
+
+// Math helpers
+
+fn safe_add_64(first: u64, second: u64) -> u64 {
+    let (carry, result): (bool, u64) = jet::add_64(first, second);
+
+    result
+}
+
+fn safe_add_32(first: u32, second: u32) -> u32 {
+    let (carry, result): (bool, u32) = jet::add_32(first, second);
+
+    result
+}
+
+fn safe_sub_64(first: u64, second: u64) -> u64 {
+    let (carry, result): (bool, u64) = jet::subtract_64(first, second);
+
+    result
+}
+
+fn min_64(first: u64, second: u64) -> u64 {
+    match jet::lt_64(first, second) {
+        true => first,
+        false => second,
+    }
+}
+
 // Check helpers
 
 fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
@@ -34,10 +68,31 @@ fn check_script_hashes_eq(script_1: u256, script_2: u256) {
     assert!(jet::eq_256(script_1, script_2));
 }
 
-fn ensure_script_hash(index: u32, is_input_index: bool, expected_script_hash: u256) {
-    let script_hash: u256 = get_script_hash(index, is_input_index);
+fn check_flags_eq(flag_1: bool, flag_2: bool) {
+    assert!(jet::eq_1(<bool>::into(flag_1), <bool>::into(flag_2)));
+}
+
+fn ensure_output_is_op_return(index: u32) {
+    check_flags_eq(is_op_return(index), true);
+}
+
+fn ensure_input_script_hash(input_index: u32, expected_script_hash: u256) {
+    let script_hash: u256 = get_script_hash(input_index, true);
 
     check_script_hashes_eq(script_hash, expected_script_hash);
+}
+
+fn ensure_output_script_hash(output_index: u32, expected_script_hash: u256) {
+    let script_hash: u256 = get_script_hash(output_index, false);
+
+    check_script_hashes_eq(script_hash, expected_script_hash);
+}
+
+fn ensure_input_and_output_script_hashes_eq(input_index: u32, output_index: u32) {
+    let input_script_hash: u256 = get_script_hash(input_index, true);
+    let output_script_hash: u256 = get_script_hash(output_index, false);
+
+    check_script_hashes_eq(input_script_hash, output_script_hash);
 }
 
 fn ensure_asset_with_amount(index: u32, is_input_index: bool, expected_asset_bits: u256, expected_amount: u64) {
@@ -45,18 +100,6 @@ fn ensure_asset_with_amount(index: u32, is_input_index: bool, expected_asset_bit
 
     check_assets_eq(asset_bits, expected_asset_bits);
     check_asset_amounts_eq(amount, expected_amount);
-}
-
-fn ensure_input_and_output_assets_eq(input_index: u32, output_index: u32, expected_asset_bits: u256) -> u64 {
-    let (input_asset_bits, input_amount): (u256, u64) = get_asset_and_amount(input_index, true);
-    let (output_asset_bits, output_amount): (u256, u64) = get_asset_and_amount(output_index, false);
-
-    check_assets_eq(input_asset_bits, expected_asset_bits);
-    check_assets_eq(input_asset_bits, output_asset_bits);
-
-    check_asset_amounts_eq(input_amount, output_amount);
-
-    input_amount
 }
 
 fn ensure_input_and_output_assets_with_amount_eq(input_index: u32, output_index: u32, expected_asset_bits: u256, expected_amount: u64) {
@@ -70,188 +113,306 @@ fn ensure_input_and_output_assets_with_amount_eq(input_index: u32, output_index:
     check_asset_amounts_eq(input_amount, output_amount);
 }
 
-fn ensure_output_is_op_return(index: u32) {
-    match jet::output_null_datum(index, 0) {
-        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => (),
-        None => panic!(),
-    }
-}
-
-fn ensure_zero_bit(bit: bool) { assert!(jet::eq_1(<bool>::into(bit), 0)); }
-
-// Lending parameters functions
-
-fn count_multiplier(acc: u64, decimals_mantissa: u8, i: u8) -> Either<u64, u64> {
-    match jet::eq_8(decimals_mantissa, i) {
-        true => Left(acc),
-        false => {
-            let new_acc: u128 = jet::multiply_64(acc, 10);
-            let (_, new_acc): (u64, u64) = <u128>::into(new_acc);
-
-            Right(new_acc)
-        }
-    }
-}
-
-fn get_decimals_multiplier(decimals_mantissa: u4) -> u64 {
-    let decimals_mantissa: u8 = <(u4, u4)>::into((0, decimals_mantissa));
-    let multiplier: u64 = unwrap_left::<u64>(for_while::<count_multiplier>(1, decimals_mantissa));
-
-    multiplier
-}
-
-fn from_base_amount(base_amount: u32, decimals_mantissa: u4) -> u64 {
-    let base_amount: u64 = jet::left_pad_low_32_64(base_amount);
-    let multiplier: u64 = get_decimals_multiplier(decimals_mantissa);
-
-    let result_amount: u128 = jet::multiply_64(base_amount, multiplier);
-
-    let (carry, result_amount): (u64, u64) = <u128>::into(result_amount);
-
-    assert!(jet::eq_64(carry, 0));
-
-    result_amount    
-}
-
-fn extract_bits_from_amount(encoded_amount: u64, bits_count: u8, shift: u8) -> (u64, u8) {
-    let mask: u64 =  jet::left_shift_64(shift, jet::left_shift_with_64(1, bits_count, 0));
-    let shifted_amount: u64 = jet::right_shift_64(shift, jet::and_64(encoded_amount, mask));
-
-    let (carry, new_shift): (bool, u8) = jet::add_8(shift, bits_count);
-    ensure_zero_bit(carry);
-
-    (shifted_amount, new_shift)
-}
-
-fn extract_lending_parameters(first_parameters_amount: u64, second_parameters_amount: u64) -> (u64, u64, u32, u16) {
-    // Extracting parameter values from the first parameters amount
-    let interest_rate_bits: u8 = 16;
-
-    let (interest_rate_raw, shift): (u64, u8) = extract_bits_from_amount(first_parameters_amount, interest_rate_bits, 0);
-    let interest_rate: u16 = jet::rightmost_64_16(interest_rate_raw);
-
-    let loan_expiration_time_bits: u8 = 27;
-
-    let (loan_expiration_time_raw, shift): (u64, u8) = extract_bits_from_amount(first_parameters_amount, loan_expiration_time_bits, shift);
-    let loan_expiration_time: u32 = jet::rightmost_64_32(loan_expiration_time_raw);
-
-    let decimals_mantissa_bits: u8 = 4;
-
-    let (collateral_decimals_mantissa_raw, shift): (u64, u8) = extract_bits_from_amount(first_parameters_amount, decimals_mantissa_bits, shift);
-    let collateral_decimals_mantissa: u4 = jet::rightmost_64_4(collateral_decimals_mantissa_raw);
-
-    let (principal_decimals_mantissa_raw, shift): (u64, u8) = extract_bits_from_amount(first_parameters_amount, decimals_mantissa_bits, shift);
-    let principal_decimals_mantissa: u4 = jet::rightmost_64_4(principal_decimals_mantissa_raw);
-    
-    // Extracting parameter values from the second parameters amount
-    let base_amount_bits: u8 = 25;
-
-    let (collateral_base_amount_raw, shift): (u64, u8) = extract_bits_from_amount(second_parameters_amount, base_amount_bits, 0);
-    let collateral_base_amount: u32 = jet::rightmost_64_32(collateral_base_amount_raw);
-
-    let (principal_base_amount_raw, shift): (u64, u8) = extract_bits_from_amount(second_parameters_amount, base_amount_bits, shift);
-    let principal_base_amount: u32 = jet::rightmost_64_32(principal_base_amount_raw);
-
-    let collateral_amount: u64 = from_base_amount(collateral_base_amount, collateral_decimals_mantissa);
-    let principal_amount: u64 = from_base_amount(principal_base_amount, principal_decimals_mantissa);
-
-    (collateral_amount, principal_amount, loan_expiration_time, interest_rate)
-}
-
-fn validate_lending_params(collateral_amount: u64, principal_amount: u64, loan_expiration_time: u32, interest_rate: u16) {
-    check_asset_amounts_eq(param::COLLATERAL_AMOUNT, collateral_amount);
-    check_asset_amounts_eq(param::PRINCIPAL_AMOUNT, principal_amount);
-    check_asset_amounts_eq(jet::left_pad_low_32_64(param::LOAN_EXPIRATION_TIME), jet::left_pad_low_32_64(loan_expiration_time));
-    check_asset_amounts_eq(jet::left_pad_low_16_64(param::PRINCIPAL_INTEREST_RATE), jet::left_pad_low_16_64(interest_rate));
-}
-
-// Interest logic
-
-fn calculate_interest(principal_amount: u64, interest_rate: u16) -> u64 {
-    let MAX_BASIS_POINTS: u64 = 10_000;
-
-    let interest_rate: u64 = jet::left_pad_low_16_64(interest_rate);
-
-    let interest: u128 = jet::multiply_64(principal_amount, interest_rate);
-
-    // TODO: Handle case when hi > 0
-    let (hi, lo): (u64, u64) = <u128>::into(interest);
-    check_asset_amounts_eq(hi, 0);
-
-    let interest: u64 = jet::divide_64(lo, MAX_BASIS_POINTS);
-
-    interest
-}
-
-fn calculate_principal_with_interest(principal_without_interest: u64, interest_rate: u16) -> u64 {
-    let interest: u64 = calculate_interest(principal_without_interest, interest_rate);
-
-    let (carry, principal_with_interest): (bool, u64) = jet::add_64(principal_without_interest, interest);
-    ensure_zero_bit(carry);
-
-    principal_with_interest
-}
-
 // Main paths logic
 
-fn loan_repayment_path() {
-    assert!(jet::eq_32(jet::current_index(), 0));
-
-    ensure_input_and_output_assets_with_amount_eq(0, 0, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
-    let first_parameters_amount: u64 = ensure_input_and_output_assets_eq(1, 2, param::FIRST_PARAMETERS_NFT_ASSET_ID);
-    let second_parameters_amount: u64 = ensure_input_and_output_assets_eq(2, 3, param::SECOND_PARAMETERS_NFT_ASSET_ID);
-    ensure_input_and_output_assets_with_amount_eq(3, 4, param::BORROWER_NFT_ASSET_ID, 1);
-
-    let (
-        collateral_amount,
-        principal_amount,
-        loan_expiration_time,
-        interest_rate
-    ): (u64, u64, u32, u16) = extract_lending_parameters(first_parameters_amount, second_parameters_amount);
-
-    validate_lending_params(collateral_amount, principal_amount, loan_expiration_time, interest_rate);
-
-    let principal_amount_with_interest: u64 = calculate_principal_with_interest(principal_amount, interest_rate);
-
-    ensure_asset_with_amount(1, false, param::PRINCIPAL_ASSET_ID, principal_amount_with_interest);
-    ensure_script_hash(1, false, param::LENDER_PRINCIPAL_COV_HASH);
-
-    ensure_output_is_op_return(2);
-    ensure_output_is_op_return(3);
-    ensure_output_is_op_return(4);
+fn get_max_basis_points() -> u64 {
+    10_000
 }
 
-fn loan_liquidation_path() {
-    assert!(jet::eq_32(jet::current_index(), 0));
+fn apply_basis_points(amount: u64, bps: u64) -> u64 {
+    let amount_with_bps: u128 = jet::multiply_64(amount, bps);
 
-    ensure_input_and_output_assets_with_amount_eq(0, 0, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
-    let first_parameters_amount: u64 = ensure_input_and_output_assets_eq(1, 1, param::FIRST_PARAMETERS_NFT_ASSET_ID);
-    let second_parameters_amount: u64 = ensure_input_and_output_assets_eq(2, 2, param::SECOND_PARAMETERS_NFT_ASSET_ID);
-    ensure_input_and_output_assets_with_amount_eq(3, 3, param::LENDER_NFT_ASSET_ID, 1);
+    // TODO: Handle case when hi > 0
+    let (hi, lo): (u64, u64) = <u128>::into(amount_with_bps);
+    check_asset_amounts_eq(hi, 0);
 
-    let (
-        collateral_amount,
-        principal_amount,
-        loan_expiration_time,
-        interest_rate
-    ): (u64, u64, u32, u16) = extract_lending_parameters(first_parameters_amount, second_parameters_amount);
+    let result: u64 = jet::divide_64(lo, get_max_basis_points());
 
-    validate_lending_params(collateral_amount, principal_amount, loan_expiration_time, interest_rate);
+    result
+}
 
-    jet::check_lock_height(loan_expiration_time);
+fn get_protocol_fee_percentage() -> u64 {
+    1_000 // 10%
+}
 
-    ensure_output_is_op_return(1);
-    ensure_output_is_op_return(2);
-    ensure_output_is_op_return(3);
+fn calc_protocol_fee_amount(fee_amount: u64) -> u64 {
+    apply_basis_points(fee_amount, get_protocol_fee_percentage())
+}
+
+fn get_total_fee_amount() -> u64 {
+    apply_basis_points(param::PRINCIPAL_AMOUNT, param::PRINCIPAL_INTEREST_RATE)
+}
+
+fn get_total_protocol_fee_amount() -> u64 {
+    calc_protocol_fee_amount(get_total_fee_amount())
+}
+
+fn get_total_amount_to_repay() -> u64 {
+    let principal_amount: u64 = param::PRINCIPAL_AMOUNT;
+    let total_fee_amount: u64 = apply_basis_points(principal_amount, param::PRINCIPAL_INTEREST_RATE);
+
+    safe_add_64(principal_amount, total_fee_amount)
+}
+
+fn handle_first_repayment(amount_to_repay: u64) {
+    let start_input_index: u32 = jet::current_index();
+    assert!(jet::eq_32(start_input_index, 0));
+
+    let borrower_debt_nft_input_index: u32 = safe_add_32(start_input_index, 1);
+
+    let (input_borrower_debt_nft_asset, input_borrower_debt_nft_amount): (u256, u64) = get_asset_and_amount(borrower_debt_nft_input_index, true);
+
+    check_assets_eq(input_borrower_debt_nft_asset, param::BORROWER_DEBT_NFT_ASSET_ID);
+
+    assert!(jet::some_64(amount_to_repay));
+    assert!(jet::lt_64(amount_to_repay, input_borrower_debt_nft_amount));
+    assert!(jet::le_64(input_borrower_debt_nft_amount, get_total_amount_to_repay()));
+
+    let total_amount_to_repay: u64 = get_total_amount_to_repay();
+
+    assert!(jet::le_64(input_borrower_debt_nft_amount, total_amount_to_repay));
+
+    let start_output_index: u32 = 0;
+    let lending_output_index: u32 = start_output_index;
+    let borrower_debt_nft_output_index: u32 = safe_add_32(start_output_index, 1);
+    let debt_nft_burn_output_index: u32 = safe_add_32(start_output_index, 2);
+    let lender_vault_output_index: u32 = safe_add_32(start_output_index, 3);
+    let protocol_fee_vault_output_index: u32 = safe_add_32(start_output_index, 4);
+
+    // Check Lending covenant output
+    ensure_input_and_output_assets_with_amount_eq(start_input_index, lending_output_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+    ensure_input_and_output_script_hashes_eq(start_input_index, lending_output_index);
+
+    // Check Borrower Debt NFT outputs
+    let expected_borrower_debt_nft_amount: u64 = safe_sub_64(input_borrower_debt_nft_amount, amount_to_repay);
+
+    ensure_asset_with_amount(borrower_debt_nft_output_index, false, input_borrower_debt_nft_asset, expected_borrower_debt_nft_amount);
+    ensure_input_and_output_script_hashes_eq(borrower_debt_nft_input_index, borrower_debt_nft_output_index);
+
+    ensure_asset_with_amount(debt_nft_burn_output_index, false, input_borrower_debt_nft_asset, amount_to_repay);
+    ensure_output_is_op_return(debt_nft_burn_output_index);
+
+    // Check Vault outputs
+    let repaid_fee_amount: u64 = min_64(get_total_fee_amount(), amount_to_repay);
+    let repaid_protocol_fee_amount: u64 = calc_protocol_fee_amount(repaid_fee_amount);
+    let lender_vault_amount: u64 = safe_sub_64(amount_to_repay, repaid_protocol_fee_amount);
+
+    ensure_asset_with_amount(lender_vault_output_index, false, param::PRINCIPAL_ASSET_ID, lender_vault_amount);
+    ensure_output_script_hash(lender_vault_output_index, param::LENDER_VAULT_COV_HASH);
+
+    let protocol_fee_vault_script_hash: u256 = match jet::eq_64(repaid_protocol_fee_amount, get_total_protocol_fee_amount()) {
+        true => param::FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH,
+        false => param::PROTOCOL_FEE_VAULT_COV_HASH,
+    };
+
+    ensure_asset_with_amount(protocol_fee_vault_output_index, false, param::PRINCIPAL_ASSET_ID, repaid_protocol_fee_amount);
+    ensure_output_script_hash(protocol_fee_vault_output_index, protocol_fee_vault_script_hash);
+}
+
+fn handle_subsequent_repayment(amount_to_repay: u64) {
+    let start_input_index: u32 = jet::current_index();
+    assert!(jet::eq_32(start_input_index, 0));
+
+    let borrower_debt_nft_input_index: u32 = safe_add_32(start_input_index, 1);
+    let lender_vault_input_index: u32 = safe_add_32(start_input_index, 2);
+
+    let (input_borrower_debt_nft_asset, input_borrower_debt_nft_amount): (u256, u64) = get_asset_and_amount(borrower_debt_nft_input_index, true);
+    let (input_lender_vault_asset, input_lender_vault_amount): (u256, u64) = get_asset_and_amount(lender_vault_input_index, true);
+
+    check_assets_eq(input_borrower_debt_nft_asset, param::BORROWER_DEBT_NFT_ASSET_ID);
+
+    assert!(jet::some_64(amount_to_repay));
+    assert!(jet::lt_64(amount_to_repay, input_borrower_debt_nft_amount));
+    assert!(jet::le_64(input_borrower_debt_nft_amount, get_total_amount_to_repay()));
+
+    let already_repaid_amount: u64 = safe_sub_64(get_total_amount_to_repay(), input_borrower_debt_nft_amount);
+    let already_repaid_fee_amount: u64 = min_64(get_total_fee_amount(), already_repaid_amount);
+    let already_repaid_protocol_fee_amount: u64 = calc_protocol_fee_amount(already_repaid_fee_amount);
+
+    // Check Vault inputs
+    check_assets_eq(input_lender_vault_asset, param::PRINCIPAL_ASSET_ID);
+    ensure_input_script_hash(lender_vault_input_index, param::LENDER_VAULT_COV_HASH);
+
+    let start_output_index: u32 = 0;
+    let lending_output_index: u32 = start_output_index;
+    let borrower_debt_nft_output_index: u32 = safe_add_32(start_output_index, 1);
+    let debt_nft_burn_output_index: u32 = safe_add_32(start_output_index, 2);
+    let lender_vault_output_index: u32 = safe_add_32(start_output_index, 3);
+
+    // Check Lending covenant output
+    ensure_input_and_output_assets_with_amount_eq(start_input_index, lending_output_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+    ensure_input_and_output_script_hashes_eq(start_input_index, lending_output_index);
+
+    // Check Borrower Debt NFT outputs
+    let expected_borrower_debt_nft_amount: u64 = safe_sub_64(input_borrower_debt_nft_amount, amount_to_repay);
+
+    ensure_asset_with_amount(borrower_debt_nft_output_index, false, input_borrower_debt_nft_asset, expected_borrower_debt_nft_amount);
+    ensure_input_and_output_script_hashes_eq(borrower_debt_nft_input_index, borrower_debt_nft_output_index);
+
+    ensure_asset_with_amount(debt_nft_burn_output_index, false, input_borrower_debt_nft_asset, amount_to_repay);
+    ensure_output_is_op_return(debt_nft_burn_output_index);
+
+    // Check Vault outputs
+    let fee_amount_left: u64 = safe_sub_64(get_total_fee_amount(), already_repaid_fee_amount);
+    let currently_repaid_fee_amount: u64 = min_64(fee_amount_left, amount_to_repay);
+    let currently_repaid_protocol_fee_amount: u64 = calc_protocol_fee_amount(currently_repaid_fee_amount);
+
+    let lender_vault_amount_delta: u64 = safe_sub_64(amount_to_repay, currently_repaid_protocol_fee_amount);
+    let lender_vault_amount: u64 = safe_add_64(input_lender_vault_amount, lender_vault_amount_delta);
+
+    ensure_asset_with_amount(lender_vault_output_index, false, param::PRINCIPAL_ASSET_ID, lender_vault_amount);
+    ensure_output_script_hash(lender_vault_output_index, param::LENDER_VAULT_COV_HASH);
+
+    match jet::lt_64(already_repaid_protocol_fee_amount, get_total_protocol_fee_amount()) {
+        true => {
+            let protocol_fee_vault_input_index: u32 = safe_add_32(start_input_index, 3);
+            let protocol_fee_vault_output_index: u32 = safe_add_32(start_output_index, 4);
+
+            let (input_protocol_fee_vault_asset, input_protocol_fee_vault_amount): (u256, u64) = get_asset_and_amount(protocol_fee_vault_input_index, true);
+
+            check_assets_eq(input_protocol_fee_vault_asset, param::PRINCIPAL_ASSET_ID);
+            ensure_input_script_hash(protocol_fee_vault_input_index, param::PROTOCOL_FEE_VAULT_COV_HASH);
+
+            let total_repaid_protocol_fee_amount: u64 = safe_add_64(already_repaid_protocol_fee_amount, currently_repaid_protocol_fee_amount);
+
+            let protocol_fee_vault_script_hash: u256 = match jet::eq_64(total_repaid_protocol_fee_amount, get_total_protocol_fee_amount()) {
+                true => param::FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH,
+                false => param::PROTOCOL_FEE_VAULT_COV_HASH,
+            };
+
+            let protocol_fee_vault_amount: u64 = safe_add_64(input_protocol_fee_vault_amount, currently_repaid_protocol_fee_amount);
+
+            ensure_asset_with_amount(protocol_fee_vault_output_index, false, param::PRINCIPAL_ASSET_ID, protocol_fee_vault_amount);
+            ensure_output_script_hash(protocol_fee_vault_output_index, protocol_fee_vault_script_hash);
+        },
+        false => {},
+    };
+}
+
+fn partial_repay(amount_to_repay: u64) {
+    let start_input_index: u32 = jet::current_index();
+
+    let (input_borrower_debt_nft_asset, input_borrower_debt_nft_amount): (u256, u64) = get_asset_and_amount(safe_add_32(start_input_index, 1), true);
+
+    match jet::eq_64(input_borrower_debt_nft_amount, get_total_amount_to_repay()) {
+        true => {
+            handle_first_repayment(amount_to_repay);
+        },
+        false => {
+            handle_subsequent_repayment(amount_to_repay);
+        },
+    };
+}
+
+fn full_repay() {
+    let start_input_index: u32 = jet::current_index();
+    assert!(jet::eq_32(start_input_index, 0));
+
+    let borrower_debt_nft_input_index: u32 = safe_add_32(start_input_index, 1);
+    
+    let (input_borrower_debt_nft_asset, input_borrower_debt_nft_amount): (u256, u64) = get_asset_and_amount(borrower_debt_nft_input_index, true);
+
+    check_assets_eq(input_borrower_debt_nft_asset, param::BORROWER_DEBT_NFT_ASSET_ID);
+
+    let already_repaid_amount: u64 = safe_sub_64(get_total_amount_to_repay(), input_borrower_debt_nft_amount);
+    let already_repaid_fee_amount: u64 = min_64(get_total_fee_amount(), already_repaid_amount);
+    let already_repaid_protocol_fee_amount: u64 = calc_protocol_fee_amount(already_repaid_fee_amount);
+
+    let start_output_index: u32 = 0;
+    let borrower_debt_nft_output_index: u32 = start_output_index;
+    let lender_vault_output_index: u32 = safe_add_32(start_output_index, 1);
+
+    // Check Borrower Debt NFT output
+    ensure_asset_with_amount(borrower_debt_nft_output_index, false, input_borrower_debt_nft_asset, input_borrower_debt_nft_amount);
+    ensure_output_is_op_return(borrower_debt_nft_output_index);
+
+    // Check Vault outputs
+    let fee_amount_left: u64 = safe_sub_64(get_total_fee_amount(), already_repaid_fee_amount);
+    let currently_repaid_protocol_fee_amount: u64 = calc_protocol_fee_amount(fee_amount_left);
+
+    let input_lender_vault_amount: u64 = match jet::some_64(already_repaid_amount) {
+        true => {
+            let lender_vault_input_index: u32 = safe_add_32(start_input_index, 2);
+
+            let (input_lender_vault_asset, input_lender_vault_amount): (u256, u64) = get_asset_and_amount(lender_vault_input_index, true);
+
+            check_assets_eq(input_lender_vault_asset, param::PRINCIPAL_ASSET_ID);
+            ensure_input_script_hash(lender_vault_input_index, param::LENDER_VAULT_COV_HASH);
+
+            input_lender_vault_amount
+        },
+        false => 0,
+    };
+
+    let lender_vault_amount: u64 = safe_add_64(input_lender_vault_amount, input_borrower_debt_nft_amount);
+
+    ensure_asset_with_amount(lender_vault_output_index, false, param::PRINCIPAL_ASSET_ID, lender_vault_amount);
+    ensure_output_script_hash(lender_vault_output_index, param::FINALIZED_LENDER_VAULT_COV_HASH);
+
+    match jet::lt_64(already_repaid_protocol_fee_amount, get_total_protocol_fee_amount()) {
+        true => {
+            let protocol_fee_vault_input_index: u32 = safe_add_32(start_input_index, 3);
+            let protocol_fee_vault_output_index: u32 = safe_add_32(start_output_index, 4);
+
+            let (input_protocol_fee_vault_asset, input_protocol_fee_vault_amount): (u256, u64) = get_asset_and_amount(protocol_fee_vault_input_index, true);
+
+            check_assets_eq(input_protocol_fee_vault_asset, param::PRINCIPAL_ASSET_ID);
+            ensure_input_script_hash(protocol_fee_vault_input_index, param::PROTOCOL_FEE_VAULT_COV_HASH);
+
+            let protocol_fee_vault_amount: u64 = safe_add_64(input_protocol_fee_vault_amount, currently_repaid_protocol_fee_amount);
+
+            ensure_asset_with_amount(protocol_fee_vault_output_index, false, param::PRINCIPAL_ASSET_ID, protocol_fee_vault_amount);
+            ensure_output_script_hash(protocol_fee_vault_output_index, param::FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH);
+        },
+        false => {},
+    };
+}
+
+fn liquidate() {
+    let start_input_index: u32 = jet::current_index();
+    assert!(jet::eq_32(start_input_index, 0));
+
+    jet::check_lock_height(param::LOAN_EXPIRATION_TIME);
+
+    let (collateral_asset, collateral_amount): (u256, u64) = get_asset_and_amount(start_input_index, true);
+    let (input_borrower_debt_nft_asset, input_borrower_debt_nft_amount): (u256, u64) = get_asset_and_amount(safe_add_32(start_input_index, 1), true);
+    let (input_lender_nft_asset, input_lender_nft_amount): (u256, u64) = get_asset_and_amount(safe_add_32(start_input_index, 2), true);
+
+    check_assets_eq(collateral_asset, param::COLLATERAL_ASSET_ID);
+    check_assets_eq(input_borrower_debt_nft_asset, param::BORROWER_DEBT_NFT_ASSET_ID);
+    check_assets_eq(input_lender_nft_asset, param::LENDER_NFT_ASSET_ID);
+
+    check_asset_amounts_eq(collateral_amount, param::COLLATERAL_AMOUNT);
+    check_asset_amounts_eq(input_lender_nft_amount, 1);
+
+    let start_output_index: u32 = 0;
+    let borrower_debt_nft_output_index: u32 = start_output_index;
+    let lender_nft_output_index: u32 = safe_add_32(start_output_index, 1);
+
+    let (output_borrower_debt_nft_asset, output_borrower_debt_nft_amount): (u256, u64) = get_asset_and_amount(borrower_debt_nft_output_index, false);
+    let (output_lender_nft_asset, output_lender_nft_amount): (u256, u64) = get_asset_and_amount(lender_nft_output_index, false);
+
+    check_asset_amounts_eq(input_borrower_debt_nft_amount, output_borrower_debt_nft_amount);
+    check_asset_amounts_eq(input_lender_nft_amount, output_lender_nft_amount);
+
+    ensure_output_is_op_return(borrower_debt_nft_output_index);
+    ensure_output_is_op_return(lender_nft_output_index);
 }
 
 fn main() {
     match witness::PATH {
-        Left(params: ()) => {
-            loan_repayment_path();
+        Left(repayment_params: Either<u64, ()>) => {
+            match repayment_params {
+                Left(amount_to_repay: u64) => {
+                    partial_repay(amount_to_repay);
+                },
+                Right(params: ()) => {
+                    full_repay();
+                },
+            }
         },
         Right(params: ()) => {
-            loan_liquidation_path();
+            liquidate();
         }
     }
 }
