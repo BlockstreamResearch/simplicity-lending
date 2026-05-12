@@ -18,7 +18,7 @@ export default defineConfig({
       },
       typescript: true,
       eslint: {
-        lintCommand: 'eslint "{src,config}/**/*.{jsx,tsx}" --cache --max-warnings=0',
+        lintCommand: 'eslint .',
       },
     }),
   ],
