@@ -5,7 +5,8 @@ import type { ListOffersParams } from './indexer'
 export const queryKeys = {
   offers: {
     all: ['offers'] as const,
-    list: (params: ListOffersParams = {}) => ['offers', 'list', params] as const,
+    list: ({ status, asset, limit, offset }: ListOffersParams) =>
+      ['offers', 'list', status, asset, limit, offset] as const,
     detail: (offerId: string) => ['offers', 'detail', offerId] as const,
     utxos: (offerId: string) => ['offers', 'utxos', offerId] as const,
     participants: (offerId: string) => ['offers', 'participants', offerId] as const,

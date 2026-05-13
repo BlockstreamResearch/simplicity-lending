@@ -23,18 +23,12 @@ const utxoListSchema = z.array(scripthashUtxoEntrySchema)
 const txListSchema = z.array(scripthashTxEntrySchema)
 const outspendsListSchema = z.array(esploraOutspendSchema)
 
-function esploraBaseUrl(): string {
-  return env.VITE_ESPLORA_BASE_URL.replace(/\/+$/, '')
-}
-
-function explorerBaseUrl(): string {
-  const explorerOverride = env.VITE_ESPLORA_EXPLORER_URL
-  if (explorerOverride) return explorerOverride.replace(/\/+$/, '')
-  return esploraBaseUrl()
-}
-
 function buildEsploraUrl(path: string): string {
-  return `${esploraBaseUrl()}${path}`
+  return `${env.VITE_ESPLORA_BASE_URL}${path}`
+}
+
+function buildExplorerUrl(path: string): string {
+  return `${env.VITE_ESPLORA_EXPLORER_URL}${path}`
 }
 
 type Resource = 'address' | 'scripthash'
@@ -50,15 +44,15 @@ function buildTxsHistoryPath(basePath: string, lastSeenTxid?: string): string {
 }
 
 export function getTxExplorerUrl(txid: string): string {
-  return `${explorerBaseUrl()}/tx/${txid.trim()}`
+  return buildExplorerUrl(`/tx/${txid.trim()}`)
 }
 
 export function getAssetExplorerUrl(assetId: string): string {
-  return `${explorerBaseUrl()}/asset/${assetId.trim()}`
+  return buildExplorerUrl(`/asset/${assetId.trim()}`)
 }
 
 export function getAddressExplorerUrl(address: string): string {
-  return `${explorerBaseUrl()}/address/${address.trim()}`
+  return buildExplorerUrl(`/address/${address.trim()}`)
 }
 
 export async function getTx(txid: string, options: RequestParams = {}): Promise<EsploraTx> {

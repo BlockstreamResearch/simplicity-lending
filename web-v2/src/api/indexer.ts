@@ -26,17 +26,13 @@ const offerDetailsListSchema = z.array(offerDetailsSchema)
 const offerUtxoListSchema = z.array(offerUtxoSchema)
 const offerParticipantListSchema = z.array(offerParticipantSchema)
 
-function indexerBaseUrl(): string {
-  return env.VITE_API_URL.replace(/\/+$/, '')
-}
-
 function buildOfferUrl(offerId: string, suffix = ''): string {
-  return `${indexerBaseUrl()}/offers/${encodeURIComponent(offerId)}${suffix}`
+  return `${env.VITE_API_URL}/offers/${encodeURIComponent(offerId)}${suffix}`
 }
 
 function buildSearchUrl(path: string, params: Record<string, string>): string {
   const query = new URLSearchParams(params).toString()
-  return query ? `${indexerBaseUrl()}${path}?${query}` : `${indexerBaseUrl()}${path}`
+  return query ? `${env.VITE_API_URL}${path}?${query}` : `${env.VITE_API_URL}${path}`
 }
 
 function postBatch<Schema extends z.ZodTypeAny>(
@@ -44,7 +40,7 @@ function postBatch<Schema extends z.ZodTypeAny>(
   ids: string[],
   options: RequestParams,
 ): Promise<z.output<Schema>> {
-  return requestJson(`${indexerBaseUrl()}/offers/batch`, schema, {
+  return requestJson(`${env.VITE_API_URL}/offers/batch`, schema, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids }),
@@ -53,7 +49,7 @@ function postBatch<Schema extends z.ZodTypeAny>(
 }
 
 export interface ListOffersParams {
-  status?: OfferStatus | string
+  status?: OfferStatus
   asset?: string
   limit?: number
   offset?: number

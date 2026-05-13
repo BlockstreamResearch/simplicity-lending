@@ -27,6 +27,7 @@ export function useOffer(offerId: string): UseQueryResult<OfferDetails> {
     queryKey: queryKeys.offers.detail(offerId),
     queryFn: ({ signal }) => fetchOffer(offerId, { signal }),
     staleTime: STALE_TIME_MS.realtime,
+    enabled: !!offerId,
   })
 }
 
@@ -35,6 +36,7 @@ export function useOfferUtxos(offerId: string): UseQueryResult<OfferUtxo[]> {
     queryKey: queryKeys.offers.utxos(offerId),
     queryFn: ({ signal }) => fetchOfferUtxos(offerId, { signal }),
     staleTime: STALE_TIME_MS.realtime,
+    enabled: !!offerId,
   })
 }
 
@@ -43,6 +45,7 @@ export function useOfferParticipants(offerId: string): UseQueryResult<OfferParti
     queryKey: queryKeys.offers.participants(offerId),
     queryFn: ({ signal }) => fetchOfferParticipants(offerId, { signal }),
     staleTime: STALE_TIME_MS.realtime,
+    enabled: !!offerId,
   })
 }
 
@@ -52,6 +55,7 @@ export function useOfferParticipantsHistory(offerId: string): UseQueryResult<Off
     queryFn: ({ signal }) => fetchOfferParticipantsHistory(offerId, { signal }),
     staleTime: STALE_TIME_MS.realtime,
     gcTime: GC_TIME_MS.long,
+    enabled: !!offerId,
   })
 }
 
@@ -60,6 +64,7 @@ export function useOfferIdsByScript(scriptPubkeyHex: string): UseQueryResult<str
     queryKey: queryKeys.offers.byScript(scriptPubkeyHex),
     queryFn: ({ signal }) => fetchOfferIdsByScript(scriptPubkeyHex, { signal }),
     staleTime: STALE_TIME_MS.realtime,
+    enabled: !!scriptPubkeyHex,
   })
 }
 
@@ -68,5 +73,6 @@ export function useOfferIdsByBorrowerPubkey(borrowerPubkeyHex: string): UseQuery
     queryKey: queryKeys.offers.byBorrower(borrowerPubkeyHex),
     queryFn: ({ signal }) => fetchOfferIdsByBorrowerPubkey(borrowerPubkeyHex, { signal }),
     staleTime: STALE_TIME_MS.realtime,
+    enabled: !!borrowerPubkeyHex,
   })
 }

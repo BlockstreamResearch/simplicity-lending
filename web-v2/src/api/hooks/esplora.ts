@@ -35,6 +35,7 @@ export function useTx(txid: string): UseQueryResult<EsploraTx> {
     queryFn: ({ signal }) => getTx(txid, { signal }),
     staleTime: STALE_TIME_MS.long,
     gcTime: GC_TIME_MS.long,
+    enabled: txid.length > 0,
   })
 }
 
@@ -43,6 +44,7 @@ export function useTxOutspends(txid: string): UseQueryResult<EsploraOutspend[]> 
     queryKey: queryKeys.esplora.txOutspends(txid),
     queryFn: ({ signal }) => getTxOutspends(txid, { signal }),
     staleTime: STALE_TIME_MS.short,
+    enabled: txid.length > 0,
   })
 }
 
@@ -51,6 +53,7 @@ export function useAddressInfo(address: string): UseQueryResult<AddressInfo> {
     queryKey: queryKeys.esplora.addressInfo(address),
     queryFn: ({ signal }) => getAddressInfo(address, { signal }),
     staleTime: STALE_TIME_MS.short,
+    enabled: address.length > 0,
   })
 }
 
@@ -59,6 +62,7 @@ export function useAddressUtxos(address: string): UseQueryResult<ScripthashUtxoE
     queryKey: queryKeys.esplora.addressUtxo(address),
     queryFn: ({ signal }) => getAddressUtxo(address, { signal }),
     staleTime: STALE_TIME_MS.realtime,
+    enabled: address.length > 0,
   })
 }
 
@@ -70,6 +74,7 @@ export function useAddressTxs(
     queryKey: queryKeys.esplora.addressTxs(address, lastSeenTxid),
     queryFn: ({ signal }) => getAddressTxs(address, lastSeenTxid, { signal }),
     staleTime: STALE_TIME_MS.short,
+    enabled: address.length > 0,
   })
 }
 

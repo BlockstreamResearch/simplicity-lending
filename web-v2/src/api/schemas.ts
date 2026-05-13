@@ -16,7 +16,10 @@ function coerceToNumber(value: unknown): unknown {
 }
 
 const u64AsBigint = z.preprocess(coerceToBigint, z.bigint())
-const u64AsNumber = z.preprocess(coerceToNumber, z.number())
+const blockHeightSchema = z.preprocess(
+  coerceToNumber,
+  z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+)
 
 const finiteNumber = z.coerce.number().refine(Number.isFinite, 'must be finite')
 
@@ -27,12 +30,13 @@ export const offerStatusSchema = z.enum([
   'liquidated',
   'cancelled',
   'claimed',
+  'unknown',
 ])
 export type OfferStatus = z.infer<typeof offerStatusSchema>
 
 const offerStatusWithFallback = offerStatusSchema.catch(ctx => {
-  console.warn('[api] unknown offer status, falling back to "pending"', { value: ctx.input })
-  return 'pending'
+  console.warn('[api] unrecognized offer status', { value: ctx.input })
+  return 'unknown'
 })
 
 export const participantTypeSchema = z.enum(['borrower', 'lender'])
@@ -57,7 +61,7 @@ export const offerShortSchema = z.object({
   principal_amount: u64AsBigint,
   interest_rate: finiteNumber.default(0),
   loan_expiration_time: finiteNumber.default(0),
-  created_at_height: u64AsNumber,
+  created_at_height: blockHeightSchema,
   created_at_txid: z.string(),
 })
 export type OfferShort = z.infer<typeof offerShortSchema>
@@ -89,7 +93,7 @@ export const offerUtxoSchema = z.object({
   txid: z.string(),
   vout: z.coerce.number(),
   utxo_type: offerUtxoTypeSchema,
-  created_at_height: u64AsNumber,
+  created_at_height: blockHeightSchema,
   spent_txid: z.string().nullable(),
   spent_at_height: z.coerce.number().nullable(),
 })
@@ -101,7 +105,7 @@ export const offerParticipantSchema = z.object({
   script_pubkey: z.string(),
   txid: z.string(),
   vout: z.coerce.number(),
-  created_at_height: u64AsNumber,
+  created_at_height: blockHeightSchema,
   spent_txid: z.string().nullable(),
   spent_at_height: z.coerce.number().nullable(),
 })
@@ -170,11 +174,20 @@ export const esploraVoutSchema = z
   .passthrough()
 export type EsploraVout = z.infer<typeof esploraVoutSchema>
 
+export const esploraVinSchema = z
+  .object({
+    txid: z.string().optional(),
+    vout: z.number().optional(),
+    is_coinbase: z.boolean().optional(),
+  })
+  .passthrough()
+export type EsploraVin = z.infer<typeof esploraVinSchema>
+
 export const esploraTxSchema = z
   .object({
     txid: z.string(),
     vout: z.array(esploraVoutSchema),
-    vin: z.array(z.unknown()).optional(),
+    vin: z.array(esploraVinSchema).optional(),
     status: txStatusSchema.optional(),
   })
   .passthrough()
