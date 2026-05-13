@@ -4,6 +4,7 @@ import AppLayout from '@/components/AppLayout'
 import { RoutePath } from '@/constants/routes'
 import { AppProviders } from '@/providers/AppProviders'
 
+import ErrorBoundary from './components/ErrorBoundary'
 import BorrowPage from './pages/Borrow'
 import DashboardPage from './pages/Dashboard'
 import SupplyPage from './pages/Supply'
@@ -12,6 +13,7 @@ const router = createBrowserRouter([
   {
     path: RoutePath.Dashboard,
     element: <AppLayout />,
+    errorElement: <ErrorBoundary />,
     children: [
       {
         index: true,
