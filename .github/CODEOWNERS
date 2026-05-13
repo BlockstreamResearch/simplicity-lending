@@ -1,2 +1,7 @@
 # These owners will be requested for review when someone opens a pull request.
+
+# Default owners for any paths not matched below.
 * @Arvolear @Hrom131
+
+# Frontend apps
+/web-v2/ @ardier16

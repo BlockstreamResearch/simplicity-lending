@@ -4,7 +4,11 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'web-v2/**'
   pull_request:
+    paths-ignore:
+      - 'web-v2/**'
   workflow_call:
 
 env:
