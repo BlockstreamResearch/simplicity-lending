@@ -13,3 +13,5 @@ export const env = envSchema.parse({
 })
 
 export type AppEnv = z.infer<typeof envSchema>
+
+export type NetworkName = AppEnv['VITE_NETWORK']
