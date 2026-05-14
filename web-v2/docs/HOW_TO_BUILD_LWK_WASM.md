@@ -5,11 +5,11 @@
 ## 1. **Build lwk-builder stage:**
 
 ```bash
-# run from repo root (contains web/ and web-v2/)
-docker build -f web/Dockerfile --target lwk-builder -t lwk-builder .
+# run from repo root
+docker build -f web-v2/Dockerfile --target lwk-builder -t lwk-builder .
 ```
 
-## **2. Extract pkg_web to repo root pkg_web**:
+## **2. Extract pkg_web to repo root:**
 
 ```bash
 docker create --name tmp lwk-builder
