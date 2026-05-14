@@ -11,17 +11,101 @@ use crate::artifacts::issuance_factory::IssuanceFactoryProgram;
 use crate::programs::issuance_factory::{
     IssuanceFactoryError, IssuanceFactoryParameters, IssuanceFactoryWitnessBranch,
 };
-use crate::programs::program::SimplexProgram;
+use crate::programs::program::{
+    CreationOpReturnData, PROGRAM_ID_LENGTH, ProgramId, SimplexProgram, op_return_payload,
+};
 
 pub struct IssuanceFactory {
     program: IssuanceFactoryProgram,
     parameters: IssuanceFactoryParameters,
 }
 
-// TODO: encode constants to the factory asset amount or creation OP_RETURN
-pub const PRE_LOCK_ISSUING_UTXOS_COUNT: u8 = 2;
-pub const PRE_LOCK_REISSUANCE_FLAGS: u64 = 0;
-pub const ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH: usize = 32;
+const CREATION_OP_RETURN_OUTPUT_INDEX: usize = 1;
+const OWNER_PUBKEY_LENGTH: usize = 32;
+const CREATION_OP_RETURN_DATA_LENGTH: usize = PROGRAM_ID_LENGTH
+    + std::mem::size_of::<u8>()
+    + std::mem::size_of::<u64>()
+    + OWNER_PUBKEY_LENGTH;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IssuanceFactoryCreationOpReturnData {
+    pub program_id: ProgramId,
+    pub issuing_utxos_count: u8,
+    pub reissuance_flags: u64,
+    pub owner_pubkey: XOnlyPublicKey,
+}
+
+impl IssuanceFactoryCreationOpReturnData {
+    pub fn new(
+        program_id: ProgramId,
+        issuing_utxos_count: u8,
+        reissuance_flags: u64,
+        owner_pubkey: XOnlyPublicKey,
+    ) -> Self {
+        Self {
+            program_id,
+            issuing_utxos_count,
+            reissuance_flags,
+            owner_pubkey,
+        }
+    }
+
+    pub fn decode(op_return_bytes: &[u8]) -> Result<Self, IssuanceFactoryError> {
+        <Self as CreationOpReturnData>::decode(op_return_bytes)
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        <Self as CreationOpReturnData>::encode(self)
+    }
+}
+
+impl CreationOpReturnData for IssuanceFactoryCreationOpReturnData {
+    type Error = IssuanceFactoryError;
+
+    const DATA_LENGTH: usize = CREATION_OP_RETURN_DATA_LENGTH;
+
+    fn decode(op_return_bytes: &[u8]) -> Result<Self, Self::Error> {
+        Self::validate_length(op_return_bytes, |expected, actual| {
+            IssuanceFactoryError::InvalidCreationOpReturnDataLength { expected, actual }
+        })?;
+
+        let mut cursor = 0;
+
+        let program_id = Self::decode_program_id(op_return_bytes);
+        cursor += PROGRAM_ID_LENGTH;
+
+        let issuing_utxos_count = op_return_bytes[cursor];
+        cursor += std::mem::size_of::<u8>();
+
+        let reissuance_flags = u64::from_le_bytes(
+            op_return_bytes[cursor..cursor + std::mem::size_of::<u64>()]
+                .try_into()
+                .expect("reissuance flags length is fixed"),
+        );
+        cursor += std::mem::size_of::<u64>();
+
+        let owner_pubkey_bytes = &op_return_bytes[cursor..];
+        let owner_pubkey = XOnlyPublicKey::from_slice(owner_pubkey_bytes)
+            .map_err(|_| IssuanceFactoryError::InvalidOpReturnBytes(op_return_bytes.to_hex()))?;
+
+        Ok(Self {
+            program_id,
+            issuing_utxos_count,
+            reissuance_flags,
+            owner_pubkey,
+        })
+    }
+
+    fn encode(&self) -> Vec<u8> {
+        let mut op_return_data = Vec::with_capacity(Self::DATA_LENGTH);
+        op_return_data.extend_from_slice(&self.program_id);
+        op_return_data.push(self.issuing_utxos_count);
+        op_return_data.extend_from_slice(&self.reissuance_flags.to_le_bytes());
+        op_return_data.extend_from_slice(&self.owner_pubkey.serialize());
+
+        op_return_data
+    }
+}
 
 impl IssuanceFactory {
     pub fn new(parameters: IssuanceFactoryParameters) -> Self {
@@ -35,30 +119,25 @@ impl IssuanceFactory {
         tx: &Transaction,
         provider: &impl ProviderTrait,
     ) -> Result<Self, IssuanceFactoryError> {
-        if tx.output.len() < 2 || !tx.output[1].is_null_data() {
+        if tx.output.len() <= CREATION_OP_RETURN_OUTPUT_INDEX
+            || !tx.output[CREATION_OP_RETURN_OUTPUT_INDEX].is_null_data()
+        {
             return Err(IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(
                 tx.txid(),
             ));
         }
 
-        let mut op_return_instr_iter = tx.output[5].script_pubkey.instructions_minimal();
+        let op_return_bytes =
+            op_return_payload(&tx.output[CREATION_OP_RETURN_OUTPUT_INDEX].script_pubkey)
+                .ok_or_else(|| IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(tx.txid()))?;
 
-        op_return_instr_iter.next();
-
-        let op_return_bytes = op_return_instr_iter
-            .next()
-            .unwrap()
-            .unwrap()
-            .push_bytes()
-            .unwrap();
-
-        let owner_pubkey =
+        let creation_op_return_data =
             IssuanceFactory::decode_creation_op_return_data(op_return_bytes.to_vec())?;
 
         let issuance_factory_parameters = IssuanceFactoryParameters {
-            issuing_utxos_count: PRE_LOCK_ISSUING_UTXOS_COUNT,
-            reissuance_flags: PRE_LOCK_REISSUANCE_FLAGS,
-            owner_pubkey,
+            issuing_utxos_count: creation_op_return_data.issuing_utxos_count,
+            reissuance_flags: creation_op_return_data.reissuance_flags,
+            owner_pubkey: creation_op_return_data.owner_pubkey,
             network: *provider.get_network(),
         };
 
@@ -71,26 +150,18 @@ impl IssuanceFactory {
 
     pub fn decode_creation_op_return_data(
         op_return_bytes: Vec<u8>,
-    ) -> Result<XOnlyPublicKey, IssuanceFactoryError> {
-        if op_return_bytes.len() != ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH {
-            return Err(IssuanceFactoryError::InvalidCreationOpReturnDataLength {
-                expected: ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH,
-                actual: op_return_bytes.len(),
-            });
-        }
-
-        let owner_pubkey = XOnlyPublicKey::from_slice(op_return_bytes.as_slice())
-            .map_err(|_| IssuanceFactoryError::InvalidOpReturnBytes(op_return_bytes.to_hex()))?;
-
-        Ok(owner_pubkey)
+    ) -> Result<IssuanceFactoryCreationOpReturnData, IssuanceFactoryError> {
+        IssuanceFactoryCreationOpReturnData::decode(&op_return_bytes)
     }
 
     pub fn encode_creation_op_return_data(&self) -> Vec<u8> {
-        let mut op_return_data =
-            Vec::with_capacity(ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH);
-        op_return_data.extend_from_slice(&self.parameters.owner_pubkey.serialize());
-
-        op_return_data
+        IssuanceFactoryCreationOpReturnData::new(
+            self.get_program_id(),
+            self.parameters.issuing_utxos_count,
+            self.parameters.reissuance_flags,
+            self.parameters.owner_pubkey,
+        )
+        .encode()
     }
 
     pub fn attach_creation(

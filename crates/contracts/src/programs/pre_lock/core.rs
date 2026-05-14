@@ -10,7 +10,9 @@ use simplex::utils::hash_script;
 use crate::artifacts::pre_lock::PreLockProgram;
 use crate::programs::lending::Lending;
 use crate::programs::pre_lock::{PreLockError, PreLockParameters, PreLockWitnessBranch};
-use crate::programs::program::SimplexProgram;
+use crate::programs::program::{
+    CreationOpReturnData, PROGRAM_ID_LENGTH, ProgramId, SimplexProgram, op_return_payload,
+};
 use crate::programs::script_auth::{ScriptAuth, ScriptAuthWitnessParams};
 use crate::utils::{FirstNFTParameters, LendingOfferParameters, SecondNFTParameters};
 
@@ -24,56 +26,66 @@ const PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH: usize = 68;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PreLockCreationOpReturnData {
-    pub covenant_id: [u8; 4],
+    pub program_id: ProgramId,
     pub borrower_pubkey: XOnlyPublicKey,
     pub principal_asset_id: AssetId,
 }
 
 impl PreLockCreationOpReturnData {
     pub fn new(
-        covenant_id: [u8; 4],
+        program_id: ProgramId,
         borrower_pubkey: XOnlyPublicKey,
         principal_asset_id: AssetId,
     ) -> Self {
         Self {
-            covenant_id,
+            program_id,
             borrower_pubkey,
             principal_asset_id,
         }
     }
 
     pub fn decode(op_return_bytes: &[u8]) -> Result<Self, PreLockError> {
-        if op_return_bytes.len() != PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH {
-            return Err(PreLockError::InvalidCreationOpReturnDataLength {
-                expected: PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH,
-                actual: op_return_bytes.len(),
-            });
-        }
-
-        let mut covenant_id = [0; 4];
-        covenant_id.copy_from_slice(&op_return_bytes[0..4]);
-        let borrower_pubkey = &op_return_bytes[4..36];
-        let principal_asset_id = &op_return_bytes[36..68];
-
-        Ok(Self {
-            covenant_id,
-            borrower_pubkey: Self::decode_borrower_pubkey(borrower_pubkey)?,
-            principal_asset_id: AssetId::from_slice(principal_asset_id)?,
-        })
+        <Self as CreationOpReturnData>::decode(op_return_bytes)
     }
 
     pub fn encode(&self) -> Vec<u8> {
-        let mut op_return_data = Vec::with_capacity(PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH);
-        op_return_data.extend_from_slice(&self.covenant_id);
-        op_return_data.extend_from_slice(&self.borrower_pubkey.serialize());
-        op_return_data.extend_from_slice(&self.principal_asset_id.into_inner().0);
-
-        op_return_data
+        <Self as CreationOpReturnData>::encode(self)
     }
 
     fn decode_borrower_pubkey(op_return_pub_key: &[u8]) -> Result<XOnlyPublicKey, PreLockError> {
         XOnlyPublicKey::from_slice(op_return_pub_key)
             .map_err(|_| PreLockError::InvalidOpReturnBytes(op_return_pub_key.to_hex()))
+    }
+}
+
+impl CreationOpReturnData for PreLockCreationOpReturnData {
+    type Error = PreLockError;
+
+    const DATA_LENGTH: usize = PRE_LOCK_CREATION_OP_RETURN_DATA_LENGTH;
+
+    fn decode(op_return_bytes: &[u8]) -> Result<Self, Self::Error> {
+        Self::validate_length(op_return_bytes, |expected, actual| {
+            PreLockError::InvalidCreationOpReturnDataLength { expected, actual }
+        })?;
+
+        let program_id = Self::decode_program_id(op_return_bytes);
+        let borrower_pubkey = &op_return_bytes[PROGRAM_ID_LENGTH..36];
+        let principal_asset_id = &op_return_bytes[36..68];
+
+        Ok(Self {
+            program_id,
+            borrower_pubkey: Self::decode_borrower_pubkey(borrower_pubkey)?,
+            principal_asset_id: AssetId::from_slice(principal_asset_id)?,
+        })
+    }
+
+    fn encode(&self) -> Vec<u8> {
+        let mut op_return_data = Vec::with_capacity(Self::DATA_LENGTH);
+        op_return_data.extend_from_slice(&self.program_id);
+        op_return_data.extend_from_slice(&self.borrower_pubkey.serialize());
+        op_return_data.extend_from_slice(&self.principal_asset_id.into_inner().0);
+
+        op_return_data
     }
 }
 
@@ -134,16 +146,8 @@ impl PreLock {
             &pre_collateral_tx.output[prev_collateral_outpoint.vout as usize].script_pubkey,
         );
 
-        let mut op_return_instr_iter = tx.output[5].script_pubkey.instructions_minimal();
-
-        op_return_instr_iter.next();
-
-        let op_return_bytes = op_return_instr_iter
-            .next()
-            .unwrap()
-            .unwrap()
-            .push_bytes()
-            .unwrap();
+        let op_return_bytes = op_return_payload(&tx.output[5].script_pubkey)
+            .ok_or_else(|| PreLockError::NotAPreLockCreationTx(tx.txid()))?;
 
         let creation_op_return_data =
             PreLock::decode_creation_op_return_data(op_return_bytes.to_vec())?;
@@ -176,7 +180,7 @@ impl PreLock {
 
     pub fn encode_creation_op_return_data(&self) -> Vec<u8> {
         PreLockCreationOpReturnData::new(
-            self.get_program_source_code_hash(),
+            self.get_program_id(),
             self.parameters.borrower_pubkey,
             self.parameters.principal_asset_id,
         )

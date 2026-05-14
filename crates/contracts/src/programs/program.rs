@@ -7,7 +7,49 @@ use simplex::transaction::{
     RequiredSignature, UTXO,
 };
 
-use simplex::simplicityhl::elements::{AssetId, Script};
+use simplex::simplicityhl::elements::{AssetId, Script, opcodes, script::Instruction};
+
+pub const PROGRAM_ID_LENGTH: usize = 4;
+pub type ProgramId = [u8; PROGRAM_ID_LENGTH];
+
+pub fn op_return_payload(script: &Script) -> Option<&[u8]> {
+    let mut instructions = script.instructions_minimal();
+
+    match instructions.next()? {
+        Ok(Instruction::Op(opcodes::all::OP_RETURN)) => {}
+        _ => return None,
+    }
+
+    instructions.next()?.ok()?.push_bytes()
+}
+
+pub trait CreationOpReturnData: Sized {
+    type Error;
+
+    const DATA_LENGTH: usize;
+
+    fn decode(op_return_bytes: &[u8]) -> Result<Self, Self::Error>;
+
+    fn encode(&self) -> Vec<u8>;
+
+    fn validate_length(
+        op_return_bytes: &[u8],
+        invalid_length: impl FnOnce(usize, usize) -> Self::Error,
+    ) -> Result<(), Self::Error> {
+        if op_return_bytes.len() != Self::DATA_LENGTH {
+            return Err(invalid_length(Self::DATA_LENGTH, op_return_bytes.len()));
+        }
+
+        Ok(())
+    }
+
+    fn decode_program_id(op_return_bytes: &[u8]) -> ProgramId {
+        let mut program_id = [0; PROGRAM_ID_LENGTH];
+        program_id.copy_from_slice(&op_return_bytes[..PROGRAM_ID_LENGTH]);
+
+        program_id
+    }
+}
 
 pub trait SimplexProgram {
     fn add_program_input<'a>(
@@ -95,7 +137,7 @@ pub trait SimplexProgram {
         self.get_program().get_script_hash(self.get_network())
     }
 
-    fn get_program_source_code_hash(&self) -> [u8; 4] {
+    fn get_program_id(&self) -> ProgramId {
         let source_code_hash = digest(&SHA256, self.get_program_source_code().as_bytes());
         let mut hash_prefix = [0; 4];
         hash_prefix.copy_from_slice(&source_code_hash.as_ref()[..4]);
