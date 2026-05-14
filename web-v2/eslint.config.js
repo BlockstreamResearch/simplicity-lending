@@ -86,10 +86,7 @@ export default defineConfig([
   // TypeScript-specific overrides
   {
     files: ['**/*.{ts,tsx}'],
-    extends: [
-      tseslint.configs.recommended,
-      importPlugin.flatConfigs.typescript,
-    ],
+    extends: [tseslint.configs.recommended, importPlugin.flatConfigs.typescript],
     plugins: {
       '@typescript-eslint': tseslint.plugin,
     },
