@@ -5,11 +5,12 @@ import type { PropsWithChildren } from 'react'
 import { env } from '@/constants/env'
 
 import { queryClient } from './queryClient'
+import { LwkProvider } from './lwk/LwkProvider'
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <LwkProvider>{children}</LwkProvider>
       {env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   )

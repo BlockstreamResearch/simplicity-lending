@@ -27,6 +27,8 @@ Copy `.env.example` to `.env` and adjust as needed.
 
 ## Install
 
+> To build the LWK WASM module required by this app, see [docs/HOW_TO_BUILD_LWK_WASM.md](docs/HOW_TO_BUILD_LWK_WASM.md).
+
 ```bash
 pnpm install
 ```
