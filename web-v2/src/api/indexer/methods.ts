@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { env } from '@/constants/env'
 import { normalizeHex } from '@/utils/hex'
 
-import { requestJson, type RequestParams } from '../transport'
+import { requestJson, type RequestParams } from '../client'
 import {
   type OfferDetails,
   offerDetailsListSchema,

@@ -1,8 +1,8 @@
 import { env } from '@/constants/env'
 import { isHexString } from '@/utils/hex'
 
+import { requestBytes, requestJson, type RequestParams, requestText } from '../client'
 import { ApiError } from '../errors'
-import { apiClient, parseWithSchema, requestJson, type RequestParams } from '../transport'
 import {
   type AddressInfo,
   addressInfoSchema,
@@ -39,11 +39,7 @@ export async function fetchTx(txId: string, options: RequestParams = {}): Promis
 }
 
 export async function fetchTxRaw(txId: string, options: RequestParams = {}): Promise<Uint8Array> {
-  const { data } = await apiClient.get<ArrayBuffer>(buildEsploraUrl(`/tx/${txId}/raw`), {
-    signal: options.signal,
-    responseType: 'arraybuffer',
-  })
-  return new Uint8Array(data)
+  return requestBytes(buildEsploraUrl(`/tx/${txId}/raw`), { signal: options.signal })
 }
 
 export async function fetchTxOutspends(
@@ -60,40 +56,29 @@ export async function broadcastTx(txHex: string, options: RequestParams = {}): P
   if (!isHexString(trimmedHex)) {
     throw new ApiError('broadcastTx: txHex must be a non-empty hex string with even length')
   }
-  const { data } = await apiClient.post<string>(buildEsploraUrl('/tx'), trimmedHex, {
+  return requestText(buildEsploraUrl('/tx'), {
+    method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
-    responseType: 'text',
+    data: trimmedHex,
     signal: options.signal,
   })
-  return data.trim()
 }
 
 export async function fetchLatestBlockHash(options: RequestParams = {}): Promise<string> {
-  const { data } = await apiClient.get<string>(buildEsploraUrl('/blocks/tip/hash'), {
-    responseType: 'text',
-    signal: options.signal,
-  })
-  return data.trim()
+  return requestText(buildEsploraUrl('/blocks/tip/hash'), { signal: options.signal })
 }
 
 export async function fetchLatestBlockHeight(options: RequestParams = {}): Promise<number> {
-  const url = buildEsploraUrl('/blocks/tip/height')
-  const { data } = await apiClient.get<string>(url, {
-    responseType: 'text',
+  return requestText(buildEsploraUrl('/blocks/tip/height'), blockHeightTextSchema, {
     signal: options.signal,
   })
-  return parseWithSchema(data.trim(), blockHeightTextSchema, url)
 }
 
 export async function fetchBlockHashAtHeight(
   blockHeight: number,
   options: RequestParams = {},
 ): Promise<string> {
-  const { data } = await apiClient.get<string>(buildEsploraUrl(`/block-height/${blockHeight}`), {
-    responseType: 'text',
-    signal: options.signal,
-  })
-  return data.trim()
+  return requestText(buildEsploraUrl(`/block-height/${blockHeight}`), { signal: options.signal })
 }
 
 export async function fetchBlockTxIds(

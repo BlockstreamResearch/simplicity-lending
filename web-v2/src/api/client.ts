@@ -11,7 +11,7 @@ export interface RequestParams {
   signal?: AbortSignal
 }
 
-export const apiClient = axios.create({ timeout: DEFAULT_TIMEOUT_MS })
+const apiClient = axios.create({ timeout: DEFAULT_TIMEOUT_MS })
 
 apiClient.interceptors.response.use(undefined, (error: AxiosError) =>
   Promise.reject(toApiError(error)),
@@ -41,7 +41,7 @@ function safeStringify(data: unknown): string {
   }
 }
 
-export function parseWithSchema<Schema extends z.ZodTypeAny>(
+function parseWithSchema<Schema extends z.ZodTypeAny>(
   data: unknown,
   schema: Schema,
   url: string,
@@ -58,6 +58,10 @@ export function parseWithSchema<Schema extends z.ZodTypeAny>(
   return parsed.data
 }
 
+function isZodSchema(value: unknown): value is z.ZodTypeAny {
+  return typeof (value as { safeParse?: unknown } | undefined)?.safeParse === 'function'
+}
+
 export async function requestJson<Schema extends z.ZodTypeAny>(
   url: string,
   schema: Schema,
@@ -65,4 +69,31 @@ export async function requestJson<Schema extends z.ZodTypeAny>(
 ): Promise<z.output<Schema>> {
   const { data } = await apiClient.request<unknown>({ ...config, url })
   return parseWithSchema(data, schema, url)
+}
+
+export function requestText(url: string, config?: AxiosRequestConfig): Promise<string>
+export function requestText<Schema extends z.ZodTypeAny>(
+  url: string,
+  schema: Schema,
+  config?: AxiosRequestConfig,
+): Promise<z.output<Schema>>
+export async function requestText<Schema extends z.ZodTypeAny>(
+  url: string,
+  schemaOrConfig?: Schema | AxiosRequestConfig,
+  maybeConfig?: AxiosRequestConfig,
+): Promise<string | z.output<Schema>> {
+  const schema = isZodSchema(schemaOrConfig) ? schemaOrConfig : undefined
+  const config = schema ? maybeConfig : (schemaOrConfig as AxiosRequestConfig | undefined)
+  const { data } = await apiClient.request<string>({ ...config, url, responseType: 'text' })
+  const text = typeof data === 'string' ? data.trim() : ''
+  return schema ? parseWithSchema(text, schema, url) : text
+}
+
+export async function requestBytes(url: string, config?: AxiosRequestConfig): Promise<Uint8Array> {
+  const { data } = await apiClient.request<ArrayBuffer>({
+    ...config,
+    url,
+    responseType: 'arraybuffer',
+  })
+  return new Uint8Array(data)
 }
