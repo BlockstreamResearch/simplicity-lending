@@ -223,7 +223,7 @@ impl SecondNFTParameters {
 }
 
 pub const MAX_LIQUID_AMOUNT: u64 = 2_100_000_000_000_000;
-pub const MAX_BASIS_POINTS: u64 = 10_000;
+const MAX_BASIS_POINTS: u64 = 10_000;
 
 const POWERS_OF_10: [u64; 16] = [
     1,                     // 10^0

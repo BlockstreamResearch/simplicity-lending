@@ -1,18 +1,17 @@
 use simplex::{
     program::Program,
-    provider::{ProviderTrait, SimplicityNetwork},
-    simplicityhl::elements::{LockTime, Script, Sequence, Transaction},
+    provider::SimplicityNetwork,
+    simplicityhl::elements::{LockTime, Script, Sequence},
     transaction::{FinalTransaction, PartialInput, PartialOutput, UTXO},
 };
 
 use crate::programs::{
-    lending::{LendingError, LendingParameters, LendingWitnessBranch},
+    lending::{LendingParameters, LendingWitnessBranch},
+    ownable_script_auth::{OwnableScriptAuth, OwnableScriptAuthParameters},
     program::SimplexProgram,
-    script_auth::{ScriptAuth, ScriptAuthWitnessParams},
 };
 use crate::{
-    artifacts::lending::LendingProgram,
-    utils::{FirstNFTParameters, LendingOfferParameters, SecondNFTParameters},
+    artifacts::lending::LendingProgram, programs::lending::params::LendingOfferRepaymentPhase,
 };
 
 pub struct Lending {
@@ -28,176 +27,99 @@ impl Lending {
         }
     }
 
-    pub fn try_from_tx(
-        tx: &Transaction,
-        provider: &impl ProviderTrait,
-    ) -> Result<Self, LendingError> {
-        if tx.input.len() < 7 || tx.output.len() < 7 {
-            return Err(LendingError::NotALendingCreationTx(tx.txid()));
-        }
-
-        let collateral_asset_id = tx.output[0]
-            .asset
-            .explicit()
-            .ok_or_else(LendingError::ConfidentialAssetsAreNotSupported)?;
-        let first_parameters_nft_asset_id = tx.output[1]
-            .asset
-            .explicit()
-            .expect("Utility NFT must be explicit");
-        let second_parameters_nft_asset_id = tx.output[2]
-            .asset
-            .explicit()
-            .expect("Utility NFT must be explicit");
-        let borrower_nft_asset_id = tx.output[3]
-            .asset
-            .explicit()
-            .expect("Utility NFT must be explicit");
-        let lender_nft_asset_id = tx.output[4]
-            .asset
-            .explicit()
-            .expect("Utility NFT must be explicit");
-        let principal_asset_id = tx.output[5]
-            .asset
-            .explicit()
-            .ok_or_else(LendingError::ConfidentialAssetsAreNotSupported)?;
-
-        let first_parameters_nft_amount = tx.output[1]
-            .value
-            .explicit()
-            .expect("Parameter NFT must have explicit amount");
-        let second_parameters_nft_amount = tx.output[2]
-            .value
-            .explicit()
-            .expect("Parameter NFT must have explicit amount");
-
-        let offer_parameters = LendingOfferParameters::build_from_parameters_nfts(
-            &FirstNFTParameters::decode(first_parameters_nft_amount),
-            &SecondNFTParameters::decode(second_parameters_nft_amount),
-        );
-
-        let lending_parameters = LendingParameters {
-            collateral_asset_id,
-            principal_asset_id,
-            first_parameters_nft_asset_id,
-            second_parameters_nft_asset_id,
-            borrower_nft_asset_id,
-            lender_nft_asset_id,
-            offer_parameters,
-            network: *provider.get_network(),
-        };
-
-        Ok(Self::new(lending_parameters))
-    }
-
     pub fn get_parameters(&self) -> &LendingParameters {
         &self.parameters
     }
 
-    pub fn attach_creation(
-        &self,
-        ft: &mut FinalTransaction,
-        first_parameters_nft_utxo: UTXO,
-        second_parameters_nft_utxo: UTXO,
-    ) {
+    pub fn attach_creation(&self, ft: &mut FinalTransaction) {
         self.add_program_output(
             ft,
             self.parameters.collateral_asset_id,
-            self.parameters.offer_parameters.collateral_amount,
-        );
-
-        let parameter_nfts_script_auth = ScriptAuth::from_simplex_program(self);
-        let first_parameters_nft_amount = first_parameters_nft_utxo.explicit_amount();
-        let second_parameters_nft_amount = second_parameters_nft_utxo.explicit_amount();
-
-        parameter_nfts_script_auth.attach_creation(
-            ft,
-            self.parameters.first_parameters_nft_asset_id,
-            first_parameters_nft_amount,
-        );
-        parameter_nfts_script_auth.attach_creation(
-            ft,
-            self.parameters.second_parameters_nft_asset_id,
-            second_parameters_nft_amount,
+            self.parameters.collateral_amount,
         );
     }
 
-    pub fn attach_loan_repayment(
+    pub fn attach_full_repayment(
         &self,
         ft: &mut FinalTransaction,
         lending_utxo: UTXO,
-        first_parameters_nft_utxo: UTXO,
-        second_parameters_nft_utxo: UTXO,
+        borrower_debt_nft_utxo: UTXO,
+        lender_vault_utxo: Option<UTXO>,
+        protocol_fee_vault_utxo: Option<UTXO>,
     ) {
-        let first_parameters_nft_amount = first_parameters_nft_utxo.explicit_amount();
-        let second_parameters_nft_amount = second_parameters_nft_utxo.explicit_amount();
+        let current_borrower_debt = borrower_debt_nft_utxo.explicit_amount();
+
+        self.attach_partial_repayment(
+            ft,
+            lending_utxo,
+            borrower_debt_nft_utxo,
+            lender_vault_utxo,
+            protocol_fee_vault_utxo,
+            current_borrower_debt,
+        );
+    }
+
+    pub fn attach_partial_repayment(
+        &self,
+        ft: &mut FinalTransaction,
+        lending_utxo: UTXO,
+        borrower_debt_nft_utxo: UTXO,
+        lender_vault_utxo: Option<UTXO>,
+        protocol_fee_vault_utxo: Option<UTXO>,
+        amount_to_repay: u64,
+    ) {
         let lending_input_index = ft.n_inputs() as u32;
+        let borrower_debt_nft_input_index = lending_input_index + 1;
 
         self.add_program_input(
             ft,
             lending_utxo,
-            LendingWitnessBranch::LoanRepayment.build_witness(),
+            LendingWitnessBranch::PartialLoanRepayment { amount_to_repay }.build_witness(),
         );
 
-        let parameters_script_auth = ScriptAuth::from_simplex_program(self);
-        let parameters_script_auth_witness = ScriptAuthWitnessParams::new(lending_input_index);
+        let current_borrower_debt = borrower_debt_nft_utxo.explicit_amount();
 
-        parameters_script_auth.attach_unlocking(
+        if amount_to_repay < current_borrower_debt {
+            self.add_program_output(
+                ft,
+                self.parameters.collateral_asset_id,
+                self.parameters.collateral_amount,
+            );
+        }
+
+        let borrower_debt_nft_output_index = ft.n_outputs() as u32;
+
+        self.attach_borrower_debt_nft(
             ft,
-            first_parameters_nft_utxo,
-            parameters_script_auth_witness,
+            borrower_debt_nft_utxo,
+            lending_input_index,
+            amount_to_repay,
         );
-        parameters_script_auth.attach_unlocking(
+
+        self.attach_vaults(
             ft,
-            second_parameters_nft_utxo,
-            parameters_script_auth_witness,
+            lender_vault_utxo,
+            protocol_fee_vault_utxo,
+            (
+                borrower_debt_nft_input_index,
+                borrower_debt_nft_output_index,
+            ),
+            current_borrower_debt,
+            amount_to_repay,
         );
-
-        let principal_with_interest = self
-            .parameters
-            .offer_parameters
-            .calculate_principal_with_interest();
-        let lender_principal_asset_auth = self.parameters.get_lender_principal_asset_auth();
-
-        lender_principal_asset_auth.add_program_output(
-            ft,
-            self.parameters.principal_asset_id,
-            principal_with_interest,
-        );
-
-        ft.add_output(PartialOutput::new(
-            Script::new_op_return(b"burn"),
-            first_parameters_nft_amount,
-            self.parameters.first_parameters_nft_asset_id,
-        ));
-
-        ft.add_output(PartialOutput::new(
-            Script::new_op_return(b"burn"),
-            second_parameters_nft_amount,
-            self.parameters.second_parameters_nft_asset_id,
-        ));
-
-        ft.add_output(PartialOutput::new(
-            Script::new_op_return(b"burn"),
-            1,
-            self.parameters.borrower_nft_asset_id,
-        ));
     }
 
     pub fn attach_loan_liquidation(
         &self,
         ft: &mut FinalTransaction,
-        program_utxo: UTXO,
-        first_parameters_nft_utxo: UTXO,
-        second_parameters_nft_utxo: UTXO,
+        lending_utxo: UTXO,
+        borrower_debt_nft_utxo: UTXO,
     ) {
-        let first_parameters_nft_amount = first_parameters_nft_utxo.explicit_amount();
-        let second_parameters_nft_amount = second_parameters_nft_utxo.explicit_amount();
         let lending_input_index = ft.n_inputs() as u32;
 
-        let locktime =
-            LockTime::from_height(self.parameters.offer_parameters.loan_expiration_time).unwrap();
+        let locktime = LockTime::from_height(self.parameters.loan_expiration_time).unwrap();
 
-        let lending_input = PartialInput::new(program_utxo)
+        let lending_input = PartialInput::new(lending_utxo)
             .with_sequence(Sequence::ENABLE_LOCKTIME_NO_RBF)
             .with_locktime(locktime);
 
@@ -207,37 +129,190 @@ impl Lending {
             LendingWitnessBranch::LoanLiquidation.build_witness(),
         );
 
-        let parameters_script_auth = ScriptAuth::from_simplex_program(self);
-        let parameters_script_auth_witness = ScriptAuthWitnessParams::new(lending_input_index);
+        let current_borrower_debt = borrower_debt_nft_utxo.explicit_amount();
 
-        parameters_script_auth.attach_unlocking(
+        self.attach_borrower_debt_nft(
             ft,
-            first_parameters_nft_utxo,
-            parameters_script_auth_witness,
+            borrower_debt_nft_utxo,
+            lending_input_index,
+            current_borrower_debt,
         );
-        parameters_script_auth.attach_unlocking(
-            ft,
-            second_parameters_nft_utxo,
-            parameters_script_auth_witness,
-        );
-
-        ft.add_output(PartialOutput::new(
-            Script::new_op_return(b"burn"),
-            first_parameters_nft_amount,
-            self.parameters.first_parameters_nft_asset_id,
-        ));
-
-        ft.add_output(PartialOutput::new(
-            Script::new_op_return(b"burn"),
-            second_parameters_nft_amount,
-            self.parameters.second_parameters_nft_asset_id,
-        ));
 
         ft.add_output(PartialOutput::new(
             Script::new_op_return(b"burn"),
             1,
             self.parameters.lender_nft_asset_id,
         ));
+    }
+
+    fn attach_borrower_debt_nft(
+        &self,
+        ft: &mut FinalTransaction,
+        borrower_debt_nft_utxo: UTXO,
+        lending_input_index: u32,
+        amount_to_burn: u64,
+    ) {
+        let current_borrower_debt = borrower_debt_nft_utxo.explicit_amount();
+
+        assert!(
+            amount_to_burn <= current_borrower_debt,
+            "Passed amount to burn {amount_to_burn} higher than the debt amount {current_borrower_debt}"
+        );
+
+        let borrower_debt_nft_script_auth = OwnableScriptAuth::new(OwnableScriptAuthParameters {
+            owner_pubkey: self.parameters.borrower_pubkey,
+            script_hash: self.get_script_hash(),
+            network: self.parameters.network,
+        });
+
+        borrower_debt_nft_script_auth.attach_unlocking(
+            ft,
+            borrower_debt_nft_utxo,
+            lending_input_index,
+        );
+
+        if amount_to_burn < current_borrower_debt {
+            borrower_debt_nft_script_auth.attach_creation(
+                ft,
+                self.parameters.borrower_debt_nft_asset_id,
+                current_borrower_debt - amount_to_burn,
+            );
+        }
+
+        ft.add_output(PartialOutput::new(
+            Script::new_op_return(b"burn"),
+            amount_to_burn,
+            self.parameters.borrower_debt_nft_asset_id,
+        ));
+    }
+
+    fn attach_vaults(
+        &self,
+        ft: &mut FinalTransaction,
+        lender_vault_utxo: Option<UTXO>,
+        protocol_fee_vault_utxo: Option<UTXO>,
+        borrower_debt_nft_indexes: (u32, u32),
+        current_borrower_debt: u64,
+        amount_to_repay: u64,
+    ) {
+        match self.parameters.get_repayment_phase(current_borrower_debt) {
+            LendingOfferRepaymentPhase::NoRepayments => {
+                self.attach_vaults_for_no_repayments_phase(
+                    ft,
+                    current_borrower_debt,
+                    amount_to_repay,
+                );
+            }
+            LendingOfferRepaymentPhase::RepayingOfferFee => {
+                self.attach_vaults_for_repaying_offer_fee_phase(
+                    ft,
+                    lender_vault_utxo.unwrap(),
+                    protocol_fee_vault_utxo.unwrap(),
+                    (borrower_debt_nft_indexes.0, borrower_debt_nft_indexes.1),
+                    current_borrower_debt,
+                    amount_to_repay,
+                );
+            }
+            LendingOfferRepaymentPhase::RepayingPrincipal => {
+                self.attach_vaults_for_repaying_principal_phase(
+                    ft,
+                    lender_vault_utxo.unwrap(),
+                    (borrower_debt_nft_indexes.0, borrower_debt_nft_indexes.1),
+                    current_borrower_debt,
+                    amount_to_repay,
+                );
+            }
+            LendingOfferRepaymentPhase::Repaid => {}
+        }
+    }
+
+    fn attach_vaults_for_no_repayments_phase(
+        &self,
+        ft: &mut FinalTransaction,
+        current_borrower_debt: u64,
+        amount_to_repay: u64,
+    ) {
+        let repaid_protocol_fee = self
+            .parameters
+            .get_repaid_protocol_fee(current_borrower_debt, amount_to_repay);
+
+        if amount_to_repay < current_borrower_debt {
+            self.parameters
+                .get_active_lender_vault()
+                .attach_creation(ft, amount_to_repay - repaid_protocol_fee);
+        } else {
+            self.parameters
+                .get_finalized_lender_vault()
+                .attach_creation(ft, amount_to_repay - repaid_protocol_fee);
+        }
+
+        if repaid_protocol_fee < self.parameters.get_total_protocol_fee() {
+            self.parameters
+                .get_active_protocol_fee_vault()
+                .attach_creation(ft, repaid_protocol_fee);
+        } else {
+            self.parameters
+                .get_finalized_protocol_fee_vault()
+                .attach_creation(ft, repaid_protocol_fee);
+        }
+    }
+
+    fn attach_vaults_for_repaying_offer_fee_phase(
+        &self,
+        ft: &mut FinalTransaction,
+        lender_vault_utxo: UTXO,
+        protocol_fee_vault_utxo: UTXO,
+        borrower_debt_nft_indexes: (u32, u32),
+        current_borrower_debt: u64,
+        amount_to_repay: u64,
+    ) {
+        let repaid_protocol_fee = self
+            .parameters
+            .get_repaid_protocol_fee(current_borrower_debt, amount_to_repay);
+        let protocol_fee_left = self
+            .parameters
+            .get_protocol_fee_to_repay(current_borrower_debt);
+
+        let active_lender_vault = self.parameters.get_active_lender_vault();
+        let active_protocol_fee_vault = self.parameters.get_active_protocol_fee_vault();
+
+        active_lender_vault.attach_supplying_with_goal(
+            ft,
+            lender_vault_utxo,
+            borrower_debt_nft_indexes.0,
+            borrower_debt_nft_indexes.1,
+            amount_to_repay - repaid_protocol_fee,
+            current_borrower_debt,
+        );
+
+        active_protocol_fee_vault.attach_supplying_with_goal(
+            ft,
+            protocol_fee_vault_utxo,
+            borrower_debt_nft_indexes.0,
+            borrower_debt_nft_indexes.1,
+            repaid_protocol_fee,
+            protocol_fee_left,
+        );
+    }
+
+    fn attach_vaults_for_repaying_principal_phase(
+        &self,
+        ft: &mut FinalTransaction,
+        lender_vault_utxo: UTXO,
+        borrower_debt_nft_indexes: (u32, u32),
+        current_borrower_debt: u64,
+        amount_to_repay: u64,
+    ) {
+        let active_lender_vault = self.parameters.get_active_lender_vault();
+
+        active_lender_vault.attach_supplying_with_goal(
+            ft,
+            lender_vault_utxo,
+            borrower_debt_nft_indexes.0,
+            borrower_debt_nft_indexes.1,
+            amount_to_repay,
+            current_borrower_debt,
+        );
     }
 }
 

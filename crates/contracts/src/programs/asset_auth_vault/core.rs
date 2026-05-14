@@ -85,6 +85,34 @@ impl ActiveAssetAuthVault {
         );
     }
 
+    pub fn attach_supplying_with_goal(
+        &self,
+        ft: &mut FinalTransaction,
+        program_utxo: UTXO,
+        input_supplier_index: u32,
+        output_supplier_index: u32,
+        amount_to_supply: u64,
+        amount_to_goal: u64,
+    ) {
+        if amount_to_supply >= amount_to_goal {
+            self.attach_final_supplying(
+                ft,
+                program_utxo,
+                input_supplier_index,
+                output_supplier_index,
+                amount_to_supply,
+            );
+        } else {
+            self.attach_supplying(
+                ft,
+                program_utxo,
+                input_supplier_index,
+                output_supplier_index,
+                amount_to_supply,
+            );
+        }
+    }
+
     pub fn attach_supplying(
         &self,
         ft: &mut FinalTransaction,
