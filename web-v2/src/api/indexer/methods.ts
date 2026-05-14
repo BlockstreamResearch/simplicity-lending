@@ -3,28 +3,22 @@ import { z } from 'zod'
 import { env } from '@/constants/env'
 import { normalizeHex } from '@/utils/hex'
 
+import { requestJson, type RequestParams } from '../transport'
 import {
   type OfferDetails,
+  offerDetailsListSchema,
   offerDetailsSchema,
   type OfferFull,
-  offerFullSchema,
+  offerFullListSchema,
   offerIdListSchema,
   type OfferParticipant,
-  offerParticipantSchema,
+  offerParticipantListSchema,
   type OfferShort,
-  offerShortSchema,
+  offerShortListSchema,
   type OfferStatus,
   type OfferUtxo,
-  offerUtxoSchema,
-  type ParticipantType,
+  offerUtxoListSchema,
 } from './schemas'
-import { requestJson, type RequestParams } from './transport'
-
-const offerShortListSchema = z.array(offerShortSchema)
-const offerFullListSchema = z.array(offerFullSchema)
-const offerDetailsListSchema = z.array(offerDetailsSchema)
-const offerUtxoListSchema = z.array(offerUtxoSchema)
-const offerParticipantListSchema = z.array(offerParticipantSchema)
 
 function buildOfferUrl(offerId: string, suffix = ''): string {
   return `${env.VITE_API_URL}/offers/${encodeURIComponent(offerId)}${suffix}`
@@ -42,8 +36,7 @@ function postBatch<Schema extends z.ZodTypeAny>(
 ): Promise<z.output<Schema>> {
   return requestJson(`${env.VITE_API_URL}/offers/batch`, schema, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids }),
+    data: { ids },
     signal: options.signal,
   })
 }
@@ -55,16 +48,20 @@ export interface ListOffersParams {
   offset?: number
 }
 
-export async function fetchOffers(
-  params: ListOffersParams = {},
-  options: RequestParams = {},
-): Promise<OfferShort[]> {
+function toQueryParams(params: ListOffersParams): Record<string, string> {
   const queryParams: Record<string, string> = {}
   if (params.status) queryParams.status = params.status
   if (params.asset) queryParams.asset = params.asset
   if (params.limit !== undefined) queryParams.limit = String(params.limit)
   if (params.offset !== undefined) queryParams.offset = String(params.offset)
-  return requestJson(buildSearchUrl('/offers', queryParams), offerShortListSchema, {
+  return queryParams
+}
+
+export async function fetchOffers(
+  params: ListOffersParams = {},
+  options: RequestParams = {},
+): Promise<OfferShort[]> {
+  return requestJson(buildSearchUrl('/offers', toQueryParams(params)), offerShortListSchema, {
     signal: options.signal,
   })
 }
@@ -73,12 +70,7 @@ export async function fetchOffersFull(
   params: ListOffersParams = {},
   options: RequestParams = {},
 ): Promise<OfferFull[]> {
-  const queryParams: Record<string, string> = {}
-  if (params.status) queryParams.status = params.status
-  if (params.asset) queryParams.asset = params.asset
-  if (params.limit !== undefined) queryParams.limit = String(params.limit)
-  if (params.offset !== undefined) queryParams.offset = String(params.offset)
-  return requestJson(buildSearchUrl('/offers/full', queryParams), offerFullListSchema, {
+  return requestJson(buildSearchUrl('/offers/full', toQueryParams(params)), offerFullListSchema, {
     signal: options.signal,
   })
 }
@@ -142,43 +134,4 @@ export async function fetchOfferIdsByBorrowerPubkey(
     borrower_pubkey: normalizeHex(borrowerPubkeyHex),
   })
   return requestJson(url, offerIdListSchema, { signal: options.signal })
-}
-
-export function filterOfferDetailsByParticipantRole(
-  offers: OfferDetails[],
-  scriptPubkeyHex: string,
-  role: ParticipantType,
-): OfferDetails[] {
-  const targetScript = normalizeHex(scriptPubkeyHex)
-  return offers.filter(offer =>
-    offer.participants.some(
-      participant =>
-        participant.participant_type === role &&
-        normalizeHex(participant.script_pubkey) === targetScript,
-    ),
-  )
-}
-
-export function getCurrentParticipantByRole(
-  history: OfferParticipant[],
-  role: ParticipantType,
-): OfferParticipant | null {
-  const unspentEntries = history.filter(
-    participant => participant.participant_type === role && participant.spent_txid === null,
-  )
-  if (unspentEntries.length === 0) return null
-  const sortedByHeight = [...unspentEntries].sort(
-    (left, right) => right.created_at_height - left.created_at_height,
-  )
-  return sortedByHeight[0] ?? null
-}
-
-export function getCurrentLenderParticipant(history: OfferParticipant[]): OfferParticipant | null {
-  return getCurrentParticipantByRole(history, 'lender')
-}
-
-export function getCurrentBorrowerParticipant(
-  history: OfferParticipant[],
-): OfferParticipant | null {
-  return getCurrentParticipantByRole(history, 'borrower')
 }

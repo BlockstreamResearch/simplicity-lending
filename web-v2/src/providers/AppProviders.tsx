@@ -4,8 +4,8 @@ import type { PropsWithChildren } from 'react'
 
 import { env } from '@/constants/env'
 
-import { queryClient } from './queryClient'
 import { LwkProvider } from './lwk/LwkProvider'
+import { queryClient } from './queryClient'
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
