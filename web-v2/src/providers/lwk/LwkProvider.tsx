@@ -9,7 +9,6 @@ const network = env.VITE_NETWORK
 
 export function LwkProvider({ children }: { children: React.ReactNode }) {
   const [lwk, setLwk] = useState<Lwk | null>(null)
-
   useEffect(() => {
     let cancelled = false
 
