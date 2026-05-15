@@ -1,6 +1,5 @@
 use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::{AssetId, Script, Transaction};
-use simplex::simplicityhl::elements::{hex::ToHex, schnorr::XOnlyPublicKey};
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{
     FinalTransaction, IssuanceDetails, PartialOutput, RequiredSignature, UTXO,
@@ -9,19 +8,15 @@ use simplex::{program::Program, provider::SimplicityNetwork};
 
 use crate::artifacts::issuance_factory::IssuanceFactoryProgram;
 use crate::programs::issuance_factory::{
-    IssuanceFactoryError, IssuanceFactoryParameters, IssuanceFactoryWitnessBranch,
+    CREATION_OP_RETURN_OUTPUT_INDEX, IssuanceFactoryError, IssuanceFactoryParameters,
+    IssuanceFactoryWitnessBranch,
 };
-use crate::programs::program::SimplexProgram;
+use crate::programs::program::{SimplexProgram, op_return_payload};
 
 pub struct IssuanceFactory {
     program: IssuanceFactoryProgram,
     parameters: IssuanceFactoryParameters,
 }
-
-// TODO: encode constants to the factory asset amount or creation OP_RETURN
-pub const PRE_LOCK_ISSUING_UTXOS_COUNT: u8 = 2;
-pub const PRE_LOCK_REISSUANCE_FLAGS: u64 = 0;
-pub const ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH: usize = 32;
 
 impl IssuanceFactory {
     pub fn new(parameters: IssuanceFactoryParameters) -> Self {
@@ -35,30 +30,25 @@ impl IssuanceFactory {
         tx: &Transaction,
         provider: &impl ProviderTrait,
     ) -> Result<Self, IssuanceFactoryError> {
-        if tx.output.len() < 2 || !tx.output[1].is_null_data() {
+        if tx.output.len() <= CREATION_OP_RETURN_OUTPUT_INDEX
+            || !tx.output[CREATION_OP_RETURN_OUTPUT_INDEX].is_null_data()
+        {
             return Err(IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(
                 tx.txid(),
             ));
         }
 
-        let mut op_return_instr_iter = tx.output[5].script_pubkey.instructions_minimal();
+        let op_return_bytes =
+            op_return_payload(&tx.output[CREATION_OP_RETURN_OUTPUT_INDEX].script_pubkey)
+                .ok_or_else(|| IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(tx.txid()))?;
 
-        op_return_instr_iter.next();
-
-        let op_return_bytes = op_return_instr_iter
-            .next()
-            .unwrap()
-            .unwrap()
-            .push_bytes()
-            .unwrap();
-
-        let owner_pubkey =
+        let creation_op_return_data =
             IssuanceFactory::decode_creation_op_return_data(op_return_bytes.to_vec())?;
 
         let issuance_factory_parameters = IssuanceFactoryParameters {
-            issuing_utxos_count: PRE_LOCK_ISSUING_UTXOS_COUNT,
-            reissuance_flags: PRE_LOCK_REISSUANCE_FLAGS,
-            owner_pubkey,
+            issuing_utxos_count: creation_op_return_data.issuing_utxos_count,
+            reissuance_flags: creation_op_return_data.reissuance_flags,
+            owner_pubkey: creation_op_return_data.owner_pubkey,
             network: *provider.get_network(),
         };
 
@@ -67,30 +57,6 @@ impl IssuanceFactory {
 
     pub fn get_parameters(&self) -> &IssuanceFactoryParameters {
         &self.parameters
-    }
-
-    pub fn decode_creation_op_return_data(
-        op_return_bytes: Vec<u8>,
-    ) -> Result<XOnlyPublicKey, IssuanceFactoryError> {
-        if op_return_bytes.len() != ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH {
-            return Err(IssuanceFactoryError::InvalidCreationOpReturnDataLength {
-                expected: ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH,
-                actual: op_return_bytes.len(),
-            });
-        }
-
-        let owner_pubkey = XOnlyPublicKey::from_slice(op_return_bytes.as_slice())
-            .map_err(|_| IssuanceFactoryError::InvalidOpReturnBytes(op_return_bytes.to_hex()))?;
-
-        Ok(owner_pubkey)
-    }
-
-    pub fn encode_creation_op_return_data(&self) -> Vec<u8> {
-        let mut op_return_data =
-            Vec::with_capacity(ISSUANCE_FACTORY_CREATION_OP_RETURN_DATA_LENGTH);
-        op_return_data.extend_from_slice(&self.parameters.owner_pubkey.serialize());
-
-        op_return_data
     }
 
     pub fn attach_creation(
@@ -170,5 +136,9 @@ impl SimplexProgram for IssuanceFactory {
 
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
+    }
+
+    fn get_program_source_code(&self) -> &'static str {
+        IssuanceFactoryProgram::SOURCE
     }
 }
