@@ -107,6 +107,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id)
   }, [state.connectionStatus, performDisconnect])
 
+  useEffect(() => {
+    if (state.connectionStatus !== 'ready') return
+
+    const id = setInterval(() => {
+      const session = sessionRef.current
+      if (!session) return
+      syncWallet(session.wollet, session.esploraClient)
+        .then(rawBalances => {
+          setState(s => ({ ...s, balances: serializeBalances(rawBalances) }))
+        })
+        .catch(console.warn)
+    }, 60_000)
+
+    return () => clearInterval(id)
+  }, [state.connectionStatus])
+
   const connect = useCallback(
     async (variant: SinglesigVariant) => {
       if (sessionRef.current !== null) return
@@ -211,7 +227,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const signedPset = await session.connector.signPset(pset)
     const finalizedPset = session.wollet.finalize(signedPset)
     const txid = await session.esploraClient.broadcast(finalizedPset)
-    return txid.toString()
+    const txidStr = txid.toString()
+
+    // Auto-sync balances after broadcast (fire-and-forget, errors are non-fatal).
+    syncWallet(session.wollet, session.esploraClient)
+      .then(rawBalances => {
+        setState(s => ({ ...s, balances: serializeBalances(rawBalances) }))
+      })
+      .catch(console.warn)
+
+    return txidStr
   }, [])
 
   const getLastReceiveAddress = useCallback((): string | null => {

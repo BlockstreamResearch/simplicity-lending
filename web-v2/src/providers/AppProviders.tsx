@@ -11,7 +11,6 @@ import { WalletProvider } from './wallet/WalletProvider'
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
-      <LwkProvider>{children}</LwkProvider>
       <LwkProvider>
         <WalletProvider>{children}</WalletProvider>
       </LwkProvider>
