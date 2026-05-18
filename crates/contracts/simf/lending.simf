@@ -187,6 +187,14 @@ fn ensure_asset_transition_with_additional_amount(
     check_asset_amounts_eq(output_amount, new_asset_amount);
 }
 
+fn ensure_offer_is_active() {
+    check_flags_eq(param::IS_ACTIVE, true);
+}
+
+fn ensure_offer_is_pending() {
+    check_flags_eq(param::IS_ACTIVE, false);
+}
+
 // Basis points math
 
 fn get_max_basis_points() -> u64 {
@@ -207,12 +215,12 @@ fn apply_basis_points(amount: u64, bps: u64) -> u64 {
 
 // Main paths helpers
 
-fn get_protocol_fee_percentage() -> u64 {
+fn get_protocol_fee_bps() -> u64 {
     1_000 // 10%
 }
 
-fn calc_protocol_fee_amount(fee_amount: u64) -> u64 {
-    apply_basis_points(fee_amount, get_protocol_fee_percentage())
+fn get_protocol_fee_amount(fee_amount: u64) -> u64 {
+    apply_basis_points(fee_amount, get_protocol_fee_bps())
 }
 
 fn get_total_fee_amount() -> u64 {
@@ -234,9 +242,9 @@ fn get_current_borrower_debt(debt_nft_input_index: u32) -> u64 {
     current_borrower_debt
 }
 
-fn get_repaid_fees(fee_left: u64, amount_to_repay: u64) -> (u64, u64) {
+fn split_repayment_by_fees(fee_left: u64, amount_to_repay: u64) -> (u64, u64) {
     let fee_repaid: u64 = min_64(fee_left, amount_to_repay);
-    let protocol_fee_repaid: u64 = calc_protocol_fee_amount(fee_repaid);
+    let protocol_fee_repaid: u64 = get_protocol_fee_amount(fee_repaid);
 
     (fee_repaid, protocol_fee_repaid)
 }
@@ -254,16 +262,16 @@ fn validate_vaults(
     let (
         already_repaid_fee,
         already_repaid_protocol_fee
-    ): (u64, u64) = get_repaid_fees(total_fee_amount, already_repaid_amount);
+    ): (u64, u64) = split_repayment_by_fees(total_fee_amount, already_repaid_amount);
 
     let fee_left: u64 = safe_sub_64(total_fee_amount, already_repaid_fee);
 
-    let (fee_repaid, protocol_fee_repaid): (u64, u64) = get_repaid_fees(fee_left, amount_to_repay);
+    let (fee_repaid, protocol_fee_repaid): (u64, u64) = split_repayment_by_fees(fee_left, amount_to_repay);
 
     let total_repaid_protocol_fee: u64 = safe_add_64(already_repaid_protocol_fee, protocol_fee_repaid);
     let additional_lender_vault_amount: u64 = safe_sub_64(amount_to_repay, protocol_fee_repaid);
 
-    let total_protocol_fee: u64 = calc_protocol_fee_amount(total_fee_amount);
+    let total_protocol_fee: u64 = get_protocol_fee_amount(total_fee_amount);
 
     let lender_vault_output_hash: u256 = match jet::eq_64(current_borrower_debt, amount_to_repay) {
         true => param::FINALIZED_LENDER_VAULT_COV_HASH,
@@ -346,7 +354,9 @@ fn get_partial_repayment_protocol_fee_vault_indexes(start_input_index: u32, star
     (safe_add_32(start_input_index, 3), safe_add_32(start_output_index, 4))
 }
 
-fn partial_repay(amount_to_repay: u64) {
+fn partial_repay_offer(amount_to_repay: u64) {
+    ensure_offer_is_active();
+
     let (lending_input_index, lending_output_index): (u32, u32) = (jet::current_index(), 0);
     let (
         borrower_debt_nft_input_index,
@@ -400,12 +410,14 @@ fn get_full_repayment_protocol_fee_vault_indexes(start_input_index: u32, start_o
     (safe_add_32(start_input_index, 3), safe_add_32(start_output_index, 2))
 }
 
-fn full_repay() {
-    let lending_input_index: u32 = jet::current_index();
+fn full_repay_offer() {
+    ensure_offer_is_active();
+
+    let (lending_input_index, lending_output_index): (u32, u32) = (jet::current_index(), 0);
     let (
         borrower_debt_nft_input_index,
         borrower_debt_nft_output_index
-    ): (u32, u32) = get_full_repayment_borrower_debt_nft_indexes(lending_input_index, 0);
+    ): (u32, u32) = get_full_repayment_borrower_debt_nft_indexes(lending_input_index, lending_output_index);
 
     assert!(jet::eq_32(lending_input_index, 0));
 
@@ -419,8 +431,8 @@ fn full_repay() {
     let current_borrower_debt: u64 = get_current_borrower_debt(borrower_debt_nft_input_index);
 
     validate_vaults(
-        get_full_repayment_lender_vault_indexes(lending_input_index, 0),
-        get_full_repayment_protocol_fee_vault_indexes(lending_input_index, 0),
+        get_full_repayment_lender_vault_indexes(lending_input_index, lending_output_index),
+        get_full_repayment_protocol_fee_vault_indexes(lending_input_index, lending_output_index),
         current_borrower_debt,
         current_borrower_debt
     );
@@ -436,16 +448,18 @@ fn get_liquidation_lender_nft_indexes(start_input_index: u32, start_output_index
     (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 1))
 }
 
-fn liquidate() {
-    let lending_input_index: u32 = jet::current_index();
+fn liquidate_offer() {
+    ensure_offer_is_active();
+
+    let (lending_input_index, lending_output_index): (u32, u32) = (jet::current_index(), 0);
     let (
         borrower_debt_nft_input_index,
         borrower_debt_nft_output_index
-    ): (u32, u32) = get_liquidation_borrower_debt_nft_indexes(lending_input_index, 0);
+    ): (u32, u32) = get_liquidation_borrower_debt_nft_indexes(lending_input_index, lending_output_index);
     let (
         lender_nft_input_index,
         lender_nft_output_index
-    ): (u32, u32) = get_liquidation_lender_nft_indexes(lending_input_index, 0);
+    ): (u32, u32) = get_liquidation_lender_nft_indexes(lending_input_index, lending_output_index);
 
     assert!(jet::eq_32(lending_input_index, 0));
 
@@ -461,20 +475,126 @@ fn liquidate() {
     ensure_input_asset_and_amount_burn(lender_nft_input_index, lender_nft_output_index, param::LENDER_NFT_ASSET_ID, 1);
 }
 
+// Offer acceptance flow
+
+fn get_acceptance_borrower_debt_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+    (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 1))
+}
+
+fn get_acceptance_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+    (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 2))
+}
+
+fn get_acceptance_principal_output_index(start_output_index: u32) -> u32 {
+    safe_add_32(start_output_index, 3)
+}
+
+fn accept_offer() {
+    ensure_offer_is_pending();
+
+    let (lending_input_index, lending_output_index): (u32, u32) = (jet::current_index(), 0);
+    let (
+        borrower_debt_nft_input_index,
+        borrower_debt_nft_output_index
+    ): (u32, u32) = get_acceptance_borrower_debt_nft_indexes(lending_input_index, lending_output_index);
+    let (
+        lender_nft_input_index,
+        lender_nft_output_index
+    ): (u32, u32) = get_acceptance_lender_nft_indexes(lending_input_index, lending_output_index);
+    let principal_output_index: u32 = get_acceptance_principal_output_index(lending_output_index);
+
+    assert!(jet::eq_32(lending_input_index, 0));
+
+    ensure_io_asset_and_amount_eq(lending_input_index, lending_output_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+    ensure_output_script_hash(lending_output_index, param::ACTIVE_LENDING_OFFER_COV_HASH);
+
+    let expected_borrower_debt_nft_amount: u64 = get_total_amount_to_repay();
+
+    ensure_io_asset_and_amount_eq(
+        borrower_debt_nft_input_index,
+        borrower_debt_nft_output_index,
+        param::BORROWER_DEBT_NFT_ASSET_ID,
+        expected_borrower_debt_nft_amount
+    );
+    ensure_output_script_hash(borrower_debt_nft_output_index, param::BORROWER_DEBT_NFT_COV_HASH);
+
+    ensure_io_asset_and_amount_eq(lender_nft_input_index, lender_nft_output_index, param::LENDER_NFT_ASSET_ID, 1);
+
+    ensure_output_asset_and_amount(principal_output_index, param::PRINCIPAL_ASSET_ID, param::PRINCIPAL_AMOUNT);
+    ensure_output_script_hash(principal_output_index, param::PRINCIPAL_OUTPUT_SCRIPT_HASH);
+}
+
+// Offer cancellation flow
+
+fn get_cancellation_borrower_debt_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+    (safe_add_32(start_input_index, 1), start_output_index)
+}
+
+fn get_cancellation_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+    (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 1))
+}
+
+fn cancel_offer(cancellation_sig: Signature) {
+    ensure_offer_is_pending();
+
+    let lending_input_index: u32 = jet::current_index();
+    let (
+        borrower_debt_nft_input_index,
+        borrower_debt_nft_output_index
+    ): (u32, u32) = get_cancellation_borrower_debt_nft_indexes(lending_input_index, 0);
+    let (
+        lender_nft_input_index,
+        lender_nft_output_index
+    ): (u32, u32) = get_cancellation_lender_nft_indexes(lending_input_index, 0);
+
+    assert!(jet::eq_32(lending_input_index, 0));
+
+    jet::bip_0340_verify((param::BORROWER_PUB_KEY, jet::sig_all_hash()), cancellation_sig);
+
+    let expected_borrower_debt_nft_amount: u64 = get_total_amount_to_repay();
+
+    ensure_input_asset_and_amount(lending_input_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+
+    ensure_input_asset_and_amount_burn(
+        borrower_debt_nft_input_index,
+        borrower_debt_nft_output_index,
+        param::BORROWER_DEBT_NFT_ASSET_ID, expected_borrower_debt_nft_amount
+    );
+    ensure_input_asset_and_amount_burn(
+        lender_nft_input_index,
+        lender_nft_output_index,
+        param::LENDER_NFT_ASSET_ID, 1
+    );
+}
+
 fn main() {
     match witness::PATH {
-        Left(repayment_params: Either<u64, ()>) => {
-            match repayment_params {
-                Left(amount_to_repay: u64) => {
-                    partial_repay(amount_to_repay);
+        Left(pending_offer_params: Either<(), Signature>) => {
+            match pending_offer_params {
+                Left(params: ()) => {
+                    accept_offer();
                 },
-                Right(params: ()) => {
-                    full_repay();
+                Right(cancellation_sig: Signature) => {
+                    cancel_offer(cancellation_sig);
                 },
             }
         },
-        Right(params: ()) => {
-            liquidate();
-        }
+        Right(active_offer_params: Either<Either<u64, ()>, ()>) => {
+            match active_offer_params {
+                Left(repayment_params: Either<u64, ()>) => {
+                    match repayment_params {
+                        Left(amount_to_repay: u64) => {
+                            partial_repay_offer(amount_to_repay);
+                        },
+                        Right(params: ()) => {
+                            full_repay_offer();
+                        },
+                    }
+                },
+                Right(params: ()) => {
+                    liquidate_offer();
+                }
+            }
+        },
     }
 }

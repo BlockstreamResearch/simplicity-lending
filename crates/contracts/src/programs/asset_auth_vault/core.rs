@@ -29,15 +29,7 @@ impl ActiveAssetAuthVault {
     }
 
     pub fn from_finalized_vault(parameters: FinalizedAssetAuthVaultParameters) -> Self {
-        let finalized_vault = FinalizedAssetAuthVault::new(parameters);
-        let finalized_vault_hash = finalized_vault.get_script_hash();
-
-        let active_vault_parameters = ActiveAssetAuthVaultParameters::from_finalized_parameters(
-            &parameters,
-            finalized_vault_hash,
-        );
-
-        Self::new(active_vault_parameters)
+        Self::new(parameters.into())
     }
 
     pub fn get_parameters(&self) -> &ActiveAssetAuthVaultParameters {

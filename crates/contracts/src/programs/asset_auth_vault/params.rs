@@ -1,6 +1,9 @@
 use simplex::{provider::SimplicityNetwork, simplicityhl::elements::AssetId};
 
-use crate::artifacts::asset_auth_vault::derived_asset_auth_vault::AssetAuthVaultArguments;
+use crate::{
+    artifacts::asset_auth_vault::derived_asset_auth_vault::AssetAuthVaultArguments,
+    programs::{asset_auth_vault::FinalizedAssetAuthVault, program::SimplexProgram},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ActiveAssetAuthVaultParameters {
@@ -39,23 +42,24 @@ impl From<ActiveAssetAuthVaultParameters> for FinalizedAssetAuthVaultParameters 
     }
 }
 
-impl ActiveAssetAuthVaultParameters {
-    pub fn from_finalized_parameters(
-        parameters: &FinalizedAssetAuthVaultParameters,
-        finalized_vault_hash: [u8; 32],
-    ) -> Self {
+impl From<FinalizedAssetAuthVaultParameters> for ActiveAssetAuthVaultParameters {
+    fn from(value: FinalizedAssetAuthVaultParameters) -> Self {
+        let finalized_vault = FinalizedAssetAuthVault::new(value);
+
         Self {
-            vault_asset_id: parameters.vault_asset_id,
-            keeper_asset_id: parameters.keeper_asset_id,
-            supplier_asset_id: parameters.supplier_asset_id,
-            finalized_vault_cov_hash: finalized_vault_hash,
-            keeper_min_asset_amount: parameters.keeper_min_asset_amount,
-            with_keeper_asset_burn: parameters.with_keeper_asset_burn,
-            with_supplier_asset_burn: parameters.with_supplier_asset_burn,
-            network: parameters.network,
+            vault_asset_id: value.vault_asset_id,
+            keeper_asset_id: value.keeper_asset_id,
+            supplier_asset_id: value.supplier_asset_id,
+            keeper_min_asset_amount: value.keeper_min_asset_amount,
+            with_keeper_asset_burn: value.with_keeper_asset_burn,
+            with_supplier_asset_burn: value.with_supplier_asset_burn,
+            finalized_vault_cov_hash: finalized_vault.get_script_hash(),
+            network: value.network,
         }
     }
+}
 
+impl ActiveAssetAuthVaultParameters {
     pub fn build_arguments(&self) -> AssetAuthVaultArguments {
         AssetAuthVaultArguments {
             vault_asset_id: self.vault_asset_id.into_inner().0,
