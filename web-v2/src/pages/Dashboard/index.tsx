@@ -33,7 +33,6 @@ function resolvePhase(
 ): Phase {
   if (connectionStatus === 'locked') return 'locked'
   if (connectionStatus === 'ready') return 'ready'
-  // disconnected
   if (syncing) return 'connecting'
   return usbDeviceDetected ? 'usb-detected' : 'no-usb'
 }
@@ -51,6 +50,7 @@ export default function DashboardPage() {
     connect,
     sendLbtc,
     getLastReceiveAddress,
+    verifyReceiveAddress,
   } = useWallet()
 
   const [walletType, setWalletType] = useState<SinglesigVariant>('Wpkh')
@@ -60,6 +60,7 @@ export default function DashboardPage() {
   const [sendError, setSendError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [txConfirmations, setTxConfirmations] = useState<number | null>(null)
+  const [verifyingAddress, setVerifyingAddress] = useState(false)
 
   // Poll Esplora directly for first confirmation after sending.
   useEffect(() => {
@@ -80,6 +81,19 @@ export default function DashboardPage() {
   }, [sendTxid, txConfirmations])
 
   const phase = resolvePhase(connectionStatus, usbDeviceDetected, syncing)
+
+  const handleVerifyAddress = async () => {
+    setVerifyingAddress(true)
+    console.warn('[Dashboard] handleVerifyAddress: requesting address verification on device...')
+    try {
+      const addr = await verifyReceiveAddress()
+      console.warn('[Dashboard] handleVerifyAddress: device confirmed address →', addr)
+    } catch (err) {
+      console.warn('[Dashboard] handleVerifyAddress: error', err)
+    } finally {
+      setVerifyingAddress(false)
+    }
+  }
 
   const handleSend = async () => {
     setSendError(null)
@@ -179,6 +193,13 @@ export default function DashboardPage() {
           <div className='space-y-1'>
             <p className='text-sm font-medium'>Receive address</p>
             <code className='break-all text-xs'>{getLastReceiveAddress()}</code>
+            <button
+              className='mt-1 rounded bg-accent-soft-hover px-3 py-1 text-xs disabled:opacity-50'
+              disabled={verifyingAddress}
+              onClick={handleVerifyAddress}
+            >
+              {verifyingAddress ? 'Confirm on device…' : 'Verify on Jade'}
+            </button>
           </div>
 
           <div className='space-y-1'>

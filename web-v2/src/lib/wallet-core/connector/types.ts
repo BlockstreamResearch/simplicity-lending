@@ -1,4 +1,4 @@
-import type { Pset, WolletDescriptor } from 'lwk_web'
+import type { Pset, Wollet, WolletDescriptor } from 'lwk_web'
 
 import type { ConnectionStatus, JadeVersionInfo, SinglesigVariant } from '../types'
 
@@ -10,4 +10,5 @@ export interface WalletConnector {
   isConnected(): boolean
   readVersion?(): Promise<JadeVersionInfo>
   getConnectionState?(): Promise<ConnectionStatus>
+  getVerifiedReceiveAddress?(variant: SinglesigVariant, wollet: Wollet): Promise<string>
 }

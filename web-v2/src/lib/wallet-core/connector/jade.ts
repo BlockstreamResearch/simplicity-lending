@@ -1,4 +1,4 @@
-import type { Jade, Network, Pset, WolletDescriptor } from 'lwk_web'
+import type { Jade, Network, Pset, Wollet, WolletDescriptor } from 'lwk_web'
 
 import type { Lwk } from '@/lwk'
 
@@ -69,6 +69,22 @@ export class JadeConnector implements WalletConnector {
     } finally {
       this.busy = false
     }
+  }
+
+  /**
+   * Ask Jade to display and confirm the receive address on-device.
+   *
+   * Jade shows the address on its screen and requires a button press to confirm.
+   * The returned string is the address as verified by the hardware — compare it
+   * against the software-derived address to detect substitution attacks.
+   */
+  async getVerifiedReceiveAddress(variant: SinglesigVariant, wollet: Wollet): Promise<string> {
+    if (!this.jade) throw new Error('JadeConnector: not connected')
+    const addrResult = wollet.address()
+    const index = addrResult.index()
+    const path = wollet.addressFullPath(index)
+    const singlesig = this.lwk.Singlesig.from(variant)
+    return await this.jade.getReceiveAddressSingle(singlesig, path)
   }
 
   isConnected(): boolean {

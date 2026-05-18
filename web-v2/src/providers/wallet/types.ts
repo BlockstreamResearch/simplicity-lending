@@ -9,6 +9,7 @@ export interface WalletContextValue extends WalletState {
   signAndBroadcast(pset: Pset): Promise<string>
   sendLbtc(recipientAddress: string, satoshi: bigint): Promise<string>
   getLastReceiveAddress(): string | null
+  verifyReceiveAddress(): Promise<string | null>
   resumeSession(): Promise<void>
   savedSession: SavedSession | null
 }

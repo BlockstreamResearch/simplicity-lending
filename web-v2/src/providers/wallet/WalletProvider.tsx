@@ -60,6 +60,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  // Release the WebSerial port before page unload to avoid Jade's -32003
+  // (network inconsistency) error on reload. beforeunload cannot await promises,
+  // so we fire-and-forget — jade.free() is a synchronous WASM call under the hood.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const session = sessionRef.current
+      if (session) {
+        session.connector.disconnect().catch(console.warn)
+        sessionRef.current = null
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [])
+
   // Permanent Web Serial event listeners — detect USB plug/unplug.
   useEffect(() => {
     if (!('serial' in navigator)) return
@@ -245,6 +260,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return session.wollet.address().address().toString()
   }, [])
 
+  const verifyReceiveAddress = useCallback(async (): Promise<string | null> => {
+    const session = sessionRef.current
+    if (!session) return null
+    if (!session.connector.getVerifiedReceiveAddress)
+      return session.wollet.address().address().toString()
+
+    return session.connector.getVerifiedReceiveAddress(state.walletType ?? 'Wpkh', session.wollet)
+  }, [state.walletType])
+
   const sendLbtc = useCallback(
     async (recipientAddress: string, satoshi: bigint): Promise<string> => {
       const session = sessionRef.current
@@ -270,6 +294,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         signAndBroadcast,
         sendLbtc,
         getLastReceiveAddress,
+        verifyReceiveAddress,
         resumeSession,
         savedSession,
       }}
