@@ -4,7 +4,6 @@ use lending_contracts::utils::get_random_seed;
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialInput, RequiredSignature};
 
-use super::common::tx_steps::finalize_and_broadcast;
 use super::common::wallet::split_first_signer_utxo;
 
 pub(super) fn setup_issuance_factory(
@@ -12,11 +11,9 @@ pub(super) fn setup_issuance_factory(
     issuing_utxos_count: u8,
     reissuance_flags: u64,
 ) -> anyhow::Result<(IssuanceFactory, IssuanceFactoryParameters)> {
-    let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let txid = split_first_signer_utxo(context, vec![1000, 5000, 10000]);
-    provider.wait(&txid)?;
+    split_first_signer_utxo(context, vec![1000, 5000, 10000]);
 
     let issuance_factory_parameters = IssuanceFactoryParameters {
         issuing_utxos_count,
@@ -45,9 +42,7 @@ pub(super) fn setup_issuance_factory(
         issuance_factory_asset_amount,
     );
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok((issuance_factory, issuance_factory_parameters))
 }

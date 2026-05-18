@@ -3,7 +3,6 @@ use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
-use crate::asset_auth_tests::common::tx_steps::finalize_and_broadcast;
 use crate::asset_auth_tests::common::wallet::get_split_utxo_ft;
 
 use super::setup::setup_asset_auth;
@@ -19,8 +18,7 @@ fn split_auth_utxo(
 
     let ft = get_split_utxo_ft(auth_utxo, amounts, signer, *context.get_network());
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    context.get_default_provider().wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }

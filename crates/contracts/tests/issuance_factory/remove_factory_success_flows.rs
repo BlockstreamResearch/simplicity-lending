@@ -2,12 +2,12 @@ use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::transaction::FinalTransaction;
 
-use super::common::tx_steps::finalize_and_broadcast;
 use super::setup::setup_issuance_factory;
 
 #[simplex::test]
 fn removes_issuance_factory_correctly(context: simplex::TestContext) -> anyhow::Result<()> {
     let provider = context.get_default_provider();
+    let signer = context.get_default_signer();
 
     let (issuance_factory, _) = setup_issuance_factory(&context, 2, 0)?;
 
@@ -18,8 +18,7 @@ fn removes_issuance_factory_correctly(context: simplex::TestContext) -> anyhow::
 
     issuance_factory.attach_factory_removing(&mut ft, issuance_factory_utxo);
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }

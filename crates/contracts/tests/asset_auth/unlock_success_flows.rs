@@ -4,7 +4,6 @@ use lending_contracts::programs::program::SimplexProgram;
 use simplex::simplicityhl::elements::Script;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
-use super::common::tx_steps::finalize_and_broadcast;
 use super::setup::setup_asset_auth;
 
 #[simplex::test]
@@ -39,8 +38,7 @@ fn unlocks_without_burn_with_one_explicit_output(
         asset_auth_parameters.asset_id,
     ));
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -87,8 +85,7 @@ fn unlocks_without_burn_with_multiple_explicit_outputs(
         asset_auth_utxo.explicit_asset(),
     ));
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -128,8 +125,7 @@ fn unlocks_without_burn_with_confidential_output(
         asset_auth_parameters.asset_id,
     ));
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -164,8 +160,7 @@ fn unlocks_with_burn_with_one_explicit_output(context: simplex::TestContext) -> 
         asset_auth_parameters.asset_id,
     ));
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -211,8 +206,7 @@ fn unlocks_with_burn_with_multiple_explicit_outputs(
         asset_auth_utxo.explicit_asset(),
     ));
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }

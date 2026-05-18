@@ -79,8 +79,7 @@ fn withdraw_all_succeeds_with_one_explicit_output_without_keeper_asset_burn(
         vault_parameters.vault_asset_id,
     ));
 
-    let txid = keeper.broadcast(&ft)?;
-    provider.wait(&txid)?;
+    keeper.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -122,8 +121,7 @@ fn withdraw_all_succeeds_with_one_explicit_output_with_keeper_asset_burn(
         vault_parameters.vault_asset_id,
     ));
 
-    let txid = keeper.broadcast(&ft)?;
-    provider.wait(&txid)?;
+    keeper.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -165,8 +163,7 @@ fn withdraw_all_succeeds_with_one_explicit_output(
         vault_parameters.vault_asset_id,
     ));
 
-    let txid = keeper.broadcast(&ft)?;
-    provider.wait(&txid)?;
+    keeper.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -213,8 +210,7 @@ fn withdraw_all_succeeds_with_several_explicit_outputs(
         vault_parameters.vault_asset_id,
     ));
 
-    let txid = keeper.broadcast(&ft)?;
-    provider.wait(&txid)?;
+    keeper.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -259,8 +255,7 @@ fn withdraw_all_succeeds_with_confidential_output(
         .with_blinding_key(keeper.get_blinding_public_key()),
     );
 
-    let txid = keeper.broadcast(&ft)?;
-    provider.wait(&txid)?;
+    keeper.broadcast(&ft)?.wait()?;
 
     Ok(())
 }

@@ -12,7 +12,6 @@ use simplex::transaction::{
 };
 
 use super::common::issuance::issue_asset;
-use super::common::tx_steps::finalize_and_broadcast;
 use super::common::wallet::{get_split_utxo_ft, split_first_signer_utxo};
 
 pub(super) fn issue_auth_assets(
@@ -20,11 +19,9 @@ pub(super) fn issue_auth_assets(
     supplier_auth_asset_amount: u64,
     keeper_auth_asset_amount: u64,
 ) -> anyhow::Result<(AssetId, AssetId)> {
-    let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let txid = split_first_signer_utxo(context, vec![1000, 5000, 10000]);
-    provider.wait(&txid)?;
+    split_first_signer_utxo(context, vec![1000, 5000, 10000]);
 
     let policy_utxos = signer.get_utxos_asset(context.get_network().policy_asset())?;
 
@@ -57,8 +54,7 @@ pub(super) fn issue_auth_assets(
         keeper_auth_issuance_details.asset_id,
     ));
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok((
         supplier_auth_issuance_details.asset_id,
@@ -86,8 +82,7 @@ pub(super) fn prepare_vault_asset(
         *context.get_network(),
     );
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(vault_asset_id)
 }
@@ -96,7 +91,6 @@ pub(super) fn make_confidential(
     context: &simplex::TestContext,
     asset_utxo: UTXO,
 ) -> anyhow::Result<()> {
-    let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
     let mut ft = FinalTransaction::new();
@@ -114,8 +108,7 @@ pub(super) fn make_confidential(
         RequiredSignature::NativeEcdsa,
     );
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -141,8 +134,7 @@ pub(super) fn setup_asset_auth_vault(
 
     asset_auth_vault.attach_creation(&mut ft, vault_asset_amount);
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
@@ -157,7 +149,6 @@ pub(super) fn fund_keeper(
     keeper: &Signer,
     keeper_asset_id: AssetId,
 ) -> anyhow::Result<()> {
-    let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
     let keeper_auth_utxo = signer.get_utxos_asset(keeper_asset_id)?[0].clone();
@@ -188,8 +179,7 @@ pub(super) fn fund_keeper(
         context.get_network().policy_asset(),
     ));
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -247,8 +237,7 @@ pub(super) fn final_supply(
         ));
     }
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(finalized_vault)
 }
@@ -300,8 +289,7 @@ pub(super) fn supply(
         ));
     }
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }

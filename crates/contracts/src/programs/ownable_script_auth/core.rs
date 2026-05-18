@@ -21,6 +21,7 @@ impl OwnableScriptAuth {
         let mut program =
             OwnableScriptAuthProgram::new(parameters.build_arguments()).with_storage_capacity(1);
 
+        #[allow(unused_must_use)]
         program.set_storage_at(0, parameters.owner_pubkey.serialize());
 
         Self {
@@ -103,6 +104,7 @@ impl OwnableScriptAuth {
     }
 
     fn apply_ownership_transfer(&mut self, new_owner: XOnlyPublicKey) {
+        #[allow(unused_must_use)]
         self.program.set_storage_at(0, new_owner.serialize());
         self.parameters.owner_pubkey = new_owner;
     }

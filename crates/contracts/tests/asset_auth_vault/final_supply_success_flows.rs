@@ -6,7 +6,6 @@ use lending_contracts::programs::program::SimplexProgram;
 use simplex::simplicityhl::elements::Script;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
-use super::common::tx_steps::finalize_and_broadcast;
 use super::setup::{
     check_vault_amount, issue_auth_assets, make_confidential, prepare_vault_asset,
     setup_asset_auth_vault,
@@ -84,8 +83,7 @@ fn final_supply_succeeds_with_explicit_input_without_auth_burn(
         RequiredSignature::NativeEcdsa,
     );
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     check_vault_amount(&context, &finalized_vault, expected_vault_balance)?;
 
@@ -136,8 +134,7 @@ fn final_supply_succeeds_with_explicit_input_and_auth_burn(
         RequiredSignature::NativeEcdsa,
     );
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     check_vault_amount(&context, &finalized_vault, expected_vault_balance)?;
 
@@ -192,8 +189,7 @@ fn final_supply_succeeds_with_confidential_input(
         supplier_auth_utxo.explicit_asset(),
     ));
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     check_vault_amount(&context, &finalized_vault, expected_vault_balance)?;
 

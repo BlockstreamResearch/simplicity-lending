@@ -8,7 +8,6 @@ use simplex::{
     utils::hash_script,
 };
 
-use super::common::tx_steps::finalize_and_broadcast;
 use super::common::wallet::split_first_signer_utxo;
 
 fn setup_script_auth(
@@ -17,8 +16,7 @@ fn setup_script_auth(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let txid = split_first_signer_utxo(context, vec![1000, 5000, 10000]);
-    provider.wait(&txid)?;
+    split_first_signer_utxo(context, vec![1000, 5000, 10000]);
 
     let signer_script_pubkey = signer.get_address().script_pubkey();
     let signer_script_hash = hash_script(&signer_script_pubkey);
@@ -40,8 +38,7 @@ fn setup_script_auth(
         utxo_to_lock.explicit_amount(),
     );
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok((script_auth, script_auth_parameters))
 }
@@ -130,6 +127,8 @@ fn unlocks_with_multiple_explicit_outputs(context: simplex::TestContext) -> anyh
         script_auth_utxo.explicit_asset(),
     ));
 
+    signer.broadcast(&ft)?.wait()?;
+
     Ok(())
 }
 
@@ -171,6 +170,8 @@ fn unlocks_with_confidential_output(context: simplex::TestContext) -> anyhow::Re
         auth_utxo.explicit_amount(),
         auth_utxo.explicit_asset(),
     ));
+
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }

@@ -4,7 +4,6 @@ use lending_contracts::utils::get_random_seed;
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
-use super::common::tx_steps::finalize_and_broadcast;
 use super::setup::setup_issuance_factory;
 
 #[simplex::test]
@@ -51,8 +50,7 @@ fn issues_new_assets_without_reissuance_tokens_from_the_0_output(
         second_issuance_details.asset_id,
     ));
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -137,8 +135,7 @@ fn issues_new_assets_without_reissuance_tokens_from_the_2_output(
 
     assert_eq!(ft.n_outputs(), 6);
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    alice.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -196,8 +193,7 @@ fn issues_new_assets_with_reissuance_tokens_from_the_0_output(
         .with_blinding_key(signer.get_blinding_public_key()),
     );
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok(())
 }
@@ -300,8 +296,7 @@ fn issues_new_assets_with_reissuance_tokens_from_the_2_output(
 
     assert_eq!(ft.n_outputs(), 8);
 
-    let txid = finalize_and_broadcast(&context, &ft)?;
-    provider.wait(&txid)?;
+    alice.broadcast(&ft)?.wait()?;
 
     Ok(())
 }

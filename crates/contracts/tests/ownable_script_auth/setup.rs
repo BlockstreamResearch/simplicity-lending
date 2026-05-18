@@ -6,7 +6,6 @@ use simplex::{
     utils::hash_script,
 };
 
-use super::common::tx_steps::finalize_and_broadcast;
 use super::common::wallet::split_first_signer_utxo;
 
 pub(super) fn setup_ownable_script_auth(
@@ -15,8 +14,7 @@ pub(super) fn setup_ownable_script_auth(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let txid = split_first_signer_utxo(context, vec![1000, 5000, 10000]);
-    provider.wait(&txid)?;
+    split_first_signer_utxo(context, vec![1000, 5000, 10000]);
 
     let signer_script_pubkey = signer.get_address().script_pubkey();
     let signer_script_hash = hash_script(&signer_script_pubkey);
@@ -45,8 +43,7 @@ pub(super) fn setup_ownable_script_auth(
         utxo_to_lock.explicit_amount(),
     );
 
-    let txid = finalize_and_broadcast(context, &ft)?;
-    provider.wait(&txid)?;
+    signer.broadcast(&ft)?.wait()?;
 
     Ok((ownable_script_auth, ownable_script_auth_parameters))
 }

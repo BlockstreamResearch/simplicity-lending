@@ -1,8 +1,6 @@
 #![allow(dead_code)]
-use super::tx_steps::finalize_and_broadcast;
 use simplex::provider::SimplicityNetwork;
 use simplex::signer::Signer;
-use simplex::simplicityhl::elements::Txid;
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
 };
@@ -48,7 +46,7 @@ pub fn get_split_utxo_ft(
     ft
 }
 
-pub fn split_first_signer_utxo(context: &simplex::TestContext, amounts: Vec<u64>) -> Txid {
+pub fn split_first_signer_utxo(context: &simplex::TestContext, amounts: Vec<u64>) {
     let signer = context.get_default_signer();
 
     let signer_utxos = signer.get_utxos().unwrap();
@@ -57,5 +55,5 @@ pub fn split_first_signer_utxo(context: &simplex::TestContext, amounts: Vec<u64>
         .expect("Signer does not have any utxos");
 
     let ft = get_split_utxo_ft(signer_utxo.clone(), amounts, signer, *context.get_network());
-    finalize_and_broadcast(context, &ft).unwrap()
+    signer.broadcast(&ft).unwrap().wait().unwrap();
 }

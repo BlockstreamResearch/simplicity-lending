@@ -6,8 +6,6 @@ use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, partial_input::IssuanceInput,
 };
 
-use super::tx_steps::finalize_and_broadcast;
-
 pub const PREPARATION_UTXO_ASSET_AMOUNT: u64 = 10;
 
 pub fn issue_asset(
@@ -42,7 +40,9 @@ pub fn issue_asset(
         first_utxo.explicit_asset(),
     ));
 
-    let txid = finalize_and_broadcast(context, &ft)?;
+    let receipt = signer.broadcast(&ft)?;
 
-    Ok((txid, issuance_details.asset_id))
+    receipt.wait()?;
+
+    Ok((receipt.txid(), issuance_details.asset_id))
 }
