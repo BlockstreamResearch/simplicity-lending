@@ -67,11 +67,9 @@ pub(super) fn prepare_vault_asset(
     total_vault_asset_amount: u64,
     split_amounts: Vec<u64>,
 ) -> anyhow::Result<AssetId> {
-    let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (txid, vault_asset_id) = issue_asset(context, total_vault_asset_amount)?;
-    provider.wait(&txid)?;
+    let vault_asset_id = issue_asset(context, total_vault_asset_amount)?;
 
     let vault_asset_utxo = signer.get_utxos_asset(vault_asset_id)?[0].clone();
 

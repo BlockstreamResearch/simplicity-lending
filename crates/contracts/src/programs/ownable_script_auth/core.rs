@@ -41,12 +41,6 @@ impl OwnableScriptAuth {
         amount_to_lock: u64,
     ) {
         self.add_program_output(ft, asset_id_to_lock, amount_to_lock);
-
-        ft.add_output(PartialOutput::new(
-            Script::new_op_return(self.parameters.owner_pubkey.serialize().as_slice()),
-            0,
-            AssetId::default(),
-        ));
     }
 
     pub fn attach_ownership_transfer(
@@ -77,8 +71,12 @@ impl OwnableScriptAuth {
 
         self.add_program_output(ft, locked_asset, locked_amount);
 
+        self.attach_metadata(ft);
+    }
+
+    pub fn attach_metadata(&self, ft: &mut FinalTransaction) {
         ft.add_output(PartialOutput::new(
-            Script::new_op_return(new_owner.serialize().as_slice()),
+            Script::new_op_return(self.parameters.owner_pubkey.serialize().as_slice()),
             0,
             AssetId::default(),
         ));

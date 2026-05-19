@@ -481,12 +481,12 @@ fn get_acceptance_borrower_debt_nft_indexes(start_input_index: u32, start_output
     (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 1))
 }
 
-fn get_acceptance_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
-    (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 2))
+fn get_acceptance_principal_output_index(start_output_index: u32) -> u32 {
+    safe_add_32(start_output_index, 2)
 }
 
-fn get_acceptance_principal_output_index(start_output_index: u32) -> u32 {
-    safe_add_32(start_output_index, 3)
+fn get_acceptance_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+    (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 3))
 }
 
 fn accept_offer() {

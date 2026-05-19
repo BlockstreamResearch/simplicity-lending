@@ -1,17 +1,14 @@
 #![allow(dead_code)]
 use lending_contracts::utils::get_random_seed;
 
-use simplex::simplicityhl::elements::{AssetId, Txid};
+use simplex::simplicityhl::elements::AssetId;
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, partial_input::IssuanceInput,
 };
 
 pub const PREPARATION_UTXO_ASSET_AMOUNT: u64 = 10;
 
-pub fn issue_asset(
-    context: &simplex::TestContext,
-    asset_amount: u64,
-) -> anyhow::Result<(Txid, AssetId)> {
+pub fn issue_asset(context: &simplex::TestContext, asset_amount: u64) -> anyhow::Result<AssetId> {
     let signer = context.get_default_signer();
 
     let mut ft = FinalTransaction::new();
@@ -40,9 +37,7 @@ pub fn issue_asset(
         first_utxo.explicit_asset(),
     ));
 
-    let receipt = signer.broadcast(&ft)?;
+    signer.broadcast(&ft)?.wait()?;
 
-    receipt.wait()?;
-
-    Ok((receipt.txid(), issuance_details.asset_id))
+    Ok(issuance_details.asset_id)
 }

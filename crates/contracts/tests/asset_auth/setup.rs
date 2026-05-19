@@ -15,8 +15,7 @@ pub(super) fn setup_asset_auth(
 
     split_first_signer_utxo(context, vec![1000]);
 
-    let (txid, asset_id) = issue_asset(context, asset_amount)?;
-    provider.wait(&txid)?;
+    let asset_id = issue_asset(context, asset_amount)?;
 
     let asset_auth_parameters = AssetAuthParameters {
         asset_id,

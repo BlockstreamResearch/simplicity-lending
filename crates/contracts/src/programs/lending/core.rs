@@ -45,6 +45,15 @@ impl PendingLendingOffer {
     }
 
     pub fn attach_creation(&self, ft: &mut FinalTransaction) {
+        let nfts_script_auth = ScriptAuth::from_simplex_program(self);
+
+        nfts_script_auth.attach_creation(
+            ft,
+            self.parameters.borrower_debt_nft_asset_id,
+            self.parameters.offer_parameters.get_total_amount_to_repay(),
+        );
+        nfts_script_auth.attach_creation(ft, self.parameters.lender_nft_asset_id, 1);
+
         self.add_program_output(
             ft,
             self.parameters.collateral_asset_id,
@@ -60,7 +69,7 @@ impl PendingLendingOffer {
         pending_lending_utxo: UTXO,
         borrower_debt_nft_utxo: UTXO,
         lender_nft_utxo: UTXO,
-    ) {
+    ) -> ActiveLendingOffer {
         let pending_lending_input_index = ft.n_inputs() as u32;
 
         self.add_program_input(
@@ -95,6 +104,8 @@ impl PendingLendingOffer {
             self.parameters.principal_asset_id,
             self.parameters.offer_parameters.principal_amount,
         );
+
+        active_lending
     }
 
     pub fn attach_offer_cancellation(
@@ -200,13 +211,15 @@ impl ActiveLendingOffer {
         let lending_input_index = ft.n_inputs() as u32;
         let borrower_debt_nft_input_index = lending_input_index + 1;
 
-        self.add_program_input(
-            ft,
-            active_lending_utxo,
-            LendingWitnessBranch::PartialLoanRepayment { amount_to_repay }.build_witness(),
-        );
-
         let current_borrower_debt = borrower_debt_nft_utxo.explicit_amount();
+
+        let witness_branch = if current_borrower_debt == amount_to_repay {
+            LendingWitnessBranch::FullLoanRepayment
+        } else {
+            LendingWitnessBranch::PartialLoanRepayment { amount_to_repay }
+        };
+
+        self.add_program_input(ft, active_lending_utxo, witness_branch.build_witness());
 
         if amount_to_repay < current_borrower_debt {
             self.add_program_output(
@@ -419,7 +432,7 @@ impl ActiveLendingOffer {
             borrower_debt_nft_indexes.0,
             borrower_debt_nft_indexes.1,
             amount_to_repay - repaid_protocol_fee,
-            current_borrower_debt,
+            current_borrower_debt - protocol_fee_left,
         );
 
         active_protocol_fee_vault.attach_supplying_with_goal(
