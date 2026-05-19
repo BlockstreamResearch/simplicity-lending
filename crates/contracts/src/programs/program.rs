@@ -7,21 +7,10 @@ use simplex::transaction::{
     RequiredSignature, UTXO,
 };
 
-use simplex::simplicityhl::elements::{AssetId, Script, opcodes, script::Instruction};
+use simplex::simplicityhl::elements::{AssetId, Script};
 
 pub const PROGRAM_ID_LENGTH: usize = 4;
 pub type ProgramId = [u8; PROGRAM_ID_LENGTH];
-
-pub fn op_return_payload(script: &Script) -> Option<&[u8]> {
-    let mut instructions = script.instructions_minimal();
-
-    match instructions.next()? {
-        Ok(Instruction::Op(opcodes::all::OP_RETURN)) => {}
-        _ => return None,
-    }
-
-    instructions.next()?.ok()?.push_bytes()
-}
 
 pub trait CreationOpReturnData: Sized {
     type Error;
@@ -150,4 +139,20 @@ pub trait SimplexProgram {
     fn get_network(&self) -> &SimplicityNetwork;
 
     fn get_program_source_code(&self) -> &'static str;
+}
+
+pub trait MetadataProgram: SimplexProgram {
+    type Metadata: CreationOpReturnData;
+
+    fn build_metadata(&self) -> Self::Metadata;
+
+    fn encode_metadata_op_return(&self) -> Vec<u8> {
+        self.build_metadata().encode()
+    }
+
+    fn decode_metadata_op_return(
+        op_return_bytes: Vec<u8>,
+    ) -> Result<Self::Metadata, <Self::Metadata as CreationOpReturnData>::Error> {
+        Self::Metadata::decode(&op_return_bytes)
+    }
 }

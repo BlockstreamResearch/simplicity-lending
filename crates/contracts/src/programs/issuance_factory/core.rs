@@ -8,10 +8,12 @@ use simplex::{program::Program, provider::SimplicityNetwork};
 
 use crate::artifacts::issuance_factory::IssuanceFactoryProgram;
 use crate::programs::issuance_factory::{
-    CREATION_OP_RETURN_OUTPUT_INDEX, IssuanceFactoryError, IssuanceFactoryParameters,
-    IssuanceFactoryWitnessBranch,
+    IssuanceFactoryError, IssuanceFactoryParameters, IssuanceFactoryWitnessBranch,
 };
-use crate::programs::program::{SimplexProgram, op_return_payload};
+
+const CREATION_OP_RETURN_OUTPUT_INDEX: usize = 1;
+use crate::programs::program::{MetadataProgram, SimplexProgram};
+use crate::utils::op_return_payload;
 
 pub struct IssuanceFactory {
     program: IssuanceFactoryProgram,
@@ -43,7 +45,7 @@ impl IssuanceFactory {
                 .ok_or_else(|| IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(tx.txid()))?;
 
         let creation_op_return_data =
-            IssuanceFactory::decode_creation_op_return_data(op_return_bytes.to_vec())?;
+            IssuanceFactory::decode_metadata_op_return(op_return_bytes.to_vec())?;
 
         let issuance_factory_parameters = IssuanceFactoryParameters {
             issuing_utxos_count: creation_op_return_data.issuing_utxos_count,
@@ -67,7 +69,7 @@ impl IssuanceFactory {
     ) {
         self.add_program_output(ft, factory_asset_id, factory_asset_amount);
 
-        let op_return_data = self.encode_creation_op_return_data();
+        let op_return_data = self.encode_metadata_op_return();
 
         ft.add_output(PartialOutput::new(
             Script::new_op_return(&op_return_data),

@@ -2,10 +2,8 @@ use simplex::simplicityhl::elements::{hex::ToHex, schnorr::XOnlyPublicKey};
 
 use crate::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryError};
 use crate::programs::program::{
-    CreationOpReturnData, PROGRAM_ID_LENGTH, ProgramId, SimplexProgram,
+    CreationOpReturnData, MetadataProgram, PROGRAM_ID_LENGTH, ProgramId, SimplexProgram,
 };
-
-pub(crate) const CREATION_OP_RETURN_OUTPUT_INDEX: usize = 1;
 
 const OWNER_PUBKEY_LENGTH: usize = 32;
 const CREATION_OP_RETURN_DATA_LENGTH: usize = PROGRAM_ID_LENGTH
@@ -85,20 +83,15 @@ impl CreationOpReturnData for IssuanceFactoryCreationOpReturnData {
     }
 }
 
-impl IssuanceFactory {
-    pub fn decode_creation_op_return_data(
-        op_return_bytes: Vec<u8>,
-    ) -> Result<IssuanceFactoryCreationOpReturnData, IssuanceFactoryError> {
-        IssuanceFactoryCreationOpReturnData::decode(&op_return_bytes)
-    }
+impl MetadataProgram for IssuanceFactory {
+    type Metadata = IssuanceFactoryCreationOpReturnData;
 
-    pub fn encode_creation_op_return_data(&self) -> Vec<u8> {
+    fn build_metadata(&self) -> Self::Metadata {
         IssuanceFactoryCreationOpReturnData::new(
             self.get_program_id(),
             self.get_parameters().issuing_utxos_count,
             self.get_parameters().reissuance_flags,
             self.get_parameters().owner_pubkey,
         )
-        .encode()
     }
 }

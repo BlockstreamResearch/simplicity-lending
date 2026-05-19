@@ -1,7 +1,6 @@
 use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
-use lending_contracts::programs::program::{
-    SimplexProgram, op_return_payload as script_op_return_payload,
-};
+use lending_contracts::programs::program::{MetadataProgram, SimplexProgram};
+use lending_contracts::utils::op_return_payload as script_op_return_payload;
 use simplex::simplicityhl::elements::{Transaction, Txid};
 
 use super::setup::setup_issuance_factory;
@@ -74,9 +73,9 @@ fn decodes_issuance_factory_creation_metadata(context: simplex::TestContext) -> 
 
     let issuance_factory_creation_tx =
         provider.fetch_transaction(&issuance_factory_creation_txid)?;
-    let decoded_op_return_data = IssuanceFactory::decode_creation_op_return_data(
-        op_return_payload(&issuance_factory_creation_tx),
-    )?;
+    let decoded_op_return_data = IssuanceFactory::decode_metadata_op_return(op_return_payload(
+        &issuance_factory_creation_tx,
+    ))?;
 
     assert_eq!(
         decoded_op_return_data.program_id,

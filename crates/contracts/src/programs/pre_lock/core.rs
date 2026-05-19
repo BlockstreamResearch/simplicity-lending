@@ -8,8 +8,9 @@ use simplex::utils::hash_script;
 use crate::artifacts::pre_lock::PreLockProgram;
 use crate::programs::lending::Lending;
 use crate::programs::pre_lock::{PreLockError, PreLockParameters, PreLockWitnessBranch};
-use crate::programs::program::{SimplexProgram, op_return_payload};
+use crate::programs::program::{MetadataProgram, SimplexProgram};
 use crate::programs::script_auth::{ScriptAuth, ScriptAuthWitnessParams};
+use crate::utils::op_return_payload;
 use crate::utils::{FirstNFTParameters, LendingOfferParameters, SecondNFTParameters};
 
 pub struct PreLock {
@@ -79,8 +80,7 @@ impl PreLock {
         let op_return_bytes = op_return_payload(&tx.output[5].script_pubkey)
             .ok_or_else(|| PreLockError::NotAPreLockCreationTx(tx.txid()))?;
 
-        let creation_op_return_data =
-            PreLock::decode_creation_op_return_data(op_return_bytes.to_vec())?;
+        let creation_op_return_data = PreLock::decode_metadata_op_return(op_return_bytes.to_vec())?;
 
         let pre_lock_parameters = PreLockParameters {
             collateral_asset_id,
@@ -129,7 +129,7 @@ impl PreLock {
         utility_nfts_script_auth.attach_creation(ft, self.parameters.borrower_nft_asset_id, 1);
         utility_nfts_script_auth.attach_creation(ft, self.parameters.lender_nft_asset_id, 1);
 
-        let op_return_data = self.encode_creation_op_return_data();
+        let op_return_data = self.encode_metadata_op_return();
 
         ft.add_output(PartialOutput::new(
             Script::new_op_return(&op_return_data),
