@@ -2,7 +2,7 @@ use simplex::simplicityhl::elements::{hex::ToHex, schnorr::XOnlyPublicKey};
 
 use crate::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryError};
 use crate::programs::program::{
-    CreationOpReturnData, MetadataProgram, PROGRAM_ID_LENGTH, ProgramId, SimplexProgram,
+    CreationMetadata, MetadataProgram, PROGRAM_ID_LENGTH, ProgramId, SimplexProgram,
 };
 
 const OWNER_PUBKEY_LENGTH: usize = 32;
@@ -12,14 +12,14 @@ const CREATION_OP_RETURN_DATA_LENGTH: usize = PROGRAM_ID_LENGTH
     + OWNER_PUBKEY_LENGTH;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct IssuanceFactoryCreationOpReturnData {
+pub struct IssuanceFactoryCreationMetadata {
     pub program_id: ProgramId,
     pub issuing_utxos_count: u8,
     pub reissuance_flags: u64,
     pub owner_pubkey: XOnlyPublicKey,
 }
 
-impl IssuanceFactoryCreationOpReturnData {
+impl IssuanceFactoryCreationMetadata {
     pub fn new(
         program_id: ProgramId,
         issuing_utxos_count: u8,
@@ -35,14 +35,14 @@ impl IssuanceFactoryCreationOpReturnData {
     }
 }
 
-impl CreationOpReturnData for IssuanceFactoryCreationOpReturnData {
+impl CreationMetadata for IssuanceFactoryCreationMetadata {
     type Error = IssuanceFactoryError;
 
     const DATA_LENGTH: usize = CREATION_OP_RETURN_DATA_LENGTH;
 
     fn decode(op_return_bytes: &[u8]) -> Result<Self, Self::Error> {
         Self::validate_length(op_return_bytes, |expected, actual| {
-            IssuanceFactoryError::InvalidCreationOpReturnDataLength { expected, actual }
+            IssuanceFactoryError::InvalidCreationMetadataLength { expected, actual }
         })?;
 
         let mut cursor = 0;
@@ -62,7 +62,7 @@ impl CreationOpReturnData for IssuanceFactoryCreationOpReturnData {
 
         let owner_pubkey_bytes = &op_return_bytes[cursor..];
         let owner_pubkey = XOnlyPublicKey::from_slice(owner_pubkey_bytes)
-            .map_err(|_| IssuanceFactoryError::InvalidOpReturnBytes(op_return_bytes.to_hex()))?;
+            .map_err(|_| IssuanceFactoryError::InvalidMetadataBytes(op_return_bytes.to_hex()))?;
 
         Ok(Self {
             program_id,
@@ -84,11 +84,11 @@ impl CreationOpReturnData for IssuanceFactoryCreationOpReturnData {
 }
 
 impl MetadataProgram for IssuanceFactory {
-    type Metadata = IssuanceFactoryCreationOpReturnData;
+    type Metadata = IssuanceFactoryCreationMetadata;
 
     fn build_metadata(&self) -> Self::Metadata {
-        IssuanceFactoryCreationOpReturnData::new(
-            self.get_program_id(),
+        IssuanceFactoryCreationMetadata::new(
+            Self::get_program_id(),
             self.get_parameters().issuing_utxos_count,
             self.get_parameters().reissuance_flags,
             self.get_parameters().owner_pubkey,

@@ -35,7 +35,7 @@ fn creates_issuance_factory_with_creation_metadata(
     context: simplex::TestContext,
 ) -> anyhow::Result<()> {
     let provider = context.get_default_provider();
-    let (issuance_factory_creation_txid, issuance_factory, issuance_factory_parameters) =
+    let (issuance_factory_creation_txid, _, issuance_factory_parameters) =
         setup_default_issuance_factory(&context)?;
 
     let issuance_factory_creation_tx =
@@ -47,7 +47,7 @@ fn creates_issuance_factory_with_creation_metadata(
     assert_eq!(op_return_data.len(), 45);
     assert_eq!(
         &op_return_data[0..4],
-        issuance_factory.get_program_id().as_slice()
+        IssuanceFactory::get_program_id().as_slice()
     );
     assert_eq!(
         op_return_data[4],
@@ -68,7 +68,7 @@ fn creates_issuance_factory_with_creation_metadata(
 #[simplex::test]
 fn decodes_issuance_factory_creation_metadata(context: simplex::TestContext) -> anyhow::Result<()> {
     let provider = context.get_default_provider();
-    let (issuance_factory_creation_txid, issuance_factory, issuance_factory_parameters) =
+    let (issuance_factory_creation_txid, _, issuance_factory_parameters) =
         setup_default_issuance_factory(&context)?;
 
     let issuance_factory_creation_tx =
@@ -79,7 +79,7 @@ fn decodes_issuance_factory_creation_metadata(context: simplex::TestContext) -> 
 
     assert_eq!(
         decoded_op_return_data.program_id,
-        issuance_factory.get_program_id()
+        IssuanceFactory::get_program_id()
     );
     assert_eq!(
         decoded_op_return_data.issuing_utxos_count,

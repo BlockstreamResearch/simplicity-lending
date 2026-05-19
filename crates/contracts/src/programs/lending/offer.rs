@@ -2,7 +2,7 @@ use std::cmp::min;
 
 use crate::utils::apply_basis_points;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OfferParameters {
     pub collateral_amount: u64,
     pub principal_amount: u64,

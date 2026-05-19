@@ -56,15 +56,15 @@ impl ScriptAuth {
 }
 
 impl SimplexProgram for ScriptAuth {
+    fn get_program_source_code() -> &'static str {
+        ScriptAuthProgram::SOURCE
+    }
+
     fn get_program(&self) -> &Program {
         self.program.as_ref()
     }
 
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
-    }
-
-    fn get_program_source_code(&self) -> &'static str {
-        ScriptAuthProgram::SOURCE
     }
 }

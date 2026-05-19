@@ -47,15 +47,15 @@ impl AssetAuth {
 }
 
 impl SimplexProgram for AssetAuth {
+    fn get_program_source_code() -> &'static str {
+        AssetAuthProgram::SOURCE
+    }
+
     fn get_program(&self) -> &Program {
         self.program.as_ref()
     }
 
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
-    }
-
-    fn get_program_source_code(&self) -> &'static str {
-        AssetAuthProgram::SOURCE
     }
 }

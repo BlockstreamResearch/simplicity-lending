@@ -1,7 +1,7 @@
 use simplex::{
     program::Program,
     provider::SimplicityNetwork,
-    simplicityhl::elements::{LockTime, Script, Sequence},
+    simplicityhl::elements::{AssetId, LockTime, Script, Sequence, Transaction},
     transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO},
 };
 
@@ -9,14 +9,17 @@ use crate::{
     artifacts::lending::LendingProgram,
     programs::{
         lending::{
-            ActiveLendingOfferParameters, LendingWitnessBranch, OfferRepaymentPhase,
-            PendingLendingOfferParameters,
+            ActiveLendingOfferParameters, LendingOfferError, LendingWitnessBranch, OfferParameters,
+            OfferRepaymentPhase, PendingLendingOfferParameters,
         },
         ownable_script_auth::{OwnableScriptAuth, OwnableScriptAuthParameters},
-        program::SimplexProgram,
+        program::{MetadataProgram, SimplexProgram},
         script_auth::{ScriptAuth, ScriptAuthWitnessParams},
     },
+    utils::{basis_points_of, op_return_payload},
 };
+
+const CREATION_METADATA_OUTPUT_INDEX: usize = 4;
 
 pub struct PendingLendingOffer {
     program: LendingProgram,
@@ -40,6 +43,63 @@ impl PendingLendingOffer {
         Self::new(parameters.into())
     }
 
+    pub fn try_from_tx(
+        tx: &Transaction,
+        protocol_fee_keeper_asset_id: AssetId,
+        network: SimplicityNetwork,
+    ) -> Result<Self, LendingOfferError> {
+        if tx.output.len() <= CREATION_METADATA_OUTPUT_INDEX
+            || !tx.output[CREATION_METADATA_OUTPUT_INDEX].is_null_data()
+        {
+            return Err(LendingOfferError::NotALendingOfferCreationTx(tx.txid()));
+        }
+
+        let op_return_bytes =
+            op_return_payload(&tx.output[CREATION_METADATA_OUTPUT_INDEX].script_pubkey)
+                .ok_or_else(|| LendingOfferError::NotALendingOfferCreationTx(tx.txid()))?;
+
+        let creation_metadata =
+            PendingLendingOffer::decode_metadata_op_return(op_return_bytes.to_vec())?;
+
+        if creation_metadata.program_id != Self::get_program_id() {
+            return Err(LendingOfferError::NotALendingOfferCreationTx(tx.txid()));
+        }
+
+        let borrower_debt_nft_tx_out = tx.output[1].clone();
+        let lender_nft_tx_out = tx.output[2].clone();
+        let pending_lending_offer_tx_out = tx.output[3].clone();
+
+        let total_amount_to_repay = borrower_debt_nft_tx_out.value.explicit().unwrap();
+
+        if total_amount_to_repay < creation_metadata.principal_amount {
+            return Err(LendingOfferError::NotALendingOfferCreationTx(tx.txid()));
+        }
+
+        let total_fee = total_amount_to_repay - creation_metadata.principal_amount;
+        let principal_interest_rate =
+            basis_points_of(creation_metadata.principal_amount, total_fee)?;
+
+        let offer_parameters = OfferParameters {
+            collateral_amount: pending_lending_offer_tx_out.value.explicit().unwrap(),
+            principal_amount: creation_metadata.principal_amount,
+            loan_expiration_time: creation_metadata.loan_expiration_time,
+            principal_interest_rate,
+        };
+
+        let active_lending_offer_parameters = ActiveLendingOfferParameters {
+            collateral_asset_id: pending_lending_offer_tx_out.asset.explicit().unwrap(),
+            principal_asset_id: creation_metadata.principal_asset_id,
+            protocol_fee_keeper_asset_id,
+            borrower_debt_nft_asset_id: borrower_debt_nft_tx_out.asset.explicit().unwrap(),
+            lender_nft_asset_id: lender_nft_tx_out.asset.explicit().unwrap(),
+            borrower_pubkey: creation_metadata.borrower_pubkey,
+            offer_parameters,
+            network,
+        };
+
+        Ok(Self::from_active_lending(active_lending_offer_parameters))
+    }
+
     pub fn get_parameters(&self) -> &PendingLendingOfferParameters {
         &self.parameters
     }
@@ -60,7 +120,9 @@ impl PendingLendingOffer {
             self.parameters.offer_parameters.collateral_amount,
         );
 
-        // TODO: Add metadata OP_RETURN
+        let creation_metadata = self.encode_metadata_op_return();
+
+        ft.add_output(PartialOutput::new_metadata(&creation_metadata));
     }
 
     pub fn attach_offer_acceptance(
@@ -467,6 +529,10 @@ impl ActiveLendingOffer {
 }
 
 impl SimplexProgram for PendingLendingOffer {
+    fn get_program_source_code() -> &'static str {
+        LendingProgram::SOURCE
+    }
+
     fn get_program(&self) -> &Program {
         self.program.as_ref()
     }
@@ -477,15 +543,15 @@ impl SimplexProgram for PendingLendingOffer {
 }
 
 impl SimplexProgram for ActiveLendingOffer {
+    fn get_program_source_code() -> &'static str {
+        LendingProgram::SOURCE
+    }
+
     fn get_program(&self) -> &Program {
         self.program.as_ref()
     }
 
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
-    }
-
-    fn get_program_source_code(&self) -> &'static str {
-        LendingProgram::SOURCE
     }
 }

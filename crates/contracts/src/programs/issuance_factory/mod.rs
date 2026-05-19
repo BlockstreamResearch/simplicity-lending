@@ -6,6 +6,6 @@ mod witness;
 
 pub use core::IssuanceFactory;
 pub use error::IssuanceFactoryError;
-pub use metadata::IssuanceFactoryCreationOpReturnData;
+pub use metadata::IssuanceFactoryCreationMetadata;
 pub use params::IssuanceFactoryParameters;
 pub use witness::IssuanceFactoryWitnessBranch;

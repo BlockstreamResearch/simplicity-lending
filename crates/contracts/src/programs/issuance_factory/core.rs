@@ -10,10 +10,10 @@ use crate::artifacts::issuance_factory::IssuanceFactoryProgram;
 use crate::programs::issuance_factory::{
     IssuanceFactoryError, IssuanceFactoryParameters, IssuanceFactoryWitnessBranch,
 };
-
-const CREATION_OP_RETURN_OUTPUT_INDEX: usize = 1;
 use crate::programs::program::{MetadataProgram, SimplexProgram};
 use crate::utils::op_return_payload;
+
+const CREATION_METADATA_OUTPUT_INDEX: usize = 1;
 
 pub struct IssuanceFactory {
     program: IssuanceFactoryProgram,
@@ -32,8 +32,8 @@ impl IssuanceFactory {
         tx: &Transaction,
         provider: &impl ProviderTrait,
     ) -> Result<Self, IssuanceFactoryError> {
-        if tx.output.len() <= CREATION_OP_RETURN_OUTPUT_INDEX
-            || !tx.output[CREATION_OP_RETURN_OUTPUT_INDEX].is_null_data()
+        if tx.output.len() <= CREATION_METADATA_OUTPUT_INDEX
+            || !tx.output[CREATION_METADATA_OUTPUT_INDEX].is_null_data()
         {
             return Err(IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(
                 tx.txid(),
@@ -41,16 +41,16 @@ impl IssuanceFactory {
         }
 
         let op_return_bytes =
-            op_return_payload(&tx.output[CREATION_OP_RETURN_OUTPUT_INDEX].script_pubkey)
+            op_return_payload(&tx.output[CREATION_METADATA_OUTPUT_INDEX].script_pubkey)
                 .ok_or_else(|| IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(tx.txid()))?;
 
-        let creation_op_return_data =
+        let creation_metadata =
             IssuanceFactory::decode_metadata_op_return(op_return_bytes.to_vec())?;
 
         let issuance_factory_parameters = IssuanceFactoryParameters {
-            issuing_utxos_count: creation_op_return_data.issuing_utxos_count,
-            reissuance_flags: creation_op_return_data.reissuance_flags,
-            owner_pubkey: creation_op_return_data.owner_pubkey,
+            issuing_utxos_count: creation_metadata.issuing_utxos_count,
+            reissuance_flags: creation_metadata.reissuance_flags,
+            owner_pubkey: creation_metadata.owner_pubkey,
             network: *provider.get_network(),
         };
 
@@ -71,11 +71,7 @@ impl IssuanceFactory {
 
         let op_return_data = self.encode_metadata_op_return();
 
-        ft.add_output(PartialOutput::new(
-            Script::new_op_return(&op_return_data),
-            0,
-            AssetId::default(),
-        ));
+        ft.add_output(PartialOutput::new_metadata(&op_return_data));
     }
 
     pub fn attach_assets_issuing(
@@ -132,15 +128,15 @@ impl IssuanceFactory {
 }
 
 impl SimplexProgram for IssuanceFactory {
+    fn get_program_source_code() -> &'static str {
+        IssuanceFactoryProgram::SOURCE
+    }
+
     fn get_program(&self) -> &Program {
         self.program.as_ref()
     }
 
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
-    }
-
-    fn get_program_source_code(&self) -> &'static str {
-        IssuanceFactoryProgram::SOURCE
     }
 }

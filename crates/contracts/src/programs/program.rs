@@ -12,7 +12,7 @@ use simplex::simplicityhl::elements::{AssetId, Script};
 pub const PROGRAM_ID_LENGTH: usize = 4;
 pub type ProgramId = [u8; PROGRAM_ID_LENGTH];
 
-pub trait CreationOpReturnData: Sized {
+pub trait CreationMetadata: Sized {
     type Error;
 
     const DATA_LENGTH: usize;
@@ -126,23 +126,23 @@ pub trait SimplexProgram {
         self.get_program().get_script_hash(self.get_network())
     }
 
-    fn get_program_id(&self) -> ProgramId {
-        let source_code_hash = digest(&SHA256, self.get_program_source_code().as_bytes());
+    fn get_program_id() -> ProgramId {
+        let source_code_hash = digest(&SHA256, Self::get_program_source_code().as_bytes());
         let mut hash_prefix = [0; 4];
         hash_prefix.copy_from_slice(&source_code_hash.as_ref()[..4]);
 
         hash_prefix
     }
 
+    fn get_program_source_code() -> &'static str;
+
     fn get_program(&self) -> &Program;
 
     fn get_network(&self) -> &SimplicityNetwork;
-
-    fn get_program_source_code(&self) -> &'static str;
 }
 
 pub trait MetadataProgram: SimplexProgram {
-    type Metadata: CreationOpReturnData;
+    type Metadata: CreationMetadata;
 
     fn build_metadata(&self) -> Self::Metadata;
 
@@ -152,7 +152,7 @@ pub trait MetadataProgram: SimplexProgram {
 
     fn decode_metadata_op_return(
         op_return_bytes: Vec<u8>,
-    ) -> Result<Self::Metadata, <Self::Metadata as CreationOpReturnData>::Error> {
+    ) -> Result<Self::Metadata, <Self::Metadata as CreationMetadata>::Error> {
         Self::Metadata::decode(&op_return_bytes)
     }
 }
