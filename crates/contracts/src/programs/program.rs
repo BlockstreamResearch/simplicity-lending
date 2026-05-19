@@ -1,3 +1,4 @@
+use ring::digest::{SHA256, digest};
 use simplex::program::{Program, WitnessTrait};
 use simplex::provider::SimplicityNetwork;
 use simplex::transaction::partial_input::IssuanceInput;
@@ -7,6 +8,37 @@ use simplex::transaction::{
 };
 
 use simplex::simplicityhl::elements::{AssetId, Script};
+
+pub const PROGRAM_ID_LENGTH: usize = 4;
+pub type ProgramId = [u8; PROGRAM_ID_LENGTH];
+
+pub trait CreationOpReturnData: Sized {
+    type Error;
+
+    const DATA_LENGTH: usize;
+
+    fn decode(op_return_bytes: &[u8]) -> Result<Self, Self::Error>;
+
+    fn encode(&self) -> Vec<u8>;
+
+    fn validate_length(
+        op_return_bytes: &[u8],
+        invalid_length: impl FnOnce(usize, usize) -> Self::Error,
+    ) -> Result<(), Self::Error> {
+        if op_return_bytes.len() != Self::DATA_LENGTH {
+            return Err(invalid_length(Self::DATA_LENGTH, op_return_bytes.len()));
+        }
+
+        Ok(())
+    }
+
+    fn decode_program_id(op_return_bytes: &[u8]) -> ProgramId {
+        let mut program_id = [0; PROGRAM_ID_LENGTH];
+        program_id.copy_from_slice(&op_return_bytes[..PROGRAM_ID_LENGTH]);
+
+        program_id
+    }
+}
 
 pub trait SimplexProgram {
     fn add_program_input<'a>(
@@ -94,7 +126,33 @@ pub trait SimplexProgram {
         self.get_program().get_script_hash(self.get_network())
     }
 
+    fn get_program_id(&self) -> ProgramId {
+        let source_code_hash = digest(&SHA256, self.get_program_source_code().as_bytes());
+        let mut hash_prefix = [0; 4];
+        hash_prefix.copy_from_slice(&source_code_hash.as_ref()[..4]);
+
+        hash_prefix
+    }
+
     fn get_program(&self) -> &Program;
 
     fn get_network(&self) -> &SimplicityNetwork;
+
+    fn get_program_source_code(&self) -> &'static str;
+}
+
+pub trait MetadataProgram: SimplexProgram {
+    type Metadata: CreationOpReturnData;
+
+    fn build_metadata(&self) -> Self::Metadata;
+
+    fn encode_metadata_op_return(&self) -> Vec<u8> {
+        self.build_metadata().encode()
+    }
+
+    fn decode_metadata_op_return(
+        op_return_bytes: Vec<u8>,
+    ) -> Result<Self::Metadata, <Self::Metadata as CreationOpReturnData>::Error> {
+        Self::Metadata::decode(&op_return_bytes)
+    }
 }

@@ -116,4 +116,8 @@ impl SimplexProgram for OwnableScriptAuth {
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
     }
+
+    fn get_program_source_code(&self) -> &'static str {
+        OwnableScriptAuthProgram::SOURCE
+    }
 }

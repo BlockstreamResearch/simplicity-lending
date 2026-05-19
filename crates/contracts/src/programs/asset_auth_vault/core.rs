@@ -186,6 +186,10 @@ impl SimplexProgram for ActiveAssetAuthVault {
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
     }
+
+    fn get_program_source_code(&self) -> &'static str {
+        AssetAuthVaultProgram::SOURCE
+    }
 }
 
 impl SimplexProgram for FinalizedAssetAuthVault {
@@ -195,5 +199,9 @@ impl SimplexProgram for FinalizedAssetAuthVault {
 
     fn get_network(&self) -> &SimplicityNetwork {
         &self.parameters.network
+    }
+
+    fn get_program_source_code(&self) -> &'static str {
+        AssetAuthVaultProgram::SOURCE
     }
 }
