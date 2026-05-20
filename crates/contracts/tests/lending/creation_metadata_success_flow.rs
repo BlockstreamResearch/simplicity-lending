@@ -14,9 +14,9 @@ fn default_pending_offer_setup(
 ) -> anyhow::Result<(Txid, PendingLendingOffer, PendingLendingOfferParameters)> {
     let provider = context.get_default_provider();
 
-    split_first_signer_utxo(&context, vec![5000, 10000]);
+    split_first_signer_utxo(context, vec![5000, 10000]);
 
-    let issuance_factory = setup_issuance_factory(&context)?;
+    let issuance_factory = setup_issuance_factory(context)?;
 
     let principal_asset_amount = 20000;
     let current_height = provider.fetch_tip_height()?;
@@ -29,7 +29,7 @@ fn default_pending_offer_setup(
     };
 
     setup_pending_lending_offer(
-        &context,
+        context,
         offer_parameters,
         issuance_factory,
         principal_asset_amount,

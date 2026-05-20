@@ -1,9 +1,6 @@
 use clap::Subcommand;
 
-use crate::commands::{
-    account::AccountCommand, lending::LendingCommand, pre_lock::PreLockCommand,
-    utility::UtilityCommand,
-};
+use crate::commands::{account::AccountCommand, utility::UtilityCommand};
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
@@ -11,16 +8,6 @@ pub enum Command {
     Account {
         #[command(subcommand)]
         command: AccountCommand,
-    },
-    /// Lending offer related commands
-    Lending {
-        #[command(subcommand)]
-        command: LendingCommand,
-    },
-    /// Offer creation commands
-    PreLock {
-        #[command(subcommand)]
-        command: PreLockCommand,
     },
     /// Utility steps related commands
     Utility {

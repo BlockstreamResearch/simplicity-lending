@@ -23,7 +23,6 @@ workspace = true
 ring = { workspace = true }
 hex = { workspace = true }
 thiserror = { workspace = true }
-modular-bitfield = { workspace = true }
 
 smplx-std = { workspace = true }
 

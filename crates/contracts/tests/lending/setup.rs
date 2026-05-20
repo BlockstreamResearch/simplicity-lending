@@ -264,7 +264,7 @@ pub(super) fn partial_repay_offer(
 
     let active_offer_utxo =
         provider.fetch_scripthash_utxos(&active_lending_offer.get_script_pubkey())?[0].clone();
-    let borrower_debt_nft_utxo = get_borrower_debt_nft_utxo(&context, active_offer_parameters)?;
+    let borrower_debt_nft_utxo = get_borrower_debt_nft_utxo(context, active_offer_parameters)?;
     let (lender_vault_utxo, protocol_fee_vault_utxo) =
         get_offer_vaults_utxos(context, active_offer_parameters)?;
 

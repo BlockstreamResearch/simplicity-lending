@@ -5,8 +5,6 @@ use simplex::signer::Signer;
 
 use crate::commands::account::Account;
 use crate::commands::core::Command;
-use crate::commands::lending::CliLending;
-use crate::commands::pre_lock::CliPreLock;
 use crate::commands::utility::Utility;
 use crate::config::CliConfig;
 use crate::error::CliError;
@@ -37,16 +35,6 @@ impl Cli {
                 let context = Cli::build_context()?;
 
                 Ok(Account::run(context, command)?)
-            }
-            Command::Lending { command } => {
-                let context = Cli::build_context()?;
-
-                Ok(CliLending::run(context, command)?)
-            }
-            Command::PreLock { command } => {
-                let context = Cli::build_context()?;
-
-                Ok(CliPreLock::run(context, command)?)
             }
             Command::Utility { command } => {
                 let context = Cli::build_context()?;
