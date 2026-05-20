@@ -20,13 +20,11 @@ CREATE TABLE offers (
     id uuid NOT NULL,
     PRIMARY KEY (id),
     borrower_pubkey BYTEA NOT NULL,
-    borrower_output_script_hash BYTEA NOT NULL,
     collateral_asset_id BYTEA NOT NULL,
     principal_asset_id BYTEA NOT NULL,
-    first_parameters_nft_asset_id BYTEA NOT NULL,
-    second_parameters_nft_asset_id BYTEA NOT NULL,
-    borrower_nft_asset_id BYTEA NOT NULL,
+    borrower_debt_nft_asset_id BYTEA NOT NULL,
     lender_nft_asset_id BYTEA NOT NULL,
+    protocol_fee_keeper_asset_id BYTEA NOT NULL,
     collateral_amount BIGINT NOT NULL,
     principal_amount BIGINT NOT NULL,
     interest_rate INTEGER NOT NULL,
@@ -37,8 +35,8 @@ CREATE TABLE offers (
 );
 
 CREATE TYPE utxo_type AS ENUM (
-    'pre_lock',
-    'lending',
+    'pending_offer',
+    'active_offer',
     'cancellation',
     'repayment',
     'liquidation',
@@ -47,7 +45,7 @@ CREATE TYPE utxo_type AS ENUM (
 
 CREATE TABLE offer_utxos (
     offer_id uuid NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
-    utxo_type utxo_type NOT NULL DEFAULT 'pre_lock',
+    utxo_type utxo_type NOT NULL DEFAULT 'pending_offer',
 
     txid BYTEA NOT NULL,
     vout INTEGER NOT NULL,

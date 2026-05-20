@@ -110,7 +110,7 @@ mod tests {
     fn active_utxo(offer_byte: u8) -> ActiveUtxo {
         ActiveUtxo {
             offer_id: Uuid::from_bytes([offer_byte; 16]),
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         }
     }
 

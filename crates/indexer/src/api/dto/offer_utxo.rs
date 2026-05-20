@@ -67,7 +67,7 @@ mod tests {
             offer_id: Uuid::new_v4(),
             txid: vec![0x11],
             vout: 0,
-            utxo_type: UtxoType::Lending,
+            utxo_type: UtxoType::ActiveOffer,
             created_at_height: 1,
             spent_txid: None,
             spent_at_height: None,

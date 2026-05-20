@@ -53,24 +53,21 @@ pub async fn insert_offer(
     let row = sqlx::query!(
         r#"
         INSERT INTO offers (
-            id, borrower_pubkey, borrower_output_script_hash, collateral_asset_id, principal_asset_id,
-            first_parameters_nft_asset_id, second_parameters_nft_asset_id,
-            borrower_nft_asset_id, lender_nft_asset_id,
+            id, borrower_pubkey, collateral_asset_id, principal_asset_id,
+            borrower_debt_nft_asset_id, lender_nft_asset_id, protocol_fee_keeper_asset_id,
             collateral_amount, principal_amount, interest_rate,
             loan_expiration_time, created_at_height, created_at_txid
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (created_at_txid) DO NOTHING
         RETURNING id
         "#,
         offer.id,
         offer.borrower_pubkey,
-        offer.borrower_output_script_hash,
         offer.collateral_asset_id,
         offer.principal_asset_id,
-        offer.first_parameters_nft_asset_id,
-        offer.second_parameters_nft_asset_id,
-        offer.borrower_nft_asset_id,
+        offer.borrower_debt_nft_asset_id,
         offer.lender_nft_asset_id,
+        offer.protocol_fee_keeper_asset_id,
         offer.collateral_amount,
         offer.principal_amount,
         offer.interest_rate,
@@ -280,7 +277,7 @@ pub async fn get_offer_participant_asset_id(
     participant_type: ParticipantType,
 ) -> Result<Vec<u8>, sqlx::Error> {
     let offer_row = sqlx::query!(
-        r#"SELECT borrower_nft_asset_id, lender_nft_asset_id FROM offers WHERE id = $1"#,
+        r#"SELECT borrower_debt_nft_asset_id, lender_nft_asset_id FROM offers WHERE id = $1"#,
         offer_id
     )
     .fetch_one(&mut **sql_tx)
@@ -291,7 +288,7 @@ pub async fn get_offer_participant_asset_id(
     })?;
 
     match participant_type {
-        ParticipantType::Borrower => Ok(offer_row.borrower_nft_asset_id),
+        ParticipantType::Borrower => Ok(offer_row.borrower_debt_nft_asset_id),
         ParticipantType::Lender => Ok(offer_row.lender_nft_asset_id),
     }
 }

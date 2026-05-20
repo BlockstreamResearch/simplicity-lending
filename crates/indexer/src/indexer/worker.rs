@@ -32,7 +32,15 @@ pub async fn run_indexer(settings: IndexerSettings, db_pool: PgPool, client: Esp
         while last_indexed_height < latest_height {
             let next_height = last_indexed_height + 1;
 
-            match process_block(&db_pool, &client, &mut cache, next_height).await {
+            match process_block(
+                &db_pool,
+                &client,
+                &mut cache,
+                next_height,
+                settings.protocol_fee_keeper_asset_id,
+            )
+            .await
+            {
                 Ok(_) => {
                     last_indexed_height = next_height;
                 }

@@ -1,7 +1,7 @@
 use simplex::simplicityhl::elements::{OutPoint, Transaction, hex::ToHex};
 use uuid::Uuid;
 
-use crate::indexer::handlers::{handle_lending_creation, handle_offer_cancellation};
+use crate::indexer::handlers::{handle_offer_acceptance, handle_offer_cancellation};
 use crate::indexer::{
     cache::UtxoCache, handle_loan_liquidation, handle_loan_repayment, handle_repayment_claim,
     is_loan_repayment_tx,
@@ -24,7 +24,7 @@ pub async fn handle_offer_transition(
     block_height: u64,
 ) -> anyhow::Result<()> {
     match utxo_type {
-        UtxoType::PreLock => {
+        UtxoType::PendingOffer => {
             if is_offer_cancellation_tx(tx) {
                 handle_offer_cancellation(
                     sql_tx,
@@ -36,7 +36,7 @@ pub async fn handle_offer_transition(
                 )
                 .await
             } else {
-                handle_lending_creation(
+                handle_offer_acceptance(
                     sql_tx,
                     cache,
                     old_outpoint,
@@ -47,7 +47,7 @@ pub async fn handle_offer_transition(
                 .await
             }
         }
-        UtxoType::Lending => {
+        UtxoType::ActiveOffer => {
             if is_loan_repayment_tx(tx) {
                 handle_loan_repayment(
                     sql_tx,

@@ -1,3 +1,5 @@
+use simplex::simplicityhl::elements::AssetId;
+
 #[derive(serde::Deserialize)]
 pub struct Settings {
     pub database: DatabaseSettings,
@@ -38,6 +40,7 @@ pub struct EsploraSettings {
 
 #[derive(serde::Deserialize, Clone)]
 pub struct IndexerSettings {
+    pub protocol_fee_keeper_asset_id: AssetId,
     pub interval: u64,
     pub last_indexed_height: u64,
 }

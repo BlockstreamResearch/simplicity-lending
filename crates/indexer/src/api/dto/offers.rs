@@ -43,11 +43,9 @@ pub struct OfferListItemFull {
     pub base: OfferListItemShort,
 
     pub borrower_pubkey: String,
-    pub borrower_output_script_hash: String,
-    pub first_parameters_nft_asset: String,
-    pub second_parameters_nft_asset: String,
-    pub borrower_nft_asset: String,
+    pub borrower_debt_nft_asset: String,
     pub lender_nft_asset: String,
+    pub protocol_fee_keeper_asset: String,
 }
 
 impl From<OfferModel> for OfferListItemFull {
@@ -66,11 +64,9 @@ impl From<OfferModel> for OfferListItemFull {
                 created_at_txid: format_hex(value.created_at_txid),
             },
             borrower_pubkey: value.borrower_pubkey.to_hex(),
-            borrower_output_script_hash: value.borrower_output_script_hash.to_hex(),
-            first_parameters_nft_asset: format_hex(value.first_parameters_nft_asset_id),
-            second_parameters_nft_asset: format_hex(value.second_parameters_nft_asset_id),
-            borrower_nft_asset: format_hex(value.borrower_nft_asset_id),
+            borrower_debt_nft_asset: format_hex(value.borrower_debt_nft_asset_id),
             lender_nft_asset: format_hex(value.lender_nft_asset_id),
+            protocol_fee_keeper_asset: format_hex(value.protocol_fee_keeper_asset_id),
         }
     }
 }
@@ -134,13 +130,11 @@ mod tests {
         let model = OfferModel {
             id,
             borrower_pubkey: vec![0x11, 0x22],
-            borrower_output_script_hash: vec![0x33, 0x44],
             collateral_asset_id: vec![0x01, 0x02],
             principal_asset_id: vec![0x03, 0x04],
-            first_parameters_nft_asset_id: vec![0x05, 0x06],
-            second_parameters_nft_asset_id: vec![0x07, 0x08],
-            borrower_nft_asset_id: vec![0x09, 0x0a],
+            borrower_debt_nft_asset_id: vec![0x09, 0x0a],
             lender_nft_asset_id: vec![0x0b, 0x0c],
+            protocol_fee_keeper_asset_id: vec![0x0b, 0x2c],
             collateral_amount: 99,
             principal_amount: 77,
             interest_rate: 12,
@@ -158,10 +152,8 @@ mod tests {
         assert_eq!(dto.base.principal_asset, "0403");
         assert_eq!(dto.base.created_at_txid, "adde");
         assert_eq!(dto.borrower_pubkey, "1122");
-        assert_eq!(dto.borrower_output_script_hash, "3344");
-        assert_eq!(dto.first_parameters_nft_asset, "0605");
-        assert_eq!(dto.second_parameters_nft_asset, "0807");
-        assert_eq!(dto.borrower_nft_asset, "0a09");
+        assert_eq!(dto.borrower_debt_nft_asset, "0a09");
         assert_eq!(dto.lender_nft_asset, "0c0b");
+        assert_eq!(dto.protocol_fee_keeper_asset, "2c0b");
     }
 }

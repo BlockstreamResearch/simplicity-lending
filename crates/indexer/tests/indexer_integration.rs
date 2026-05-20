@@ -14,11 +14,11 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use lending_contracts::{programs::pre_lock::PreLockParameters, utils::LendingOfferParameters};
+use lending_contracts::programs::lending::{OfferParameters, PendingLendingOfferParameters};
 use lending_indexer::esplora_client::EsploraClient;
 use lending_indexer::indexer::{
-    UtxoCache, get_last_indexed_height, handle_pre_lock_creation, load_utxo_cache, process_block,
-    process_tx, upsert_sync_state,
+    UtxoCache, get_last_indexed_height, handle_pending_offer_creation, load_utxo_cache,
+    process_block, process_tx, upsert_sync_state,
 };
 use lending_indexer::models::{
     ActiveUtxo, OfferStatus, OfferUtxoModel, ParticipantType, UtxoData, UtxoType,
@@ -98,13 +98,13 @@ async fn start_mock_esplora(
     start_mock_server(app).await
 }
 
-async fn seed_offer_with_pre_lock(
+async fn seed_offer_with_pending_offer(
     pool: &PgPool,
     offer_id: Uuid,
     outpoint: OutPoint,
     created_at_height: i64,
 ) -> anyhow::Result<()> {
-    // Mirrors production: `handle_pre_lock_creation` stores the pre-lock
+    // Mirrors production: `handle_pending_offer_creation` stores the pre-lock
     // txid as `created_at_txid`.
     let mut offer = offer_model(
         offer_id,
@@ -114,8 +114,13 @@ async fn seed_offer_with_pre_lock(
     offer.current_status = lending_indexer::models::OfferStatus::Pending;
     seed_offer_row(pool, &offer).await?;
 
-    let pre_lock = unspent_offer_utxo(offer_id, outpoint, UtxoType::PreLock, created_at_height);
-    seed_offer_utxo_row(pool, &pre_lock).await?;
+    let pending_offer = unspent_offer_utxo(
+        offer_id,
+        outpoint,
+        UtxoType::PendingOffer,
+        created_at_height,
+    );
+    seed_offer_utxo_row(pool, &pending_offer).await?;
 
     Ok(())
 }
@@ -216,11 +221,17 @@ async fn process_tx_and_commit(
     pool: &PgPool,
     tx: &Transaction,
     cache: &mut UtxoCache,
-    client: &EsploraClient,
     block_height: u64,
 ) -> anyhow::Result<()> {
     let mut sql_tx = pool.begin().await?;
-    process_tx(&mut sql_tx, tx, cache, client, block_height).await?;
+    process_tx(
+        &mut sql_tx,
+        tx,
+        cache,
+        block_height,
+        AssetId::from_slice(&[3; 32]).unwrap(),
+    )
+    .await?;
     sql_tx.commit().await?;
     Ok(())
 }
@@ -230,24 +241,23 @@ async fn process_tx_and_commit(
 async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
     let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(11, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 100).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(11, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 100).await?;
     cache.insert(
-        pre_lock_outpoint,
+        pending_offer_outpoint,
         ActiveUtxo {
             offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
     // Dispatch: all outputs non-null-data -> lending path (not cancellation).
     // Pad to 7 inputs so the tx matches the shape of a real lending-creation
     // spend even if the dispatcher later adds an input-count guard.
-    let lending_tx = padded_tx_with_inputs(vec![pre_lock_outpoint], vec![normal_output(); 5]);
-    process_tx_and_commit(&pool, &lending_tx, &mut cache, &client, 101).await?;
+    let lending_tx = padded_tx_with_inputs(vec![pending_offer_outpoint], vec![normal_output(); 5]);
+    process_tx_and_commit(&pool, &lending_tx, &mut cache, 101).await?;
 
     // Dispatch: output[1] non-null + [2, 3, 4] null-data -> repayment path.
     let lending_outpoint = OutPoint {
@@ -264,21 +274,21 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
             null_data_output(),
         ],
     );
-    process_tx_and_commit(&pool, &repayment_tx, &mut cache, &client, 102).await?;
+    process_tx_and_commit(&pool, &repayment_tx, &mut cache, 102).await?;
 
     let repayment_outpoint = OutPoint {
         txid: repayment_tx.txid(),
         vout: 1,
     };
     let claim_tx = tx_with_input(repayment_outpoint, vec![normal_output(), normal_output()]);
-    process_tx_and_commit(&pool, &claim_tx, &mut cache, &client, 103).await?;
+    process_tx_and_commit(&pool, &claim_tx, &mut cache, 103).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "claimed");
 
     let utxos = offer_utxo_type_spent_set(&pool, offer_id).await?;
     let expected: HashSet<(String, bool)> = [
-        ("pre_lock".to_string(), true),
-        ("lending".to_string(), true),
+        ("pending_offer".to_string(), true),
+        ("active_offer".to_string(), true),
         ("repayment".to_string(), true),
         ("claim".to_string(), true),
     ]
@@ -286,7 +296,7 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
     .collect();
     assert_eq!(utxos, expected);
 
-    assert!(cache.get(&pre_lock_outpoint).is_none());
+    assert!(cache.get(&pending_offer_outpoint).is_none());
     assert!(cache.get(&lending_outpoint).is_none());
     assert!(cache.get(&repayment_outpoint).is_none());
 
@@ -298,21 +308,20 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
 async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
     let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(22, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 200).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(22, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 200).await?;
     cache.insert(
-        pre_lock_outpoint,
+        pending_offer_outpoint,
         ActiveUtxo {
             offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
-    let lending_tx = padded_tx_with_inputs(vec![pre_lock_outpoint], vec![normal_output(); 5]);
-    process_tx_and_commit(&pool, &lending_tx, &mut cache, &client, 201).await?;
+    let lending_tx = padded_tx_with_inputs(vec![pending_offer_outpoint], vec![normal_output(); 5]);
+    process_tx_and_commit(&pool, &lending_tx, &mut cache, 201).await?;
 
     // Dispatch: outputs [1, 2, 3] null-data, [4] non-null -> liquidation path.
     let lending_outpoint = OutPoint {
@@ -329,7 +338,7 @@ async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Res
             normal_output(),
         ],
     );
-    process_tx_and_commit(&pool, &liquidation_tx, &mut cache, &client, 202).await?;
+    process_tx_and_commit(&pool, &liquidation_tx, &mut cache, 202).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "liquidated");
     // Pins: liquidation handler inserts the post-liquidation utxo as already
@@ -351,22 +360,21 @@ async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Res
 async fn process_tx_prelock_to_cancellation_sets_status_and_archives() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
     let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(55, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 400).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(55, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 400).await?;
     cache.insert(
-        pre_lock_outpoint,
+        pending_offer_outpoint,
         ActiveUtxo {
             offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
     // Dispatch: all non-coin outputs null-data -> cancellation path.
     let cancellation_tx = tx_with_input(
-        pre_lock_outpoint,
+        pending_offer_outpoint,
         vec![
             normal_output(),
             null_data_output(),
@@ -375,7 +383,7 @@ async fn process_tx_prelock_to_cancellation_sets_status_and_archives() -> anyhow
             null_data_output(),
         ],
     );
-    process_tx_and_commit(&pool, &cancellation_tx, &mut cache, &client, 401).await?;
+    process_tx_and_commit(&pool, &cancellation_tx, &mut cache, 401).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "cancelled");
     assert_eq!(
@@ -391,11 +399,10 @@ async fn process_tx_prelock_to_cancellation_sets_status_and_archives() -> anyhow
 async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
     let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(66, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 500).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(66, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 500).await?;
 
     let borrower_outpoint = outpoint_with_txid_byte(67, 1);
     seed_participant_utxo_row(
@@ -421,7 +428,7 @@ async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Resu
         borrower_outpoint,
         vec![explicit_asset_output(7, non_op_return_script())],
     );
-    process_tx_and_commit(&pool, &move_tx, &mut cache, &client, 502).await?;
+    process_tx_and_commit(&pool, &move_tx, &mut cache, 502).await?;
 
     let new_borrower_outpoint = OutPoint {
         txid: move_tx.txid(),
@@ -444,7 +451,7 @@ async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Resu
         new_borrower_outpoint,
         vec![explicit_asset_output(7, Script::new_op_return(b"burn"))],
     );
-    process_tx_and_commit(&pool, &burn_tx, &mut cache, &client, 503).await?;
+    process_tx_and_commit(&pool, &burn_tx, &mut cache, 503).await?;
 
     assert!(cache.get(&new_borrower_outpoint).is_none());
     assert_eq!(
@@ -465,11 +472,10 @@ async fn participant_move_without_target_asset_marks_spent_without_new_utxo() ->
 {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
     let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(74, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 530).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(74, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 530).await?;
 
     let borrower_outpoint = outpoint_with_txid_byte(75, 1);
     seed_participant_utxo_row(
@@ -497,14 +503,7 @@ async fn participant_move_without_target_asset_marks_spent_without_new_utxo() ->
         borrower_outpoint,
         vec![explicit_asset_output(9, non_op_return_script())],
     );
-    process_tx_and_commit(
-        &pool,
-        &move_without_target_asset_tx,
-        &mut cache,
-        &client,
-        532,
-    )
-    .await?;
+    process_tx_and_commit(&pool, &move_without_target_asset_tx, &mut cache, 532).await?;
 
     assert!(cache.get(&borrower_outpoint).is_none());
     assert_eq!(
@@ -524,16 +523,15 @@ async fn participant_move_without_target_asset_marks_spent_without_new_utxo() ->
 async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
     let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(72, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 520).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(72, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 520).await?;
     cache.insert(
-        pre_lock_outpoint,
+        pending_offer_outpoint,
         ActiveUtxo {
             offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
@@ -561,7 +559,7 @@ async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyho
     // borrower NFT (asset byte 7 matches seeded `borrower_nft_asset_id`).
     // Pad to 7 inputs so the pre-lock -> lending dispatch sees a valid shape.
     let combined_tx = padded_tx_with_inputs(
-        vec![pre_lock_outpoint, borrower_outpoint],
+        vec![pending_offer_outpoint, borrower_outpoint],
         vec![
             normal_output(),
             explicit_asset_output(7, non_op_return_script()),
@@ -571,7 +569,7 @@ async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyho
         ],
     );
 
-    process_tx_and_commit(&pool, &combined_tx, &mut cache, &client, 522).await?;
+    process_tx_and_commit(&pool, &combined_tx, &mut cache, 522).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "active");
 
@@ -583,7 +581,7 @@ async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyho
         txid: combined_tx.txid(),
         vout: 1,
     };
-    assert!(cache.get(&pre_lock_outpoint).is_none());
+    assert!(cache.get(&pending_offer_outpoint).is_none());
     assert!(cache.get(&borrower_outpoint).is_none());
     assert!(cache.get(&lending_outpoint).is_some());
     assert!(cache.get(&moved_borrower_outpoint).is_some());
@@ -605,12 +603,12 @@ async fn process_block_rolls_back_db_and_cache_when_later_tx_fails() -> anyhow::
     // Valid offer whose pre-lock the first tx of the block will consume.
     let valid_offer_id = Uuid::new_v4();
     let valid_prelock_outpoint = outpoint_with_txid_byte(33, 0);
-    seed_offer_with_pre_lock(&pool, valid_offer_id, valid_prelock_outpoint, 300).await?;
+    seed_offer_with_pending_offer(&pool, valid_offer_id, valid_prelock_outpoint, 300).await?;
     cache.insert(
         valid_prelock_outpoint,
         ActiveUtxo {
             offer_id: valid_offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
@@ -641,12 +639,12 @@ async fn process_block_rolls_back_db_and_cache_when_later_tx_fails() -> anyhow::
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let result = process_block(&pool, &client, &mut cache, 301).await;
+    let result = process_block(&pool, &client, &mut cache, 301, AssetId::default()).await;
     assert!(result.is_err());
 
     assert_eq!(current_status(&pool, valid_offer_id).await?, "pending");
     assert_eq!(
-        count_offer_utxos(&pool, valid_offer_id, "pre_lock", Some(false)).await?,
+        count_offer_utxos(&pool, valid_offer_id, "pending_offer", Some(false)).await?,
         1
     );
     assert_eq!(
@@ -675,13 +673,13 @@ async fn process_block_successfully_commits_sync_state_and_cache() -> anyhow::Re
     let mut cache = UtxoCache::new();
 
     let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(70, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 510).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(70, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 510).await?;
     cache.insert(
-        pre_lock_outpoint,
+        pending_offer_outpoint,
         ActiveUtxo {
             offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
@@ -705,7 +703,7 @@ async fn process_block_successfully_commits_sync_state_and_cache() -> anyhow::Re
         },
     );
 
-    let lending_tx = padded_tx_with_inputs(vec![pre_lock_outpoint], vec![normal_output(); 5]);
+    let lending_tx = padded_tx_with_inputs(vec![pending_offer_outpoint], vec![normal_output(); 5]);
     let move_tx = tx_with_input(
         borrower_outpoint,
         vec![explicit_asset_output(7, non_op_return_script())],
@@ -727,7 +725,7 @@ async fn process_block_successfully_commits_sync_state_and_cache() -> anyhow::Re
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    process_block(&pool, &client, &mut cache, 512).await?;
+    process_block(&pool, &client, &mut cache, 512, AssetId::default()).await?;
 
     let sync =
         sqlx::query("SELECT last_indexed_height, last_indexed_hash FROM sync_state WHERE id = 1")
@@ -744,7 +742,7 @@ async fn process_block_successfully_commits_sync_state_and_cache() -> anyhow::Re
         txid: move_tx.txid(),
         vout: 0,
     };
-    assert!(cache.get(&pre_lock_outpoint).is_none());
+    assert!(cache.get(&pending_offer_outpoint).is_none());
     assert!(cache.get(&borrower_outpoint).is_none());
     assert!(cache.get(&lending_outpoint).is_some());
     assert!(cache.get(&moved_borrower_outpoint).is_some());
@@ -769,8 +767,8 @@ async fn restart_helpers_restore_height_and_only_unspent_cache_entries() -> anyh
 
     // Pins `load_utxo_cache`'s `WHERE spent_txid IS NULL` invariant.
     let offer_id = Uuid::new_v4();
-    let pre_lock_outpoint = outpoint_with_txid_byte(88, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 600).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(88, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 600).await?;
 
     let spent_lending_outpoint = outpoint_with_txid_byte(90, 1);
     seed_offer_utxo_row(
@@ -778,7 +776,7 @@ async fn restart_helpers_restore_height_and_only_unspent_cache_entries() -> anyh
         &spent_offer_utxo(
             offer_id,
             spent_lending_outpoint,
-            UtxoType::Lending,
+            UtxoType::ActiveOffer,
             601,
             602,
             0xab,
@@ -815,7 +813,7 @@ async fn restart_helpers_restore_height_and_only_unspent_cache_entries() -> anyh
     .await?;
 
     let restored_cache = load_utxo_cache(&pool).await?;
-    assert!(restored_cache.get(&pre_lock_outpoint).is_some());
+    assert!(restored_cache.get(&pending_offer_outpoint).is_some());
     assert!(restored_cache.get(&unspent_lender_outpoint).is_some());
     assert!(restored_cache.get(&spent_lending_outpoint).is_none());
     assert!(restored_cache.get(&spent_borrower_outpoint).is_none());
@@ -838,7 +836,7 @@ async fn process_block_returns_error_on_invalid_esplora_tx_payload() -> anyhow::
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let result = process_block(&pool, &client, &mut cache, 700).await;
+    let result = process_block(&pool, &client, &mut cache, 700, AssetId::default()).await;
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
@@ -860,7 +858,7 @@ async fn process_block_returns_error_on_esplora_http_500() -> anyhow::Result<()>
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let result = process_block(&pool, &client, &mut cache, 900).await;
+    let result = process_block(&pool, &client, &mut cache, 900, AssetId::default()).await;
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
@@ -868,22 +866,21 @@ async fn process_block_returns_error_on_esplora_http_500() -> anyhow::Result<()>
     Ok(())
 }
 
-// Intent: these tests drive `handle_pre_lock_creation` directly with
-// synthesized parameters. Going through `is_pre_lock_creation_tx` would
+// Intent: these tests drive `handle_pending_offer_creation` directly with
+// synthesized parameters. Going through `is_pending_offer_creation_tx` would
 // require a real Simplex PreLock script in output[0] and a provider capable
 // of fetching the collateral tx, which is out of scope for DB-level
 // integration tests. The gatekeeper is covered by its own unit tests;
 // everything after it (DB rows + cache inserts) is exercised here.
 
-fn synthesized_pre_lock_parameters() -> PreLockParameters {
-    PreLockParameters {
+fn synthesized_pending_offer_parameters() -> PendingLendingOfferParameters {
+    PendingLendingOfferParameters {
         collateral_asset_id: AssetId::from_slice(&[0xc0_u8; 32]).expect("asset"),
         principal_asset_id: AssetId::from_slice(&[0xd1_u8; 32]).expect("asset"),
-        first_parameters_nft_asset_id: AssetId::from_slice(&[0xf1_u8; 32]).expect("asset"),
-        second_parameters_nft_asset_id: AssetId::from_slice(&[0xf2_u8; 32]).expect("asset"),
-        borrower_nft_asset_id: AssetId::from_slice(&[0xbb_u8; 32]).expect("asset"),
+        borrower_debt_nft_asset_id: AssetId::from_slice(&[0xbb_u8; 32]).expect("asset"),
         lender_nft_asset_id: AssetId::from_slice(&[0x1e_u8; 32]).expect("asset"),
-        offer_parameters: LendingOfferParameters {
+        protocol_fee_keeper_asset_id: AssetId::from_slice(&[0x2a_u8; 32]).expect("asset"),
+        offer_parameters: OfferParameters {
             collateral_amount: 1_000,
             principal_amount: 500,
             loan_expiration_time: 12_345,
@@ -891,14 +888,14 @@ fn synthesized_pre_lock_parameters() -> PreLockParameters {
         },
         borrower_pubkey: XOnlyPublicKey::from_str(FIXED_BORROWER_PUBKEY_HEX)
             .expect("valid xonly key"),
-        borrower_output_script_hash: [0x9a_u8; 32],
+        active_lending_cov_hash: [4; 32],
         network: SimplicityNetwork::LiquidTestnet,
     }
 }
 
 /// Pins: handler contract requires >= 7 outputs, reads the borrower script
 /// from vout 3 and the lender script from vout 4.
-fn pre_lock_shaped_tx(
+fn pending_offer_shaped_tx(
     input_outpoint: OutPoint,
     borrower_script: Script,
     lender_script: Script,
@@ -923,14 +920,14 @@ fn pre_lock_shaped_tx(
 
 #[tokio::test]
 #[serial]
-async fn process_tx_pre_lock_creation_inserts_offer_and_participants() -> anyhow::Result<()> {
+async fn process_tx_pending_offer_creation_inserts_offer_and_participants() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
 
-    let params = synthesized_pre_lock_parameters();
+    let params = synthesized_pending_offer_parameters();
     let borrower_script = Script::from(vec![0xaa_u8, 0xbb]);
     let lender_script = Script::from(vec![0xcc_u8, 0xdd]);
-    let tx = pre_lock_shaped_tx(
+    let tx = pending_offer_shaped_tx(
         outpoint_with_txid_byte(0x10, 0),
         borrower_script.clone(),
         lender_script.clone(),
@@ -939,7 +936,7 @@ async fn process_tx_pre_lock_creation_inserts_offer_and_participants() -> anyhow
 
     {
         let mut sql_tx = pool.begin().await?;
-        handle_pre_lock_creation(&mut sql_tx, &mut cache, params, &tx, 1_000).await?;
+        handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &tx, 1_000).await?;
         sql_tx.commit().await?;
     }
 
@@ -957,17 +954,17 @@ async fn process_tx_pre_lock_creation_inserts_offer_and_participants() -> anyhow
         txid.as_byte_array().to_vec()
     );
 
-    let pre_lock_rows = sqlx::query(
+    let pending_offer_rows = sqlx::query(
         "SELECT vout, utxo_type::text AS t, spent_txid FROM offer_utxos WHERE offer_id = $1",
     )
     .bind(offer_id)
     .fetch_all(&pool)
     .await?;
-    assert_eq!(pre_lock_rows.len(), 1);
-    assert_eq!(pre_lock_rows[0].get::<i32, _>("vout"), 0);
-    assert_eq!(pre_lock_rows[0].get::<String, _>("t"), "pre_lock");
+    assert_eq!(pending_offer_rows.len(), 1);
+    assert_eq!(pending_offer_rows[0].get::<i32, _>("vout"), 0);
+    assert_eq!(pending_offer_rows[0].get::<String, _>("t"), "pending_offer");
     assert!(
-        pre_lock_rows[0]
+        pending_offer_rows[0]
             .get::<Option<Vec<u8>>, _>("spent_txid")
             .is_none(),
         "pre-lock UTXO must be unspent"
@@ -999,10 +996,13 @@ async fn process_tx_pre_lock_creation_inserts_offer_and_participants() -> anyhow
         lender_script.to_bytes().to_vec()
     );
 
-    let pre_lock_op = OutPoint { txid, vout: 0 };
+    let pending_offer_op = OutPoint { txid, vout: 0 };
     let borrower_op = OutPoint { txid, vout: 3 };
     let lender_op = OutPoint { txid, vout: 4 };
-    assert!(cache.get(&pre_lock_op).is_some(), "pre-lock must be cached");
+    assert!(
+        cache.get(&pending_offer_op).is_some(),
+        "pre-lock must be cached"
+    );
     assert!(
         cache.get(&borrower_op).is_some(),
         "borrower NFT must be cached"
@@ -1018,12 +1018,12 @@ async fn process_tx_pre_lock_creation_inserts_offer_and_participants() -> anyhow
 /// circuit and bails out before touching `offer_utxos` / `offer_participants`.
 #[tokio::test]
 #[serial]
-async fn handle_pre_lock_creation_is_idempotent_on_replay() -> anyhow::Result<()> {
+async fn handle_pending_offer_creation_is_idempotent_on_replay() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
 
-    let params = synthesized_pre_lock_parameters();
-    let tx = pre_lock_shaped_tx(
+    let params = synthesized_pending_offer_parameters();
+    let tx = pending_offer_shaped_tx(
         outpoint_with_txid_byte(0x20, 0),
         Script::from(vec![0x51]),
         Script::from(vec![0x52]),
@@ -1031,13 +1031,13 @@ async fn handle_pre_lock_creation_is_idempotent_on_replay() -> anyhow::Result<()
 
     {
         let mut sql_tx = pool.begin().await?;
-        handle_pre_lock_creation(&mut sql_tx, &mut cache, params, &tx, 2_000).await?;
+        handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &tx, 2_000).await?;
         sql_tx.commit().await?;
     }
 
     {
         let mut sql_tx = pool.begin().await?;
-        handle_pre_lock_creation(&mut sql_tx, &mut cache, params, &tx, 2_000).await?;
+        handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &tx, 2_000).await?;
         sql_tx.commit().await?;
     }
 
@@ -1046,12 +1046,12 @@ async fn handle_pre_lock_creation_is_idempotent_on_replay() -> anyhow::Result<()
         .await?;
     assert_eq!(offers.get::<i64, _>("c"), 1);
 
-    let pre_lock_utxos = sqlx::query(
-        "SELECT COUNT(*)::BIGINT AS c FROM offer_utxos WHERE utxo_type::text = 'pre_lock'",
+    let pending_offer_utxos = sqlx::query(
+        "SELECT COUNT(*)::BIGINT AS c FROM offer_utxos WHERE utxo_type::text = 'pending_offer'",
     )
     .fetch_one(&pool)
     .await?;
-    assert_eq!(pre_lock_utxos.get::<i64, _>("c"), 1);
+    assert_eq!(pending_offer_utxos.get::<i64, _>("c"), 1);
 
     let participants = sqlx::query("SELECT COUNT(*)::BIGINT AS c FROM offer_participants")
         .fetch_one(&pool)
@@ -1063,20 +1063,22 @@ async fn handle_pre_lock_creation_is_idempotent_on_replay() -> anyhow::Result<()
 
 #[tokio::test]
 #[serial]
-async fn handle_pre_lock_creation_with_malformed_outputs_returns_error() -> anyhow::Result<()> {
+async fn handle_pending_offer_creation_with_malformed_outputs_returns_error() -> anyhow::Result<()>
+{
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
 
-    let params = synthesized_pre_lock_parameters();
+    let params = synthesized_pending_offer_parameters();
     let malformed_tx = tx_with_input(
         outpoint_with_txid_byte(0x30, 0),
         vec![normal_output(); 6], // < 7 outputs triggers the guard clause
     );
 
     let mut sql_tx = pool.begin().await?;
-    let error = handle_pre_lock_creation(&mut sql_tx, &mut cache, params, &malformed_tx, 3_000)
-        .await
-        .expect_err("handler must reject tx with < 7 outputs");
+    let error =
+        handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &malformed_tx, 3_000)
+            .await
+            .expect_err("handler must reject tx with < 7 outputs");
     sql_tx.rollback().await?;
 
     let message = error.to_string();
@@ -1095,25 +1097,24 @@ async fn handle_pre_lock_creation_with_malformed_outputs_returns_error() -> anyh
 async fn same_block_participant_transfer_routes_through_pending_cache() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
-    let params = synthesized_pre_lock_parameters();
-    let pre_lock_tx = pre_lock_shaped_tx(
+    let params = synthesized_pending_offer_parameters();
+    let pending_offer_tx = pending_offer_shaped_tx(
         outpoint_with_txid_byte(0x40, 0),
         Script::from(vec![0x51]),
         Script::from(vec![0x52]),
     );
     let borrower_outpoint = OutPoint {
-        txid: pre_lock_tx.txid(),
+        txid: pending_offer_tx.txid(),
         vout: 3,
     };
     let lender_outpoint = OutPoint {
-        txid: pre_lock_tx.txid(),
+        txid: pending_offer_tx.txid(),
         vout: 4,
     };
 
     // tx2 must see `borrower_outpoint` via the pending-ops map; `commit_block`
-    // has not run yet. Asset byte 0xbb matches `synthesized_pre_lock_parameters`.
+    // has not run yet. Asset byte 0xbb matches `synthesized_pending_offer_parameters`.
     let borrower_move_tx = tx_with_input(
         borrower_outpoint,
         vec![explicit_asset_output(0xbb, non_op_return_script())],
@@ -1126,8 +1127,16 @@ async fn same_block_participant_transfer_routes_through_pending_cache() -> anyho
     let mut sql_tx = pool.begin().await?;
     cache.begin_block();
 
-    handle_pre_lock_creation(&mut sql_tx, &mut cache, params, &pre_lock_tx, 4_001).await?;
-    process_tx(&mut sql_tx, &borrower_move_tx, &mut cache, &client, 4_001).await?;
+    handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &pending_offer_tx, 4_001)
+        .await?;
+    process_tx(
+        &mut sql_tx,
+        &borrower_move_tx,
+        &mut cache,
+        4_001,
+        AssetId::default(),
+    )
+    .await?;
     upsert_sync_state(
         &mut sql_tx,
         4_001,
@@ -1165,13 +1174,12 @@ const LENDER_ASSET_BYTE: u8 = 8;
 async fn lender_nft_movement_updates_history() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
     let offer_id = Uuid::new_v4();
     // Seeded `lender_nft_asset_id` is `[8; 32]` -> movement tx must emit
     // asset byte 8 for the handler to pick up the new lender NFT output.
-    let pre_lock_outpoint = outpoint_with_txid_byte(0x50, 0);
-    seed_offer_with_pre_lock(&pool, offer_id, pre_lock_outpoint, 5_000).await?;
+    let pending_offer_outpoint = outpoint_with_txid_byte(0x50, 0);
+    seed_offer_with_pending_offer(&pool, offer_id, pending_offer_outpoint, 5_000).await?;
 
     let lender_outpoint = outpoint_with_txid_byte(0x51, 2);
     seed_participant_utxo_row(
@@ -1200,7 +1208,7 @@ async fn lender_nft_movement_updates_history() -> anyhow::Result<()> {
             non_op_return_script(),
         )],
     );
-    process_tx_and_commit(&pool, &move_tx, &mut cache, &client, 5_002).await?;
+    process_tx_and_commit(&pool, &move_tx, &mut cache, 5_002).await?;
 
     let moved_outpoint = OutPoint {
         txid: move_tx.txid(),
@@ -1230,13 +1238,13 @@ async fn load_utxo_cache_excludes_spent_utxos() -> anyhow::Result<()> {
     offer.current_status = OfferStatus::Active;
     seed_offer_row(&pool, &offer).await?;
 
-    let spent_pre_lock_outpoint = outpoint_with_txid_byte(0x60, 0);
+    let spent_pending_offer_outpoint = outpoint_with_txid_byte(0x60, 0);
     seed_offer_utxo_row(
         &pool,
         &spent_offer_utxo(
             offer_id,
-            spent_pre_lock_outpoint,
-            UtxoType::PreLock,
+            spent_pending_offer_outpoint,
+            UtxoType::PendingOffer,
             6_000,
             6_001,
             0x61,
@@ -1276,7 +1284,7 @@ async fn load_utxo_cache_excludes_spent_utxos() -> anyhow::Result<()> {
 
     // Pins `WHERE spent_txid IS NULL` in `load_utxo_cache`.
     assert!(cache.get(&unspent_borrower_outpoint).is_some());
-    assert!(cache.get(&spent_pre_lock_outpoint).is_none());
+    assert!(cache.get(&spent_pending_offer_outpoint).is_none());
     assert!(cache.get(&spent_borrower_outpoint).is_none());
 
     Ok(())
@@ -1290,12 +1298,12 @@ async fn process_block_rolls_back_when_first_tx_fails() -> anyhow::Result<()> {
 
     let valid_offer_id = Uuid::new_v4();
     let valid_prelock_outpoint = outpoint_with_txid_byte(0x70, 0);
-    seed_offer_with_pre_lock(&pool, valid_offer_id, valid_prelock_outpoint, 7_000).await?;
+    seed_offer_with_pending_offer(&pool, valid_offer_id, valid_prelock_outpoint, 7_000).await?;
     cache.insert(
         valid_prelock_outpoint,
         ActiveUtxo {
             offer_id: valid_offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
@@ -1328,13 +1336,13 @@ async fn process_block_rolls_back_when_first_tx_fails() -> anyhow::Result<()> {
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let result = process_block(&pool, &client, &mut cache, 7_001).await;
+    let result = process_block(&pool, &client, &mut cache, 7_001, AssetId::default()).await;
     assert!(result.is_err());
 
     assert_eq!(current_status(&pool, valid_offer_id).await?, "pending");
-    // pre_lock stays unspent -> good_tx was never applied.
+    // pending_offer stays unspent -> good_tx was never applied.
     assert_eq!(
-        count_offer_utxos(&pool, valid_offer_id, "pre_lock", Some(false)).await?,
+        count_offer_utxos(&pool, valid_offer_id, "pending_offer", Some(false)).await?,
         1
     );
     assert_eq!(
@@ -1363,12 +1371,13 @@ async fn process_block_empty_txids_still_commits_sync_state() -> anyhow::Result<
 
     let pre_existing_offer_id = Uuid::new_v4();
     let pre_existing_outpoint = outpoint_with_txid_byte(0x80, 0);
-    seed_offer_with_pre_lock(&pool, pre_existing_offer_id, pre_existing_outpoint, 8_000).await?;
+    seed_offer_with_pending_offer(&pool, pre_existing_offer_id, pre_existing_outpoint, 8_000)
+        .await?;
     cache.insert(
         pre_existing_outpoint,
         ActiveUtxo {
             offer_id: pre_existing_offer_id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
@@ -1381,7 +1390,7 @@ async fn process_block_empty_txids_still_commits_sync_state() -> anyhow::Result<
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    process_block(&pool, &client, &mut cache, 8_001).await?;
+    process_block(&pool, &client, &mut cache, 8_001, AssetId::default()).await?;
 
     let sync =
         sqlx::query("SELECT last_indexed_height, last_indexed_hash FROM sync_state WHERE id = 1")
@@ -1419,7 +1428,7 @@ async fn process_block_propagates_esplora_block_txids_500() -> anyhow::Result<()
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let result = process_block(&pool, &client, &mut cache, 9_100).await;
+    let result = process_block(&pool, &client, &mut cache, 9_100, AssetId::default()).await;
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
@@ -1452,7 +1461,7 @@ async fn process_block_propagates_esplora_tx_raw_500() -> anyhow::Result<()> {
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let result = process_block(&pool, &client, &mut cache, 9_200).await;
+    let result = process_block(&pool, &client, &mut cache, 9_200, AssetId::default()).await;
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
@@ -1465,21 +1474,20 @@ async fn process_block_propagates_esplora_tx_raw_500() -> anyhow::Result<()> {
 async fn spent_utxo_does_not_reroute_from_cache() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let mut cache = UtxoCache::new();
-    let client = EsploraClient::new();
 
     let offer_id = Uuid::new_v4();
     let mut offer = offer_model(offer_id, 10_000, vec![0xaa_u8; 32]);
     offer.current_status = OfferStatus::Cancelled;
     seed_offer_row(&pool, &offer).await?;
 
-    let spent_pre_lock_outpoint = outpoint_with_txid_byte(0x90, 0);
+    let spent_pending_offer_outpoint = outpoint_with_txid_byte(0x90, 0);
     seed_offer_utxo_row(
         &pool,
         &OfferUtxoModel {
             offer_id,
-            txid: spent_pre_lock_outpoint.txid.as_byte_array().to_vec(),
-            vout: spent_pre_lock_outpoint.vout as i32,
-            utxo_type: UtxoType::PreLock,
+            txid: spent_pending_offer_outpoint.txid.as_byte_array().to_vec(),
+            vout: spent_pending_offer_outpoint.vout as i32,
+            utxo_type: UtxoType::PendingOffer,
             created_at_height: 10_000,
             spent_txid: Some(vec![0x91_u8; 32]),
             spent_at_height: Some(10_001),
@@ -1489,8 +1497,8 @@ async fn spent_utxo_does_not_reroute_from_cache() -> anyhow::Result<()> {
 
     // Deliberately do NOT seed the cache: load_utxo_cache would have excluded
     // this spent outpoint. A tx that now spends it must be ignored entirely.
-    let stale_spend_tx = tx_with_input(spent_pre_lock_outpoint, vec![normal_output(); 5]);
-    process_tx_and_commit(&pool, &stale_spend_tx, &mut cache, &client, 10_100).await?;
+    let stale_spend_tx = tx_with_input(spent_pending_offer_outpoint, vec![normal_output(); 5]);
+    process_tx_and_commit(&pool, &stale_spend_tx, &mut cache, 10_100).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "cancelled");
     assert_eq!(

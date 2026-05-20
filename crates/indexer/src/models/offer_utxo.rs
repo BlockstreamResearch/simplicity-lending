@@ -5,8 +5,8 @@ use uuid::Uuid;
 #[sqlx(type_name = "utxo_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum UtxoType {
-    PreLock,
-    Lending,
+    PendingOffer,
+    ActiveOffer,
     Cancellation,
     Repayment,
     Liquidation,

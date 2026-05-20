@@ -1,9 +1,10 @@
 use lending_contracts::programs::program::SimplexProgram;
+use simplex::provider::SimplicityNetwork;
+use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
 
-use lending_contracts::programs::pre_lock::{PreLock, PreLockParameters};
+use lending_contracts::programs::lending::{PendingLendingOffer, PendingLendingOfferParameters};
 
-use crate::esplora_client::EsploraClient;
 use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferModel, OfferUtxoModel, UtxoType};
 use crate::{
@@ -13,13 +14,13 @@ use crate::{
 
 #[tracing::instrument(
     name = "Handling pre lock creation transaction",
-    skip(sql_tx, pre_lock_params, tx, block_height),
+    skip(sql_tx, pending_offer_parameters, tx, block_height),
     fields(txid = %tx.txid(), %block_height),
 )]
-pub async fn handle_pre_lock_creation(
+pub async fn handle_pending_offer_creation(
     sql_tx: &mut DbTx<'_>,
     cache: &mut UtxoCache,
-    pre_lock_params: PreLockParameters,
+    pending_offer_parameters: PendingLendingOfferParameters,
     tx: &Transaction,
     block_height: u64,
 ) -> anyhow::Result<()> {
@@ -33,7 +34,7 @@ pub async fn handle_pre_lock_creation(
         ));
     }
 
-    let offer_model = OfferModel::new(&pre_lock_params, block_height, txid);
+    let offer_model = OfferModel::new(&pending_offer_parameters, block_height, txid);
 
     if db::insert_offer(sql_tx, &offer_model).await?.is_none() {
         tracing::debug!(%txid, "Pre-lock offer already indexed, skipping");
@@ -45,7 +46,7 @@ pub async fn handle_pre_lock_creation(
         offer_id: offer_model.id,
         txid: txid.to_byte_array().to_vec(),
         vout: 0,
-        utxo_type: UtxoType::PreLock,
+        utxo_type: UtxoType::PendingOffer,
         created_at_height: block_height as i64,
         spent_at_height: None,
         spent_txid: None,
@@ -56,7 +57,7 @@ pub async fn handle_pre_lock_creation(
         pre_lock_outpoint,
         ActiveUtxo {
             offer_id: offer_model.id,
-            data: UtxoData::Offer(UtxoType::PreLock),
+            data: UtxoData::Offer(UtxoType::PendingOffer),
         },
     );
 
@@ -103,25 +104,33 @@ pub async fn handle_pre_lock_creation(
     Ok(())
 }
 
-pub fn is_pre_lock_creation_tx(
+pub fn is_pending_offer_creation_tx(
     tx: &Transaction,
-    client: &EsploraClient,
-) -> Option<PreLockParameters> {
-    let pre_lock = PreLock::try_from_tx(tx, &client.to_simplex_provider()).ok()?;
+    protocol_fee_keeper_asset_id: AssetId,
+) -> Option<PendingLendingOfferParameters> {
+    // TODO: Move network to config
+    let pending_offer = PendingLendingOffer::try_from_tx(
+        tx,
+        protocol_fee_keeper_asset_id,
+        SimplicityNetwork::LiquidTestnet,
+    )
+    .ok()?;
 
-    let pre_lock_script_pubkey = pre_lock.get_script_pubkey();
+    let pending_offer_script_pubkey = pending_offer.get_script_pubkey();
 
-    if tx.output.first().unwrap().script_pubkey != pre_lock_script_pubkey {
+    // TODO: Get UTXO indexes from the PendingLendingOffer program
+    if tx.output[3].script_pubkey != pending_offer_script_pubkey {
         return None;
     }
 
-    Some(*pre_lock.get_parameters())
+    Some(*pending_offer.get_parameters())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::is_pre_lock_creation_tx;
-    use crate::esplora_client::EsploraClient;
+    use simplex::simplicityhl::elements::AssetId;
+
+    use super::is_pending_offer_creation_tx;
     use crate::indexer::handlers::test_utils::{make_tx_with_inputs, normal_output, null_output};
 
     #[test]
@@ -139,13 +148,11 @@ mod tests {
             ],
         );
 
-        let client = EsploraClient::new();
-
-        assert!(is_pre_lock_creation_tx(&tx, &client).is_none());
+        assert!(is_pending_offer_creation_tx(&tx, AssetId::default()).is_none());
     }
 
     #[test]
-    fn returns_none_when_outputs_less_than_7() {
+    fn returns_none_when_outputs_less_than_5() {
         let tx = make_tx_with_inputs(
             5,
             vec![
@@ -153,18 +160,14 @@ mod tests {
                 normal_output(),
                 normal_output(),
                 normal_output(),
-                normal_output(),
-                null_output(),
             ],
         );
 
-        let client = EsploraClient::new();
-
-        assert!(is_pre_lock_creation_tx(&tx, &client).is_none());
+        assert!(is_pending_offer_creation_tx(&tx, AssetId::default()).is_none());
     }
 
     #[test]
-    fn returns_none_when_output_5_is_not_null_data() {
+    fn returns_none_when_output_4_is_not_null_data() {
         let tx = make_tx_with_inputs(
             5,
             vec![
@@ -178,8 +181,6 @@ mod tests {
             ],
         );
 
-        let client = EsploraClient::new();
-
-        assert!(is_pre_lock_creation_tx(&tx, &client).is_none());
+        assert!(is_pending_offer_creation_tx(&tx, AssetId::default()).is_none());
     }
 }

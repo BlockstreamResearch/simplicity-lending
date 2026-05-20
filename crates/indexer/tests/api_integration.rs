@@ -119,7 +119,7 @@ async fn seed_offer_graph(
     let pre_lock = spent_offer_utxo(
         offer_id,
         outpoint,
-        UtxoType::PreLock,
+        UtxoType::PendingOffer,
         created_at_height,
         created_at_height + 1,
         0x99,
@@ -130,7 +130,7 @@ async fn seed_offer_graph(
             txid: outpoint.txid,
             vout: 2,
         },
-        UtxoType::Lending,
+        UtxoType::ActiveOffer,
         created_at_height + 2,
     );
     seed_offer_utxo_row(pool, &pre_lock).await?;
@@ -223,7 +223,6 @@ async fn get_offers_full_returns_borrower_pubkey_among_other_fields() -> anyhow:
     assert_eq!(json.as_array().map_or(0, Vec::len), 2);
     assert_ids_match_unordered(&json, &[pending_offer, active_offer]);
     assert!(json[0]["borrower_pubkey"].as_str().is_some());
-    assert!(json[0]["borrower_output_script_hash"].as_str().is_some());
 
     server_handle.abort();
     Ok(())
@@ -399,9 +398,9 @@ async fn get_offer_utxos_returns_full_history_ordered_by_height() -> anyhow::Res
     let json = get_json(&http, format!("{base_url}/offers/{pending_offer}/utxos")).await?;
 
     assert_eq!(json.as_array().map_or(0, Vec::len), 2);
-    assert_eq!(json[0]["utxo_type"], "pre_lock");
+    assert_eq!(json[0]["utxo_type"], "pending_offer");
     assert_eq!(json[0]["spent_at_height"], PENDING_OFFER_HEIGHT + 1);
-    assert_eq!(json[1]["utxo_type"], "lending");
+    assert_eq!(json[1]["utxo_type"], "active_offer");
     assert!(json[1]["spent_at_height"].is_null());
 
     server_handle.abort();
@@ -666,11 +665,9 @@ struct ExpectedOfferDetailsDto {
     created_at_height: u64,
     created_at_txid: String,
     borrower_pubkey: String,
-    borrower_output_script_hash: String,
-    first_parameters_nft_asset: String,
-    second_parameters_nft_asset: String,
-    borrower_nft_asset: String,
+    borrower_debt_nft_asset: String,
     lender_nft_asset: String,
+    protocol_fee_keeper_asset: String,
     participants: Vec<ExpectedParticipantDto>,
 }
 
@@ -708,10 +705,9 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     // 32-byte seeded values serialize as 64-char hex strings.
     assert_eq!(dto.collateral_asset.len(), 64);
     assert_eq!(dto.principal_asset.len(), 64);
-    assert_eq!(dto.first_parameters_nft_asset.len(), 64);
-    assert_eq!(dto.second_parameters_nft_asset.len(), 64);
-    assert_eq!(dto.borrower_nft_asset.len(), 64);
+    assert_eq!(dto.borrower_debt_nft_asset.len(), 64);
     assert_eq!(dto.lender_nft_asset.len(), 64);
+    assert_eq!(dto.protocol_fee_keeper_asset.len(), 64);
     assert_eq!(dto.participants.len(), 1);
     assert_eq!(dto.participants[0].script_pubkey, "52ac");
     assert_eq!(dto.participants[0].participant_type, "borrower");

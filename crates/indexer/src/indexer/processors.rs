@@ -1,19 +1,19 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::{Transaction, hex::ToHex};
+use simplex::simplicityhl::elements::{AssetId, Transaction, hex::ToHex};
 
 use uuid::Uuid;
 
 use crate::{
     db::DbTx,
     esplora_client::EsploraClient,
-    indexer::{cache::UtxoCache, db, handlers, is_pre_lock_creation_tx},
+    indexer::{cache::UtxoCache, db, handlers, is_pending_offer_creation_tx},
     models::UtxoData,
 };
 
 #[tracing::instrument(
     name = "Processing block",
-    skip(db, client, cache),
+    skip(db, client, cache, protocol_fee_keeper_asset_id),
     fields(block_run_id = %Uuid::new_v4(), height = %block_height)
 )]
 pub async fn process_block(
@@ -21,6 +21,7 @@ pub async fn process_block(
     client: &EsploraClient,
     cache: &mut UtxoCache,
     block_height: u64,
+    protocol_fee_keeper_asset_id: AssetId,
 ) -> anyhow::Result<()> {
     let block_hash = client.get_block_hash_at_height(block_height).await?;
     let txids = client.get_block_txids(&block_hash).await?;
@@ -37,7 +38,14 @@ pub async fn process_block(
 
     let process_result = async {
         for tx in txs {
-            process_tx(&mut sql_tx, &tx, cache, client, block_height).await?;
+            process_tx(
+                &mut sql_tx,
+                &tx,
+                cache,
+                block_height,
+                protocol_fee_keeper_asset_id,
+            )
+            .await?;
         }
 
         db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
@@ -66,15 +74,15 @@ pub async fn process_block(
 
 #[tracing::instrument(
     name = "Processing transaction",
-    skip(sql_tx, tx, block_height, cache),
+    skip(sql_tx, tx, block_height, cache, protocol_fee_keeper_asset_id),
     fields(txid = %tx.txid().to_hex())
 )]
 pub async fn process_tx(
     sql_tx: &mut DbTx<'_>,
     tx: &Transaction,
     cache: &mut UtxoCache,
-    client: &EsploraClient,
     block_height: u64,
+    protocol_fee_keeper_asset_id: AssetId,
 ) -> anyhow::Result<()> {
     let mut is_offer_tx = false;
 
@@ -110,8 +118,17 @@ pub async fn process_tx(
         }
     }
 
-    if !is_offer_tx && let Some(args) = is_pre_lock_creation_tx(tx, client) {
-        handlers::pre_lock::handle_pre_lock_creation(sql_tx, cache, args, tx, block_height).await?;
+    if !is_offer_tx
+        && let Some(args) = is_pending_offer_creation_tx(tx, protocol_fee_keeper_asset_id)
+    {
+        handlers::pending_offer::handle_pending_offer_creation(
+            sql_tx,
+            cache,
+            args,
+            tx,
+            block_height,
+        )
+        .await?;
     }
 
     Ok(())
