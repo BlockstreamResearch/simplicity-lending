@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO offers (\n            id, borrower_pubkey, collateral_asset_id, principal_asset_id,\n            borrower_debt_nft_asset_id, lender_nft_asset_id, protocol_fee_keeper_asset_id,\n            collateral_amount, principal_amount, interest_rate,\n            loan_expiration_time, created_at_height, created_at_txid\n        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n        ON CONFLICT (created_at_txid) DO NOTHING\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int4",
+        "Int4",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "418da1c5973987311319f833536c66832b890341642108666b3b0b003175df1f"
+}

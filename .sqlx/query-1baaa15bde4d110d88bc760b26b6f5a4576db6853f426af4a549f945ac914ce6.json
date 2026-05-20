@@ -13,8 +13,8 @@
             "name": "utxo_type",
             "kind": {
               "Enum": [
-                "pre_lock",
-                "lending",
+                "pending_offer",
+                "active_offer",
                 "cancellation",
                 "repayment",
                 "liquidation",
