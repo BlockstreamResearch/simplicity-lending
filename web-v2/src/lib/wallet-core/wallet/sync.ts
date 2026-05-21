@@ -1,37 +1,20 @@
-import type { EsploraClient, Network, Wollet } from 'lwk_web'
-
-import { env } from '@/constants/env'
-import type { Lwk } from '@/lwk'
-
-/**
- * Creates an EsploraClient configured for waterfalls + utxoOnly scanning.
- * Waterfalls provides fast indexed encrypted UTXO discovery vs slow sequential HD scan.
- */
-export function createEsploraClient(lwk: Lwk, lwkNetwork: Network): EsploraClient {
-  const client = new lwk.EsploraClient(
-    lwkNetwork,
-    env.VITE_WATERFALLS_URL,
-    true, // waterfalls
-    4, // concurrency
-    true, // utxoOnly
-  )
-  if (lwkNetwork.isMainnet() || lwkNetwork.isTestnet()) {
-    client.setWaterfallsServerRecipient(env.VITE_WATERFALLS_RECIPIENT)
-  }
-  return client
-}
+import type { EsploraClient, Wollet } from 'lwk_web'
 
 /**
  * Syncs wallet state via waterfalls fullScan and applies the update.
- * Returns the updated balance map (assetId -> satoshis).
+ * Returns the updated balance map (assetId -> satoshis as strings).
  */
-export async function syncWallet(
+export async function syncBalances(
   wollet: Wollet,
   esploraClient: EsploraClient,
-): Promise<[string, bigint][]> {
+): Promise<Record<string, string>> {
   const update = await esploraClient.fullScanToIndex(wollet, 0)
   if (update) {
     wollet.applyUpdate(update)
   }
-  return wollet.balance().entries() as [string, bigint][]
+  const result: Record<string, string> = {}
+  for (const [assetId, amount] of wollet.balance().entries() as [string, bigint][]) {
+    result[assetId] = amount.toString()
+  }
+  return result
 }

@@ -1,6 +1,12 @@
-import type { Network, SimplicityArguments, Transaction, XOnlyPublicKey } from 'lwk_web'
+import type {
+  EsploraClient,
+  Network,
+  SimplicityArguments,
+  Transaction,
+  XOnlyPublicKey,
+} from 'lwk_web'
 
-import type { NetworkName } from '@/constants/env'
+import { env, type NetworkName } from '@/constants/env'
 
 export type Lwk = typeof import('lwk_web')
 
@@ -41,4 +47,22 @@ export function createP2trAddress(lwk: Lwk, params: CreateP2trAddressParams): st
   const net = createLwkNetwork(params.network, lwk)
   const address = program.createP2trAddress(params.internalKey, net)
   return address.toString()
+}
+
+/**
+ * Creates an EsploraClient configured for waterfalls + utxoOnly scanning.
+ * Waterfalls provides fast indexed encrypted UTXO discovery vs slow sequential HD scan.
+ */
+export function createEsploraClient(lwk: Lwk, lwkNetwork: Network): EsploraClient {
+  const client = new lwk.EsploraClient(
+    lwkNetwork,
+    `${env.VITE_WATERFALLS_URL}/api`,
+    true, // waterfalls
+    4, // concurrency
+    true, // utxoOnly
+  )
+  if (lwkNetwork.isMainnet() || lwkNetwork.isTestnet()) {
+    client.setWaterfallsServerRecipient(env.VITE_WATERFALLS_RECIPIENT)
+  }
+  return client
 }

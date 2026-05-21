@@ -1,14 +1,14 @@
 import type { Pset, Wollet, WolletDescriptor } from 'lwk_web'
 
-import type { ConnectionStatus, JadeVersionInfo, SinglesigVariant } from '../types'
+import type { ConnectionStatus, WalletType } from '../types'
 
 export interface WalletConnector {
+  readonly id: string | null
   connect(): Promise<void>
-  disconnect(): Promise<void>
-  getDescriptor(variant: SinglesigVariant): Promise<WolletDescriptor>
+  disconnect(): void
+  getDescriptor(variant: WalletType): Promise<WolletDescriptor>
   signPset(pset: Pset): Promise<Pset>
-  isConnected(): boolean
-  readVersion?(): Promise<JadeVersionInfo>
-  getConnectionState?(): Promise<ConnectionStatus>
-  getVerifiedReceiveAddress?(variant: SinglesigVariant, wollet: Wollet): Promise<string>
+  isConnected: boolean
+  getConnectionStatus(): Promise<ConnectionStatus>
+  getVerifiedReceiveAddress?(variant: WalletType, wollet: Wollet): Promise<string>
 }

@@ -2,7 +2,7 @@ import type { Network, Pset, Signer, WolletDescriptor } from 'lwk_web'
 
 import type { Lwk } from '@/lwk'
 
-import type { SinglesigVariant } from '../types'
+import type { ConnectionStatus, WalletType } from '../types'
 import type { WalletConnector } from './types'
 
 /**
@@ -16,6 +16,7 @@ import type { WalletConnector } from './types'
  */
 export class SeedConnector implements WalletConnector {
   private signer: Signer | null = null
+  private _id: string | null = null
 
   constructor(
     private readonly lwk: Lwk,
@@ -29,18 +30,24 @@ export class SeedConnector implements WalletConnector {
     if (this.signer !== null) return
     const mnemonic = new this.lwk.Mnemonic(this.mnemonicStr)
     this.signer = new this.lwk.Signer(mnemonic, this.lwkNetwork)
+    this._id = crypto.randomUUID()
   }
 
-  async disconnect(): Promise<void> {
+  disconnect(): void {
     if (this.signer) {
       this.signer.free()
       this.signer = null
     }
+    this._id = null
+  }
+
+  get id(): string | null {
+    return this._id
   }
 
   async getDescriptor(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _variant: SinglesigVariant,
+    _variant: WalletType,
   ): Promise<WolletDescriptor> {
     if (!this.signer) throw new Error('SeedConnector: not connected')
     // Signer only exposes wpkhSlip77Descriptor (native segwit + SLIP77 blinding).
@@ -54,7 +61,11 @@ export class SeedConnector implements WalletConnector {
     return this.signer.sign(pset)
   }
 
-  isConnected(): boolean {
+  async getConnectionStatus(): Promise<ConnectionStatus> {
+    return 'ready'
+  }
+
+  get isConnected(): boolean {
     return this.signer !== null
   }
 }

@@ -4,7 +4,7 @@ const envSchema = z.object({
   VITE_API_URL: z.string().url().default('http://localhost:80'),
   DEV: z.boolean().default(false),
   PROD: z.boolean().default(false),
-  VITE_ESPLORA_BASE_URL: z.string().url().default('https://blockstream.info/liquid/api'),
+  VITE_ESPLORA_BASE_URL: z.string().url().default('https://blockstream.info/liquid'),
   VITE_NETWORK: z.enum(['liquid', 'liquidtestnet', 'regtest']).default('liquid'),
   VITE_WATERFALLS_URL: z.string().url(),
   VITE_WATERFALLS_RECIPIENT: z

@@ -2,39 +2,24 @@ import type { Pset } from 'lwk_web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
+import { useSessionStorage } from '@/hooks/useSessionStorage'
 import { JadeConnector } from '@/lib/wallet-core/connector/jade'
 import { SeedConnector } from '@/lib/wallet-core/connector/seed'
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
+import type { WalletType } from '@/lib/wallet-core/types'
+import { syncBalances } from '@/lib/wallet-core/wallet/sync'
+import { createEsploraClient } from '@/lwk'
+import { useLwk } from '@/providers/lwk/useLwk'
+
 import {
   INITIAL_WALLET_STATE,
   type SavedSession,
-  type SinglesigVariant,
+  type WalletSession,
   type WalletState,
-} from '@/lib/wallet-core/types'
-import type { WalletSession } from '@/lib/wallet-core/wallet/session'
-import { createEsploraClient, syncWallet } from '@/lib/wallet-core/wallet/sync'
-import { useLwk } from '@/providers/lwk/useLwk'
-
+} from './types'
 import { WalletContext } from './WalletContext'
 
 const SESSION_STORAGE_KEY = 'jade_wallet_session'
-
-function loadSavedSession(): SavedSession | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as SavedSession) : null
-  } catch {
-    return null
-  }
-}
-
-function persistSession(session: SavedSession): void {
-  sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
-}
-
-function clearPersistedSession(): void {
-  sessionStorage.removeItem(SESSION_STORAGE_KEY)
-}
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const { lwk, lwkNetwork } = useLwk()
@@ -42,23 +27,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const sessionRef = useRef<WalletSession | null>(null)
 
   const [state, setState] = useState<WalletState>(INITIAL_WALLET_STATE)
-  const [savedSession, setSavedSession] = useState<SavedSession | null>(loadSavedSession)
+  const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
 
   // Stable disconnect used by polling, USB events, and the public disconnect action.
-  const performDisconnect = useCallback(async (error?: string) => {
-    const session = sessionRef.current
-    if (session) {
-      await session.connector.disconnect()
-      sessionRef.current = null
-    }
-    clearPersistedSession()
-    setSavedSession(null)
-    // Do NOT preserve usbDeviceDetected — physical disconnect means the device is gone.
-    setState(() => ({
-      ...INITIAL_WALLET_STATE,
-      ...(error !== undefined ? { error, isError: true } : {}),
-    }))
-  }, [])
+  const performDisconnect = useCallback(
+    async (error?: string) => {
+      const session = sessionRef.current
+      if (session) {
+        session.connector.disconnect()
+        sessionRef.current = null
+      }
+      setSavedSession(null)
+      // Do NOT preserve usbDeviceDetected — physical disconnect means the device is gone.
+      setState(() => ({
+        ...INITIAL_WALLET_STATE,
+        ...(error !== undefined ? { error, isError: true } : {}),
+      }))
+      window.location.reload()
+    },
+    [setSavedSession],
+  )
 
   // Release the WebSerial port before page unload to avoid Jade's -32003
   // (network inconsistency) error on reload. beforeunload cannot await promises,
@@ -67,7 +55,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleBeforeUnload = () => {
       const session = sessionRef.current
       if (session) {
-        session.connector.disconnect().catch(console.warn)
+        session.connector.disconnect()
         sessionRef.current = null
       }
     }
@@ -85,7 +73,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
     const handleDisconnect = () => {
       if (sessionRef.current) {
-        performDisconnect('Device disconnected').catch(console.warn)
+        performDisconnect('Device disconnected')
       } else {
         setState(s => ({ ...s, usbDeviceDetected: false }))
       }
@@ -106,11 +94,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const id = setInterval(() => {
       const session = sessionRef.current
-      if (!session?.connector.getConnectionState) return
+      if (!session) return
 
       session.connector
-        .getConnectionState()
+        .getConnectionStatus()
         .then(status => {
+          if (status === 'locked') window.location.reload() // to prompt for PIN again and avoid serial port conflicts
           setState(s => (s.connectionStatus === status ? s : { ...s, connectionStatus: status }))
         })
         .catch((err: unknown) => {
@@ -128,9 +117,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const id = setInterval(() => {
       const session = sessionRef.current
       if (!session) return
-      syncWallet(session.wollet, session.esploraClient)
+      syncBalances(session.wollet, session.esploraClient)
         .then(rawBalances => {
-          setState(s => ({ ...s, balances: serializeBalances(rawBalances) }))
+          setState(s => ({ ...s, balances: rawBalances }))
         })
         .catch(console.warn)
     }, 60_000)
@@ -139,7 +128,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [state.connectionStatus])
 
   const connect = useCallback(
-    async (variant: SinglesigVariant) => {
+    async (variant: WalletType) => {
       if (sessionRef.current !== null) return
 
       setState(s => ({ ...s, syncing: true, error: null, isError: false }))
@@ -151,16 +140,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         await connector.connect()
 
-        // Hardware signers expose readVersion; software signers are always 'ready'.
-        const versionInfo = (await connector.readVersion?.()) ?? null
-        const connectionStatus =
-          versionInfo?.jadeState !== 'READY' && versionInfo !== null ? 'locked' : 'ready'
+        const connectionStatus = await connector.getConnectionStatus()
 
         // Show the intermediate state (locked/ready) before PIN prompt blocks.
         setState(s => ({
           ...s,
           connectionStatus,
-          jadeMac: versionInfo?.jadeMac ?? null,
+          efuseMac: connector.id,
           walletType: variant,
         }))
 
@@ -171,14 +157,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         sessionRef.current = { connector, descriptor, wollet, esploraClient }
 
         const saved: SavedSession = {
-          efuseMac: versionInfo?.jadeMac ?? null,
+          efuseMac: connector.id,
           walletType: variant,
           descriptorStr: descriptor.toString(),
         }
-        persistSession(saved)
         setSavedSession(saved)
 
-        const rawBalances = await syncWallet(wollet, esploraClient)
+        const balances = await syncBalances(wollet, esploraClient)
 
         setState(s => ({
           ...s,
@@ -186,7 +171,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           syncing: false,
           error: null,
           isError: false,
-          balances: serializeBalances(rawBalances),
+          balances,
         }))
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)
@@ -200,7 +185,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }))
       }
     },
-    [lwk, lwkNetwork],
+    [lwk, lwkNetwork, setSavedSession],
   )
 
   const disconnect = useCallback(async () => {
@@ -208,9 +193,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [performDisconnect])
 
   const resumeSession = useCallback(async () => {
-    const saved = savedSession
-    if (!saved) return
-    await connect(saved.walletType)
+    if (!savedSession) return
+    await connect(savedSession.walletType)
   }, [savedSession, connect])
 
   const autoResumedRef = useRef(false)
@@ -227,8 +211,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, syncing: true, error: null }))
 
     try {
-      const rawBalances = await syncWallet(session.wollet, session.esploraClient)
-      setState(s => ({ ...s, syncing: false, balances: serializeBalances(rawBalances) }))
+      const balances = await syncBalances(session.wollet, session.esploraClient)
+      setState(s => ({ ...s, syncing: false, balances }))
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err)
       setState(s => ({ ...s, syncing: false, error, isError: true }))
@@ -245,9 +229,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const txidStr = txid.toString()
 
     // Auto-sync balances after broadcast (fire-and-forget, errors are non-fatal).
-    syncWallet(session.wollet, session.esploraClient)
-      .then(rawBalances => {
-        setState(s => ({ ...s, balances: serializeBalances(rawBalances) }))
+    syncBalances(session.wollet, session.esploraClient)
+      .then(balances => {
+        setState(s => ({ ...s, balances }))
       })
       .catch(console.warn)
 
@@ -302,12 +286,4 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       {children}
     </WalletContext.Provider>
   )
-}
-
-function serializeBalances(raw: [string, bigint][]): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const [assetId, amount] of raw) {
-    result[assetId] = amount.toString()
-  }
-  return result
 }
