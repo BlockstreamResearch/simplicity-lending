@@ -10,5 +10,6 @@ export interface WalletConnector {
   signPset(pset: Pset): Promise<Pset>
   isConnected: boolean
   getConnectionStatus(): Promise<ConnectionStatus>
+  getXOnlyPublicKey?(): Promise<string>
   getVerifiedReceiveAddress?(variant: WalletType, wollet: Wollet): Promise<string>
 }

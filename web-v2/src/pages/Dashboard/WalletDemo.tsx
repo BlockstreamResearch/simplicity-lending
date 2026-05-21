@@ -33,6 +33,7 @@ export function WalletDemo() {
     sendLbtc,
     getLastReceiveAddress,
     verifyReceiveAddress,
+    getXOnlyPublicKey,
     efuseMac,
   } = useWallet()
 
@@ -44,6 +45,20 @@ export function WalletDemo() {
   const [sending, setSending] = useState(false)
   const [txConfirmations, setTxConfirmations] = useState<number | null>(null)
   const [verifyingAddress, setVerifyingAddress] = useState(false)
+  const [xOnlyPubKey, setXOnlyPubKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (connectionStatus !== 'ready') return
+    let cancelled = false
+    getXOnlyPublicKey()
+      .then(key => {
+        if (!cancelled) setXOnlyPubKey(key)
+      })
+      .catch(console.warn)
+    return () => {
+      cancelled = true
+    }
+  }, [connectionStatus, getXOnlyPublicKey])
 
   // Poll Esplora directly for first confirmation after sending.
   useEffect(() => {
@@ -202,6 +217,13 @@ export function WalletDemo() {
               </ul>
             )}
           </div>
+
+          {env.VITE_DEBUG_MNEMONIC && xOnlyPubKey && (
+            <div className='space-y-1'>
+              <p className='text-sm font-medium'>X-Only Public Key (Simplicity)</p>
+              <code className='break-all text-xs'>{xOnlyPubKey}</code>
+            </div>
+          )}
 
           <div className='space-y-2 rounded border border-gray-200 p-4'>
             <p className='text-sm font-medium'>Send Transfer</p>

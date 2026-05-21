@@ -11,6 +11,7 @@ export interface WalletContextValue extends WalletState {
   sendLbtc(recipientAddress: string, satoshi: bigint): Promise<string>
   getLastReceiveAddress(): string | null
   verifyReceiveAddress(): Promise<string | null>
+  getXOnlyPublicKey(): Promise<string | null>
   resumeSession(): Promise<void>
   savedSession: SavedSession | null
 }

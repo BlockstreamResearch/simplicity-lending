@@ -61,6 +61,13 @@ export class SeedConnector implements WalletConnector {
     return this.signer.sign(pset)
   }
 
+  async getXOnlyPublicKey(): Promise<string> {
+    if (!this.signer) throw new Error('SeedConnector: not connected')
+    //github.com/BlockstreamResearch/smplx/blob/1945d11b47fff8838c3e99c210133519a9522324/crates/sdk/src/signer/core.rs#L621C1-L628C2
+    const path = this.lwkNetwork.isMainnet() ? 'm/84h/1776h/0h/0/1' : 'm/84h/1h/0h/0/1'
+    return this.lwk.simplicityDeriveXonlyPubkey(this.signer, path).toString()
+  }
+
   async getConnectionStatus(): Promise<ConnectionStatus> {
     return 'ready'
   }

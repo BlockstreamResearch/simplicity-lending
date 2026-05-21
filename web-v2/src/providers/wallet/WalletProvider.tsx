@@ -244,6 +244,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return session.wollet.address().address().toString()
   }, [])
 
+  const getXOnlyPublicKey = useCallback(async (): Promise<string | null> => {
+    const session = sessionRef.current
+    if (!session) return null
+    return session.connector.getXOnlyPublicKey?.() ?? null
+  }, [])
+
   const verifyReceiveAddress = useCallback(async (): Promise<string | null> => {
     const session = sessionRef.current
     if (!session) return null
@@ -279,6 +285,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         sendLbtc,
         getLastReceiveAddress,
         verifyReceiveAddress,
+        getXOnlyPublicKey,
         resumeSession,
         savedSession,
       }}
