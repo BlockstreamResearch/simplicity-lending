@@ -6,7 +6,7 @@ import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
 export interface WalletContextValue extends WalletState {
   connect(variant: WalletType): Promise<void>
   disconnect(): Promise<void>
-  sync(): Promise<void>
+  syncWallet(): Promise<void>
   signAndBroadcast(pset: Pset): Promise<string>
   sendLbtc(recipientAddress: string, satoshi: bigint): Promise<string>
   getLastReceiveAddress(): string | null

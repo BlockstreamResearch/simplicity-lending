@@ -280,7 +280,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         ...state,
         connect,
         disconnect,
-        sync,
+        syncWallet: sync,
         signAndBroadcast,
         sendLbtc,
         getLastReceiveAddress,
