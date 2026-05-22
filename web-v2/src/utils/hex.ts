@@ -27,3 +27,14 @@ export function bytesToHex(bytes: Uint8Array): string {
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
 }
+
+export function bytes32ToHex(b: Uint8Array): string {
+  if (b.length !== 32) throw new Error('Expected 32 bytes')
+  return bytesToHex(b)
+}
+
+export function hexToBytes32(hex: string): Uint8Array {
+  const s = normalizeHex(hex)
+  if (s.length !== 64) throw new Error('Expected 64 hex chars for 32-byte value')
+  return hexToBytes(s)
+}

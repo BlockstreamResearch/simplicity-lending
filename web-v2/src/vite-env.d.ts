@@ -10,5 +10,11 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 declare module 'virtual:simplicity-sources' {
-  export const sources: Record<string, string>
+  export interface SimplicitySources {
+    lending: string
+    asset_auth: string
+    script_auth: string
+  }
+
+  export const sources: SimplicitySources
 }

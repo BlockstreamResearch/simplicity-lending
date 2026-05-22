@@ -1,3 +1,4 @@
+import type { XOnlyPublicKey } from 'lwk_web'
 import { useEffect, useState } from 'react'
 
 import { fetchTxConfirmations } from '@/api/esplora/methods'
@@ -45,7 +46,7 @@ export function WalletDemo() {
   const [sending, setSending] = useState(false)
   const [txConfirmations, setTxConfirmations] = useState<number | null>(null)
   const [verifyingAddress, setVerifyingAddress] = useState(false)
-  const [xOnlyPubKey, setXOnlyPubKey] = useState<string | null>(null)
+  const [xOnlyPubKey, setXOnlyPubKey] = useState<XOnlyPublicKey | null>(null)
   const [lastReceiveAddress, setLastReceiveAddress] = useState<string | null>(null)
 
   useEffect(() => {
@@ -235,7 +236,7 @@ export function WalletDemo() {
           {env.VITE_DEBUG_MNEMONIC && xOnlyPubKey && (
             <div className='space-y-1'>
               <p className='text-sm font-medium'>X-Only Public Key (Simplicity)</p>
-              <code className='break-all text-xs'>{xOnlyPubKey}</code>
+              <code className='break-all text-xs'>{xOnlyPubKey.toString()}</code>
             </div>
           )}
 

@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { env } from '@/constants/env'
-import { createLwkNetwork, getLwk, type Lwk } from '@/lwk'
+import { createLwkNetwork, getLwk } from '@/lwk'
 
 import { LwkContext } from './LwkContext'
 
 const network = env.VITE_NETWORK
 
 export function LwkProvider({ children }: { children: React.ReactNode }) {
-  const [lwk, setLwk] = useState<Lwk | null>(null)
+  const [isReady, setIsReady] = useState(false)
+
   useEffect(() => {
     let cancelled = false
 
-    getLwk().then(instance => {
-      if (!cancelled) setLwk(instance)
+    getLwk().then(() => {
+      if (!cancelled) {
+        setIsReady(true)
+      }
     })
 
     return () => {
@@ -21,7 +24,13 @@ export function LwkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const lwkNetwork = useMemo(() => (lwk ? createLwkNetwork(network, lwk) : null), [lwk])
+  const lwkNetwork = useMemo(() => {
+    if (!isReady) {
+      return null
+    }
+
+    return createLwkNetwork(network)
+  }, [isReady])
 
   useEffect(() => {
     return () => {
@@ -29,7 +38,7 @@ export function LwkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [lwkNetwork])
 
-  if (!lwk || !lwkNetwork) {
+  if (!lwkNetwork) {
     // TODO: Replace with proper loader after UI framework setup
     return <div>Loading...</div>
   }
@@ -37,7 +46,6 @@ export function LwkProvider({ children }: { children: React.ReactNode }) {
   return (
     <LwkContext.Provider
       value={{
-        lwk,
         lwkNetwork,
         network,
         isTestnet: network === 'liquidtestnet',
