@@ -26,6 +26,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const { lwk, lwkNetwork } = useLwk()
 
   const sessionRef = useRef<WalletSession | null>(null)
+  const connectingRef = useRef(false)
 
   const [state, setState] = useState<WalletState>(() => {
     const disconnectError = sessionStorage.getItem(DISCONNECT_ERROR_KEY)
@@ -37,8 +38,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   })
   const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
 
-  // Stable disconnect used by polling, USB events, and the public disconnect action.
-  const performDisconnect = useCallback(
+  const disconnect = useCallback(
     async (error?: string) => {
       const session = sessionRef.current
       if (session) {
@@ -80,7 +80,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
     const handleDisconnect = () => {
       if (sessionRef.current) {
-        performDisconnect('Device disconnected')
+        disconnect('Device disconnected')
       } else {
         setState(s => ({ ...s, usbDeviceDetected: false }))
       }
@@ -93,7 +93,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       navigator.serial.removeEventListener('connect', handleConnect)
       navigator.serial.removeEventListener('disconnect', handleDisconnect)
     }
-  }, [performDisconnect])
+  }, [disconnect])
 
   // Poll Jade state while connected — detects PIN lock and physical disconnect.
   useEffect(() => {
@@ -114,12 +114,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         .catch((err: unknown) => {
           // TODO: Move to a more robust error handling strategy
           if (err instanceof Error && err.message === 'jade:busy') return
-          performDisconnect('Device disconnected').catch(console.warn)
+          disconnect('Device disconnected').catch(console.warn)
         })
     }, 3_000)
 
     return () => clearInterval(id)
-  }, [state.connectionStatus, performDisconnect])
+  }, [state.connectionStatus, disconnect])
 
   useEffect(() => {
     if (state.connectionStatus !== 'ready') return
@@ -139,7 +139,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const connect = useCallback(
     async (variant: WalletType) => {
-      if (sessionRef.current !== null) return
+      if (sessionRef.current !== null || connectingRef.current) return
+      connectingRef.current = true
 
       setState(s => ({ ...s, syncing: true, error: null, isError: false }))
 
@@ -190,19 +191,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)
         connector?.disconnect()
-        sessionStorage.setItem(DISCONNECT_ERROR_KEY, error)
+        sessionRef.current = null
         // TODO: Move to a more robust error handling strategy
         if (error.toLowerCase().includes('pin')) {
+          sessionStorage.setItem(DISCONNECT_ERROR_KEY, error)
           window.location.reload()
+        } else {
+          setState(s => ({
+            ...INITIAL_WALLET_STATE,
+            usbDeviceDetected: s.usbDeviceDetected,
+            error,
+            isError: true,
+          }))
         }
+      } finally {
+        connectingRef.current = false
       }
     },
     [lwk, lwkNetwork, setSavedSession],
   )
-
-  const disconnect = useCallback(async () => {
-    await performDisconnect()
-  }, [performDisconnect])
 
   const resumeSession = useCallback(async () => {
     if (!savedSession) return
@@ -213,8 +220,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (autoResumedRef.current || !savedSession || state.connectionStatus !== 'disconnected') return
     autoResumedRef.current = true
-    resumeSession().catch(() => performDisconnect().catch(console.warn))
-  }, [savedSession, state.connectionStatus, resumeSession, performDisconnect])
+    resumeSession().catch(() => disconnect().catch(console.warn))
+  }, [savedSession, state.connectionStatus, resumeSession, disconnect])
 
   const sync = useCallback(async () => {
     const session = sessionRef.current
