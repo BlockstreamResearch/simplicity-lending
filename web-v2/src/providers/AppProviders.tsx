@@ -6,11 +6,14 @@ import { env } from '@/constants/env'
 
 import { LwkProvider } from './lwk/LwkProvider'
 import { queryClient } from './queryClient'
+import { WalletProvider } from './wallet/WalletProvider'
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
-      <LwkProvider>{children}</LwkProvider>
+      <LwkProvider>
+        <WalletProvider>{children}</WalletProvider>
+      </LwkProvider>
       {env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   )

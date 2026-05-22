@@ -16,6 +16,8 @@ import {
   type ScriptHashUtxoEntry,
   scriptHashUtxoListSchema,
   txIdListSchema,
+  type TxStatus,
+  txStatusSchema,
 } from './schemas'
 
 function buildEsploraUrl(path: string): string {
@@ -36,6 +38,22 @@ function buildTxsHistoryPath(basePath: string, lastSeenTxId?: string): string {
 
 export async function fetchTx(txId: string, options: RequestParams = {}): Promise<EsploraTx> {
   return requestJson(buildEsploraUrl(`/tx/${txId}`), esploraTxSchema, { signal: options.signal })
+}
+
+export async function fetchTxStatus(txId: string, options: RequestParams = {}): Promise<TxStatus> {
+  return requestJson(buildEsploraUrl(`/tx/${txId}/status`), txStatusSchema, {
+    signal: options.signal,
+  })
+}
+
+export async function fetchTxConfirmations(
+  txId: string,
+  options: RequestParams = {},
+): Promise<number | null> {
+  const status = await fetchTxStatus(txId, options)
+  if (!status.confirmed || status.block_height === undefined) return null
+  const tip = await fetchLatestBlockHeight(options)
+  return tip - status.block_height + 1
 }
 
 export async function fetchTxRaw(txId: string, options: RequestParams = {}): Promise<Uint8Array> {

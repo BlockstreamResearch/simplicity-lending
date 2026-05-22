@@ -1,0 +1,78 @@
+import type { Network, Pset, Signer, WolletDescriptor } from 'lwk_web'
+
+import type { Lwk } from '@/lwk'
+
+import type { ConnectionStatus, WalletType } from '../types'
+import type { WalletConnector } from './types'
+
+/**
+ * Software signer connector backed by a BIP39 mnemonic.
+ *
+ * Intended for dev/test only — never ship a real mnemonic in env vars.
+ * Gate behind VITE_DEBUG_MNEMONIC so it never runs in production builds.
+ *
+ * Signer is a WASM-backed object. It must NOT be stored in React state.
+ * This class owns the Signer reference exclusively.
+ */
+export class SeedConnector implements WalletConnector {
+  private signer: Signer | null = null
+  private _id: string | null = null
+
+  constructor(
+    private readonly lwk: Lwk,
+    private readonly lwkNetwork: Network,
+    private readonly mnemonicStr: string,
+  ) {
+    if (!mnemonicStr) throw new Error('SeedConnector: VITE_DEBUG_MNEMONIC is not set')
+  }
+
+  async connect(): Promise<void> {
+    if (this.signer !== null) return
+    const mnemonic = new this.lwk.Mnemonic(this.mnemonicStr)
+    this.signer = new this.lwk.Signer(mnemonic, this.lwkNetwork)
+    this._id = crypto.randomUUID()
+  }
+
+  disconnect(): void {
+    if (this.signer) {
+      this.signer.free()
+      this.signer = null
+    }
+    this._id = null
+  }
+
+  get id(): string | null {
+    return this._id
+  }
+
+  async getDescriptor(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _variant: WalletType,
+  ): Promise<WolletDescriptor> {
+    if (!this.signer) throw new Error('SeedConnector: not connected')
+    // Signer only exposes wpkhSlip77Descriptor (native segwit + SLIP77 blinding).
+    // The variant param is accepted for interface compatibility but ignored here.
+    return this.signer.wpkhSlip77Descriptor()
+  }
+
+  async signPset(pset: Pset): Promise<Pset> {
+    if (!this.signer) throw new Error('SeedConnector: not connected')
+    // Signer.sign() is synchronous — wrap for interface compatibility.
+    return this.signer.sign(pset)
+  }
+
+  async getXOnlyPublicKey(): Promise<string> {
+    if (!this.signer) throw new Error('SeedConnector: not connected')
+    //github.com/BlockstreamResearch/smplx/blob/1945d11b47fff8838c3e99c210133519a9522324/crates/sdk/src/signer/core.rs#L621C1-L628C2
+    const path = this.lwkNetwork.isMainnet() ? 'm/84h/1776h/0h/0/1' : 'm/84h/1h/0h/0/1'
+    return this.lwk.simplicityDeriveXonlyPubkey(this.signer, path).toString()
+  }
+
+  async getConnectionStatus(): Promise<ConnectionStatus> {
+    return 'ready'
+  }
+
+  get isConnected(): boolean {
+    return this.signer !== null
+  }
+}
