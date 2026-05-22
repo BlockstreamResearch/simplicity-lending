@@ -20,13 +20,21 @@ import {
 import { WalletContext } from './WalletContext'
 
 const SESSION_STORAGE_KEY = 'jade_wallet_session'
+const DISCONNECT_ERROR_KEY = 'jade_disconnect_error'
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const { lwk, lwkNetwork } = useLwk()
 
   const sessionRef = useRef<WalletSession | null>(null)
 
-  const [state, setState] = useState<WalletState>(INITIAL_WALLET_STATE)
+  const [state, setState] = useState<WalletState>(() => {
+    const disconnectError = sessionStorage.getItem(DISCONNECT_ERROR_KEY)
+    if (disconnectError) {
+      sessionStorage.removeItem(DISCONNECT_ERROR_KEY)
+      return { ...INITIAL_WALLET_STATE, error: disconnectError, isError: true }
+    }
+    return INITIAL_WALLET_STATE
+  })
   const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
 
   // Stable disconnect used by polling, USB events, and the public disconnect action.
@@ -38,11 +46,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         sessionRef.current = null
       }
       setSavedSession(null)
-      // Do NOT preserve usbDeviceDetected — physical disconnect means the device is gone.
-      setState(() => ({
-        ...INITIAL_WALLET_STATE,
-        ...(error !== undefined ? { error, isError: true } : {}),
-      }))
+      // Persist the error so it survives the reload that releases the serial port.
+      if (error !== undefined) {
+        sessionStorage.setItem(DISCONNECT_ERROR_KEY, error)
+      }
       window.location.reload()
     },
     [setSavedSession],
@@ -99,10 +106,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       session.connector
         .getConnectionStatus()
         .then(status => {
-          if (status === 'locked') window.location.reload() // to prompt for PIN again and avoid serial port conflicts
+          if (status === 'locked' && state.connectionStatus !== 'locked') {
+            window.location.reload() // to prompt for PIN again and avoid serial port conflicts
+          }
           setState(s => (s.connectionStatus === status ? s : { ...s, connectionStatus: status }))
         })
         .catch((err: unknown) => {
+          // TODO: Move to a more robust error handling strategy
           if (err instanceof Error && err.message === 'jade:busy') return
           performDisconnect('Device disconnected').catch(console.warn)
         })
@@ -133,8 +143,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       setState(s => ({ ...s, syncing: true, error: null, isError: false }))
 
+      let connector: WalletConnector | null = null
+
       try {
-        const connector: WalletConnector = env.VITE_DEBUG_MNEMONIC
+        const walletType: WalletType = env.VITE_DEBUG_MNEMONIC ? 'Wpkh' : variant
+
+        connector = env.VITE_DEBUG_MNEMONIC
           ? new SeedConnector(lwk, lwkNetwork, env.VITE_DEBUG_MNEMONIC)
           : new JadeConnector(lwk, lwkNetwork)
 
@@ -146,19 +160,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setState(s => ({
           ...s,
           connectionStatus,
-          efuseMac: connector.id,
-          walletType: variant,
+          connectorId: connector!.id,
+          walletType,
         }))
 
-        const descriptor = await connector.getDescriptor(variant)
+        const descriptor = await connector.getDescriptor(walletType)
         const wollet = new lwk.Wollet(lwkNetwork, descriptor)
         const esploraClient = createEsploraClient(lwk, lwkNetwork)
 
         sessionRef.current = { connector, descriptor, wollet, esploraClient }
 
         const saved: SavedSession = {
-          efuseMac: connector.id,
-          walletType: variant,
+          connectorId: connector.id,
+          walletType,
           descriptorStr: descriptor.toString(),
         }
         setSavedSession(saved)
@@ -175,14 +189,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }))
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)
-        sessionRef.current = null
-        // USB may still be plugged in even if connect() failed, so preserve usbDeviceDetected.
-        setState(s => ({
-          ...INITIAL_WALLET_STATE,
-          usbDeviceDetected: s.usbDeviceDetected,
-          error,
-          isError: true,
-        }))
+        connector?.disconnect()
+        sessionStorage.setItem(DISCONNECT_ERROR_KEY, error)
+        // TODO: Move to a more robust error handling strategy
+        if (error.toLowerCase().includes('pin')) {
+          window.location.reload()
+        }
       }
     },
     [lwk, lwkNetwork, setSavedSession],
@@ -238,7 +250,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return txidStr
   }, [])
 
-  const getLastReceiveAddress = useCallback((): string | null => {
+  const getLastReceiveAddress = useCallback(async (): Promise<string | null> => {
     const session = sessionRef.current
     if (!session) return null
     return session.wollet.address().address().toString()

@@ -9,7 +9,7 @@ export interface WalletContextValue extends WalletState {
   syncWallet(): Promise<void>
   signAndBroadcast(pset: Pset): Promise<string>
   sendLbtc(recipientAddress: string, satoshi: bigint): Promise<string>
-  getLastReceiveAddress(): string | null
+  getLastReceiveAddress(): Promise<string | null>
   verifyReceiveAddress(): Promise<string | null>
   getXOnlyPublicKey(): Promise<string | null>
   resumeSession(): Promise<void>
@@ -24,14 +24,14 @@ export interface WalletSession {
 }
 
 export interface SavedSession {
-  efuseMac: string | null
+  connectorId: string | null
   walletType: WalletType
   descriptorStr: string
 }
 
 export interface WalletState {
   connectionStatus: ConnectionStatus
-  efuseMac: string | null
+  connectorId: string | null
   walletType: WalletType | null
   balances: Record<string, string>
   syncing: boolean
@@ -44,7 +44,7 @@ export interface WalletState {
 
 export const INITIAL_WALLET_STATE: WalletState = {
   connectionStatus: 'disconnected',
-  efuseMac: null,
+  connectorId: null,
   walletType: null,
   balances: {},
   syncing: false,

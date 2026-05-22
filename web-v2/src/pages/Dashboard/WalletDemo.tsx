@@ -34,7 +34,7 @@ export function WalletDemo() {
     getLastReceiveAddress,
     verifyReceiveAddress,
     getXOnlyPublicKey,
-    efuseMac,
+    connectorId,
   } = useWallet()
 
   const [walletType, setWalletType] = useState<WalletType>('Wpkh')
@@ -46,6 +46,7 @@ export function WalletDemo() {
   const [txConfirmations, setTxConfirmations] = useState<number | null>(null)
   const [verifyingAddress, setVerifyingAddress] = useState(false)
   const [xOnlyPubKey, setXOnlyPubKey] = useState<string | null>(null)
+  const [lastReceiveAddress, setLastReceiveAddress] = useState<string | null>(null)
 
   useEffect(() => {
     if (connectionStatus !== 'ready') return
@@ -59,6 +60,19 @@ export function WalletDemo() {
       cancelled = true
     }
   }, [connectionStatus, getXOnlyPublicKey])
+
+  useEffect(() => {
+    if (connectionStatus !== 'ready') return
+    let cancelled = false
+    getLastReceiveAddress()
+      .then(addr => {
+        if (!cancelled) setLastReceiveAddress(addr)
+      })
+      .catch(console.warn)
+    return () => {
+      cancelled = true
+    }
+  }, [connectionStatus, getLastReceiveAddress])
 
   // Poll Esplora directly for first confirmation after sending.
   useEffect(() => {
@@ -178,7 +192,7 @@ export function WalletDemo() {
         <div className='space-y-1'>
           <p className='text-sm'>
             Enter PIN on device
-            {efuseMac && <span className='ml-2 text-xs text-gray-500'>({efuseMac})</span>}
+            {connectorId && <span className='ml-2 text-xs text-gray-500'>({connectorId})</span>}
           </p>
           {syncing && <p className='text-xs text-gray-400'>Loading wallet...</p>}
         </div>
@@ -188,7 +202,7 @@ export function WalletDemo() {
         <div className='space-y-4'>
           <div className='space-y-1'>
             <p className='text-sm font-medium'>Receive address</p>
-            <code className='break-all text-xs'>{getLastReceiveAddress()}</code>
+            <code className='break-all text-xs'>{lastReceiveAddress}</code>
             <button
               className='mt-1 rounded bg-accent-soft-hover px-3 py-1 text-xs disabled:opacity-50'
               disabled={verifyingAddress}
@@ -201,7 +215,7 @@ export function WalletDemo() {
           <div className='space-y-1'>
             <p className='text-sm font-medium'>
               Balances
-              {efuseMac && <span className='ml-2 text-xs text-gray-500'>({efuseMac})</span>}
+              {connectorId && <span className='ml-2 text-xs text-gray-500'>({connectorId})</span>}
             </p>
             {syncing ? (
               <p className='text-xs text-gray-400'>Syncing...</p>
