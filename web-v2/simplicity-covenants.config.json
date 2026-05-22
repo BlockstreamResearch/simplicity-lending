@@ -1,0 +1,7 @@
+{
+  "covenants": [
+    { "id": "lending", "path": "../crates/contracts/simf/lending.simf" },
+    { "id": "asset_auth", "path": "../crates/contracts/simf/asset_auth.simf" },
+    { "id": "script_auth", "path": "../crates/contracts/simf/script_auth.simf" }
+  ]
+}

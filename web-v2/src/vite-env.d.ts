@@ -9,3 +9,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+declare module 'virtual:simplicity-sources' {
+  export const sources: Record<string, string>
+}
