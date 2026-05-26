@@ -169,6 +169,7 @@ fn supply(input_supplier_index: u32, output_supplier_index: u32, vault_output_in
     ensure_vault_amount_after_supplying(vault_output_index, amount_to_supply);
 }
 
+// TODO: Add goal logic to finalization flow
 fn final_supply(
     input_supplier_index: u32,
     output_supplier_index: u32,

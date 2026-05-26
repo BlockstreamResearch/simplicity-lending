@@ -1,42 +1,34 @@
-use simplex::simplicityhl::elements::{AssetId, hex::ToHex, secp256k1_zkp::XOnlyPublicKey};
+use simplex::simplicityhl::elements::AssetId;
 
 use crate::programs::{
-    lending::{LendingOfferError, OfferParameters, PendingLendingOffer},
+    lending::{LendingOffer, LendingOfferError, OfferParameters},
     program::{CreationMetadata, MetadataProgram, PROGRAM_ID_LENGTH, ProgramId, SimplexProgram},
 };
 
-const LENDING_OFFER_CREATION_METADATA_LENGTH: usize = 80;
+const LENDING_OFFER_CREATION_METADATA_LENGTH: usize = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LendingOfferCreationMetadata {
     pub program_id: ProgramId,
-    pub borrower_pubkey: XOnlyPublicKey,
     pub principal_asset_id: AssetId,
     pub principal_amount: u64,
     pub loan_expiration_time: u32,
+    pub principal_interest_rate: u16,
 }
 
 impl LendingOfferCreationMetadata {
     pub fn new(
         program_id: ProgramId,
-        borrower_pubkey: XOnlyPublicKey,
         principal_asset_id: AssetId,
         offer_parameters: OfferParameters,
     ) -> Self {
         Self {
             program_id,
-            borrower_pubkey,
             principal_asset_id,
             principal_amount: offer_parameters.principal_amount,
             loan_expiration_time: offer_parameters.loan_expiration_time,
+            principal_interest_rate: offer_parameters.principal_interest_rate,
         }
-    }
-
-    fn decode_borrower_pubkey(
-        op_return_pub_key: &[u8],
-    ) -> Result<XOnlyPublicKey, LendingOfferError> {
-        XOnlyPublicKey::from_slice(op_return_pub_key)
-            .map_err(|_| LendingOfferError::InvalidMetadataBytes(op_return_pub_key.to_hex()))
     }
 }
 
@@ -55,9 +47,6 @@ impl CreationMetadata for LendingOfferCreationMetadata {
         let program_id = Self::decode_program_id(op_return_bytes);
         cursor += PROGRAM_ID_LENGTH;
 
-        let borrower_pubkey_raw = &op_return_bytes[cursor..cursor + 32];
-        cursor += 32;
-
         let principal_asset_id_raw = &op_return_bytes[cursor..cursor + 32];
         cursor += 32;
 
@@ -73,29 +62,36 @@ impl CreationMetadata for LendingOfferCreationMetadata {
                 .try_into()
                 .expect("u32 length is fixed"),
         );
+        cursor += std::mem::size_of::<u32>();
+
+        let principal_interest_rate = u16::from_le_bytes(
+            op_return_bytes[cursor..cursor + std::mem::size_of::<u16>()]
+                .try_into()
+                .expect("u16 length is fixed"),
+        );
 
         Ok(Self {
             program_id,
-            borrower_pubkey: Self::decode_borrower_pubkey(borrower_pubkey_raw)?,
             principal_asset_id: AssetId::from_slice(principal_asset_id_raw)?,
             principal_amount,
             loan_expiration_time,
+            principal_interest_rate,
         })
     }
 
     fn encode(&self) -> Vec<u8> {
         let mut op_return_data = Vec::with_capacity(Self::DATA_LENGTH);
         op_return_data.extend_from_slice(&self.program_id);
-        op_return_data.extend_from_slice(&self.borrower_pubkey.serialize());
         op_return_data.extend_from_slice(&self.principal_asset_id.into_inner().0);
         op_return_data.extend_from_slice(&self.principal_amount.to_le_bytes());
         op_return_data.extend_from_slice(&self.loan_expiration_time.to_le_bytes());
+        op_return_data.extend_from_slice(&self.principal_interest_rate.to_le_bytes());
 
         op_return_data
     }
 }
 
-impl MetadataProgram for PendingLendingOffer {
+impl MetadataProgram for LendingOffer {
     type Metadata = LendingOfferCreationMetadata;
 
     fn build_metadata(&self) -> Self::Metadata {
@@ -103,7 +99,6 @@ impl MetadataProgram for PendingLendingOffer {
 
         LendingOfferCreationMetadata::new(
             Self::get_program_id(),
-            parameters.borrower_pubkey,
             parameters.principal_asset_id,
             parameters.offer_parameters,
         )
