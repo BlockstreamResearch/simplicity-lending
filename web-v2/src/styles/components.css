@@ -1,0 +1,62 @@
+@layer components {
+  .input:where(:focus, :focus-visible, [data-focused='true'], [data-focus-visible='true']) {
+    --field-shadow: 0 0 #0000;
+  }
+
+  .table-root--secondary .table__header {
+    background-color: transparent;
+    border-bottom-width: 0;
+  }
+
+  .table-root--secondary .table__column {
+    background-color: var(--surface);
+    border-radius: 0;
+    border-bottom: 4px solid var(--surface-secondary);
+  }
+
+  .table-root--secondary .table__column:first-child {
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+  }
+
+  .table-root--secondary .table__column:last-child {
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .table-root--secondary .table__row .table__cell {
+    background-color: var(--surface);
+    border-bottom: 4px solid var(--surface-secondary);
+  }
+
+  .table-root--secondary .table__row .table__cell:first-child {
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+  }
+
+  .table-root--secondary .table__row .table__cell:last-child {
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .table-root--secondary .table__row[data-hovered='true'] .table__cell {
+    background-color: var(--accent-soft-hover);
+  }
+
+  .table-root--secondary .table__row[data-selected='true'] .table__cell {
+    background-color: var(--accent-soft);
+  }
+
+  .table-root--secondary .table__footer {
+    background-color: var(--surface);
+    border-radius: 4px;
+  }
+
+  .pagination__link {
+    border-radius: 4px;
+  }
+
+  .pagination__summary {
+    gap: 0.75rem;
+  }
+}

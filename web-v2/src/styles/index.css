@@ -1,16 +1,15 @@
 @import 'tailwindcss';
 @import '@heroui/react/styles';
-
-/* TODO: Put design system tokens here */
-/* :root {} */
-
-/* TODO: Put theme overrides here */
-/* @theme {} */
+@import './tokens.css';
+@import './theme.css';
+@import './components.css';
 
 * {
   box-sizing: border-box;
 }
 
 body {
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
 }
