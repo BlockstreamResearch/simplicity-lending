@@ -3,7 +3,7 @@ use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
 
-use lending_contracts::programs::lending::{PendingLendingOffer, PendingLendingOfferParameters};
+use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters};
 
 use crate::indexer::{cache::UtxoCache, db};
 use crate::models::{OfferModel, OfferUtxoModel, UtxoType};
@@ -13,36 +13,36 @@ use crate::{
 };
 
 #[tracing::instrument(
-    name = "Handling pre lock creation transaction",
-    skip(sql_tx, pending_offer_parameters, tx, block_height),
+    name = "Handling offer creation transaction",
+    skip(sql_tx, offer_parameters, tx, block_height),
     fields(txid = %tx.txid(), %block_height),
 )]
 pub async fn handle_pending_offer_creation(
     sql_tx: &mut DbTx<'_>,
     cache: &mut UtxoCache,
-    pending_offer_parameters: PendingLendingOfferParameters,
+    offer_parameters: LendingOfferParameters,
     tx: &Transaction,
     block_height: u64,
 ) -> anyhow::Result<()> {
     let txid = tx.txid();
 
-    if tx.output.len() < 7 {
+    if tx.output.len() < 4 {
         return Err(anyhow::anyhow!(
-            "Malformed PreLock transaction {}: expected at least 6 outputs, found {}",
+            "Malformed offer creation transaction {}: expected at least 4 outputs, found {}",
             txid,
             tx.output.len()
         ));
     }
 
-    let offer_model = OfferModel::new(&pending_offer_parameters, block_height, txid);
+    let offer_model = OfferModel::new(&offer_parameters, block_height, txid);
 
     if db::insert_offer(sql_tx, &offer_model).await?.is_none() {
-        tracing::debug!(%txid, "Pre-lock offer already indexed, skipping");
+        tracing::debug!(%txid, "Offer already indexed, skipping");
         return Ok(());
     }
 
-    let pre_lock_outpoint = OutPoint { txid, vout: 0 };
-    let pre_lock_offer_utxo = OfferUtxoModel {
+    let lending_offer_outpoint = OutPoint { txid, vout: 0 };
+    let lending_offer_utxo = OfferUtxoModel {
         offer_id: offer_model.id,
         txid: txid.to_byte_array().to_vec(),
         vout: 0,
@@ -52,9 +52,9 @@ pub async fn handle_pending_offer_creation(
         spent_txid: None,
     };
 
-    db::insert_offer_utxo(sql_tx, &pre_lock_offer_utxo).await?;
+    db::insert_offer_utxo(sql_tx, &lending_offer_utxo).await?;
     cache.insert(
-        pre_lock_outpoint,
+        lending_offer_outpoint,
         ActiveUtxo {
             offer_id: offer_model.id,
             data: UtxoData::Offer(UtxoType::PendingOffer),
@@ -104,33 +104,33 @@ pub async fn handle_pending_offer_creation(
     Ok(())
 }
 
-pub fn is_pending_offer_creation_tx(
+pub fn is_offer_creation_tx(
     tx: &Transaction,
     protocol_fee_keeper_asset_id: AssetId,
-) -> Option<PendingLendingOfferParameters> {
+) -> Option<LendingOfferParameters> {
     // TODO: Move network to config
-    let pending_offer = PendingLendingOffer::try_from_tx(
+    let offer = LendingOffer::try_from_tx(
         tx,
         protocol_fee_keeper_asset_id,
         SimplicityNetwork::LiquidTestnet,
     )
     .ok()?;
 
-    let pending_offer_script_pubkey = pending_offer.get_script_pubkey();
+    let offer_script_pubkey = offer.get_script_pubkey();
 
     // TODO: Get UTXO indexes from the PendingLendingOffer program
-    if tx.output[3].script_pubkey != pending_offer_script_pubkey {
+    if tx.output[3].script_pubkey != offer_script_pubkey {
         return None;
     }
 
-    Some(*pending_offer.get_parameters())
+    Some(*offer.get_parameters())
 }
 
 #[cfg(test)]
 mod tests {
     use simplex::simplicityhl::elements::AssetId;
 
-    use super::is_pending_offer_creation_tx;
+    use super::is_offer_creation_tx;
     use crate::indexer::handlers::test_utils::{make_tx_with_inputs, normal_output, null_output};
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
             ],
         );
 
-        assert!(is_pending_offer_creation_tx(&tx, AssetId::default()).is_none());
+        assert!(is_offer_creation_tx(&tx, AssetId::default()).is_none());
     }
 
     #[test]
@@ -163,7 +163,7 @@ mod tests {
             ],
         );
 
-        assert!(is_pending_offer_creation_tx(&tx, AssetId::default()).is_none());
+        assert!(is_offer_creation_tx(&tx, AssetId::default()).is_none());
     }
 
     #[test]
@@ -181,6 +181,6 @@ mod tests {
             ],
         );
 
-        assert!(is_pending_offer_creation_tx(&tx, AssetId::default()).is_none());
+        assert!(is_offer_creation_tx(&tx, AssetId::default()).is_none());
     }
 }

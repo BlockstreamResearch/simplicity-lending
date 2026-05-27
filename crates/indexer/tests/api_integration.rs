@@ -14,8 +14,8 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::common::{
-    FIXED_BORROWER_PUBKEY_HEX, offer_model, outpoint_from_uuid_vout, seed_offer_row,
-    seed_offer_utxo_row, seed_participant_utxo_row, spent_offer_utxo, spent_participant, test_pool,
+    offer_model, outpoint_from_uuid_vout, seed_offer_row, seed_offer_utxo_row,
+    seed_participant_utxo_row, spent_offer_utxo, spent_participant, test_pool,
     unique_32_bytes_from_uuid, unspent_offer_utxo, unspent_participant,
 };
 
@@ -214,7 +214,7 @@ async fn get_offers_returns_all_seeded_offers_with_correct_status() -> anyhow::R
 
 #[tokio::test]
 #[serial]
-async fn get_offers_full_returns_borrower_pubkey_among_other_fields() -> anyhow::Result<()> {
+async fn get_offers_full_returns_borrower_nft_asset_among_other_fields() -> anyhow::Result<()> {
     let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
     let http = reqwest::Client::new();
 
@@ -222,7 +222,7 @@ async fn get_offers_full_returns_borrower_pubkey_among_other_fields() -> anyhow:
 
     assert_eq!(json.as_array().map_or(0, Vec::len), 2);
     assert_ids_match_unordered(&json, &[pending_offer, active_offer]);
-    assert!(json[0]["borrower_pubkey"].as_str().is_some());
+    assert!(json[0]["borrower_nft_asset"].as_str().is_some());
 
     server_handle.abort();
     Ok(())
@@ -320,25 +320,6 @@ async fn get_offers_by_script_returns_only_owners_of_unspent_match() -> anyhow::
     )
     .await?;
     assert_eq!(historical.as_array().map_or(0, Vec::len), 0);
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
-async fn get_offers_by_borrower_pubkey_returns_pending_only() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, _active_offer) = setup_seeded_api().await?;
-    let http = reqwest::Client::new();
-
-    let json = get_json(
-        &http,
-        format!("{base_url}/offers/by-borrower-pubkey?borrower_pubkey={FIXED_BORROWER_PUBKEY_HEX}"),
-    )
-    .await?;
-
-    assert_eq!(json.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(json[0], pending_offer.to_string());
 
     server_handle.abort();
     Ok(())
@@ -503,13 +484,6 @@ async fn query_endpoints_return_empty_arrays_when_no_matches() -> anyhow::Result
     .await?;
     assert_eq!(by_script.as_array().map_or(0, Vec::len), 0);
 
-    let by_borrower = get_json(
-        &http,
-        format!("{base_url}/offers/by-borrower-pubkey?borrower_pubkey={FIXED_BORROWER_PUBKEY_HEX}"),
-    )
-    .await?;
-    assert_eq!(by_borrower.as_array().map_or(0, Vec::len), 0);
-
     server_handle.abort();
     Ok(())
 }
@@ -538,18 +512,6 @@ async fn validation_errors_match_error_contract() -> anyhow::Result<()> {
     assert_eq!(invalid_script.status(), StatusCode::BAD_REQUEST);
     assert_eq!(
         response_json(invalid_script).await?["error"]["code"],
-        "bad_request"
-    );
-
-    let invalid_borrower = http
-        .get(format!(
-            "{base_url}/offers/by-borrower-pubkey?borrower_pubkey=deadbeef"
-        ))
-        .send()
-        .await?;
-    assert_eq!(invalid_borrower.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(
-        response_json(invalid_borrower).await?["error"]["code"],
         "bad_request"
     );
 
@@ -664,8 +626,7 @@ struct ExpectedOfferDetailsDto {
     loan_expiration_time: u32,
     created_at_height: u64,
     created_at_txid: String,
-    borrower_pubkey: String,
-    borrower_debt_nft_asset: String,
+    borrower_nft_asset: String,
     lender_nft_asset: String,
     protocol_fee_keeper_asset: String,
     participants: Vec<ExpectedParticipantDto>,
@@ -701,11 +662,10 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.interest_rate, 120);
     assert_eq!(dto.loan_expiration_time, 1_234_567);
     assert_eq!(dto.created_at_height, PENDING_OFFER_HEIGHT as u64);
-    assert_eq!(dto.borrower_pubkey, FIXED_BORROWER_PUBKEY_HEX);
     // 32-byte seeded values serialize as 64-char hex strings.
     assert_eq!(dto.collateral_asset.len(), 64);
     assert_eq!(dto.principal_asset.len(), 64);
-    assert_eq!(dto.borrower_debt_nft_asset.len(), 64);
+    assert_eq!(dto.borrower_nft_asset.len(), 64);
     assert_eq!(dto.lender_nft_asset.len(), 64);
     assert_eq!(dto.protocol_fee_keeper_asset.len(), 64);
     assert_eq!(dto.participants.len(), 1);

@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     db::DbTx,
     esplora_client::EsploraClient,
-    indexer::{cache::UtxoCache, db, handlers, is_pending_offer_creation_tx},
+    indexer::{cache::UtxoCache, db, handlers, is_offer_creation_tx},
     models::UtxoData,
 };
 
@@ -118,9 +118,7 @@ pub async fn process_tx(
         }
     }
 
-    if !is_offer_tx
-        && let Some(args) = is_pending_offer_creation_tx(tx, protocol_fee_keeper_asset_id)
-    {
+    if !is_offer_tx && let Some(args) = is_offer_creation_tx(tx, protocol_fee_keeper_asset_id) {
         handlers::pending_offer::handle_pending_offer_creation(
             sql_tx,
             cache,
