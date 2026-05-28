@@ -1,7 +1,4 @@
-use simplex::{
-    constants::DUMMY_SIGNATURE,
-    either::Either::{Left, Right},
-};
+use simplex::either::Either::{Left, Right};
 
 use crate::artifacts::issuance_factory::derived_issuance_factory::IssuanceFactoryWitness;
 
@@ -14,12 +11,8 @@ pub enum IssuanceFactoryWitnessBranch {
 impl IssuanceFactoryWitnessBranch {
     pub fn build_witness(&self) -> Box<IssuanceFactoryWitness> {
         let path = match self {
-            IssuanceFactoryWitnessBranch::IssueAssets { output_index } => {
-                Left((*output_index, DUMMY_SIGNATURE))
-            }
-            IssuanceFactoryWitnessBranch::RemoveFactory { output_index } => {
-                Right((*output_index, DUMMY_SIGNATURE))
-            }
+            IssuanceFactoryWitnessBranch::IssueAssets { output_index } => Left(*output_index),
+            IssuanceFactoryWitnessBranch::RemoveFactory { output_index } => Right(*output_index),
         };
 
         Box::new(IssuanceFactoryWitness { path })

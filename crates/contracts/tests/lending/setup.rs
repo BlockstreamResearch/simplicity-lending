@@ -23,7 +23,6 @@ pub(super) fn setup_issuance_factory(
     let issuance_factory_parameters = IssuanceFactoryParameters {
         issuing_utxos_count: 2,
         reissuance_flags: 0,
-        owner_pubkey: signer.get_schnorr_public_key(),
         network: *context.get_network(),
     };
     let issuance_factory = IssuanceFactory::new(issuance_factory_parameters);
@@ -31,7 +30,7 @@ pub(super) fn setup_issuance_factory(
     let mut ft = FinalTransaction::new();
 
     let issuance_factory_entropy = get_random_seed();
-    let issuance_factory_asset_amount = 1;
+    let issuance_factory_asset_amount = 2;
 
     let issuance_details = ft.add_issuance_input(
         PartialInput::new(signer_policy_utxo),
@@ -39,11 +38,13 @@ pub(super) fn setup_issuance_factory(
         RequiredSignature::NativeEcdsa,
     );
 
-    issuance_factory.attach_creation(
-        &mut ft,
+    ft.add_output(PartialOutput::new(
+        signer.get_address().script_pubkey(),
+        1,
         issuance_details.asset_id,
-        issuance_factory_asset_amount,
-    );
+    ));
+
+    issuance_factory.attach_creation(&mut ft, issuance_details.asset_id, 1);
 
     signer.broadcast(&ft)?.wait()?;
 
@@ -145,13 +146,26 @@ pub(super) fn setup_pending_offer(
 
     let issuance_factory_utxo =
         provider.fetch_scripthash_utxos(&factory.get_script_pubkey())?[0].clone();
+    let issuance_factory_asset_id = issuance_factory_utxo.explicit_asset();
+
+    let factory_auth_nft_utxo = signer.get_utxos_asset(issuance_factory_asset_id)?[0].clone();
 
     // TODO: Use hash from the offer_parameters as asset_entropy
     let nfts_entropy = get_random_seed();
 
     let mut ft = FinalTransaction::new();
 
-    let borrower_nft_issuance_details = factory.attach_assets_issuing(
+    ft.add_input(
+        PartialInput::new(factory_auth_nft_utxo),
+        RequiredSignature::NativeEcdsa,
+    );
+    ft.add_output(PartialOutput::new(
+        signer.get_address().script_pubkey(),
+        1,
+        issuance_factory_asset_id,
+    ));
+
+    let borrower_nft_issuance_details = factory.attach_assets_issuance(
         &mut ft,
         issuance_factory_utxo,
         IssuanceInput::new_issuance(1, 0, nfts_entropy),
@@ -327,8 +341,8 @@ pub(super) fn get_pending_offer_utxos(
     let pending_offer_creation_tx = provider.fetch_transaction(&pending_offer_creation_txid)?;
 
     let lender_nft_utxo = UTXO {
-        outpoint: OutPoint::new(pending_offer_creation_txid, 2),
-        txout: pending_offer_creation_tx.output[2].clone(),
+        outpoint: OutPoint::new(pending_offer_creation_txid, 3),
+        txout: pending_offer_creation_tx.output[3].clone(),
         secrets: None,
     };
 

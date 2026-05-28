@@ -1,23 +1,55 @@
-use lending_contracts::{programs::program::SimplexProgram, utils::get_random_seed};
+use lending_contracts::{
+    programs::{issuance_factory::IssuanceFactory, program::SimplexProgram},
+    utils::get_random_seed,
+};
 
 use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, partial_input::IssuanceInput,
+    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
+    partial_input::IssuanceInput,
 };
 
 use super::setup::setup_issuance_factory;
 
-#[simplex::test]
-fn fails_to_issue_wrong_assets_number(context: simplex::TestContext) -> anyhow::Result<()> {
+fn setup_default_assets_issuance(
+    context: &simplex::TestContext,
+    issuing_utxos_count: u8,
+    reissuance_flags: u64,
+) -> anyhow::Result<(FinalTransaction, IssuanceFactory, UTXO)> {
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (issuance_factory, _) = setup_issuance_factory(&context, 3, 0)?;
+    let (factory_asset_id, issuance_factory, _) =
+        setup_issuance_factory(context, issuing_utxos_count, reissuance_flags)?;
+
+    let issuance_factory_utxo =
+        provider.fetch_scripthash_utxos(&issuance_factory.get_script_pubkey())?[0].clone();
+
+    let auth_nft_utxo = signer.get_utxos_asset(factory_asset_id)?[0].clone();
 
     let mut ft = FinalTransaction::new();
 
+    ft.add_input(
+        PartialInput::new(auth_nft_utxo),
+        RequiredSignature::NativeEcdsa,
+    );
+    ft.add_output(PartialOutput::new(
+        signer.get_address().script_pubkey(),
+        1,
+        factory_asset_id,
+    ));
+
+    Ok((ft, issuance_factory, issuance_factory_utxo))
+}
+
+#[simplex::test]
+fn fails_to_issue_wrong_assets_number(context: simplex::TestContext) -> anyhow::Result<()> {
+    let signer = context.get_default_signer();
+
+    let (mut ft, issuance_factory, issuance_factory_utxo) =
+        setup_default_assets_issuance(&context, 3, 0)?;
+
     let policy_asset_id = context.get_network().policy_asset();
-    let issuance_factory_utxo =
-        provider.fetch_scripthash_utxos(&issuance_factory.get_script_pubkey())?[0].clone();
+
     let policy_utxo = signer.get_utxos_asset(policy_asset_id)?[0].clone();
 
     let issuance_entropy = get_random_seed();
@@ -26,7 +58,7 @@ fn fails_to_issue_wrong_assets_number(context: simplex::TestContext) -> anyhow::
 
     let factory_issuance_input =
         IssuanceInput::new_issuance(first_asset_amount, 0, issuance_entropy);
-    let first_issuance_details = issuance_factory.attach_assets_issuing(
+    let first_issuance_details = issuance_factory.attach_assets_issuance(
         &mut ft,
         issuance_factory_utxo,
         factory_issuance_input,
@@ -63,17 +95,12 @@ fn fails_to_issue_wrong_assets_number(context: simplex::TestContext) -> anyhow::
 fn fails_to_issue_assets_with_reissuance_tokens(
     context: simplex::TestContext,
 ) -> anyhow::Result<()> {
-    let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (issuance_factory, _) = setup_issuance_factory(&context, 2, 0)?;
+    let (mut ft, issuance_factory, issuance_factory_utxo) =
+        setup_default_assets_issuance(&context, 2, 0)?;
 
-    let mut ft = FinalTransaction::new();
-
-    let policy_asset_id = context.get_network().policy_asset();
-    let issuance_factory_utxo =
-        provider.fetch_scripthash_utxos(&issuance_factory.get_script_pubkey())?[0].clone();
-    let policy_utxo = signer.get_utxos_asset(policy_asset_id)?[0].clone();
+    let policy_utxo = signer.get_utxos_asset(context.get_network().policy_asset())?[0].clone();
 
     let issuance_entropy = get_random_seed();
     let first_asset_amount = 1000;
@@ -82,7 +109,7 @@ fn fails_to_issue_assets_with_reissuance_tokens(
 
     let factory_issuance_input =
         IssuanceInput::new_issuance(first_asset_amount, first_inflation_amount, issuance_entropy);
-    let first_issuance_details = issuance_factory.attach_assets_issuing(
+    let first_issuance_details = issuance_factory.attach_assets_issuance(
         &mut ft,
         issuance_factory_utxo,
         factory_issuance_input,
@@ -127,17 +154,12 @@ fn fails_to_issue_assets_with_reissuance_tokens(
 fn fails_to_issue_assets_without_reissuance_tokens(
     context: simplex::TestContext,
 ) -> anyhow::Result<()> {
-    let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (issuance_factory, _) = setup_issuance_factory(&context, 2, 2)?;
+    let (mut ft, issuance_factory, issuance_factory_utxo) =
+        setup_default_assets_issuance(&context, 2, 2)?;
 
-    let mut ft = FinalTransaction::new();
-
-    let policy_asset_id = context.get_network().policy_asset();
-    let issuance_factory_utxo =
-        provider.fetch_scripthash_utxos(&issuance_factory.get_script_pubkey())?[0].clone();
-    let policy_utxo = signer.get_utxos_asset(policy_asset_id)?[0].clone();
+    let policy_utxo = signer.get_utxos_asset(context.get_network().policy_asset())?[0].clone();
 
     let issuance_entropy = get_random_seed();
     let first_asset_amount = 1000;
@@ -145,7 +167,7 @@ fn fails_to_issue_assets_without_reissuance_tokens(
 
     let factory_issuance_input =
         IssuanceInput::new_issuance(first_asset_amount, 0, issuance_entropy);
-    let first_issuance_details = issuance_factory.attach_assets_issuing(
+    let first_issuance_details = issuance_factory.attach_assets_issuance(
         &mut ft,
         issuance_factory_utxo,
         factory_issuance_input,

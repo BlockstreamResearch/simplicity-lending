@@ -18,7 +18,7 @@ use crate::{
     utils::op_return_payload,
 };
 
-const CREATION_METADATA_OUTPUT_INDEX: usize = 3;
+const CREATION_METADATA_OUTPUT_INDEX: usize = 4;
 
 pub struct LendingOfferStorage {
     pub is_active: bool,

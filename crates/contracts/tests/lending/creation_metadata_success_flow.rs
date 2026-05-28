@@ -43,11 +43,11 @@ fn creates_pending_offer_with_creation_metadata(
         default_pending_offer_setup(&context)?;
 
     let lending_offer_creation_tx = provider.fetch_transaction(&lending_offer_creation_txid)?;
-    let op_return_data = op_return_payload(&lending_offer_creation_tx.output[3].script_pubkey)
+    let op_return_data = op_return_payload(&lending_offer_creation_tx.output[4].script_pubkey)
         .unwrap()
         .to_vec();
 
-    assert!(lending_offer_creation_tx.output[3].is_null_data());
+    assert!(lending_offer_creation_tx.output[4].is_null_data());
     assert_eq!(op_return_data.len(), 50);
     assert_eq!(
         &op_return_data[0..4],
@@ -97,7 +97,7 @@ fn decodes_pending_offer_creation_metadata(context: simplex::TestContext) -> any
 
     let lending_offer_creation_tx = provider.fetch_transaction(&lending_offer_creation_txid)?;
 
-    let op_return_data = op_return_payload(&lending_offer_creation_tx.output[3].script_pubkey)
+    let op_return_data = op_return_payload(&lending_offer_creation_tx.output[4].script_pubkey)
         .unwrap()
         .to_vec();
     let decoded_metadata = LendingOffer::decode_metadata_op_return(op_return_data)?;

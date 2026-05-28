@@ -13,7 +13,7 @@ use crate::programs::issuance_factory::{
 use crate::programs::program::{MetadataProgram, SimplexProgram};
 use crate::utils::op_return_payload;
 
-const CREATION_METADATA_OUTPUT_INDEX: usize = 1;
+const CREATION_METADATA_OUTPUT_INDEX: usize = 2;
 
 pub struct IssuanceFactory {
     program: IssuanceFactoryProgram,
@@ -50,7 +50,6 @@ impl IssuanceFactory {
         let issuance_factory_parameters = IssuanceFactoryParameters {
             issuing_utxos_count: creation_metadata.issuing_utxos_count,
             reissuance_flags: creation_metadata.reissuance_flags,
-            owner_pubkey: creation_metadata.owner_pubkey,
             network: *provider.get_network(),
         };
 
@@ -74,19 +73,23 @@ impl IssuanceFactory {
         ft.add_output(PartialOutput::new_metadata(&op_return_data));
     }
 
-    pub fn attach_assets_issuing(
+    pub fn attach_assets_issuance(
         &self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
         program_issuance_input: IssuanceInput,
     ) -> IssuanceDetails {
-        let issuance_factory_amount = program_utxo.explicit_amount();
+        assert!(
+            ft.n_inputs() > 0,
+            "Assets issuance cant't be first attachment in transaction"
+        );
+
+        let auth_nft_output_index = ft.n_outputs() as u32 - 1;
+
         let issuance_factory_asset = program_utxo.explicit_asset();
 
-        let issuance_factory_output_index = ft.n_outputs() as u32;
-
         let issuance_factory_witness_branch = IssuanceFactoryWitnessBranch::IssueAssets {
-            output_index: issuance_factory_output_index,
+            output_index: auth_nft_output_index,
         };
 
         let issuance_details = self.add_program_issuance_input_with_signature(
@@ -94,16 +97,15 @@ impl IssuanceFactory {
             program_utxo,
             program_issuance_input,
             issuance_factory_witness_branch.build_witness(),
-            RequiredSignature::witness_with_path("PATH", &["Left", "1"]),
+            RequiredSignature::None,
         );
 
-        self.add_program_output(ft, issuance_factory_asset, issuance_factory_amount);
+        self.add_program_output(ft, issuance_factory_asset, 1);
 
         issuance_details
     }
 
     pub fn attach_factory_removing(&self, ft: &mut FinalTransaction, program_utxo: UTXO) {
-        let issuance_factory_amount = program_utxo.explicit_amount();
         let issuance_factory_asset = program_utxo.explicit_asset();
 
         let issuance_factory_output_index = ft.n_outputs() as u32;
@@ -116,12 +118,18 @@ impl IssuanceFactory {
             ft,
             program_utxo,
             issuance_factory_witness_branch.build_witness(),
-            RequiredSignature::witness_with_path("PATH", &["Right", "1"]),
+            RequiredSignature::None,
         );
 
         ft.add_output(PartialOutput::new(
             Script::new_op_return(b"burn"),
-            issuance_factory_amount,
+            1,
+            issuance_factory_asset,
+        ));
+
+        ft.add_output(PartialOutput::new(
+            Script::new_op_return(b"burn"),
+            1,
             issuance_factory_asset,
         ));
     }
