@@ -1,6 +1,7 @@
-import { Address, type Pset, TxBuilder, Wollet, XOnlyPublicKey } from 'lwk_web'
+import { Address, type Pset, TxBuilder, Wollet, type XOnlyPublicKey } from 'lwk_web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { broadcastTx } from '@/api/esplora/methods'
 import { env } from '@/constants/env'
 import { useSessionStorage } from '@/hooks/useSessionStorage'
 import { JadeConnector } from '@/lib/wallet-core/connector/jade'
@@ -245,8 +246,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const signedPset = await session.connector.signPset(pset)
     const finalizedPset = session.wollet.finalize(signedPset)
-    const txid = await session.esploraClient.broadcast(finalizedPset)
-    const txidStr = txid.toString()
+    const txHex = finalizedPset.extractTx().toString()
+    const txidStr = await broadcastTx(txHex)
 
     // Auto-sync balances after broadcast (fire-and-forget, errors are non-fatal).
     syncBalances(session.wollet, session.esploraClient)
@@ -258,10 +259,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return txidStr
   }, [])
 
-  const getLastReceiveAddress = useCallback(async (): Promise<string | null> => {
+  const getReceiveAddress = useCallback(async (): Promise<string | null> => {
     const session = sessionRef.current
     if (!session) return null
-    return session.wollet.address().address().toString()
+    return session.wollet.address(0).address().toString()
   }, [])
 
   const getXOnlyPublicKey = useCallback(async (): Promise<XOnlyPublicKey | null> => {
@@ -278,6 +279,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     return session.connector.getVerifiedReceiveAddress(state.walletType ?? 'Wpkh', session.wollet)
   }, [state.walletType])
+
+  const getWalletUtxos = useCallback(async () => {
+    const session = sessionRef.current
+
+    if (!session) {
+      throw new Error('WalletProvider: not connected')
+    }
+
+    return session.wollet.utxos()
+  }, [])
+
+  const getWollet = useCallback((): Wollet => {
+    const session = sessionRef.current
+
+    if (!session) {
+      throw new Error('WalletProvider: not connected')
+    }
+
+    return session.wollet
+  }, [])
 
   const sendLbtc = useCallback(
     async (recipientAddress: string, satoshi: bigint): Promise<string> => {
@@ -301,11 +322,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         syncWallet: sync,
         signAndBroadcast,
         sendLbtc,
-        getLastReceiveAddress,
+        getReceiveAddress,
         verifyReceiveAddress,
         getXOnlyPublicKey,
+        getWollet,
         resumeSession,
         savedSession,
+        getWalletUtxos,
       }}
     >
       {children}

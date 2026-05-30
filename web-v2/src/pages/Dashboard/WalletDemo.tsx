@@ -32,7 +32,7 @@ export function WalletDemo() {
     usbDeviceDetected,
     connect,
     sendLbtc,
-    getLastReceiveAddress,
+    getReceiveAddress,
     verifyReceiveAddress,
     getXOnlyPublicKey,
     connectorId,
@@ -47,7 +47,7 @@ export function WalletDemo() {
   const [txConfirmations, setTxConfirmations] = useState<number | null>(null)
   const [verifyingAddress, setVerifyingAddress] = useState(false)
   const [xOnlyPubKey, setXOnlyPubKey] = useState<XOnlyPublicKey | null>(null)
-  const [lastReceiveAddress, setLastReceiveAddress] = useState<string | null>(null)
+  const [receiveAddress, setReceiveAddress] = useState<string | null>(null)
 
   useEffect(() => {
     if (connectionStatus !== 'ready') return
@@ -65,15 +65,15 @@ export function WalletDemo() {
   useEffect(() => {
     if (connectionStatus !== 'ready') return
     let cancelled = false
-    getLastReceiveAddress()
+    getReceiveAddress()
       .then(addr => {
-        if (!cancelled) setLastReceiveAddress(addr)
+        if (!cancelled) setReceiveAddress(addr)
       })
       .catch(console.warn)
     return () => {
       cancelled = true
     }
-  }, [connectionStatus, getLastReceiveAddress])
+  }, [connectionStatus, getReceiveAddress])
 
   // Poll Esplora directly for first confirmation after sending.
   useEffect(() => {
@@ -203,7 +203,7 @@ export function WalletDemo() {
         <div className='space-y-4'>
           <div className='space-y-1'>
             <p className='text-sm font-medium'>Receive address</p>
-            <code className='break-all text-xs'>{lastReceiveAddress}</code>
+            <code className='break-all text-xs'>{receiveAddress}</code>
             <button
               className='mt-1 rounded bg-accent-soft-hover px-3 py-1 text-xs disabled:opacity-50'
               disabled={verifyingAddress}

@@ -1,4 +1,11 @@
-import type { EsploraClient, Pset, Wollet, WolletDescriptor, XOnlyPublicKey } from 'lwk_web'
+import type {
+  EsploraClient,
+  Pset,
+  WalletTxOut,
+  Wollet,
+  WolletDescriptor,
+  XOnlyPublicKey,
+} from 'lwk_web'
 
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
@@ -9,7 +16,9 @@ export interface WalletContextValue extends WalletState {
   syncWallet(): Promise<void>
   signAndBroadcast(pset: Pset): Promise<string>
   sendLbtc(recipientAddress: string, satoshi: bigint): Promise<string>
-  getLastReceiveAddress(): Promise<string | null>
+  getWalletUtxos(): Promise<WalletTxOut[]>
+  getWollet(): Wollet
+  getReceiveAddress(): Promise<string | null>
   verifyReceiveAddress(): Promise<string | null>
   getXOnlyPublicKey(): Promise<XOnlyPublicKey | null>
   resumeSession(): Promise<void>
