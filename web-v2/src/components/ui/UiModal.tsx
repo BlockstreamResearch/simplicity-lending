@@ -1,24 +1,23 @@
-import { Modal, type ModalContainerProps } from '@heroui/react'
+import {
+  Modal,
+  type ModalBackdropProps,
+  type ModalContainerProps,
+  type ModalProps,
+} from '@heroui/react'
 import type { ReactNode } from 'react'
 
-export interface UiModalProps {
-  isOpen?: boolean
-  defaultOpen?: boolean
-  onOpenChange?: (isOpen: boolean) => void
+export interface UiModalProps extends Omit<ModalProps, 'children'> {
   title?: ReactNode
   children?: ReactNode
   footer?: ReactNode
   trigger?: ReactNode
   size?: ModalContainerProps['size']
   placement?: ModalContainerProps['placement']
-  isDismissable?: boolean
+  isDismissable?: ModalBackdropProps['isDismissable']
   showCloseButton?: boolean
 }
 
 export function UiModal({
-  isOpen,
-  defaultOpen,
-  onOpenChange,
   title,
   children,
   footer,
@@ -27,9 +26,10 @@ export function UiModal({
   placement,
   isDismissable = true,
   showCloseButton = true,
+  ...rootProps
 }: UiModalProps) {
   return (
-    <Modal.Root isOpen={isOpen} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
+    <Modal.Root {...rootProps}>
       {trigger ? <Modal.Trigger>{trigger}</Modal.Trigger> : null}
       <Modal.Backdrop isDismissable={isDismissable}>
         <Modal.Container size={size} placement={placement}>

@@ -28,10 +28,14 @@ const router = createBrowserRouter([
         path: RoutePath.Supply,
         element: <SupplyPage />,
       },
-      {
-        path: RoutePath.DesignSystem,
-        element: <DesignSystemPage />,
-      },
+      ...(import.meta.env.DEV
+        ? [
+            {
+              path: RoutePath.DesignSystem,
+              element: <DesignSystemPage />,
+            },
+          ]
+        : []),
     ],
   },
 ])

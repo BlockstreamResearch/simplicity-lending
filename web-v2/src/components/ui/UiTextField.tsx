@@ -9,7 +9,7 @@ import {
 } from '@heroui/react'
 import type { ReactNode } from 'react'
 
-export interface UiInputProps extends Omit<TextFieldProps, 'children'> {
+export interface UiTextFieldProps extends Omit<TextFieldProps, 'children'> {
   label?: ReactNode
   placeholder?: string
   description?: ReactNode
@@ -18,7 +18,7 @@ export interface UiInputProps extends Omit<TextFieldProps, 'children'> {
   endContent?: ReactNode
 }
 
-export function UiInput({
+export function UiTextField({
   label,
   placeholder,
   description,
@@ -27,7 +27,7 @@ export function UiInput({
   startContent,
   endContent,
   ...props
-}: UiInputProps) {
+}: UiTextFieldProps) {
   const invalid = isInvalid ?? Boolean(errorMessage)
   const hasGroup = Boolean(startContent || endContent)
 

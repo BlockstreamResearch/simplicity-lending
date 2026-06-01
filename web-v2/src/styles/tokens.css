@@ -1,6 +1,7 @@
 @layer base {
   :root {
     --radius: 0.75rem;
+    --field-radius: 0.75rem;
 
     --background: #f5f5f5;
     --background-secondary: #ebebeb;
@@ -9,6 +10,7 @@
 
     --foreground: #18181b;
     --muted: #71717a;
+    --muted-secondary: #52525b;
     --link: #18181b;
     --segment: #ffffff;
     --segment-foreground: #18181b;

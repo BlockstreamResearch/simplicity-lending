@@ -67,6 +67,8 @@ async function getIconOptions() {
 }
 
 async function createIconComponent({ name, content }: { name: string; content: string }) {
+  // Normalize CLI arg (validated as /^[a-zA-Z0-9-]*$/) to PascalCase + 'Icon' suffix.
+  // Accepts kebab-case (`moon-filled`), PascalCase (`MoonFilled`) or lowercase (`moon`).
   const componentName =
     name
       .toLowerCase()

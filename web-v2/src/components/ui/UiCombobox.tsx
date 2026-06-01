@@ -1,27 +1,18 @@
 import {
+  ComboBox,
+  type ComboBoxProps,
   Description,
   FieldError,
+  Input,
   Label,
   ListBox,
   ListBoxItem,
-  Select,
-  type SelectProps,
 } from '@heroui/react'
 import type { ReactNode } from 'react'
 
-export type UiSelectKey = string | number
+import type { UiSelectOption } from './UiSelect'
 
-export interface UiSelectOption {
-  id: UiSelectKey
-  label: string
-  isDisabled?: boolean
-}
-
-export interface UiSelectProps extends Omit<
-  SelectProps<UiSelectOption, 'single'>,
-  'children' | 'items'
-> {
-  options: UiSelectOption[]
+export interface UiComboboxProps extends Omit<ComboBoxProps<UiSelectOption>, 'children'> {
   label?: ReactNode
   placeholder?: string
   description?: ReactNode
@@ -34,31 +25,28 @@ const renderOption = (option: UiSelectOption) => (
   </ListBoxItem>
 )
 
-export function UiSelect({
-  options,
+export function UiCombobox({
   label,
   placeholder,
   description,
   errorMessage,
   isInvalid,
   ...props
-}: UiSelectProps) {
+}: UiComboboxProps) {
   const invalid = isInvalid ?? Boolean(errorMessage)
 
   return (
-    <Select isInvalid={invalid} {...props}>
+    <ComboBox isInvalid={invalid} {...props}>
       {label && <Label>{label}</Label>}
-      <Select.Trigger>
-        <Select.Value>
-          {({ defaultChildren, isPlaceholder }) => (isPlaceholder ? placeholder : defaultChildren)}
-        </Select.Value>
-        <Select.Indicator />
-      </Select.Trigger>
+      <ComboBox.InputGroup>
+        <Input placeholder={placeholder} />
+        <ComboBox.Trigger />
+      </ComboBox.InputGroup>
       {description && !invalid && <Description>{description}</Description>}
       {invalid && errorMessage && <FieldError>{errorMessage}</FieldError>}
-      <Select.Popover>
-        <ListBox items={options}>{renderOption}</ListBox>
-      </Select.Popover>
-    </Select>
+      <ComboBox.Popover>
+        <ListBox<UiSelectOption>>{renderOption}</ListBox>
+      </ComboBox.Popover>
+    </ComboBox>
   )
 }

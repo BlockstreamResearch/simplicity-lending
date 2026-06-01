@@ -8,6 +8,8 @@
   --color-success-hover: var(--success-hover);
   --color-warning-hover: var(--warning-hover);
   --color-danger-hover: var(--danger-hover);
+
+  --color-muted-secondary: var(--muted-secondary);
 }
 
 @theme {

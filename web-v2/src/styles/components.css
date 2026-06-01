@@ -1,6 +1,22 @@
 @layer components {
+  /* Figma uses 4px button radius, HeroUI default is rounded-3xl (24px). */
+  .button {
+    border-radius: 4px;
+  }
+
   .input:where(:focus, :focus-visible, [data-focused='true'], [data-focus-visible='true']) {
     --field-shadow: 0 0 #0000;
+  }
+
+  /* Figma chip padding 4px 12px; HeroUI defaults are 8px horizontal. */
+  .chip {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Figma table row height 56px; HeroUI py-3 derives ~44px. */
+  .table__cell {
+    height: 56px;
   }
 
   .table-root--secondary .table__header {

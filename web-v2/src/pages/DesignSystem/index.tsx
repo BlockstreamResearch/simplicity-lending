@@ -1,19 +1,13 @@
-import { Chip, Pagination } from '@heroui/react'
+import { Card, Chip, Pagination, Spinner, Table } from '@heroui/react'
 import type { ReactNode, SVGProps } from 'react'
 import { useState } from 'react'
 
 import CoinsIcon from '@/components/icons/CoinsIcon'
-import {
-  UiButton,
-  UiCard,
-  UiInput,
-  UiModal,
-  UiSelect,
-  type UiSelectKey,
-  type UiSelectOption,
-  UiSpinner,
-  UiTable,
-} from '@/components/ui'
+import { UiButton } from '@/components/ui/UiButton'
+import { UiCombobox } from '@/components/ui/UiCombobox'
+import { UiModal } from '@/components/ui/UiModal'
+import { UiSelect, type UiSelectKey, type UiSelectOption } from '@/components/ui/UiSelect'
+import { UiTextField } from '@/components/ui/UiTextField'
 
 const SearchIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox='0 0 16 16' fill='none' aria-hidden {...props}>
@@ -240,7 +234,14 @@ const RADII: { label: string; className: string; value: string }[] = [
   { label: 'full', className: 'rounded-full', value: '9999px' },
 ]
 
-const BUTTON_VARIANTS = ['primary', 'secondary', 'ghost', 'danger', 'danger-soft'] as const
+const BUTTON_VARIANTS = [
+  'primary',
+  'secondary',
+  'tertiary',
+  'ghost',
+  'danger',
+  'danger-soft',
+] as const
 const BUTTON_SIZES = ['sm', 'md', 'lg'] as const
 
 const ASSETS: UiSelectOption[] = [
@@ -326,62 +327,61 @@ function buildPageList(current: number, total: number): (number | 'ellipsis')[] 
 
 function TableDemo() {
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState<UiSelectKey | null>(DEFAULT_PAGE_SIZE)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
-  const effectivePageSize = typeof pageSize === 'number' ? pageSize : DEFAULT_PAGE_SIZE
-  const pageCount = Math.max(1, Math.ceil(TOTAL_RESULTS / effectivePageSize))
+  const pageCount = Math.max(1, Math.ceil(TOTAL_RESULTS / pageSize))
   const currentPage = Math.min(Math.max(1, page), pageCount)
   const pages = buildPageList(currentPage, pageCount)
   const isFirst = currentPage <= 1
   const isLast = currentPage >= pageCount
 
-  const handlePageSizeChange = (key: UiSelectKey | null) => {
-    setPageSize(key)
+  const handlePageSizeChange = (key: UiSelectKey) => {
+    setPageSize(Number(key))
     setPage(1)
   }
 
   return (
-    <div className='bg-surface-secondary flex flex-col gap-6 rounded-3xl p-6'>
+    <div className='bg-surface-secondary flex flex-col gap-6 rounded-2xl p-6'>
       <header className='flex items-center gap-3'>
         <RefreshIcon className='size-6' />
         <h3 className='text-h4'>Most recent Borrow Offers</h3>
       </header>
 
-      <UiTable variant='secondary'>
-        <UiTable.ScrollContainer>
-          <UiTable.Content aria-label='Most recent Borrow Offers' selectionMode='single'>
-            <UiTable.Header>
-              <UiTable.Column isRowHeader>Asset</UiTable.Column>
-              <UiTable.Column>Amount</UiTable.Column>
-              <UiTable.Column>Rate</UiTable.Column>
-              <UiTable.Column>Term</UiTable.Column>
-              <UiTable.Column>Status</UiTable.Column>
-            </UiTable.Header>
-            <UiTable.Body items={OFFERS}>
+      <Table variant='secondary'>
+        <Table.ScrollContainer>
+          <Table.Content aria-label='Most recent Borrow Offers' selectionMode='single'>
+            <Table.Header>
+              <Table.Column isRowHeader>Asset</Table.Column>
+              <Table.Column>Amount</Table.Column>
+              <Table.Column>Rate</Table.Column>
+              <Table.Column>Term</Table.Column>
+              <Table.Column>Status</Table.Column>
+            </Table.Header>
+            <Table.Body items={OFFERS}>
               {offer => (
-                <UiTable.Row id={offer.id}>
-                  <UiTable.Cell>{offer.asset}</UiTable.Cell>
-                  <UiTable.Cell>{offer.amount}</UiTable.Cell>
-                  <UiTable.Cell>{offer.rate}</UiTable.Cell>
-                  <UiTable.Cell>{offer.term}</UiTable.Cell>
-                  <UiTable.Cell>
+                <Table.Row id={offer.id}>
+                  <Table.Cell>{offer.asset}</Table.Cell>
+                  <Table.Cell>{offer.amount}</Table.Cell>
+                  <Table.Cell>{offer.rate}</Table.Cell>
+                  <Table.Cell>{offer.term}</Table.Cell>
+                  <Table.Cell>
                     <Chip color={STATUS_CHIP[offer.status].color} variant='soft' size='sm'>
                       {STATUS_CHIP[offer.status].label}
                     </Chip>
-                  </UiTable.Cell>
-                </UiTable.Row>
+                  </Table.Cell>
+                </Table.Row>
               )}
-            </UiTable.Body>
-          </UiTable.Content>
-        </UiTable.ScrollContainer>
-        <UiTable.Footer className='pr-2 pl-4'>
+            </Table.Body>
+          </Table.Content>
+        </Table.ScrollContainer>
+        <Table.Footer className='pr-2 pl-4'>
           <Pagination>
             <Pagination.Summary>
               <span>Showing</span>
               <UiSelect
                 options={PAGE_SIZE_OPTIONS}
-                value={pageSize}
-                onChange={handlePageSizeChange}
+                selectedKey={pageSize}
+                onSelectionChange={key => handlePageSizeChange(key as UiSelectKey)}
                 className='w-20'
               />
               <span>of {TOTAL_RESULTS} results</span>
@@ -414,8 +414,8 @@ function TableDemo() {
               </Pagination.Item>
             </Pagination.Content>
           </Pagination>
-        </UiTable.Footer>
-      </UiTable>
+        </Table.Footer>
+      </Table>
     </div>
   )
 }
@@ -535,20 +535,26 @@ export default function DesignSystemPage() {
         </Row>
         <Row label='States'>
           <UiButton>Default</UiButton>
-          <UiButton isLoading loadingText='Saving…'>
+          <UiButton isPending loadingText='Saving…'>
             Save
           </UiButton>
           <UiButton isDisabled>Disabled</UiButton>
         </Row>
         <Row label='With icons'>
-          <UiButton startContent={<SearchIcon className='size-4' />}>Search</UiButton>
-          <UiButton variant='secondary' startContent={<PlusIcon className='size-4' />}>
+          <UiButton>
+            <SearchIcon className='size-4' />
+            Search
+          </UiButton>
+          <UiButton variant='secondary'>
+            <PlusIcon className='size-4' />
             Add member
           </UiButton>
-          <UiButton variant='ghost' startContent={<CoinsIcon className='size-4' />}>
+          <UiButton variant='ghost'>
+            <CoinsIcon className='size-4' />
             Go back
           </UiButton>
-          <UiButton variant='danger' startContent={<TrashIcon className='size-4' />}>
+          <UiButton variant='danger'>
+            <TrashIcon className='size-4' />
             Delete
           </UiButton>
         </Row>
@@ -563,25 +569,25 @@ export default function DesignSystemPage() {
 
       <Section title='Input' description='Label, description, error, leading/trailing content.'>
         <div className='grid max-w-xl grid-cols-1 gap-5'>
-          <UiInput label='Email address' placeholder='name@email.com' />
-          <UiInput
+          <UiTextField label='Email address' placeholder='name@email.com' />
+          <UiTextField
             label='Your name'
             placeholder='Mary'
             description="We'll never share this with anyone else"
             isRequired
           />
-          <UiInput
+          <UiTextField
             label='Your name'
             defaultValue='Mary387'
             errorMessage='Please enter only letters'
           />
-          <UiInput label='Memo' placeholder='Optional' isDisabled defaultValue='locked' />
-          <UiInput
+          <UiTextField label='Memo' placeholder='Optional' isDisabled defaultValue='locked' />
+          <UiTextField
             label='Search'
             placeholder='Search assets'
             startContent={<SearchIcon className='size-4' />}
           />
-          <UiInput
+          <UiTextField
             label='Set a price'
             startContent={<span className='text-muted text-sm'>$</span>}
             endContent={<span className='text-muted text-sm'>USD</span>}
@@ -600,16 +606,15 @@ export default function DesignSystemPage() {
             label='Asset'
             placeholder='Pick an asset'
             options={ASSETS}
-            value={asset}
-            onChange={setAsset}
+            selectedKey={asset}
+            onSelectionChange={key => setAsset(key as UiSelectKey | null)}
           />
-          <UiSelect
+          <UiCombobox
             label='Asset (searchable)'
             placeholder='Type to filter…'
-            withSearch
-            options={ASSETS}
-            value={assetSearch}
-            onChange={setAssetSearch}
+            defaultItems={ASSETS}
+            selectedKey={assetSearch}
+            onSelectionChange={key => setAssetSearch(key as UiSelectKey | null)}
           />
           <UiSelect
             label='Asset (error)'
@@ -629,19 +634,19 @@ export default function DesignSystemPage() {
         title='Card'
         description='Surface container with shadow, padding and compound parts.'
       >
-        <UiCard className='max-w-md'>
-          <UiCard.Header>
-            <UiCard.Title>Liquid Bitcoin</UiCard.Title>
-            <UiCard.Description>L-BTC · Liquid sidechain asset</UiCard.Description>
-          </UiCard.Header>
-          <UiCard.Content>
+        <Card className='max-w-md'>
+          <Card.Header>
+            <Card.Title>Liquid Bitcoin</Card.Title>
+            <Card.Description>L-BTC · Liquid sidechain asset</Card.Description>
+          </Card.Header>
+          <Card.Content>
             <p className='text-display'>1.2345 L-BTC</p>
             <p className='text-muted text-sm'>≈ $68,420</p>
-          </UiCard.Content>
-          <UiCard.Footer>
+          </Card.Content>
+          <Card.Footer>
             <UiButton size='sm'>Supply</UiButton>
-          </UiCard.Footer>
-        </UiCard>
+          </Card.Footer>
+        </Card>
       </Section>
 
       <Section
@@ -649,13 +654,13 @@ export default function DesignSystemPage() {
         description='Loading indicator. Sizes sm / md / lg / xl; status colors.'
       >
         <div className='flex flex-wrap items-end gap-6'>
-          <UiSpinner size='sm' />
-          <UiSpinner size='md' />
-          <UiSpinner size='lg' />
-          <UiSpinner size='xl' />
-          <UiSpinner color='success' />
-          <UiSpinner color='warning' />
-          <UiSpinner color='danger' />
+          <Spinner size='sm' />
+          <Spinner size='md' />
+          <Spinner size='lg' />
+          <Spinner size='xl' />
+          <Spinner color='success' />
+          <Spinner color='warning' />
+          <Spinner color='danger' />
         </div>
       </Section>
 
