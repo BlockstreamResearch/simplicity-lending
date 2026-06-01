@@ -14,7 +14,8 @@ export interface WalletContextValue extends WalletState {
   connect(variant: WalletType): Promise<void>
   disconnect(): Promise<void>
   syncWallet(): Promise<void>
-  signAndBroadcast(pset: Pset): Promise<string>
+  signPset(pset: Pset): Promise<Pset>
+  signAndBroadcast(pset: Pset): Promise<string> // TODO: Remove this method
   sendLbtc(recipientAddress: string, satoshi: bigint): Promise<string>
   getWalletUtxos(): Promise<WalletTxOut[]>
   getWollet(): Wollet

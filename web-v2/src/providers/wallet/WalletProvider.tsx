@@ -240,24 +240,34 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const signAndBroadcast = useCallback(async (pset: Pset): Promise<string> => {
+  const signPset = useCallback(async (pset: Pset): Promise<Pset> => {
     const session = sessionRef.current
     if (!session) throw new Error('WalletProvider: not connected')
 
-    const signedPset = await session.connector.signPset(pset)
-    const finalizedPset = session.wollet.finalize(signedPset)
-    const txHex = finalizedPset.extractTx().toString()
-    const txidStr = await broadcastTx(txHex)
-
-    // Auto-sync balances after broadcast (fire-and-forget, errors are non-fatal).
-    syncBalances(session.wollet, session.esploraClient)
-      .then(balances => {
-        setState(s => ({ ...s, balances }))
-      })
-      .catch(console.warn)
-
-    return txidStr
+    return session.connector.signPset(pset)
   }, [])
+
+  const signAndBroadcast = useCallback(
+    async (pset: Pset): Promise<string> => {
+      const session = sessionRef.current
+      if (!session) throw new Error('WalletProvider: not connected')
+
+      const signedPset = await signPset(pset)
+      const finalizedPset = session.wollet.finalize(signedPset)
+      const txHex = finalizedPset.extractTx().toString()
+      const txidStr = await broadcastTx(txHex)
+
+      // Auto-sync balances after broadcast (fire-and-forget, errors are non-fatal).
+      syncBalances(session.wollet, session.esploraClient)
+        .then(balances => {
+          setState(s => ({ ...s, balances }))
+        })
+        .catch(console.warn)
+
+      return txidStr
+    },
+    [signPset],
+  )
 
   const getReceiveAddress = useCallback(async (): Promise<string | null> => {
     const session = sessionRef.current
@@ -320,6 +330,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connect,
         disconnect,
         syncWallet: sync,
+        signPset,
         signAndBroadcast,
         sendLbtc,
         getReceiveAddress,

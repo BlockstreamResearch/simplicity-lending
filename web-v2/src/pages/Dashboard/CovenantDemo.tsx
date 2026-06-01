@@ -1,8 +1,11 @@
 import {
   Address,
   ExternalUtxo,
+  type Network,
   type Pset,
+  SimplicityLogLevel,
   Transaction,
+  TxBuilder,
   TxOutSecrets,
   type WalletTxOut,
   type XOnlyPublicKey,
@@ -10,18 +13,25 @@ import {
 import { useEffect, useState } from 'react'
 import { sources } from 'virtual:simplicity-sources'
 
-import { fetchAddressUtxo, fetchTxConfirmations, fetchTxRaw } from '@/api/esplora/methods'
+import {
+  broadcastTx,
+  fetchAddressUtxo,
+  fetchTxConfirmations,
+  fetchTxRaw,
+} from '@/api/esplora/methods'
 import { getTxExplorerUrl } from '@/api/esplora/utils'
-import { buildExplicitRecipientPset, buildExternalExplicitRecipientPset } from '@/lib/pset-builder'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { loadScriptAuthProgram } from '@/simplicity/covenants/scriptAuth'
+import { buildScriptAuthWitness, loadScriptAuthProgram } from '@/simplicity/covenants/scriptAuth'
+import { hexToBytes } from '@/utils/hex'
 
 interface CovenantResult {
   sourceLoaded: boolean
   xOnlyPublicKey: string
   receiveAddress: string
   scriptHash: number[]
+  scriptHashHex: string
+  authOutpoint: string
   address: string
   cmr: string
   txOutputs: TxOutputSummary[]
@@ -36,6 +46,8 @@ interface WalletUtxoSummary {
   address: string
   asset: string
   value: string
+  scriptHash: string
+  selectedRole?: 'funding' | 'auth'
   wildcardIndex: number
 }
 
@@ -54,8 +66,41 @@ function summarizeWalletUtxo(utxo: WalletTxOut): WalletUtxoSummary {
     address: utxo.address().toString(),
     asset: unblinded.asset().toString(),
     value: unblinded.value().toString(),
+    scriptHash: utxo.scriptPubkey().jet_sha256_hex(),
     wildcardIndex: utxo.wildcardIndex(),
   }
+}
+
+function outpointString(utxo: WalletTxOut): string {
+  const outpoint = utxo.outpoint()
+  return `${outpoint.txid().toString()}:${outpoint.vout()}`
+}
+
+async function findExistingCovenant(
+  authUtxos: WalletTxOut[],
+  key: XOnlyPublicKey,
+  network: Network,
+) {
+  for (const authUtxo of authUtxos) {
+    const scriptHashHex = authUtxo.scriptPubkey().jet_sha256_hex()
+    const scriptHash = hexToBytes(scriptHashHex)
+    const scriptAuthProgram = loadScriptAuthProgram(scriptHash)
+    const covenantAddress = scriptAuthProgram.createP2trAddress(key, network)
+    const covenantUtxos = await fetchAddressUtxo(covenantAddress.toString())
+
+    if (covenantUtxos.length > 0) {
+      return {
+        authUtxo,
+        scriptHashHex,
+        scriptHash,
+        scriptAuthProgram,
+        covenantAddress,
+        covenantUtxos,
+      }
+    }
+  }
+
+  return null
 }
 
 export default function CovenantDemo() {
@@ -67,6 +112,7 @@ export default function CovenantDemo() {
     getReceiveAddress,
     getWalletUtxos,
     getWollet,
+    signPset,
     signAndBroadcast,
   } = useWallet()
 
@@ -100,9 +146,9 @@ export default function CovenantDemo() {
         setBroadcastError(null)
         setTxConfirmations(null)
 
-        const key = await getXOnlyPublicKey()
+        const xOnlyPublicKey = await getXOnlyPublicKey()
 
-        if (!key) {
+        if (!xOnlyPublicKey) {
           throw new Error('Missing x-only public key')
         }
 
@@ -112,73 +158,102 @@ export default function CovenantDemo() {
           throw new Error('Missing receive address')
         }
 
-        const parsedAddress = Address.parse(receiveAddress, lwkNetwork)
-
-        const scriptHashHex = parsedAddress.scriptPubkey().jet_sha256_hex()
-
-        const scriptHash = Uint8Array.from(
-          scriptHashHex.match(/.{1,2}/g)!.map(byte => Number.parseInt(byte, 16)),
-        )
-
-        const scriptAuthProgram = loadScriptAuthProgram(scriptHash)
-
-        const covenantAddress = scriptAuthProgram.createP2trAddress(key, lwkNetwork)
-
-        const covenantUtxos = await fetchAddressUtxo(covenantAddress.toString())
         const walletUtxos = await getWalletUtxos()
         const policyAsset = lwkNetwork.policyAsset().toString()
-        const walletUtxo = walletUtxos.find(
+        const lbtcUtxos = walletUtxos.filter(
           utxo => utxo.unblinded().asset().toString() === policyAsset,
         )
 
-        if (!walletUtxo) {
-          throw new Error('Missing wallet L-BTC UTXO')
+        if (lbtcUtxos.length < 1) {
+          throw new Error('Need at least one wallet L-BTC UTXO to use as the covenant auth input')
         }
 
-        const walletUtxoValue = walletUtxo.unblinded().value()
         const feeReserve = 10_000n
+        const existing = await findExistingCovenant(lbtcUtxos, xOnlyPublicKey, lwkNetwork)
+        console.log('existing', existing)
+        const authUtxo = existing?.authUtxo ?? lbtcUtxos[1] ?? lbtcUtxos[0]
+        const authOutpoint = outpointString(authUtxo)
+        const fundingUtxo = lbtcUtxos.find(
+          utxo => outpointString(utxo) !== authOutpoint && utxo.unblinded().value() > feeReserve,
+        )
+        const fundingOutpoint = fundingUtxo ? outpointString(fundingUtxo) : null
+        const scriptHashHex = existing?.scriptHashHex ?? authUtxo.scriptPubkey().jet_sha256_hex()
+        const scriptHash = existing?.scriptHash ?? hexToBytes(scriptHashHex)
+        const scriptAuthProgram = existing?.scriptAuthProgram ?? loadScriptAuthProgram(scriptHash)
+
+        console.info('covenant demo wallet UTXO selection', {
+          policyAsset,
+          lbtcUtxoCount: lbtcUtxos.length,
+          existingCovenantFound: !!existing,
+          funding: fundingUtxo
+            ? {
+                outpoint: fundingOutpoint,
+                value: fundingUtxo.unblinded().value().toString(),
+                address: fundingUtxo.address().toString(),
+                scriptHash: fundingUtxo.scriptPubkey().jet_sha256_hex(),
+              }
+            : null,
+          auth: {
+            outpoint: authOutpoint,
+            value: authUtxo.unblinded().value().toString(),
+            address: authUtxo.address().toString(),
+            scriptHash: scriptHashHex,
+          },
+          allLbtcUtxos: lbtcUtxos.map(utxo => ({
+            outpoint: outpointString(utxo),
+            value: utxo.unblinded().value().toString(),
+            address: utxo.address().toString(),
+            scriptHash: utxo.scriptPubkey().jet_sha256_hex(),
+            wildcardIndex: utxo.wildcardIndex(),
+          })),
+        })
+
+        const covenantAddress =
+          existing?.covenantAddress ??
+          scriptAuthProgram.createP2trAddress(xOnlyPublicKey, lwkNetwork)
+        const covenantUtxos =
+          existing?.covenantUtxos ?? (await fetchAddressUtxo(covenantAddress.toString()))
         const feeRate = 100
 
-        if (walletUtxoValue <= feeReserve) {
-          throw new Error('Selected wallet L-BTC UTXO is too small for fee reserve')
-        }
-
-        const builtPset = buildExplicitRecipientPset({
-          wollet: getWollet(),
-          network: lwkNetwork,
-          recipientAddress: covenantAddress.toString(),
-          outpoints: [walletUtxo.outpoint()],
-          satoshi: walletUtxoValue - feeReserve,
-          feeRate,
-        })
-        const psetString = builtPset.toString()
-
-        const tx = builtPset.extractTx()
-
-        const txOutputs = tx.outputs.map(
-          (output): TxOutputSummary => ({
-            asset: output?.asset()?.toString(),
-            amount: output.value()?.toString(),
-            script: output.scriptPubkey().toString(),
-          }),
-        )
+        const builtPset = fundingUtxo
+          ? new TxBuilder(lwkNetwork)
+              .feeRate(feeRate)
+              .setWalletUtxos([fundingUtxo.outpoint()])
+              .addExplicitRecipient(
+                covenantAddress,
+                fundingUtxo.unblinded().value() - feeReserve,
+                lwkNetwork.policyAsset(),
+              )
+              .finish(getWollet())
+          : null
+        const psetString = builtPset?.toString() ?? null
+        const txOutputs =
+          builtPset?.extractTx().outputs.map(
+            (output): TxOutputSummary => ({
+              asset: output?.asset()?.toString(),
+              amount: output.value()?.toString(),
+              script: output.scriptPubkey().toString(),
+            }),
+          ) ?? []
 
         if (cancelled) {
           return
         }
 
-        setXOnlyPublicKey(key)
+        setXOnlyPublicKey(xOnlyPublicKey)
         setPset(builtPset)
         setPsetString(psetString)
 
         setResult({
           sourceLoaded: !!sources.script_auth,
 
-          xOnlyPublicKey: key.toString(),
+          xOnlyPublicKey: xOnlyPublicKey.toString(),
 
           receiveAddress,
 
           scriptHash: Array.from(scriptHash),
+          scriptHashHex,
+          authOutpoint,
 
           address: covenantAddress.toString(),
 
@@ -188,7 +263,16 @@ export default function CovenantDemo() {
 
           utxos: {
             covenant: covenantUtxos,
-            wallet: walletUtxos.map(summarizeWalletUtxo),
+            wallet: walletUtxos.map(utxo => {
+              const summary = summarizeWalletUtxo(utxo)
+              if (summary.outpoint === fundingOutpoint) {
+                return { ...summary, selectedRole: 'funding' }
+              }
+              if (summary.outpoint === authOutpoint) {
+                return { ...summary, selectedRole: 'auth' }
+              }
+              return summary
+            }),
           },
         })
       } catch (err) {
@@ -254,7 +338,7 @@ export default function CovenantDemo() {
   }
 
   const handleSpendCovenant = async () => {
-    if (!result) {
+    if (!result || !xOnlyPublicKey) {
       return
     }
 
@@ -275,34 +359,104 @@ export default function CovenantDemo() {
         throw new Error('Covenant UTXO asset is not L-BTC')
       }
 
+      const expectedScriptHash = result.scriptHashHex
       const walletUtxo = (await getWalletUtxos()).find(
-        utxo => utxo.unblinded().asset().toString() === policyAsset.toString(),
+        utxo =>
+          utxo.unblinded().asset().toString() === policyAsset.toString() &&
+          utxo.scriptPubkey().jet_sha256_hex() === expectedScriptHash,
       )
 
       if (!walletUtxo) {
-        throw new Error('Missing wallet L-BTC UTXO for fees')
+        throw new Error(`Missing wallet L-BTC auth UTXO with script hash ${expectedScriptHash}`)
       }
 
-      const previousTx = Transaction.fromBytes(await fetchTxRaw(covenantUtxo.txid))
-      const externalUtxo = new ExternalUtxo(
+      const covenantTx = Transaction.fromBytes(await fetchTxRaw(covenantUtxo.txid))
+      const covenantTxOut = covenantTx.outputs[covenantUtxo.vout]
+
+      if (!covenantTxOut) {
+        throw new Error('Covenant funding transaction does not have the UTXO output')
+      }
+
+      const walletOutpoint = walletUtxo.outpoint()
+      const walletOutpointLog = `${walletOutpoint.txid().toString()}:${walletOutpoint.vout()}`
+      const walletUtxoScriptHash = walletUtxo.scriptPubkey().jet_sha256_hex()
+      const walletTx = Transaction.fromBytes(await fetchTxRaw(walletOutpoint.txid().toString()))
+      const walletTxOut = walletTx.outputs[walletOutpoint.vout()]
+
+      if (!walletTxOut) {
+        throw new Error('Wallet funding transaction does not have the selected output')
+      }
+
+      const walletTxOutScriptHash = walletTxOut.scriptPubkey().jet_sha256_hex()
+      const covenantOutpointLog = `${covenantUtxo.txid}:${covenantUtxo.vout}`
+      const covenantExternalUtxo = new ExternalUtxo(
         covenantUtxo.vout,
-        previousTx,
+        covenantTx,
         TxOutSecrets.fromExplicit(policyAsset, BigInt(covenantUtxo.value)),
-        2_000,
+        20_000,
         true,
       )
-      const spendPset = buildExternalExplicitRecipientPset({
-        wollet: getWollet(),
-        network: lwkNetwork,
-        recipientAddress: result.receiveAddress,
-        outpoints: [walletUtxo.outpoint()],
-        externalUtxos: [externalUtxo],
-        satoshi: BigInt(covenantUtxo.value),
-        feeRate: 100,
-      })
 
-      setPset(spendPset)
+      const recipientAddress = Address.parse(result.receiveAddress, lwkNetwork)
+        .toUnconfidential()
+        .toString()
+
+      const spendPset = new TxBuilder(lwkNetwork)
+        .feeRate(100)
+        .setWalletUtxos([walletOutpoint])
+        .addExternalUtxos([covenantExternalUtxo])
+        .addExplicitRecipient(
+          new Address(recipientAddress),
+          BigInt(covenantUtxo.value),
+          lwkNetwork.policyAsset(),
+        )
+        .finish(getWollet())
+
       setPsetString(spendPset.toString())
+
+      console.info('script_auth spend step: signing wallet input')
+      const signedSpendPset = await signPset(spendPset)
+      console.info('script_auth spend step: finalizing wallet pset')
+      const finalizedWalletPset = getWollet().finalize(signedSpendPset)
+      console.info('script_auth spend step: extracting tx')
+      const txWithWalletWitness = finalizedWalletPset.extractTx()
+      console.info('script_auth spend step: loading script_auth program', {
+        scriptHashHex: result.scriptHashHex,
+        scriptHashLength: result.scriptHash.length,
+        sourceLoaded: result.sourceLoaded,
+      })
+      let scriptAuthProgram: ReturnType<typeof loadScriptAuthProgram>
+      try {
+        scriptAuthProgram = loadScriptAuthProgram(hexToBytes(result.scriptHashHex))
+      } catch (err) {
+        console.error('script_auth spend failed while loading program', err)
+        throw err
+      }
+      console.info('script_auth spend debug', {
+        expectedScriptHash,
+        expectedAuthOutpoint: result.authOutpoint,
+        walletUtxoScriptHash,
+        walletTxOutScriptHash,
+        walletOutpoint: walletOutpointLog,
+        covenantOutpoint: covenantOutpointLog,
+        inputScriptIndexWitness: 1,
+      })
+      console.info('script_auth spend step: finalizing simplicity input')
+      const finalizedTx = scriptAuthProgram.finalizeTransaction(
+        txWithWalletWitness,
+        xOnlyPublicKey,
+        [covenantTxOut, walletTxOut],
+        0,
+        buildScriptAuthWitness(1),
+        lwkNetwork,
+        SimplicityLogLevel.Trace,
+      )
+      console.info('script_auth spend step: broadcasting finalized tx')
+      const txid = await broadcastTx(finalizedTx.toString())
+
+      setPset(null)
+      setBroadcastTxid(txid)
+      setTxConfirmations(null)
     } catch (err) {
       setBroadcastError(err instanceof Error ? err.message : String(err))
     } finally {
