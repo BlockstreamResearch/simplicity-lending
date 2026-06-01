@@ -15,15 +15,11 @@ export interface WalletContextValue extends WalletState {
   disconnect(): Promise<void>
   syncWallet(): Promise<void>
   signPset(pset: Pset): Promise<Pset>
-  signAndBroadcast(pset: Pset): Promise<string> // TODO: Remove this method
-  sendLbtc(recipientAddress: string, satoshi: bigint): Promise<string>
   getWalletUtxos(): Promise<WalletTxOut[]>
-  getWollet(): Wollet
+  getWollet(): Promise<Wollet | null>
   getReceiveAddress(): Promise<string | null>
   verifyReceiveAddress(): Promise<string | null>
   getXOnlyPublicKey(): Promise<XOnlyPublicKey | null>
-  resumeSession(): Promise<void>
-  savedSession: SavedSession | null
 }
 
 export interface WalletSession {

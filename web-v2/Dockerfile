@@ -1,4 +1,4 @@
-# TODO: Use original LWK repository, once all needed methods are exposed
+# TODO: Use original LWK repository, once all required methods are exposed
 # FROM rust:1.90-bookworm AS lwk-builder
 FROM rust:1.91-bookworm AS lwk-builder
 
