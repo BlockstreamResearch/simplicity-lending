@@ -4,6 +4,7 @@ use clap::Subcommand;
 use simplex::{
     provider::ProviderTrait,
     simplicityhl::elements::{Address, AssetId, OutPoint, hex::ToHex},
+    simplicityhl::simplicity::bitcoin::PublicKey,
     transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature},
 };
 
@@ -20,11 +21,38 @@ pub enum AccountCommand {
         #[arg(long = "amount")]
         amount: u64,
     },
+    /// Send policy asset to another account with confidential output
+    SendConfidentialPolicyAsset {
+        /// Recipient address (Liquid testnet bech32m)
+        #[arg(long = "to-address")]
+        to_address: Address,
+        /// Recipient blinding public key in hexadecimal
+        #[arg(long = "recipient-blinding-pubkey")]
+        recipient_blinding_pubkey: String,
+        /// Policy amount to send
+        #[arg(long = "amount")]
+        amount: u64,
+    },
     /// Send arbitrary asset to another account
     SendAsset {
         /// Recipient address (Liquid testnet bech32m)
         #[arg(long = "to-address")]
         to_address: Address,
+        /// Asset ID in hexadecimal (big-endian) to send
+        #[arg(long = "asset-id-hex-be")]
+        asset_id_hex_be: String,
+        /// Policy amount to send
+        #[arg(long = "amount")]
+        amount: u64,
+    },
+    /// Send arbitrary asset to another account with confidential output
+    SendConfidentialAsset {
+        /// Recipient address (Liquid testnet bech32m)
+        #[arg(long = "to-address")]
+        to_address: Address,
+        /// Recipient blinding public key in hexadecimal
+        #[arg(long = "recipient-blinding-pubkey")]
+        recipient_blinding_pubkey: String,
         /// Asset ID in hexadecimal (big-endian) to send
         #[arg(long = "asset-id-hex-be")]
         asset_id_hex_be: String,
@@ -55,11 +83,33 @@ impl Account {
             AccountCommand::SendPolicyAsset { to_address, amount } => {
                 Account::send_policy_asset(context, to_address, *amount)
             }
+            AccountCommand::SendConfidentialPolicyAsset {
+                to_address,
+                recipient_blinding_pubkey,
+                amount,
+            } => Account::send_confidential_policy_asset(
+                context,
+                to_address,
+                recipient_blinding_pubkey,
+                *amount,
+            ),
             AccountCommand::SendAsset {
                 to_address,
                 asset_id_hex_be,
                 amount,
             } => Account::send_asset(context, to_address, asset_id_hex_be, *amount),
+            AccountCommand::SendConfidentialAsset {
+                to_address,
+                recipient_blinding_pubkey,
+                asset_id_hex_be,
+                amount,
+            } => Account::send_confidential_asset(
+                context,
+                to_address,
+                recipient_blinding_pubkey,
+                asset_id_hex_be,
+                *amount,
+            ),
             AccountCommand::SplitUTXO { outpoint, amounts } => {
                 Account::split_account_utxo(context, *outpoint, amounts)
             }
@@ -93,7 +143,63 @@ impl Account {
         amount: u64,
     ) -> Result<(), AccountCommandError> {
         let asset_id = AssetId::from_str(asset_id_hex_be)?;
+        Account::send_asset_with_blinding(context, to_address, asset_id, None, amount)
+    }
 
+    fn send_confidential_policy_asset(
+        context: CliContext,
+        to_address: &Address,
+        recipient_blinding_pubkey: &str,
+        amount: u64,
+    ) -> Result<(), AccountCommandError> {
+        let blinding_pubkey = PublicKey::from_str(recipient_blinding_pubkey).map_err(|source| {
+            AccountCommandError::InvalidRecipientBlindingPublicKey {
+                key: recipient_blinding_pubkey.to_owned(),
+                source,
+            }
+        })?;
+        let policy_asset_id = context.get_network().policy_asset();
+
+        Account::send_asset_with_blinding(
+            context,
+            to_address,
+            policy_asset_id,
+            Some(blinding_pubkey),
+            amount,
+        )
+    }
+
+    fn send_confidential_asset(
+        context: CliContext,
+        to_address: &Address,
+        recipient_blinding_pubkey: &str,
+        asset_id_hex_be: &str,
+        amount: u64,
+    ) -> Result<(), AccountCommandError> {
+        let blinding_pubkey = PublicKey::from_str(recipient_blinding_pubkey).map_err(|source| {
+            AccountCommandError::InvalidRecipientBlindingPublicKey {
+                key: recipient_blinding_pubkey.to_owned(),
+                source,
+            }
+        })?;
+        let asset_id = AssetId::from_str(asset_id_hex_be)?;
+
+        Account::send_asset_with_blinding(
+            context,
+            to_address,
+            asset_id,
+            Some(blinding_pubkey),
+            amount,
+        )
+    }
+
+    fn send_asset_with_blinding(
+        context: CliContext,
+        to_address: &Address,
+        asset_id: AssetId,
+        recipient_blinding_pubkey: Option<PublicKey>,
+        amount: u64,
+    ) -> Result<(), AccountCommandError> {
         let asset_utxos = context.signer.get_utxos_asset(asset_id)?;
 
         let mut inputs = Vec::new();
@@ -122,11 +228,11 @@ impl Account {
             ft.add_input(PartialInput::new(input.0), input.1);
         }
 
-        ft.add_output(PartialOutput::new(
-            to_address.script_pubkey(),
-            amount,
-            asset_id,
-        ));
+        let recipient_output = PartialOutput::new(to_address.script_pubkey(), amount, asset_id);
+        ft.add_output(match recipient_blinding_pubkey {
+            Some(blinding_pubkey) => recipient_output.with_blinding_key(blinding_pubkey),
+            None => recipient_output,
+        });
 
         if total_inputs_amount > amount {
             ft.add_output(PartialOutput::new(

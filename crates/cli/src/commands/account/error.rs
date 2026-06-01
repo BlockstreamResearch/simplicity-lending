@@ -1,7 +1,10 @@
 use simplex::{
     provider::ProviderError,
     signer::SignerError,
-    simplicityhl::{elements::OutPoint, simplicity::hex::HexToArrayError},
+    simplicityhl::{
+        elements::OutPoint,
+        simplicity::{bitcoin::key::ParsePublicKeyError, hex::HexToArrayError},
+    },
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -34,4 +37,10 @@ pub enum AccountCommandError {
 
     #[error("Hex to array error: {0}")]
     HexToArray(#[from] HexToArrayError),
+
+    #[error("Invalid recipient blinding public key `{key}`: {source}")]
+    InvalidRecipientBlindingPublicKey {
+        key: String,
+        source: ParsePublicKeyError,
+    },
 }
