@@ -12,6 +12,21 @@ pub enum AccountCommandError {
     #[error("Not a signer utxo: {0}")]
     NotASignerUTXO(OutPoint),
 
+    #[error("Duplicate outpoint in merge input: {0}")]
+    DuplicateOutpoint(OutPoint),
+
+    #[error("At least one outpoint is required for merge-utxo")]
+    MissingOutpointsToMerge,
+
+    #[error(
+        "All merged UTXOs must have the same asset. Expected {expected_asset_id}, but {outpoint} has {actual_asset_id}"
+    )]
+    UTXOsAssetMismatch {
+        expected_asset_id: String,
+        actual_asset_id: String,
+        outpoint: OutPoint,
+    },
+
     #[error(
         "Not enough {asset_id} asset to send: needed amount - {needed_amount}, actual amount - {actual_amount}"
     )]

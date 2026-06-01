@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashSet, str::FromStr};
 
 use clap::Subcommand;
 use simplex::{
@@ -69,6 +69,12 @@ pub enum AccountCommand {
         #[arg(long = "amounts", value_delimiter = ',', num_args = 1..)]
         amounts: Vec<u64>,
     },
+    /// Merge specific UTXOs into a single output
+    MergeUTXO {
+        /// UTXOs to merge
+        #[arg(long = "outpoints", value_delimiter = ',', num_args = 1..)]
+        outpoints: Vec<OutPoint>,
+    },
     /// Show current account info
     ShowAccountInfo,
     /// Show account UTXOs
@@ -112,6 +118,9 @@ impl Account {
             ),
             AccountCommand::SplitUTXO { outpoint, amounts } => {
                 Account::split_account_utxo(context, *outpoint, amounts)
+            }
+            AccountCommand::MergeUTXO { outpoints } => {
+                Account::merge_account_utxos(context, outpoints)
             }
             AccountCommand::ShowAccountInfo => Account::show_account_info(context),
             AccountCommand::ShowAccountUTXOS => Account::show_account_utxos(context),
@@ -260,11 +269,13 @@ impl Account {
     fn split_account_utxo(
         context: CliContext,
         outpoint: OutPoint,
-        amounts: &Vec<u64>,
+        amounts: &[u64],
     ) -> Result<(), AccountCommandError> {
         let found_utxos = context
             .signer
-            .get_utxos_filter(&|utxo| utxo.outpoint == outpoint, &|_| true)?;
+            .get_utxos_filter(&|utxo| utxo.outpoint == outpoint, &|utxo| {
+                utxo.outpoint == outpoint
+            })?;
 
         if found_utxos.is_empty() {
             return Err(AccountCommandError::NotASignerUTXO(outpoint));
@@ -272,8 +283,8 @@ impl Account {
 
         let utxo_to_split = found_utxos.first().unwrap();
 
-        let utxo_asset_id = utxo_to_split.explicit_asset();
-        let utxo_amount = utxo_to_split.explicit_amount();
+        let utxo_asset_id = utxo_to_split.asset();
+        let utxo_amount = utxo_to_split.amount();
 
         let mut ft = FinalTransaction::new();
 
@@ -315,6 +326,76 @@ impl Account {
         let txid = context.esplora_provider.broadcast_transaction(&tx)?;
 
         println!("UTXO successfully split!");
+        println!("Broadcast txid: {txid}");
+
+        Ok(())
+    }
+
+    fn merge_account_utxos(
+        context: CliContext,
+        outpoints: &[OutPoint],
+    ) -> Result<(), AccountCommandError> {
+        if outpoints.is_empty() {
+            return Err(AccountCommandError::MissingOutpointsToMerge);
+        }
+
+        let mut selected_outpoints = HashSet::with_capacity(outpoints.len());
+        for outpoint in outpoints {
+            if !selected_outpoints.insert(*outpoint) {
+                return Err(AccountCommandError::DuplicateOutpoint(*outpoint));
+            }
+        }
+
+        let found_utxos = context.signer.get_utxos_filter(
+            &|utxo| selected_outpoints.contains(&utxo.outpoint),
+            &|utxo| selected_outpoints.contains(&utxo.outpoint),
+        )?;
+
+        let found_outpoints: HashSet<OutPoint> =
+            found_utxos.iter().map(|utxo| utxo.outpoint).collect();
+        if let Some(missing_outpoint) = selected_outpoints
+            .iter()
+            .find(|outpoint| !found_outpoints.contains(outpoint))
+        {
+            return Err(AccountCommandError::NotASignerUTXO(*missing_outpoint));
+        }
+
+        let first_utxo = found_utxos
+            .first()
+            .ok_or(AccountCommandError::MissingOutpointsToMerge)?;
+        let merged_asset_id = first_utxo.asset();
+        let mut total_amount = 0;
+        let mut ft = FinalTransaction::new();
+
+        for utxo in found_utxos {
+            let utxo_asset_id = utxo.asset();
+            if utxo_asset_id != merged_asset_id {
+                return Err(AccountCommandError::UTXOsAssetMismatch {
+                    expected_asset_id: merged_asset_id.to_hex(),
+                    actual_asset_id: utxo_asset_id.to_hex(),
+                    outpoint: utxo.outpoint,
+                });
+            }
+
+            total_amount += utxo.amount();
+            ft.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
+        }
+
+        ft.add_output(PartialOutput::new(
+            context.signer.get_address().script_pubkey(),
+            total_amount,
+            merged_asset_id,
+        ));
+
+        println!(
+            "Merging {} UTXOs into a single output",
+            selected_outpoints.len()
+        );
+
+        let (tx, _) = context.signer.finalize(&ft)?;
+        let txid = context.esplora_provider.broadcast_transaction(&tx)?;
+
+        println!("UTXOs successfully merged!");
         println!("Broadcast txid: {txid}");
 
         Ok(())
