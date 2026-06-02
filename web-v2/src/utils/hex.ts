@@ -4,13 +4,22 @@ export function normalizeHex(hexInput: string): string {
   return hexInput.trim().toLowerCase().replace(/^0x/, '')
 }
 
+function normalizeHexWithoutWhitespace(input: string): string {
+  return normalizeHex(input).replace(/\s/g, '')
+}
+
 export function isHexString(input: string): boolean {
-  const normalized = normalizeHex(input).replace(/\s/g, '')
+  const normalized = normalizeHexWithoutWhitespace(input)
   return normalized.length > 0 && normalized.length % 2 === 0 && HEX_PATTERN.test(normalized)
 }
 
+export function isHexStringOfByteLength(input: string, byteLength: number): boolean {
+  const normalized = normalizeHexWithoutWhitespace(input)
+  return normalized.length === byteLength * 2 && isHexString(normalized)
+}
+
 export function hexToBytes(hexString: string): Uint8Array<ArrayBuffer> {
-  const normalized = normalizeHex(hexString).replace(/\s/g, '')
+  const normalized = normalizeHexWithoutWhitespace(hexString)
   if (normalized.length % 2 !== 0) {
     throw new Error('hex string must have even length')
   }

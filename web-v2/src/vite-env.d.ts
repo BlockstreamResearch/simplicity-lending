@@ -14,6 +14,7 @@ declare module 'virtual:simplicity-sources' {
     lending: string
     asset_auth: string
     script_auth: string
+    issuance_factory: string
   }
 
   export const sources: SimplicitySources
