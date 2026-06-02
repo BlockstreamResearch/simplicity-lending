@@ -4,8 +4,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use std::str::FromStr;
-
 use axum::{
     Router,
     body::Body,
@@ -14,7 +12,7 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use lending_contracts::programs::lending::{OfferParameters, PendingLendingOfferParameters};
+use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
 use lending_indexer::esplora_client::EsploraClient;
 use lending_indexer::indexer::{
     UtxoCache, get_last_indexed_height, handle_pending_offer_creation, load_utxo_cache,
@@ -27,17 +25,16 @@ use serial_test::serial;
 use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::{
     AssetId, OutPoint, Script, Transaction, TxOut, Txid, encode, hashes::Hash,
-    secp256k1_zkp::XOnlyPublicKey,
 };
 use sqlx::{PgPool, Row};
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
 use crate::common::{
-    FIXED_BORROWER_PUBKEY_HEX, explicit_asset_output, non_op_return_script, normal_output,
-    null_data_output, offer_model, outpoint_with_txid_byte, padded_tx_with_inputs, seed_offer_row,
-    seed_offer_utxo_row, seed_participant_utxo_row, spent_offer_utxo, spent_participant, test_pool,
-    tx_with_input, unspent_offer_utxo, unspent_participant,
+    explicit_asset_output, non_op_return_script, normal_output, null_data_output, offer_model,
+    outpoint_with_txid_byte, padded_tx_with_inputs, seed_offer_row, seed_offer_utxo_row,
+    seed_participant_utxo_row, spent_offer_utxo, spent_participant, test_pool, tx_with_input,
+    unspent_offer_utxo, unspent_participant,
 };
 
 #[derive(Clone)]
@@ -873,11 +870,11 @@ async fn process_block_returns_error_on_esplora_http_500() -> anyhow::Result<()>
 // integration tests. The gatekeeper is covered by its own unit tests;
 // everything after it (DB rows + cache inserts) is exercised here.
 
-fn synthesized_pending_offer_parameters() -> PendingLendingOfferParameters {
-    PendingLendingOfferParameters {
+fn synthesized_pending_offer_parameters() -> LendingOfferParameters {
+    LendingOfferParameters {
         collateral_asset_id: AssetId::from_slice(&[0xc0_u8; 32]).expect("asset"),
         principal_asset_id: AssetId::from_slice(&[0xd1_u8; 32]).expect("asset"),
-        borrower_debt_nft_asset_id: AssetId::from_slice(&[0xbb_u8; 32]).expect("asset"),
+        borrower_nft_asset_id: AssetId::from_slice(&[0xbb_u8; 32]).expect("asset"),
         lender_nft_asset_id: AssetId::from_slice(&[0x1e_u8; 32]).expect("asset"),
         protocol_fee_keeper_asset_id: AssetId::from_slice(&[0x2a_u8; 32]).expect("asset"),
         offer_parameters: OfferParameters {
@@ -886,9 +883,6 @@ fn synthesized_pending_offer_parameters() -> PendingLendingOfferParameters {
             loan_expiration_time: 12_345,
             principal_interest_rate: 250,
         },
-        borrower_pubkey: XOnlyPublicKey::from_str(FIXED_BORROWER_PUBKEY_HEX)
-            .expect("valid xonly key"),
-        active_lending_cov_hash: [4; 32],
         network: SimplicityNetwork::LiquidTestnet,
     }
 }
@@ -1071,19 +1065,19 @@ async fn handle_pending_offer_creation_with_malformed_outputs_returns_error() ->
     let params = synthesized_pending_offer_parameters();
     let malformed_tx = tx_with_input(
         outpoint_with_txid_byte(0x30, 0),
-        vec![normal_output(); 6], // < 7 outputs triggers the guard clause
+        vec![normal_output(); 3], // < 4 outputs triggers the guard clause
     );
 
     let mut sql_tx = pool.begin().await?;
     let error =
         handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &malformed_tx, 3_000)
             .await
-            .expect_err("handler must reject tx with < 7 outputs");
+            .expect_err("handler must reject tx with < 4 outputs");
     sql_tx.rollback().await?;
 
     let message = error.to_string();
     assert!(
-        message.contains("Malformed PreLock transaction"),
+        message.contains("Malformed offer creation transaction"),
         "unexpected error message: {message}"
     );
 

@@ -8,22 +8,10 @@ use lending_indexer::models::{
     OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType, UtxoType,
 };
 use simplex::simplicityhl::elements::{
-    AssetId, LockTime, OutPoint, Script, Transaction, TxIn, TxOut, Txid, confidential,
-    hashes::Hash, secp256k1_zkp::XOnlyPublicKey,
+    AssetId, LockTime, OutPoint, Script, Transaction, TxIn, TxOut, Txid, confidential, hashes::Hash,
 };
 use sqlx::PgPool;
-use std::str::FromStr;
 use uuid::Uuid;
-
-pub const FIXED_BORROWER_PUBKEY_HEX: &str =
-    "7c7db0528e8b7b58e698ac104764f6852d74b5a7335bffcdad0ce799dd7742ec";
-
-pub fn fixed_borrower_pubkey_bytes() -> Vec<u8> {
-    XOnlyPublicKey::from_str(FIXED_BORROWER_PUBKEY_HEX)
-        .expect("valid xonly key")
-        .serialize()
-        .to_vec()
-}
 
 /// Returns a ready-to-use pool with migrations applied and domain tables
 /// truncated. Panics (instead of silent-skip) when `DATABASE_URL` is not
@@ -65,10 +53,9 @@ pub fn unique_32_bytes_from_uuid(id: Uuid) -> Vec<u8> {
 pub fn offer_model(id: Uuid, created_at_height: i64, created_at_txid: Vec<u8>) -> OfferModel {
     OfferModel {
         id,
-        borrower_pubkey: fixed_borrower_pubkey_bytes(),
         collateral_asset_id: vec![1; 32],
         principal_asset_id: vec![2; 32],
-        borrower_debt_nft_asset_id: vec![7; 32],
+        borrower_nft_asset_id: vec![7; 32],
         lender_nft_asset_id: vec![8; 32],
         protocol_fee_keeper_asset_id: vec![5; 32],
         collateral_amount: 1_000,

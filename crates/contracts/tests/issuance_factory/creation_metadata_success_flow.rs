@@ -6,7 +6,7 @@ use simplex::simplicityhl::elements::{Transaction, Txid};
 use super::setup::setup_issuance_factory;
 
 fn op_return_payload(tx: &Transaction) -> Vec<u8> {
-    script_op_return_payload(&tx.output[1].script_pubkey)
+    script_op_return_payload(&tx.output[2].script_pubkey)
         .unwrap()
         .to_vec()
 }
@@ -17,7 +17,7 @@ fn setup_default_issuance_factory(
     let provider = context.get_default_provider();
     let issuing_utxos_count = 3;
     let reissuance_flags = 0x0102_0304_0506_0708;
-    let (issuance_factory, issuance_factory_parameters) =
+    let (_, issuance_factory, issuance_factory_parameters) =
         setup_issuance_factory(context, issuing_utxos_count, reissuance_flags)?;
 
     let issuance_factory_utxo =
@@ -43,8 +43,8 @@ fn creates_issuance_factory_with_creation_metadata(
     let op_return_data = op_return_payload(&issuance_factory_creation_tx);
     let expected_reissuance_flags = issuance_factory_parameters.reissuance_flags.to_le_bytes();
 
-    assert!(issuance_factory_creation_tx.output[1].is_null_data());
-    assert_eq!(op_return_data.len(), 45);
+    assert!(issuance_factory_creation_tx.output[2].is_null_data());
+    assert_eq!(op_return_data.len(), 13);
     assert_eq!(
         &op_return_data[0..4],
         IssuanceFactory::get_program_id().as_slice()
@@ -54,13 +54,6 @@ fn creates_issuance_factory_with_creation_metadata(
         issuance_factory_parameters.issuing_utxos_count
     );
     assert_eq!(&op_return_data[5..13], expected_reissuance_flags.as_slice());
-    assert_eq!(
-        &op_return_data[13..45],
-        issuance_factory_parameters
-            .owner_pubkey
-            .serialize()
-            .as_slice()
-    );
 
     Ok(())
 }
@@ -88,10 +81,6 @@ fn decodes_issuance_factory_creation_metadata(context: simplex::TestContext) -> 
     assert_eq!(
         decoded_op_return_data.reissuance_flags,
         issuance_factory_parameters.reissuance_flags
-    );
-    assert_eq!(
-        decoded_op_return_data.owner_pubkey,
-        issuance_factory_parameters.owner_pubkey
     );
 
     Ok(())

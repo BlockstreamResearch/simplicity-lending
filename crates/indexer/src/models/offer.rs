@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{Txid, hashes::Hash};
 
-use lending_contracts::programs::lending::PendingLendingOfferParameters;
+use lending_contracts::programs::lending::LendingOfferParameters;
 
 use crate::models::{ParticipantType, UtxoType};
 
@@ -34,10 +34,9 @@ pub enum OfferStatus {
 #[derive(Debug, sqlx::FromRow)]
 pub struct OfferModel {
     pub id: Uuid,
-    pub borrower_pubkey: Vec<u8>,
     pub collateral_asset_id: Vec<u8>,
     pub principal_asset_id: Vec<u8>,
-    pub borrower_debt_nft_asset_id: Vec<u8>,
+    pub borrower_nft_asset_id: Vec<u8>,
     pub lender_nft_asset_id: Vec<u8>,
     pub protocol_fee_keeper_asset_id: Vec<u8>,
     pub collateral_amount: i64,
@@ -50,50 +49,26 @@ pub struct OfferModel {
 }
 
 impl OfferModel {
-    pub fn new(
-        pending_offer_parameters: &PendingLendingOfferParameters,
-        block_height: u64,
-        txid: Txid,
-    ) -> Self {
+    pub fn new(offer_parameters: &LendingOfferParameters, block_height: u64, txid: Txid) -> Self {
         Self {
             id: Uuid::new_v4(),
-            borrower_pubkey: pending_offer_parameters
-                .borrower_pubkey
-                .serialize()
-                .to_vec(),
-            collateral_asset_id: pending_offer_parameters
-                .collateral_asset_id
+            collateral_asset_id: offer_parameters.collateral_asset_id.into_inner().0.to_vec(),
+            principal_asset_id: offer_parameters.principal_asset_id.into_inner().0.to_vec(),
+            borrower_nft_asset_id: offer_parameters
+                .borrower_nft_asset_id
                 .into_inner()
                 .0
                 .to_vec(),
-            principal_asset_id: pending_offer_parameters
-                .principal_asset_id
-                .into_inner()
-                .0
-                .to_vec(),
-            borrower_debt_nft_asset_id: pending_offer_parameters
-                .borrower_debt_nft_asset_id
-                .into_inner()
-                .0
-                .to_vec(),
-            lender_nft_asset_id: pending_offer_parameters
-                .lender_nft_asset_id
-                .into_inner()
-                .0
-                .to_vec(),
-            protocol_fee_keeper_asset_id: pending_offer_parameters
+            lender_nft_asset_id: offer_parameters.lender_nft_asset_id.into_inner().0.to_vec(),
+            protocol_fee_keeper_asset_id: offer_parameters
                 .protocol_fee_keeper_asset_id
                 .into_inner()
                 .0
                 .to_vec(),
-            collateral_amount: pending_offer_parameters.offer_parameters.collateral_amount as i64,
-            principal_amount: pending_offer_parameters.offer_parameters.principal_amount as i64,
-            interest_rate: pending_offer_parameters
-                .offer_parameters
-                .principal_interest_rate as i32,
-            loan_expiration_time: pending_offer_parameters
-                .offer_parameters
-                .loan_expiration_time as i32,
+            collateral_amount: offer_parameters.offer_parameters.collateral_amount as i64,
+            principal_amount: offer_parameters.offer_parameters.principal_amount as i64,
+            interest_rate: offer_parameters.offer_parameters.principal_interest_rate as i32,
+            loan_expiration_time: offer_parameters.offer_parameters.loan_expiration_time as i32,
             current_status: OfferStatus::Pending,
             created_at_height: block_height as i64,
             created_at_txid: txid.as_byte_array().to_vec(),
@@ -118,18 +93,17 @@ pub struct OfferModelShort {
 #[cfg(test)]
 mod tests {
     use super::{OfferModel, OfferStatus};
-    use lending_contracts::programs::lending::{OfferParameters, PendingLendingOfferParameters};
+    use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
     use simplex::{
         provider::SimplicityNetwork,
-        simplicityhl::elements::{AssetId, Txid, hashes::Hash, secp256k1_zkp::XOnlyPublicKey},
+        simplicityhl::elements::{AssetId, Txid, hashes::Hash},
     };
-    use std::str::FromStr;
 
-    fn make_pending_offer_params() -> PendingLendingOfferParameters {
-        PendingLendingOfferParameters {
+    fn make_offer_params() -> LendingOfferParameters {
+        LendingOfferParameters {
             collateral_asset_id: AssetId::from_slice(&[1_u8; 32]).expect("asset"),
             principal_asset_id: AssetId::from_slice(&[2_u8; 32]).expect("asset"),
-            borrower_debt_nft_asset_id: AssetId::from_slice(&[3_u8; 32]).expect("asset"),
+            borrower_nft_asset_id: AssetId::from_slice(&[3_u8; 32]).expect("asset"),
             lender_nft_asset_id: AssetId::from_slice(&[4_u8; 32]).expect("asset"),
             protocol_fee_keeper_asset_id: AssetId::from_slice(&[5_u8; 32]).expect("asset"),
             offer_parameters: OfferParameters {
@@ -138,27 +112,18 @@ mod tests {
                 loan_expiration_time: 12_345,
                 principal_interest_rate: 250,
             },
-            borrower_pubkey: XOnlyPublicKey::from_str(
-                "7c7db0528e8b7b58e698ac104764f6852d74b5a7335bffcdad0ce799dd7742ec",
-            )
-            .expect("valid xonly key"),
-            active_lending_cov_hash: [9_u8; 32],
             network: SimplicityNetwork::LiquidTestnet,
         }
     }
 
     #[test]
-    fn offer_model_new_maps_all_fields_from_pre_lock_parameters() {
-        let params = make_pending_offer_params();
+    fn offer_model_new_maps_all_fields_from_offer_parameters() {
+        let params = make_offer_params();
         let block_height = 777_u64;
         let txid = Txid::from_slice(&[10_u8; 32]).expect("txid");
 
         let model = OfferModel::new(&params, block_height, txid);
 
-        assert_eq!(
-            model.borrower_pubkey,
-            params.borrower_pubkey.serialize().to_vec()
-        );
         assert_eq!(
             model.collateral_asset_id,
             params.collateral_asset_id.into_inner().0.to_vec()
@@ -168,8 +133,8 @@ mod tests {
             params.principal_asset_id.into_inner().0.to_vec()
         );
         assert_eq!(
-            model.borrower_debt_nft_asset_id,
-            params.borrower_debt_nft_asset_id.into_inner().0.to_vec()
+            model.borrower_nft_asset_id,
+            params.borrower_nft_asset_id.into_inner().0.to_vec()
         );
         assert_eq!(
             model.lender_nft_asset_id,
@@ -190,7 +155,7 @@ mod tests {
 
     #[test]
     fn offer_model_new_generates_non_nil_offer_id() {
-        let params = make_pending_offer_params();
+        let params = make_offer_params();
         let txid = Txid::from_slice(&[11_u8; 32]).expect("txid");
 
         let model = OfferModel::new(&params, 1, txid);

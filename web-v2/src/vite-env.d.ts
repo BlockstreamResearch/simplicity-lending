@@ -19,3 +19,5 @@ declare module 'virtual:simplicity-sources' {
 
   export const sources: SimplicitySources
 }
+
+declare module '@fontsource-variable/inter'

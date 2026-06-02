@@ -29,8 +29,8 @@ pub async fn fetch_offers_full_info_filtered(
 ) -> Result<Vec<OfferListItemFull>, sqlx::Error> {
     let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"
-            SELECT id, current_status, borrower_pubkey, collateral_asset_id, principal_asset_id, 
-            borrower_debt_nft_asset_id, protocol_fee_keeper_asset_id, 
+            SELECT id, current_status, collateral_asset_id, principal_asset_id, 
+            borrower_nft_asset_id, protocol_fee_keeper_asset_id, 
             lender_nft_asset_id, collateral_amount, principal_amount, interest_rate, 
             loan_expiration_time, created_at_height, created_at_txid FROM offers WHERE 1=1 
         "#,
@@ -139,10 +139,9 @@ pub async fn fetch_offer_full_info_by_id(
         SELECT 
             id,
             current_status AS "current_status: OfferStatus",
-            borrower_pubkey,
             collateral_asset_id,
             principal_asset_id,
-            borrower_debt_nft_asset_id,
+            borrower_nft_asset_id,
             lender_nft_asset_id,
             protocol_fee_keeper_asset_id,
             collateral_amount,
@@ -182,8 +181,8 @@ pub async fn fetch_offer_details_by_ids(
         r#"
         SELECT 
             id, current_status AS "current_status: OfferStatus",
-            borrower_pubkey, collateral_asset_id, principal_asset_id,
-            borrower_debt_nft_asset_id, lender_nft_asset_id, protocol_fee_keeper_asset_id,
+            collateral_asset_id, principal_asset_id,
+            borrower_nft_asset_id, lender_nft_asset_id, protocol_fee_keeper_asset_id,
             collateral_amount, principal_amount, interest_rate,
             loan_expiration_time, created_at_height, created_at_txid
         FROM offers
@@ -323,32 +322,6 @@ pub async fn fetch_offer_ids_by_script(
     .await?;
 
     let offer_ids = rows.into_iter().map(|r| r.offer_id).collect();
-
-    Ok(offer_ids)
-}
-
-#[tracing::instrument(
-    name = "Fetching pending offer ids by borrower pubkey from DB",
-    skip(db, borrower_pubkey),
-    fields(borrower_pubkey = %borrower_pubkey.to_hex())
-)]
-pub async fn fetch_pending_offer_ids_by_borrower_pubkey(
-    db: &PgPool,
-    borrower_pubkey: &[u8],
-) -> Result<Vec<Uuid>, sqlx::Error> {
-    let rows = sqlx::query!(
-        r#"
-        SELECT id
-        FROM offers
-        WHERE borrower_pubkey = $1
-          AND current_status = 'pending'
-        "#,
-        borrower_pubkey
-    )
-    .fetch_all(db)
-    .await?;
-
-    let offer_ids = rows.into_iter().map(|r| r.id).collect();
 
     Ok(offer_ids)
 }

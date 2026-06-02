@@ -1,5 +1,4 @@
 use serde::Serialize;
-use simplex::simplicityhl::elements::hex::ToHex;
 use uuid::Uuid;
 
 use crate::api::dto::ParticipantDto;
@@ -42,8 +41,7 @@ pub struct OfferListItemFull {
     #[serde(flatten)]
     pub base: OfferListItemShort,
 
-    pub borrower_pubkey: String,
-    pub borrower_debt_nft_asset: String,
+    pub borrower_nft_asset: String,
     pub lender_nft_asset: String,
     pub protocol_fee_keeper_asset: String,
 }
@@ -63,8 +61,7 @@ impl From<OfferModel> for OfferListItemFull {
                 created_at_height: value.created_at_height as u64,
                 created_at_txid: format_hex(value.created_at_txid),
             },
-            borrower_pubkey: value.borrower_pubkey.to_hex(),
-            borrower_debt_nft_asset: format_hex(value.borrower_debt_nft_asset_id),
+            borrower_nft_asset: format_hex(value.borrower_nft_asset_id),
             lender_nft_asset: format_hex(value.lender_nft_asset_id),
             protocol_fee_keeper_asset: format_hex(value.protocol_fee_keeper_asset_id),
         }
@@ -74,11 +71,6 @@ impl From<OfferModel> for OfferListItemFull {
 #[derive(serde::Deserialize, Debug)]
 pub struct BatchIdsRequest {
     pub ids: Vec<Uuid>,
-}
-
-#[derive(serde::Deserialize, Debug)]
-pub struct PendingOffersQuery {
-    pub borrower_pubkey: String,
 }
 
 #[derive(Serialize)]
@@ -129,10 +121,9 @@ mod tests {
         let id = Uuid::new_v4();
         let model = OfferModel {
             id,
-            borrower_pubkey: vec![0x11, 0x22],
             collateral_asset_id: vec![0x01, 0x02],
             principal_asset_id: vec![0x03, 0x04],
-            borrower_debt_nft_asset_id: vec![0x09, 0x0a],
+            borrower_nft_asset_id: vec![0x09, 0x0a],
             lender_nft_asset_id: vec![0x0b, 0x0c],
             protocol_fee_keeper_asset_id: vec![0x0b, 0x2c],
             collateral_amount: 99,
@@ -151,8 +142,7 @@ mod tests {
         assert_eq!(dto.base.collateral_asset, "0201");
         assert_eq!(dto.base.principal_asset, "0403");
         assert_eq!(dto.base.created_at_txid, "adde");
-        assert_eq!(dto.borrower_pubkey, "1122");
-        assert_eq!(dto.borrower_debt_nft_asset, "0a09");
+        assert_eq!(dto.borrower_nft_asset, "0a09");
         assert_eq!(dto.lender_nft_asset, "0c0b");
         assert_eq!(dto.protocol_fee_keeper_asset, "2c0b");
     }

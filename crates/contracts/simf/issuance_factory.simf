@@ -9,7 +9,7 @@ fn get_script_hash(index: u32, is_input_index: bool) -> u256 {
     script_hash
 }
 
-fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
+fn get_explicit_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
     let pair: (Asset1, Amount1) = match is_input_index {
         true => unwrap(jet::input_amount(index)),
         false => unwrap(jet::output_amount(index)),
@@ -18,6 +18,20 @@ fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
     let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
     let amount: u64 = unwrap_right::<(u1, u256)>(amount);
     (asset_bits, amount)
+}
+
+fn get_current_explicit_asset() -> u256 {
+    let asset: Asset1 = jet::current_asset();
+    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
+
+    asset_bits
+}
+
+fn is_op_return(output_index: u32) -> bool {
+    match jet::output_null_datum(output_index, 0) {
+        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => true,
+        None => false,
+    }
 }
 
 // Check helpers
@@ -38,37 +52,61 @@ fn check_flags_eq(flag_1: bool, flag_2: bool) {
     assert!(jet::eq_1(<bool>::into(flag_1), <bool>::into(flag_2)));
 }
 
-fn ensure_non_zero_amount(amount: u64) {
-    assert!(jet::some_64(amount));
+// Ensure functions
+
+fn ensure_output_is_op_return(index: u32) {
+    check_flags_eq(is_op_return(index), true);
 }
 
-fn ensure_asset_with_amount(index: u32, is_input_index: bool, expected_asset_bits: u256, expected_amount: u64) {
-    let (asset_bits, amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
-
-    check_assets_eq(asset_bits, expected_asset_bits);
-    check_asset_amounts_eq(amount, expected_amount);
-}
-
-fn ensure_input_and_output_eq(input_index: u32, output_index: u32) {
-    let (input_asset_bits, input_amount): (u256, u64) = get_asset_and_amount(input_index, true);
-    let (output_asset_bits, output_amount): (u256, u64) = get_asset_and_amount(output_index, false);
-
-    check_assets_eq(input_asset_bits, input_asset_bits);
-    check_asset_amounts_eq(input_amount, output_amount);
-}
-
-fn ensure_input_and_output_script_hashes_eq(input_index: u32, output_index: u32) {
+fn ensure_io_script_hashes_eq(input_index: u32, output_index: u32) {
     let input_script_hash: u256 = get_script_hash(input_index, true);
     let output_script_hash: u256 = get_script_hash(output_index, false);
 
     check_script_hashes_eq(input_script_hash, output_script_hash);
 }
 
-fn ensure_output_is_op_return(index: u32) {
-    match jet::output_null_datum(index, 0) {
-        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => (),
-        None => panic!(),
-    }
+fn ensure_non_zero_amount(amount: u64) {
+    assert!(jet::some_64(amount));
+}
+
+fn ensure_output_asset_and_amount(output_index: u32, expected_asset_bits: u256, expected_amount: u64) {
+    let (asset_bits, amount): (u256, u64) = get_explicit_asset_and_amount(output_index, false);
+
+    check_assets_eq(asset_bits, expected_asset_bits);
+    check_asset_amounts_eq(amount, expected_amount);
+}
+
+fn ensure_io_asset_eq(input_index: u32, output_index: u32, expected_asset_bits: u256) -> (u64, u64) {
+    let (input_asset_bits, input_amount): (u256, u64) = get_explicit_asset_and_amount(input_index, true);
+    let (output_asset_bits, output_amount): (u256, u64) = get_explicit_asset_and_amount(output_index, false);
+
+    check_assets_eq(input_asset_bits, expected_asset_bits);
+    check_assets_eq(input_asset_bits, output_asset_bits);
+
+    (input_amount, output_amount)
+}
+
+fn ensure_io_asset_and_amount_eq(
+    input_index: u32,
+    output_index: u32,
+    expected_asset_bits: u256,
+    expected_amount: u64
+) {
+    let (input_amount, output_amount): (u64, u64) = ensure_io_asset_eq(input_index, output_index, expected_asset_bits);
+
+    check_asset_amounts_eq(input_amount, expected_amount);
+    check_asset_amounts_eq(input_amount, output_amount);
+}
+
+fn ensure_input_asset_and_amount_burn(
+    input_index: u32,
+    output_index: u32,
+    expected_asset_bits: u256,
+    expected_asset_amount: u64
+) {
+    ensure_io_asset_and_amount_eq(input_index, output_index, expected_asset_bits, expected_asset_amount);
+
+    ensure_output_is_op_return(output_index);
 }
 
 fn ensure_zero_bit(bit: bool) { assert!(jet::eq_1(<bool>::into(bit), 0)); }
@@ -78,10 +116,12 @@ fn ensure_zero_bit(bit: bool) { assert!(jet::eq_1(<bool>::into(bit), 0)); }
 fn safe_add_32(first: u32, second: u32) -> u32 {
     let (carry, result): (bool, u32) = jet::add_32(first, second);
 
+    check_flags_eq(carry, false);
+
     result
 }
 
-// Main paths logic
+// Main paths helpers
 
 fn get_reissuance_flag(index: u8) -> bool {
     let shifted: u64 = jet::right_shift_64(index, param::REISSUANCE_FLAGS);
@@ -95,7 +135,9 @@ fn verify_issuance(input_index: u32, output_index: u32, reissuance_flag: bool) {
     let outpoint: Outpoint = unwrap(jet::input_prev_outpoint(input_index));
     let issuance_entropy: u256 = jet::calculate_issuance_entropy(outpoint, contract_hash);
 
-    let explicit_reissuance_tokens_amount: u64 = unwrap_right::<(u1, u256)>(unwrap(unwrap(jet::issuance_token_amount(input_index))));
+    let explicit_reissuance_tokens_amount: u64 = unwrap_right::<(u1, u256)>(unwrap(unwrap(
+        jet::issuance_token_amount(input_index)
+    )));
 
     match reissuance_flag {
         // TODO: Add confidential reissuance tokens verification
@@ -112,7 +154,7 @@ fn verify_issuance(input_index: u32, output_index: u32, reissuance_flag: bool) {
 
     let issuance_amount: u64 = unwrap_right::<(u1, u256)>(issuance_amount);
 
-    ensure_asset_with_amount(output_index, false, issuance_asset, issuance_amount);
+    ensure_output_asset_and_amount(output_index, issuance_asset, issuance_amount);
 }
 
 fn verify_issuance_step(acc: (), start_output_index: u32, i: u8) -> Either<(), ()> {
@@ -131,41 +173,70 @@ fn verify_issuance_step(acc: (), start_output_index: u32, i: u8) -> Either<(), (
     }
 }
 
-fn issue_new_assets(output_index: u32, owner_sig: Signature) {
-    let current_index: u32 = jet::current_index();
+// Assets issuance flow
 
-    assert!(jet::eq_32(current_index, 0));
-    jet::bip_0340_verify((param::FACTORY_OWNER_PUBKEY, jet::sig_all_hash()), owner_sig);
+fn get_asset_issuance_issuance_factory_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+    (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 1))
+}
 
-    ensure_input_and_output_script_hashes_eq(current_index, output_index);
+fn get_asset_issuance_start_issued_output_index(start_output_index: u32) -> u32 {
+    safe_add_32(start_output_index, 2)
+}
 
-    let (carry, issued_outputs_start_index): (bool, u32) = jet::add_32(output_index, 1);
-    ensure_zero_bit(carry);
+fn issue_new_assets(output_index: u32) {
+    let (auth_nft_input_index, auth_nft_output_index): (u32, u32) = (0, output_index);
+    let (
+        issuance_factory_input_index,
+        issuance_factory_output_index
+    ): (u32, u32) = get_asset_issuance_issuance_factory_indexes(auth_nft_input_index, auth_nft_output_index);
+
+    assert!(jet::eq_32(issuance_factory_input_index, jet::current_index()));
+
+    let current_asset_bits: u256 = get_current_explicit_asset();
+
+    ensure_io_asset_and_amount_eq(auth_nft_input_index, auth_nft_output_index, current_asset_bits, 1);
+    ensure_io_asset_and_amount_eq(issuance_factory_input_index, issuance_factory_output_index, current_asset_bits, 1);
+
+    ensure_io_script_hashes_eq(issuance_factory_input_index, issuance_factory_output_index);
+
+    let issued_outputs_start_index: u32 = get_asset_issuance_start_issued_output_index(auth_nft_output_index);
 
     unwrap_left::<()>(for_while::<verify_issuance_step>((), issued_outputs_start_index));
 }
 
-fn remove_factory(output_index: u32, owner_sig: Signature) {
-    let current_index: u32 = jet::current_index();
+// Factory removing flow
 
-    assert!(jet::eq_32(current_index, 0));
-    jet::bip_0340_verify((param::FACTORY_OWNER_PUBKEY, jet::sig_all_hash()), owner_sig);
+fn get_removing_auth_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+    (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 1))
+}
 
-    ensure_output_is_op_return(output_index);
-    ensure_input_and_output_eq(current_index, output_index);
+fn remove_factory(output_index: u32) {
+    let (issuance_factory_input_index, issuance_factory_output_index): (u32, u32) = (0, output_index);
+    let (
+        auth_nft_input_index,
+        auth_nft_output_index
+    ): (u32, u32) = get_removing_auth_nft_indexes(issuance_factory_input_index, issuance_factory_output_index);
+
+    assert!(jet::eq_32(issuance_factory_input_index, jet::current_index()));
+
+    let current_asset_bits: u256 = get_current_explicit_asset();
+
+    ensure_input_asset_and_amount_burn(
+        issuance_factory_input_index,
+        issuance_factory_output_index,
+        current_asset_bits,
+        1
+    );
+    ensure_input_asset_and_amount_burn(auth_nft_input_index, auth_nft_output_index, current_asset_bits, 1);
 }
 
 fn main() {
     match witness::PATH {
-        Left(params: (u32, Signature)) => {
-            let (output_index, owner_sig): (u32, Signature) = params;
-
-            issue_new_assets(output_index, owner_sig);
+        Left(output_index: u32) => {
+            issue_new_assets(output_index);
         },
-        Right(params: (u32, Signature)) => {
-            let (output_index, owner_sig): (u32, Signature) = params;
-
-            remove_factory(output_index, owner_sig);
+        Right(output_index: u32) => {
+            remove_factory(output_index);
         }
     }
 }

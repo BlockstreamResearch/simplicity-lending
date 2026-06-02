@@ -67,17 +67,19 @@ async function getIconOptions() {
 }
 
 async function createIconComponent({ name, content }: { name: string; content: string }) {
-  const fileName = name.toLowerCase().replace(/ /g, '-') + '-icon'
-  const filePath = `./src/components/icons/${fileName}.tsx`
+  // Normalize CLI arg (validated as /^[a-zA-Z0-9-]*$/) to PascalCase + 'Icon' suffix.
+  // Accepts kebab-case (`moon-filled`), PascalCase (`MoonFilled`) or lowercase (`moon`).
+  const componentName =
+    name
+      .toLowerCase()
+      .replace(/(^\w|-\w)/g, c => c.toUpperCase())
+      .replace(/-/g, '') + 'Icon'
+  const filePath = `./src/components/icons/${componentName}.tsx`
 
-  // Check if the file already exists
   if (fs.existsSync(filePath)) {
     console.error(chalk.red(`File ${filePath} already exists. Please choose a different name.`))
     process.exit(1)
   }
-
-  // Use PascalCase for the component name
-  const componentName = fileName.replace(/(^\w|-\w)/g, c => c.toUpperCase()).replace(/-/g, '')
 
   const fileContent = `
 import type { SVGProps } from "react"

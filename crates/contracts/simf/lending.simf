@@ -142,14 +142,6 @@ fn ensure_io_asset_and_amount_eq(
     check_asset_amounts_eq(input_amount, output_amount);
 }
 
-fn ensure_input_asset_burn(input_index: u32, output_index: u32, expected_asset_bits: u256) {
-    let (input_amount, output_amount): (u64, u64) = ensure_io_asset_eq(input_index, output_index, expected_asset_bits);
-
-    check_asset_amounts_eq(input_amount, output_amount);
-
-    ensure_output_is_op_return(output_index);
-}
-
 fn ensure_input_asset_and_amount_burn(
     input_index: u32,
     output_index: u32,
@@ -159,19 +151,6 @@ fn ensure_input_asset_and_amount_burn(
     ensure_io_asset_and_amount_eq(input_index, output_index, expected_asset_bits, expected_asset_amount);
 
     ensure_output_is_op_return(output_index);
-}
-
-fn ensure_asset_transition_with_reduced_amount(
-    input_index: u32,
-    output_index: u32,
-    expected_asset_bits: u256,
-    amount_to_reduce: u64
-) {
-    let (input_amount, output_amount): (u64, u64) = ensure_io_asset_eq(input_index, output_index, expected_asset_bits);
-
-    let new_asset_amount: u64 = safe_sub_64(input_amount, amount_to_reduce);
-
-    check_asset_amounts_eq(output_amount, new_asset_amount);
 }
 
 fn ensure_asset_transition_with_additional_amount(
@@ -185,14 +164,6 @@ fn ensure_asset_transition_with_additional_amount(
     let new_asset_amount: u64 = safe_add_64(input_amount, additional_amount);
 
     check_asset_amounts_eq(output_amount, new_asset_amount);
-}
-
-fn ensure_offer_is_active() {
-    check_flags_eq(param::IS_ACTIVE, true);
-}
-
-fn ensure_offer_is_pending() {
-    check_flags_eq(param::IS_ACTIVE, false);
 }
 
 // Basis points math
@@ -213,6 +184,46 @@ fn apply_basis_points(amount: u64, bps: u64) -> u64 {
     result
 }
 
+// Storage helpers
+
+fn get_is_active_slot_leaf(is_active: bool) -> u256 {
+    let is_active_num: u64 = jet::left_pad_low_1_64(<bool>::into(is_active));
+    let is_active_num: u256 = <(u128, u128)>::into((0, <(u64, u64)>::into((0, is_active_num))));
+
+    let state_ctx1: Ctx8 = jet::tapdata_init();
+    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, is_active_num);
+
+    jet::sha_256_ctx_8_finalize(state_ctx2)
+}
+
+fn get_borrower_debt_slot_leaf(borrower_debt: u64) -> u256 {
+    let borrower_debt: u256 = <(u128, u128)>::into((0, <(u64, u64)>::into((0, borrower_debt))));
+
+    let state_ctx1: Ctx8 = jet::tapdata_init();
+    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, borrower_debt);
+
+    jet::sha_256_ctx_8_finalize(state_ctx2)
+}
+
+fn get_script_hash_for_storage(is_active: bool, borrower_debt: u64) -> u256 {
+    let is_active_slot_leaf: u256 = get_is_active_slot_leaf(is_active);
+    let borrower_debt_slot_leaf: u256 = get_borrower_debt_slot_leaf(borrower_debt);
+
+    let first_tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), is_active_slot_leaf);
+    let tap_node: u256 = jet::build_tapbranch(first_tap_node, borrower_debt_slot_leaf);
+
+    // Compute a TapTweak
+    let bip0341_key: u256 = 0x50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0;
+    let tweaked_key: u256 = jet::build_taptweak(bip0341_key, tap_node);
+
+    // Turn the TapTweak into a script hash
+    let hash_ctx1: Ctx8 = jet::sha_256_ctx_8_init();
+    let hash_ctx2: Ctx8 = jet::sha_256_ctx_8_add_2(hash_ctx1, 0x5120); // Segwit v1, length 32
+    let hash_ctx3: Ctx8 = jet::sha_256_ctx_8_add_32(hash_ctx2, tweaked_key);
+
+    jet::sha_256_ctx_8_finalize(hash_ctx3)
+}
+
 // Main paths helpers
 
 fn get_protocol_fee_bps() -> u64 {
@@ -229,17 +240,6 @@ fn get_total_fee_amount() -> u64 {
 
 fn get_total_amount_to_repay() -> u64 {
     safe_add_64(param::PRINCIPAL_AMOUNT, get_total_fee_amount())
-}
-
-fn get_current_borrower_debt(debt_nft_input_index: u32) -> u64 {
-    let (
-        debt_nft_asset_bits,
-        current_borrower_debt
-    ): (u256, u64) = get_explicit_asset_and_amount(debt_nft_input_index, true);
-
-    check_assets_eq(debt_nft_asset_bits, param::BORROWER_DEBT_NFT_ASSET_ID);
-
-    current_borrower_debt
 }
 
 fn split_repayment_by_fees(fee_left: u64, amount_to_repay: u64) -> (u64, u64) {
@@ -338,68 +338,64 @@ fn validate_vaults(
 
 // Partial repayment flow
 
-fn get_partial_repayment_borrower_debt_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+fn get_partial_repayment_offer_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
     (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 1))
 }
 
-fn get_partial_repayment_debt_nft_burn_output_index(start_output_index: u32) -> u32 {
-    safe_add_32(start_output_index, 2)
-}
-
 fn get_partial_repayment_lender_vault_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
-    (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 3))
+    (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 2))
 }
 
 fn get_partial_repayment_protocol_fee_vault_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
-    (safe_add_32(start_input_index, 3), safe_add_32(start_output_index, 4))
+    (safe_add_32(start_input_index, 3), safe_add_32(start_output_index, 3))
 }
 
-fn partial_repay_offer(amount_to_repay: u64) {
-    ensure_offer_is_active();
-
-    let (lending_input_index, lending_output_index): (u32, u32) = (jet::current_index(), 0);
+fn partial_repay_offer(current_debt: u64, amount_to_repay: u64) {
+    let (borrower_nft_input_index, borrower_nft_output_index): (u32, u32) = (0, 0);
     let (
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index
-    ): (u32, u32) = get_partial_repayment_borrower_debt_nft_indexes(lending_input_index, lending_output_index);
-    let debt_nft_burn_output_index: u32 = get_partial_repayment_debt_nft_burn_output_index(lending_output_index);
+        offer_input_index,
+        offer_output_index
+    ): (u32, u32) = get_partial_repayment_offer_indexes(borrower_nft_input_index, borrower_nft_output_index);
 
-    assert!(jet::eq_32(lending_input_index, 0));
+    assert!(jet::eq_32(jet::current_index(), offer_input_index));
 
-    let current_borrower_debt: u64 = get_current_borrower_debt(borrower_debt_nft_input_index);
+    let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
+    ensure_input_script_hash(offer_input_index, current_script_hash);
 
     assert!(jet::some_64(amount_to_repay));
-    assert!(jet::lt_64(amount_to_repay, current_borrower_debt));
-    assert!(jet::le_64(current_borrower_debt, get_total_amount_to_repay()));
+    assert!(jet::lt_64(amount_to_repay, current_debt));
 
     ensure_io_asset_and_amount_eq(
-        lending_input_index,
-        lending_output_index,
+        offer_input_index,
+        offer_output_index,
         param::COLLATERAL_ASSET_ID,
         param::COLLATERAL_AMOUNT
     );
-    ensure_asset_transition_with_reduced_amount(
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index,
-        param::BORROWER_DEBT_NFT_ASSET_ID,
-        amount_to_repay
+
+    let new_debt: u64 = safe_sub_64(current_debt, amount_to_repay);
+    let new_offer_script_hash: u256 = get_script_hash_for_storage(true, new_debt);
+
+    ensure_output_script_hash(offer_output_index, new_offer_script_hash);
+
+    ensure_io_asset_and_amount_eq(
+        borrower_nft_input_index,
+        borrower_nft_output_index,
+        param::BORROWER_NFT_ASSET_ID,
+        1
     );
 
-    ensure_output_asset_and_amount(debt_nft_burn_output_index, param::BORROWER_DEBT_NFT_ASSET_ID, amount_to_repay);
-    ensure_output_is_op_return(debt_nft_burn_output_index);
-
     validate_vaults(
-        get_partial_repayment_lender_vault_indexes(lending_input_index, lending_output_index),
-        get_partial_repayment_protocol_fee_vault_indexes(lending_input_index, lending_output_index),
-        current_borrower_debt,
+        get_partial_repayment_lender_vault_indexes(borrower_nft_input_index, borrower_nft_output_index),
+        get_partial_repayment_protocol_fee_vault_indexes(borrower_nft_input_index, borrower_nft_output_index),
+        current_debt,
         amount_to_repay
     );
 }
 
 // Full repayment flow
 
-fn get_full_repayment_borrower_debt_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
-    (safe_add_32(start_input_index, 1), start_output_index)
+fn get_full_repayment_offer_input_index(start_input_index: u32) -> u32 {
+    safe_add_32(start_input_index, 1)
 }
 
 fn get_full_repayment_lender_vault_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
@@ -410,52 +406,39 @@ fn get_full_repayment_protocol_fee_vault_indexes(start_input_index: u32, start_o
     (safe_add_32(start_input_index, 3), safe_add_32(start_output_index, 2))
 }
 
-fn full_repay_offer() {
-    ensure_offer_is_active();
+fn full_repay_offer(current_debt: u64) {
+    let (borrower_nft_input_index, borrower_nft_output_index): (u32, u32) = (0, 0);
+    let offer_input_index: u32 = get_full_repayment_offer_input_index(borrower_nft_input_index);
 
-    let (lending_input_index, lending_output_index): (u32, u32) = (jet::current_index(), 0);
-    let (
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index
-    ): (u32, u32) = get_full_repayment_borrower_debt_nft_indexes(lending_input_index, lending_output_index);
+    assert!(jet::eq_32(jet::current_index(), offer_input_index));
 
-    assert!(jet::eq_32(lending_input_index, 0));
+    let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
+    ensure_input_script_hash(offer_input_index, current_script_hash);
 
-    ensure_input_asset_and_amount(lending_input_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
-    ensure_input_asset_burn(
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index,
-        param::BORROWER_DEBT_NFT_ASSET_ID
+    ensure_input_asset_and_amount(offer_input_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+    ensure_input_asset_and_amount_burn(
+        borrower_nft_input_index,
+        borrower_nft_output_index,
+        param::BORROWER_NFT_ASSET_ID,
+        1
     );
 
-    let current_borrower_debt: u64 = get_current_borrower_debt(borrower_debt_nft_input_index);
-
     validate_vaults(
-        get_full_repayment_lender_vault_indexes(lending_input_index, lending_output_index),
-        get_full_repayment_protocol_fee_vault_indexes(lending_input_index, lending_output_index),
-        current_borrower_debt,
-        current_borrower_debt
+        get_full_repayment_lender_vault_indexes(borrower_nft_input_index, borrower_nft_output_index),
+        get_full_repayment_protocol_fee_vault_indexes(borrower_nft_input_index, borrower_nft_output_index),
+        current_debt,
+        current_debt
     );
 }
 
 // Liquidation flow
 
-fn get_liquidation_borrower_debt_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+fn get_liquidation_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
     (safe_add_32(start_input_index, 1), start_output_index)
 }
 
-fn get_liquidation_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
-    (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 1))
-}
-
-fn liquidate_offer() {
-    ensure_offer_is_active();
-
+fn liquidate_offer(current_debt: u64) {
     let (lending_input_index, lending_output_index): (u32, u32) = (jet::current_index(), 0);
-    let (
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index
-    ): (u32, u32) = get_liquidation_borrower_debt_nft_indexes(lending_input_index, lending_output_index);
     let (
         lender_nft_input_index,
         lender_nft_output_index
@@ -463,40 +446,28 @@ fn liquidate_offer() {
 
     assert!(jet::eq_32(lending_input_index, 0));
 
+    let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
+    ensure_input_script_hash(lending_input_index, current_script_hash);
+
     jet::check_lock_height(param::LOAN_EXPIRATION_TIME);
 
     ensure_input_asset_and_amount(lending_input_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
 
-    ensure_input_asset_burn(
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index,
-        param::BORROWER_DEBT_NFT_ASSET_ID
-    );
     ensure_input_asset_and_amount_burn(lender_nft_input_index, lender_nft_output_index, param::LENDER_NFT_ASSET_ID, 1);
 }
 
 // Offer acceptance flow
 
-fn get_acceptance_borrower_debt_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
-    (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 1))
-}
-
 fn get_acceptance_principal_output_index(start_output_index: u32) -> u32 {
-    safe_add_32(start_output_index, 2)
+    safe_add_32(start_output_index, 1)
 }
 
 fn get_acceptance_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
-    (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 3))
+    (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 2))
 }
 
 fn accept_offer() {
-    ensure_offer_is_pending();
-
     let (lending_input_index, lending_output_index): (u32, u32) = (jet::current_index(), 0);
-    let (
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index
-    ): (u32, u32) = get_acceptance_borrower_debt_nft_indexes(lending_input_index, lending_output_index);
     let (
         lender_nft_input_index,
         lender_nft_output_index
@@ -505,18 +476,22 @@ fn accept_offer() {
 
     assert!(jet::eq_32(lending_input_index, 0));
 
-    ensure_io_asset_and_amount_eq(lending_input_index, lending_output_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
-    ensure_output_script_hash(lending_output_index, param::ACTIVE_LENDING_OFFER_COV_HASH);
-
-    let expected_borrower_debt_nft_amount: u64 = get_total_amount_to_repay();
+    let total_amount_to_repay: u64 = get_total_amount_to_repay();
+    let current_script_hash: u256 = get_script_hash_for_storage(false, total_amount_to_repay);
+    let active_offer_script_hash: u256 = get_script_hash_for_storage(true, total_amount_to_repay);
 
     ensure_io_asset_and_amount_eq(
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index,
-        param::BORROWER_DEBT_NFT_ASSET_ID,
-        expected_borrower_debt_nft_amount
+        lending_input_index,
+        lending_output_index,
+        param::COLLATERAL_ASSET_ID,
+        param::COLLATERAL_AMOUNT
     );
-    ensure_output_script_hash(borrower_debt_nft_output_index, param::BORROWER_DEBT_NFT_COV_HASH);
+    ensure_script_hash_transition(
+        lending_input_index,
+        lending_output_index,
+        current_script_hash,
+        active_offer_script_hash
+    );
 
     ensure_io_asset_and_amount_eq(lender_nft_input_index, lender_nft_output_index, param::LENDER_NFT_ASSET_ID, 1);
 
@@ -526,73 +501,74 @@ fn accept_offer() {
 
 // Offer cancellation flow
 
-fn get_cancellation_borrower_debt_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+fn get_cancellation_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
     (safe_add_32(start_input_index, 1), start_output_index)
 }
 
-fn get_cancellation_lender_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
+fn get_cancellation_borrower_nft_indexes(start_input_index: u32, start_output_index: u32) -> (u32, u32) {
     (safe_add_32(start_input_index, 2), safe_add_32(start_output_index, 1))
 }
 
-fn cancel_offer(cancellation_sig: Signature) {
-    ensure_offer_is_pending();
-
+fn cancel_offer() {
     let lending_input_index: u32 = jet::current_index();
-    let (
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index
-    ): (u32, u32) = get_cancellation_borrower_debt_nft_indexes(lending_input_index, 0);
     let (
         lender_nft_input_index,
         lender_nft_output_index
     ): (u32, u32) = get_cancellation_lender_nft_indexes(lending_input_index, 0);
+    let (
+        borrower_nft_input_index,
+        borrower_nft_output_index
+    ): (u32, u32) = get_cancellation_borrower_nft_indexes(lending_input_index, 0);
 
     assert!(jet::eq_32(lending_input_index, 0));
 
-    jet::bip_0340_verify((param::BORROWER_PUB_KEY, jet::sig_all_hash()), cancellation_sig);
-
-    let expected_borrower_debt_nft_amount: u64 = get_total_amount_to_repay();
+    let current_script_hash: u256 = get_script_hash_for_storage(false, get_total_amount_to_repay());
+    ensure_input_script_hash(lending_input_index, current_script_hash);
 
     ensure_input_asset_and_amount(lending_input_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
 
     ensure_input_asset_and_amount_burn(
-        borrower_debt_nft_input_index,
-        borrower_debt_nft_output_index,
-        param::BORROWER_DEBT_NFT_ASSET_ID, expected_borrower_debt_nft_amount
+        borrower_nft_input_index,
+        borrower_nft_output_index,
+        param::BORROWER_NFT_ASSET_ID,
+        1
     );
     ensure_input_asset_and_amount_burn(
         lender_nft_input_index,
         lender_nft_output_index,
-        param::LENDER_NFT_ASSET_ID, 1
+        param::LENDER_NFT_ASSET_ID,
+        1
     );
 }
 
 fn main() {
     match witness::PATH {
-        Left(pending_offer_params: Either<(), Signature>) => {
+        Left(pending_offer_params: Either<(), ()>) => {
             match pending_offer_params {
                 Left(params: ()) => {
                     accept_offer();
                 },
-                Right(cancellation_sig: Signature) => {
-                    cancel_offer(cancellation_sig);
+                Right(params: ()) => {
+                    cancel_offer();
                 },
             }
         },
-        Right(active_offer_params: Either<Either<u64, ()>, ()>) => {
+        Right(active_offer_params: Either<Either<(u64, u64), u64>, u64>) => {
             match active_offer_params {
-                Left(repayment_params: Either<u64, ()>) => {
+                Left(repayment_params: Either<(u64, u64), u64>) => {
                     match repayment_params {
-                        Left(amount_to_repay: u64) => {
-                            partial_repay_offer(amount_to_repay);
+                        Left(partial_repayment_params: (u64, u64)) => {
+                            let (current_debt, amount_to_repay): (u64, u64) = partial_repayment_params;
+
+                            partial_repay_offer(current_debt, amount_to_repay);
                         },
-                        Right(params: ()) => {
-                            full_repay_offer();
+                        Right(current_debt: u64) => {
+                            full_repay_offer(current_debt);
                         },
                     }
                 },
-                Right(params: ()) => {
-                    liquidate_offer();
+                Right(current_debt: u64) => {
+                    liquidate_offer(current_debt);
                 }
             }
         },
