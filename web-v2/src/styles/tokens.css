@@ -1,6 +1,8 @@
 @layer base {
   :root {
-    --radius: 0.75rem;
+    /* Base radius drives HeroUI scale: xl = ×1.5, 2xl = ×2, 3xl = ×3.
+       8px → chip/item 16px, card/popover/modal 24px (Figma). Fields use --field-radius. */
+    --radius: 0.5rem;
     --field-radius: 0.75rem;
 
     --background: #f5f5f5;

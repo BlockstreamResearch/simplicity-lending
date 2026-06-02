@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
 import AppLayout from '@/components/AppLayout'
+import { env } from '@/constants/env'
 import { RoutePath } from '@/constants/routes'
 import { AppProviders } from '@/providers/AppProviders'
 
@@ -9,7 +10,6 @@ import BorrowPage from './pages/Borrow'
 import DashboardPage from './pages/Dashboard'
 import DesignSystemPage from './pages/DesignSystem'
 import SupplyPage from './pages/Supply'
-import { env } from '@/constants/env'
 
 const router = createBrowserRouter([
   {

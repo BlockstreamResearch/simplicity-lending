@@ -6,9 +6,8 @@ import {
 } from '@heroui/react'
 import type { ReactNode } from 'react'
 
-export interface UiModalProps extends Omit<ModalProps, 'children'> {
+export interface UiModalProps extends ModalProps {
   title?: ReactNode
-  children?: ReactNode
   footer?: ReactNode
   trigger?: ReactNode
   size?: ModalContainerProps['size']

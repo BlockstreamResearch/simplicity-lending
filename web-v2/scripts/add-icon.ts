@@ -72,7 +72,6 @@ async function createIconComponent({ name, content }: { name: string; content: s
   const componentName =
     name
       .toLowerCase()
-      .replace(/ /g, '-')
       .replace(/(^\w|-\w)/g, c => c.toUpperCase())
       .replace(/-/g, '') + 'Icon'
   const filePath = `./src/components/icons/${componentName}.tsx`

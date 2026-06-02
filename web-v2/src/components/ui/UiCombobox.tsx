@@ -19,12 +19,6 @@ export interface UiComboboxProps extends Omit<ComboBoxProps<UiSelectOption>, 'ch
   errorMessage?: ReactNode
 }
 
-const renderOption = (option: UiSelectOption) => (
-  <ListBoxItem id={option.id} textValue={option.label} isDisabled={option.isDisabled}>
-    {option.label}
-  </ListBoxItem>
-)
-
 export function UiCombobox({
   label,
   placeholder,
@@ -45,7 +39,13 @@ export function UiCombobox({
       {description && !invalid && <Description>{description}</Description>}
       {invalid && errorMessage && <FieldError>{errorMessage}</FieldError>}
       <ComboBox.Popover>
-        <ListBox<UiSelectOption>>{renderOption}</ListBox>
+        <ListBox<UiSelectOption>>
+          {(option: UiSelectOption) => (
+            <ListBoxItem id={option.id} textValue={option.label} isDisabled={option.isDisabled}>
+              {option.label}
+            </ListBoxItem>
+          )}
+        </ListBox>
       </ComboBox.Popover>
     </ComboBox>
   )

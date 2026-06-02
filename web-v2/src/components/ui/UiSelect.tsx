@@ -28,12 +28,6 @@ export interface UiSelectProps extends Omit<
   errorMessage?: ReactNode
 }
 
-const renderOption = (option: UiSelectOption) => (
-  <ListBoxItem id={option.id} textValue={option.label} isDisabled={option.isDisabled}>
-    {option.label}
-  </ListBoxItem>
-)
-
 export function UiSelect({
   options,
   label,
@@ -57,7 +51,13 @@ export function UiSelect({
       {description && !invalid && <Description>{description}</Description>}
       {invalid && errorMessage && <FieldError>{errorMessage}</FieldError>}
       <Select.Popover>
-        <ListBox items={options}>{renderOption}</ListBox>
+        <ListBox items={options}>
+          {(option: UiSelectOption) => (
+            <ListBoxItem id={option.id} textValue={option.label} isDisabled={option.isDisabled}>
+              {option.label}
+            </ListBoxItem>
+          )}
+        </ListBox>
       </Select.Popover>
     </Select>
   )
