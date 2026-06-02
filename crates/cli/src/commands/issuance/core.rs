@@ -8,30 +8,39 @@ use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, Requir
 use lending_contracts::utils::get_random_seed;
 
 use crate::cli::CliContext;
-use crate::commands::utility::UtilityCommandError;
+use crate::commands::issuance::IssuanceCommandError;
 
 #[derive(Debug, Subcommand)]
-pub enum UtilityCommand {
+pub enum IssuanceCommand {
     /// Issue arbitrary amount of new asset
     IssueAsset {
         /// Asset amount to issue
         #[arg(long = "asset-amount")]
         asset_amount: u64,
+
+        /// Inflation token amount (reissuance tokens)
+        #[arg(long = "inflation-amount")]
+        inflation_amount: Option<u64>,
     },
 }
 
-pub struct Utility {}
+pub struct Issuance {}
 
-impl Utility {
-    pub fn run(context: CliContext, command: &UtilityCommand) -> Result<(), UtilityCommandError> {
+impl Issuance {
+    pub fn run(context: CliContext, command: &IssuanceCommand) -> Result<(), IssuanceCommandError> {
         match command {
-            UtilityCommand::IssueAsset { asset_amount } => {
-                Utility::issue_asset(context, *asset_amount)
-            }
+            IssuanceCommand::IssueAsset {
+                asset_amount,
+                inflation_amount,
+            } => Issuance::issue_asset(context, *asset_amount, *inflation_amount),
         }
     }
 
-    fn issue_asset(context: CliContext, asset_amount: u64) -> Result<(), UtilityCommandError> {
+    fn issue_asset(
+        context: CliContext,
+        asset_amount: u64,
+        inflation_amount: Option<u64>,
+    ) -> Result<(), IssuanceCommandError> {
         let policy_utxos = context
             .signer
             .get_utxos_asset(context.get_network().policy_asset())?;
@@ -43,7 +52,7 @@ impl Utility {
 
         let issuance_details = ft.add_issuance_input(
             PartialInput::new(first_utxo.clone()),
-            IssuanceInput::new_issuance(asset_amount, 0, asset_entropy),
+            IssuanceInput::new_issuance(asset_amount, inflation_amount.unwrap_or(0), asset_entropy),
             RequiredSignature::NativeEcdsa,
         );
 

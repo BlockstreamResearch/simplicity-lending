@@ -1,6 +1,6 @@
 use simplex::signer::SignerError;
 
-use crate::commands::{account::AccountCommandError, utility::UtilityCommandError};
+use crate::commands::{account::AccountCommandError, issuance::IssuanceCommandError};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CliError {
@@ -8,7 +8,7 @@ pub enum CliError {
     UserAccountCommand(#[from] AccountCommandError),
 
     #[error(transparent)]
-    UtilityCommand(#[from] UtilityCommandError),
+    IssuanceCommand(#[from] IssuanceCommandError),
 
     #[error("Failed to create signer: '{0}'")]
     Signer(#[from] SignerError),
