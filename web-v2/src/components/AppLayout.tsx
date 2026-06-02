@@ -7,7 +7,7 @@ const NAV = [
   { to: RoutePath.Dashboard, label: 'Dashboard' },
   { to: RoutePath.Borrow, label: 'Borrow' },
   { to: RoutePath.Supply, label: 'Supply' },
-  ...(import.meta.env.DEV ? [{ to: RoutePath.DesignSystem, label: 'System' }] : []),
+  ...(env.DEV ? [{ to: RoutePath.DesignSystem, label: 'System' }] : []),
 ]
 
 export default function AppLayout() {

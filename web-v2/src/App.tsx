@@ -9,6 +9,7 @@ import BorrowPage from './pages/Borrow'
 import DashboardPage from './pages/Dashboard'
 import DesignSystemPage from './pages/DesignSystem'
 import SupplyPage from './pages/Supply'
+import { env } from '@/constants/env'
 
 const router = createBrowserRouter([
   {
@@ -28,7 +29,7 @@ const router = createBrowserRouter([
         path: RoutePath.Supply,
         element: <SupplyPage />,
       },
-      ...(import.meta.env.DEV
+      ...(env.DEV
         ? [
             {
               path: RoutePath.DesignSystem,
