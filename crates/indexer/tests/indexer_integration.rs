@@ -14,9 +14,10 @@ use axum::{
 };
 use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
 use lending_indexer::esplora_client::EsploraClient;
+use lending_indexer::indexer::process_tx;
 use lending_indexer::indexer::{
-    UtxoCache, get_last_indexed_height, handle_pending_offer_creation, load_utxo_cache,
-    process_block, process_tx, upsert_sync_state,
+    BlockProcessor, UtxoCache, get_last_indexed_height, handle_pending_offer_creation,
+    load_utxo_cache, upsert_sync_state,
 };
 use lending_indexer::models::{
     ActiveUtxo, OfferStatus, OfferUtxoModel, ParticipantType, UtxoData, UtxoType,
@@ -636,7 +637,9 @@ async fn process_block_rolls_back_db_and_cache_when_later_tx_fails() -> anyhow::
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let result = process_block(&pool, &client, &mut cache, 301, AssetId::default()).await;
+    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
+
+    let result = block_processor.process_block(&mut cache, 301).await;
     assert!(result.is_err());
 
     assert_eq!(current_status(&pool, valid_offer_id).await?, "pending");
@@ -722,7 +725,8 @@ async fn process_block_successfully_commits_sync_state_and_cache() -> anyhow::Re
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    process_block(&pool, &client, &mut cache, 512, AssetId::default()).await?;
+    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
+    block_processor.process_block(&mut cache, 512).await?;
 
     let sync =
         sqlx::query("SELECT last_indexed_height, last_indexed_hash FROM sync_state WHERE id = 1")
@@ -833,7 +837,9 @@ async fn process_block_returns_error_on_invalid_esplora_tx_payload() -> anyhow::
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let result = process_block(&pool, &client, &mut cache, 700, AssetId::default()).await;
+    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
+    let result = block_processor.process_block(&mut cache, 700).await;
+
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
@@ -855,7 +861,10 @@ async fn process_block_returns_error_on_esplora_http_500() -> anyhow::Result<()>
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let result = process_block(&pool, &client, &mut cache, 900, AssetId::default()).await;
+
+    let block_processor = BlockProcessor::new(pool.clone(), client, AssetId::default());
+    let result = block_processor.process_block(&mut cache, 900).await;
+
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
@@ -1123,6 +1132,7 @@ async fn same_block_participant_transfer_routes_through_pending_cache() -> anyho
 
     handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &pending_offer_tx, 4_001)
         .await?;
+
     process_tx(
         &mut sql_tx,
         &borrower_move_tx,
@@ -1330,7 +1340,8 @@ async fn process_block_rolls_back_when_first_tx_fails() -> anyhow::Result<()> {
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let result = process_block(&pool, &client, &mut cache, 7_001, AssetId::default()).await;
+    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
+    let result = block_processor.process_block(&mut cache, 7_001).await;
     assert!(result.is_err());
 
     assert_eq!(current_status(&pool, valid_offer_id).await?, "pending");
@@ -1384,7 +1395,8 @@ async fn process_block_empty_txids_still_commits_sync_state() -> anyhow::Result<
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    process_block(&pool, &client, &mut cache, 8_001, AssetId::default()).await?;
+    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
+    block_processor.process_block(&mut cache, 8_001).await?;
 
     let sync =
         sqlx::query("SELECT last_indexed_height, last_indexed_hash FROM sync_state WHERE id = 1")
@@ -1422,7 +1434,9 @@ async fn process_block_propagates_esplora_block_txids_500() -> anyhow::Result<()
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let result = process_block(&pool, &client, &mut cache, 9_100, AssetId::default()).await;
+    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
+    let result = block_processor.process_block(&mut cache, 9_100).await;
+
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
@@ -1455,7 +1469,9 @@ async fn process_block_propagates_esplora_tx_raw_500() -> anyhow::Result<()> {
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let result = process_block(&pool, &client, &mut cache, 9_200, AssetId::default()).await;
+    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
+    let result = block_processor.process_block(&mut cache, 9_200).await;
+
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 

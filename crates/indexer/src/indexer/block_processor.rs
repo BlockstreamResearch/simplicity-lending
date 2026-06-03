@@ -11,63 +11,81 @@ use crate::{
     models::UtxoData,
 };
 
-#[tracing::instrument(
-    name = "Processing block",
-    skip(db, client, cache, protocol_fee_keeper_asset_id),
-    fields(block_run_id = %Uuid::new_v4(), height = %block_height)
-)]
-pub async fn process_block(
-    db: &PgPool,
-    client: &EsploraClient,
-    cache: &mut UtxoCache,
-    block_height: u64,
+pub struct BlockProcessor {
+    db_pool: PgPool,
+    client: EsploraClient,
     protocol_fee_keeper_asset_id: AssetId,
-) -> anyhow::Result<()> {
-    let block_hash = client.get_block_hash_at_height(block_height).await?;
-    let txids = client.get_block_txids(&block_hash).await?;
-    let tx_count = txids.len();
+}
 
-    let mut txs: Vec<Transaction> = Vec::with_capacity(txids.len());
-
-    for txid in txids {
-        txs.push(client.get_tx_by_id(txid).await?);
+impl BlockProcessor {
+    pub fn new(
+        db_pool: PgPool,
+        client: EsploraClient,
+        protocol_fee_keeper_asset_id: AssetId,
+    ) -> Self {
+        Self {
+            db_pool,
+            client,
+            protocol_fee_keeper_asset_id,
+        }
     }
 
-    let mut sql_tx = db.begin().await?;
-    cache.begin_block();
+    #[tracing::instrument(
+        name = "Processing block",
+        skip(self, cache),
+        fields(block_run_id = %Uuid::new_v4(), height = %block_height)
+    )]
+    pub async fn process_block(
+        &self,
+        cache: &mut UtxoCache,
+        block_height: u64,
+    ) -> anyhow::Result<()> {
+        let block_hash = self.client.get_block_hash_at_height(block_height).await?;
+        let txids = self.client.get_block_txids(&block_hash).await?;
+        let tx_count = txids.len();
 
-    let process_result = async {
-        for tx in txs {
-            process_tx(
-                &mut sql_tx,
-                &tx,
-                cache,
-                block_height,
-                protocol_fee_keeper_asset_id,
-            )
-            .await?;
+        let mut txs: Vec<Transaction> = Vec::with_capacity(txids.len());
+
+        for txid in txids {
+            txs.push(self.client.get_tx_by_id(txid).await?);
         }
 
-        db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
-        sql_tx.commit().await?;
+        let mut sql_tx = self.db_pool.begin().await?;
+        cache.begin_block();
 
-        Ok(())
-    }
-    .await;
+        let process_result = async {
+            for tx in txs {
+                process_tx(
+                    &mut sql_tx,
+                    &tx,
+                    cache,
+                    block_height,
+                    self.protocol_fee_keeper_asset_id,
+                )
+                .await?;
+            }
 
-    match process_result {
-        Ok(()) => {
-            cache.commit_block();
-            tracing::info!(
-                "Successfully indexed block #{} ({} txs)",
-                block_height,
-                tx_count
-            );
+            db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
+            sql_tx.commit().await?;
+
             Ok(())
         }
-        Err(error) => {
-            cache.abort_block();
-            Err(error)
+        .await;
+
+        match process_result {
+            Ok(()) => {
+                cache.commit_block();
+                tracing::info!(
+                    "Successfully indexed block #{} ({} txs)",
+                    block_height,
+                    tx_count
+                );
+                Ok(())
+            }
+            Err(error) => {
+                cache.abort_block();
+                Err(error)
+            }
         }
     }
 }

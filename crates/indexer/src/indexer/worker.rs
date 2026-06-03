@@ -3,19 +3,16 @@ use std::time::Duration;
 use sqlx::PgPool;
 use tokio::time::{Interval, interval};
 
-use simplex::simplicityhl::elements::AssetId;
-
 use crate::configuration::IndexerSettings;
 use crate::esplora_client::EsploraClient;
-use crate::indexer::{UtxoCache, get_last_indexed_height, load_utxo_cache, process_block};
+use crate::indexer::{BlockProcessor, UtxoCache, get_last_indexed_height, load_utxo_cache};
 
 pub struct Worker {
-    db_pool: PgPool,
     client: EsploraClient,
     cache: UtxoCache,
     last_indexed_height: u64,
     interval: Interval,
-    protocol_fee_keeper_asset_id: AssetId,
+    block_processor: BlockProcessor,
 }
 
 impl Worker {
@@ -30,13 +27,18 @@ impl Worker {
 
         let interval = interval(Duration::from_millis(settings.interval));
 
-        Self {
+        let block_processor = BlockProcessor::new(
             db_pool,
+            client.clone(),
+            settings.protocol_fee_keeper_asset_id,
+        );
+
+        Self {
             client,
             cache,
             last_indexed_height,
             interval,
-            protocol_fee_keeper_asset_id: settings.protocol_fee_keeper_asset_id,
+            block_processor,
         }
     }
 
@@ -55,14 +57,10 @@ impl Worker {
             while self.last_indexed_height < latest_height {
                 let next_height = self.last_indexed_height + 1;
 
-                match process_block(
-                    &self.db_pool,
-                    &self.client,
-                    &mut self.cache,
-                    next_height,
-                    self.protocol_fee_keeper_asset_id,
-                )
-                .await
+                match self
+                    .block_processor
+                    .process_block(&mut self.cache, next_height)
+                    .await
                 {
                     Ok(_) => {
                         self.last_indexed_height = next_height;
