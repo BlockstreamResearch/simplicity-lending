@@ -403,9 +403,15 @@ impl Account {
 
     fn show_account_info(context: CliContext) -> Result<(), AccountCommandError> {
         let signer_wpkh_address = context.signer.get_address();
+        let signer_confidential_address = context.signer.get_confidential_address();
         let signer_schnorr_pubkey = context.signer.get_schnorr_public_key();
+        let signer_blinding_pubkey = context.signer.get_blinding_public_key();
 
         println!("User WPKH address: {:?}", signer_wpkh_address);
+        println!(
+            "User confidential address: {:?}",
+            signer_confidential_address
+        );
         println!(
             "User WPKH script pubkey: {:?}",
             signer_wpkh_address.script_pubkey().to_hex()
@@ -414,6 +420,7 @@ impl Account {
             "User Schnorr public key: {:?}",
             signer_schnorr_pubkey.to_hex()
         );
+        println!("User blinding public key: {signer_blinding_pubkey}");
 
         Ok(())
     }
