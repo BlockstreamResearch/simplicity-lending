@@ -1,6 +1,8 @@
 use clap::Subcommand;
 
-use crate::commands::{account::AccountCommand, issuance::IssuanceCommand};
+use crate::commands::{
+    account::AccountCommand, issuance::IssuanceCommand, utility::UtilityCommand,
+};
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
@@ -13,5 +15,10 @@ pub enum Command {
     Issuance {
         #[command(subcommand)]
         command: IssuanceCommand,
+    },
+    /// Utility helper commands
+    Utility {
+        #[command(subcommand)]
+        command: UtilityCommand,
     },
 }
