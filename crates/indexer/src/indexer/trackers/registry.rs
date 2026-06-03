@@ -2,43 +2,60 @@ use simplex::simplicityhl::elements::{AssetId, Transaction, hex::ToHex};
 
 use crate::{
     db::DbTx,
-    indexer::{cache::UtxoCache, handlers, is_offer_creation_tx},
+    indexer::{UtxoCache, handlers, is_offer_creation_tx},
     models::UtxoData,
 };
 
-pub struct TxProcessor {
+pub struct TrackerRegistry {
+    cache: UtxoCache,
     protocol_fee_keeper_asset_id: AssetId,
 }
 
-impl TxProcessor {
-    pub fn new(protocol_fee_keeper_asset_id: AssetId) -> Self {
+impl TrackerRegistry {
+    pub fn new(cache: UtxoCache, protocol_fee_keeper_asset_id: AssetId) -> Self {
         Self {
+            cache,
             protocol_fee_keeper_asset_id,
         }
     }
 
+    pub fn begin_block(&mut self) {
+        self.cache.begin_block();
+    }
+
+    pub fn commit_block(&mut self) {
+        self.cache.commit_block();
+    }
+
+    pub fn abort_block(&mut self) {
+        self.cache.abort_block();
+    }
+
+    pub fn cache(&self) -> &UtxoCache {
+        &self.cache
+    }
+
     #[tracing::instrument(
-        name = "Processing transaction",
-        skip(self, sql_tx, tx, block_height, cache),
+        name = "Processing utxo tracking",
+        skip(self, sql_tx, tx, block_height),
         fields(txid = %tx.txid().to_hex())
     )]
     pub async fn process_tx(
-        &self,
+        &mut self,
         sql_tx: &mut DbTx<'_>,
         tx: &Transaction,
-        cache: &mut UtxoCache,
         block_height: u64,
     ) -> anyhow::Result<()> {
         let mut is_offer_tx = false;
 
         for input in &tx.input {
-            if let Some(utxo_info) = cache.get(&input.previous_output) {
+            if let Some(utxo_info) = self.cache.get(&input.previous_output).copied() {
                 match utxo_info.data {
                     UtxoData::Offer(utxo_type) => {
                         handlers::handle_offer_transition(
                             sql_tx,
                             tx,
-                            cache,
+                            &mut self.cache,
                             &input.previous_output,
                             utxo_info.offer_id,
                             utxo_type,
@@ -51,7 +68,7 @@ impl TxProcessor {
                         handlers::handle_participant_movement(
                             sql_tx,
                             tx,
-                            cache,
+                            &mut self.cache,
                             &input.previous_output,
                             utxo_info.offer_id,
                             participant_type,
@@ -68,7 +85,7 @@ impl TxProcessor {
         {
             handlers::pending_offer::handle_pending_offer_creation(
                 sql_tx,
-                cache,
+                &mut self.cache,
                 args,
                 tx,
                 block_height,

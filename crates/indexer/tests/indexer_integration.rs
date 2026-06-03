@@ -15,8 +15,8 @@ use axum::{
 use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
 use lending_indexer::esplora_client::EsploraClient;
 use lending_indexer::indexer::{
-    BlockProcessor, TxProcessor, UtxoCache, get_last_indexed_height, handle_pending_offer_creation,
-    load_utxo_cache, upsert_sync_state,
+    BlockProcessor, TrackerRegistry, UtxoCache, get_last_indexed_height,
+    handle_pending_offer_creation, load_utxo_cache, upsert_sync_state,
 };
 use lending_indexer::models::{
     ActiveUtxo, OfferStatus, OfferUtxoModel, ParticipantType, UtxoData, UtxoType,
@@ -217,12 +217,13 @@ async fn sync_state_row_count(pool: &PgPool) -> anyhow::Result<i64> {
 async fn process_tx_and_commit(
     pool: &PgPool,
     tx: &Transaction,
-    cache: &mut UtxoCache,
+    tracker_registry: &mut TrackerRegistry,
     block_height: u64,
 ) -> anyhow::Result<()> {
     let mut sql_tx = pool.begin().await?;
-    TxProcessor::new(AssetId::from_slice(&[3; 32]).unwrap())
-        .process_tx(&mut sql_tx, tx, cache, block_height)
+
+    tracker_registry
+        .process_tx(&mut sql_tx, tx, block_height)
         .await?;
 
     sql_tx.commit().await?;
@@ -246,11 +247,13 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
         },
     );
 
+    let mut tracker_registry = TrackerRegistry::new(cache, AssetId::from_slice(&[3; 32]).unwrap());
+
     // Dispatch: all outputs non-null-data -> lending path (not cancellation).
     // Pad to 7 inputs so the tx matches the shape of a real lending-creation
     // spend even if the dispatcher later adds an input-count guard.
     let lending_tx = padded_tx_with_inputs(vec![pending_offer_outpoint], vec![normal_output(); 5]);
-    process_tx_and_commit(&pool, &lending_tx, &mut cache, 101).await?;
+    process_tx_and_commit(&pool, &lending_tx, &mut tracker_registry, 101).await?;
 
     // Dispatch: output[1] non-null + [2, 3, 4] null-data -> repayment path.
     let lending_outpoint = OutPoint {
@@ -267,14 +270,14 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
             null_data_output(),
         ],
     );
-    process_tx_and_commit(&pool, &repayment_tx, &mut cache, 102).await?;
+    process_tx_and_commit(&pool, &repayment_tx, &mut tracker_registry, 102).await?;
 
     let repayment_outpoint = OutPoint {
         txid: repayment_tx.txid(),
         vout: 1,
     };
     let claim_tx = tx_with_input(repayment_outpoint, vec![normal_output(), normal_output()]);
-    process_tx_and_commit(&pool, &claim_tx, &mut cache, 103).await?;
+    process_tx_and_commit(&pool, &claim_tx, &mut tracker_registry, 103).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "claimed");
 
@@ -289,9 +292,14 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
     .collect();
     assert_eq!(utxos, expected);
 
-    assert!(cache.get(&pending_offer_outpoint).is_none());
-    assert!(cache.get(&lending_outpoint).is_none());
-    assert!(cache.get(&repayment_outpoint).is_none());
+    assert!(
+        tracker_registry
+            .cache()
+            .get(&pending_offer_outpoint)
+            .is_none()
+    );
+    assert!(tracker_registry.cache().get(&lending_outpoint).is_none());
+    assert!(tracker_registry.cache().get(&repayment_outpoint).is_none());
 
     Ok(())
 }
@@ -314,7 +322,10 @@ async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Res
     );
 
     let lending_tx = padded_tx_with_inputs(vec![pending_offer_outpoint], vec![normal_output(); 5]);
-    process_tx_and_commit(&pool, &lending_tx, &mut cache, 201).await?;
+
+    let mut tracker_registry = TrackerRegistry::new(cache, AssetId::from_slice(&[3; 32]).unwrap());
+
+    process_tx_and_commit(&pool, &lending_tx, &mut tracker_registry, 201).await?;
 
     // Dispatch: outputs [1, 2, 3] null-data, [4] non-null -> liquidation path.
     let lending_outpoint = OutPoint {
@@ -331,7 +342,7 @@ async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Res
             normal_output(),
         ],
     );
-    process_tx_and_commit(&pool, &liquidation_tx, &mut cache, 202).await?;
+    process_tx_and_commit(&pool, &liquidation_tx, &mut tracker_registry, 202).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "liquidated");
     // Pins: liquidation handler inserts the post-liquidation utxo as already
@@ -376,7 +387,10 @@ async fn process_tx_prelock_to_cancellation_sets_status_and_archives() -> anyhow
             null_data_output(),
         ],
     );
-    process_tx_and_commit(&pool, &cancellation_tx, &mut cache, 401).await?;
+
+    let mut tracker_registry = TrackerRegistry::new(cache, AssetId::from_slice(&[3; 32]).unwrap());
+
+    process_tx_and_commit(&pool, &cancellation_tx, &mut tracker_registry, 401).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "cancelled");
     assert_eq!(
@@ -421,14 +435,22 @@ async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Resu
         borrower_outpoint,
         vec![explicit_asset_output(7, non_op_return_script())],
     );
-    process_tx_and_commit(&pool, &move_tx, &mut cache, 502).await?;
+
+    let mut tracker_registry = TrackerRegistry::new(cache, AssetId::from_slice(&[3; 32]).unwrap());
+
+    process_tx_and_commit(&pool, &move_tx, &mut tracker_registry, 502).await?;
 
     let new_borrower_outpoint = OutPoint {
         txid: move_tx.txid(),
         vout: 0,
     };
-    assert!(cache.get(&borrower_outpoint).is_none());
-    assert!(cache.get(&new_borrower_outpoint).is_some());
+    assert!(tracker_registry.cache().get(&borrower_outpoint).is_none());
+    assert!(
+        tracker_registry
+            .cache()
+            .get(&new_borrower_outpoint)
+            .is_some()
+    );
     assert_eq!(
         count_participants(&pool, offer_id, "borrower", Some(false)).await?,
         1
@@ -444,9 +466,14 @@ async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Resu
         new_borrower_outpoint,
         vec![explicit_asset_output(7, Script::new_op_return(b"burn"))],
     );
-    process_tx_and_commit(&pool, &burn_tx, &mut cache, 503).await?;
+    process_tx_and_commit(&pool, &burn_tx, &mut tracker_registry, 503).await?;
 
-    assert!(cache.get(&new_borrower_outpoint).is_none());
+    assert!(
+        tracker_registry
+            .cache()
+            .get(&new_borrower_outpoint)
+            .is_none()
+    );
     assert_eq!(
         count_participants(&pool, offer_id, "borrower", Some(false)).await?,
         0
@@ -496,9 +523,18 @@ async fn participant_move_without_target_asset_marks_spent_without_new_utxo() ->
         borrower_outpoint,
         vec![explicit_asset_output(9, non_op_return_script())],
     );
-    process_tx_and_commit(&pool, &move_without_target_asset_tx, &mut cache, 532).await?;
 
-    assert!(cache.get(&borrower_outpoint).is_none());
+    let mut tracker_registry = TrackerRegistry::new(cache, AssetId::from_slice(&[3; 32]).unwrap());
+
+    process_tx_and_commit(
+        &pool,
+        &move_without_target_asset_tx,
+        &mut tracker_registry,
+        532,
+    )
+    .await?;
+
+    assert!(tracker_registry.cache().get(&borrower_outpoint).is_none());
     assert_eq!(
         count_participants(&pool, offer_id, "borrower", Some(false)).await?,
         0
@@ -562,7 +598,9 @@ async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyho
         ],
     );
 
-    process_tx_and_commit(&pool, &combined_tx, &mut cache, 522).await?;
+    let mut tracker_registry = TrackerRegistry::new(cache, AssetId::from_slice(&[3; 32]).unwrap());
+
+    process_tx_and_commit(&pool, &combined_tx, &mut tracker_registry, 522).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "active");
 
@@ -574,10 +612,20 @@ async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyho
         txid: combined_tx.txid(),
         vout: 1,
     };
-    assert!(cache.get(&pending_offer_outpoint).is_none());
-    assert!(cache.get(&borrower_outpoint).is_none());
-    assert!(cache.get(&lending_outpoint).is_some());
-    assert!(cache.get(&moved_borrower_outpoint).is_some());
+    assert!(
+        tracker_registry
+            .cache()
+            .get(&pending_offer_outpoint)
+            .is_none()
+    );
+    assert!(tracker_registry.cache().get(&borrower_outpoint).is_none());
+    assert!(tracker_registry.cache().get(&lending_outpoint).is_some());
+    assert!(
+        tracker_registry
+            .cache()
+            .get(&moved_borrower_outpoint)
+            .is_some()
+    );
 
     assert_eq!(
         count_participants(&pool, offer_id, "borrower", Some(false)).await?,
@@ -632,9 +680,10 @@ async fn process_block_rolls_back_db_and_cache_when_later_tx_fails() -> anyhow::
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
+    let tracker_registry = TrackerRegistry::new(cache, AssetId::default());
+    let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
 
-    let result = block_processor.process_block(&mut cache, 301).await;
+    let result = block_processor.process_block(301).await;
     assert!(result.is_err());
 
     assert_eq!(current_status(&pool, valid_offer_id).await?, "pending");
@@ -649,13 +698,31 @@ async fn process_block_rolls_back_db_and_cache_when_later_tx_fails() -> anyhow::
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
     // Cache rolled back: originals intact, optimistic insert from good_tx gone.
-    assert!(cache.get(&valid_prelock_outpoint).is_some());
-    assert!(cache.get(&missing_participant_outpoint).is_some());
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&valid_prelock_outpoint)
+            .is_some()
+    );
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&missing_participant_outpoint)
+            .is_some()
+    );
     let rolled_back_lending_outpoint = OutPoint {
         txid: good_tx.txid(),
         vout: 0,
     };
-    assert!(cache.get(&rolled_back_lending_outpoint).is_none());
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&rolled_back_lending_outpoint)
+            .is_none()
+    );
 
     server_handle.abort();
     Ok(())
@@ -720,8 +787,10 @@ async fn process_block_successfully_commits_sync_state_and_cache() -> anyhow::Re
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
-    block_processor.process_block(&mut cache, 512).await?;
+    let tracker_registry = TrackerRegistry::new(cache, AssetId::default());
+    let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
+
+    block_processor.process_block(512).await?;
 
     let sync =
         sqlx::query("SELECT last_indexed_height, last_indexed_hash FROM sync_state WHERE id = 1")
@@ -738,10 +807,34 @@ async fn process_block_successfully_commits_sync_state_and_cache() -> anyhow::Re
         txid: move_tx.txid(),
         vout: 0,
     };
-    assert!(cache.get(&pending_offer_outpoint).is_none());
-    assert!(cache.get(&borrower_outpoint).is_none());
-    assert!(cache.get(&lending_outpoint).is_some());
-    assert!(cache.get(&moved_borrower_outpoint).is_some());
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&pending_offer_outpoint)
+            .is_none()
+    );
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&borrower_outpoint)
+            .is_none()
+    );
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&lending_outpoint)
+            .is_some()
+    );
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&moved_borrower_outpoint)
+            .is_some()
+    );
 
     server_handle.abort();
     Ok(())
@@ -821,7 +914,6 @@ async fn restart_helpers_restore_height_and_only_unspent_cache_entries() -> anyh
 #[serial]
 async fn process_block_returns_error_on_invalid_esplora_tx_payload() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
 
     let bogus_txid = Txid::from_slice(&[99; 32])?;
     let (base_url, server_handle) = start_mock_esplora(MockEsploraState {
@@ -832,8 +924,10 @@ async fn process_block_returns_error_on_invalid_esplora_tx_payload() -> anyhow::
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
-    let result = block_processor.process_block(&mut cache, 700).await;
+    let tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
+
+    let result = block_processor.process_block(700).await;
 
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
@@ -850,15 +944,16 @@ async fn process_block_returns_error_on_esplora_http_500() -> anyhow::Result<()>
     }
 
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
 
     let app = Router::new().route("/block-height/{height}", get(block_height_500));
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
 
-    let block_processor = BlockProcessor::new(pool.clone(), client, AssetId::default());
-    let result = block_processor.process_block(&mut cache, 900).await;
+    let tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
+
+    let result = block_processor.process_block(900).await;
 
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
@@ -1128,8 +1223,10 @@ async fn same_block_participant_transfer_routes_through_pending_cache() -> anyho
     handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &pending_offer_tx, 4_001)
         .await?;
 
-    TxProcessor::new(AssetId::default())
-        .process_tx(&mut sql_tx, &borrower_move_tx, &mut cache, 4_001)
+    let mut tracker_registry = TrackerRegistry::new(cache, AssetId::default());
+
+    tracker_registry
+        .process_tx(&mut sql_tx, &borrower_move_tx, 4_001)
         .await?;
 
     upsert_sync_state(
@@ -1139,16 +1236,21 @@ async fn same_block_participant_transfer_routes_through_pending_cache() -> anyho
     )
     .await?;
     sql_tx.commit().await?;
-    cache.commit_block();
+    tracker_registry.commit_block();
 
     let offer_row = sqlx::query("SELECT id, current_status::text AS s FROM offers")
         .fetch_one(&pool)
         .await?;
     let offer_id: Uuid = offer_row.get("id");
     assert_eq!(offer_row.get::<String, _>("s"), "pending");
-    assert!(cache.get(&borrower_outpoint).is_none());
-    assert!(cache.get(&moved_borrower_outpoint).is_some());
-    assert!(cache.get(&lender_outpoint).is_some());
+    assert!(tracker_registry.cache().get(&borrower_outpoint).is_none());
+    assert!(
+        tracker_registry
+            .cache()
+            .get(&moved_borrower_outpoint)
+            .is_some()
+    );
+    assert!(tracker_registry.cache().get(&lender_outpoint).is_some());
     assert_eq!(
         count_participants(&pool, offer_id, "borrower", Some(false)).await?,
         1
@@ -1203,14 +1305,16 @@ async fn lender_nft_movement_updates_history() -> anyhow::Result<()> {
             non_op_return_script(),
         )],
     );
-    process_tx_and_commit(&pool, &move_tx, &mut cache, 5_002).await?;
+    let mut tracker_registry = TrackerRegistry::new(cache, AssetId::default());
+
+    process_tx_and_commit(&pool, &move_tx, &mut tracker_registry, 5_002).await?;
 
     let moved_outpoint = OutPoint {
         txid: move_tx.txid(),
         vout: 0,
     };
-    assert!(cache.get(&lender_outpoint).is_none());
-    assert!(cache.get(&moved_outpoint).is_some());
+    assert!(tracker_registry.cache().get(&lender_outpoint).is_none());
+    assert!(tracker_registry.cache().get(&moved_outpoint).is_some());
     assert_eq!(
         count_participants(&pool, offer_id, "lender", Some(false)).await?,
         1
@@ -1331,8 +1435,10 @@ async fn process_block_rolls_back_when_first_tx_fails() -> anyhow::Result<()> {
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
-    let result = block_processor.process_block(&mut cache, 7_001).await;
+    let tracker_registry = TrackerRegistry::new(cache, AssetId::default());
+    let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
+
+    let result = block_processor.process_block(7_001).await;
     assert!(result.is_err());
 
     assert_eq!(current_status(&pool, valid_offer_id).await?, "pending");
@@ -1347,13 +1453,31 @@ async fn process_block_rolls_back_when_first_tx_fails() -> anyhow::Result<()> {
     );
     assert_eq!(sync_state_row_count(&pool).await?, 0);
 
-    assert!(cache.get(&valid_prelock_outpoint).is_some());
-    assert!(cache.get(&missing_participant_outpoint).is_some());
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&valid_prelock_outpoint)
+            .is_some()
+    );
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&missing_participant_outpoint)
+            .is_some()
+    );
     let rolled_back_lending_outpoint = OutPoint {
         txid: good_tx.txid(),
         vout: 0,
     };
-    assert!(cache.get(&rolled_back_lending_outpoint).is_none());
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&rolled_back_lending_outpoint)
+            .is_none()
+    );
 
     server_handle.abort();
     Ok(())
@@ -1386,8 +1510,10 @@ async fn process_block_empty_txids_still_commits_sync_state() -> anyhow::Result<
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
-    block_processor.process_block(&mut cache, 8_001).await?;
+    let tracker_registry = TrackerRegistry::new(cache, AssetId::default());
+    let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
+
+    block_processor.process_block(8_001).await?;
 
     let sync =
         sqlx::query("SELECT last_indexed_height, last_indexed_hash FROM sync_state WHERE id = 1")
@@ -1400,7 +1526,13 @@ async fn process_block_empty_txids_still_commits_sync_state() -> anyhow::Result<
         current_status(&pool, pre_existing_offer_id).await?,
         "pending"
     );
-    assert!(cache.get(&pre_existing_outpoint).is_some());
+    assert!(
+        block_processor
+            .tracker_registry()
+            .cache()
+            .get(&pre_existing_outpoint)
+            .is_some()
+    );
 
     server_handle.abort();
     Ok(())
@@ -1417,7 +1549,6 @@ async fn process_block_propagates_esplora_block_txids_500() -> anyhow::Result<()
     }
 
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
 
     let app = Router::new()
         .route("/block-height/{height}", get(block_hash_ok))
@@ -1425,8 +1556,10 @@ async fn process_block_propagates_esplora_block_txids_500() -> anyhow::Result<()
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
-    let result = block_processor.process_block(&mut cache, 9_100).await;
+    let tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
+
+    let result = block_processor.process_block(9_100).await;
 
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
@@ -1451,7 +1584,6 @@ async fn process_block_propagates_esplora_tx_raw_500() -> anyhow::Result<()> {
     }
 
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
 
     let app = Router::new()
         .route("/block-height/{height}", get(block_hash_ok))
@@ -1460,8 +1592,10 @@ async fn process_block_propagates_esplora_tx_raw_500() -> anyhow::Result<()> {
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let block_processor = BlockProcessor::new(pool.clone(), client.clone(), AssetId::default());
-    let result = block_processor.process_block(&mut cache, 9_200).await;
+    let tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
+
+    let result = block_processor.process_block(9_200).await;
 
     assert!(result.is_err());
     assert_eq!(sync_state_row_count(&pool).await?, 0);
@@ -1474,7 +1608,6 @@ async fn process_block_propagates_esplora_tx_raw_500() -> anyhow::Result<()> {
 #[serial]
 async fn spent_utxo_does_not_reroute_from_cache() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
 
     let offer_id = Uuid::new_v4();
     let mut offer = offer_model(offer_id, 10_000, vec![0xaa_u8; 32]);
@@ -1499,7 +1632,10 @@ async fn spent_utxo_does_not_reroute_from_cache() -> anyhow::Result<()> {
     // Deliberately do NOT seed the cache: load_utxo_cache would have excluded
     // this spent outpoint. A tx that now spends it must be ignored entirely.
     let stale_spend_tx = tx_with_input(spent_pending_offer_outpoint, vec![normal_output(); 5]);
-    process_tx_and_commit(&pool, &stale_spend_tx, &mut cache, 10_100).await?;
+
+    let mut tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+
+    process_tx_and_commit(&pool, &stale_spend_tx, &mut tracker_registry, 10_100).await?;
 
     assert_eq!(current_status(&pool, offer_id).await?, "cancelled");
     assert_eq!(
@@ -1510,7 +1646,7 @@ async fn spent_utxo_does_not_reroute_from_cache() -> anyhow::Result<()> {
         txid: stale_spend_tx.txid(),
         vout: 0,
     };
-    assert!(cache.get(&post_tx_outpoint).is_none());
+    assert!(tracker_registry.cache().get(&post_tx_outpoint).is_none());
 
     Ok(())
 }

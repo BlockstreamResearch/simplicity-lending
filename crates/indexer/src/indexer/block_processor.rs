@@ -1,43 +1,39 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::{AssetId, Transaction};
+use simplex::simplicityhl::elements::Transaction;
 
 use uuid::Uuid;
 
 use crate::{
     esplora_client::EsploraClient,
-    indexer::{TxProcessor, cache::UtxoCache, db},
+    indexer::{db, trackers::TrackerRegistry},
 };
 
 pub struct BlockProcessor {
     db_pool: PgPool,
     client: EsploraClient,
-    tx_processor: TxProcessor,
+    tracker_registry: TrackerRegistry,
 }
 
 impl BlockProcessor {
-    pub fn new(
-        db_pool: PgPool,
-        client: EsploraClient,
-        protocol_fee_keeper_asset_id: AssetId,
-    ) -> Self {
+    pub fn new(db_pool: PgPool, client: EsploraClient, tracker_registry: TrackerRegistry) -> Self {
         Self {
             db_pool,
             client,
-            tx_processor: TxProcessor::new(protocol_fee_keeper_asset_id),
+            tracker_registry,
         }
+    }
+
+    pub fn tracker_registry(&self) -> &TrackerRegistry {
+        &self.tracker_registry
     }
 
     #[tracing::instrument(
         name = "Processing block",
-        skip(self, cache),
+        skip(self),
         fields(block_run_id = %Uuid::new_v4(), height = %block_height)
     )]
-    pub async fn process_block(
-        &self,
-        cache: &mut UtxoCache,
-        block_height: u64,
-    ) -> anyhow::Result<()> {
+    pub async fn process_block(&mut self, block_height: u64) -> anyhow::Result<()> {
         let block_hash = self.client.get_block_hash_at_height(block_height).await?;
         let txids = self.client.get_block_txids(&block_hash).await?;
         let tx_count = txids.len();
@@ -49,12 +45,12 @@ impl BlockProcessor {
         }
 
         let mut sql_tx = self.db_pool.begin().await?;
-        cache.begin_block();
+        self.tracker_registry.begin_block();
 
         let process_result = async {
             for tx in txs {
-                self.tx_processor
-                    .process_tx(&mut sql_tx, &tx, cache, block_height)
+                self.tracker_registry
+                    .process_tx(&mut sql_tx, &tx, block_height)
                     .await?;
             }
 
@@ -67,7 +63,7 @@ impl BlockProcessor {
 
         match process_result {
             Ok(()) => {
-                cache.commit_block();
+                self.tracker_registry.commit_block();
                 tracing::info!(
                     "Successfully indexed block #{} ({} txs)",
                     block_height,
@@ -76,7 +72,7 @@ impl BlockProcessor {
                 Ok(())
             }
             Err(error) => {
-                cache.abort_block();
+                self.tracker_registry.abort_block();
                 Err(error)
             }
         }

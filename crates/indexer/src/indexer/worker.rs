@@ -5,11 +5,11 @@ use tokio::time::{Interval, interval};
 
 use crate::configuration::IndexerSettings;
 use crate::esplora_client::EsploraClient;
-use crate::indexer::{BlockProcessor, UtxoCache, get_last_indexed_height, load_utxo_cache};
+use crate::indexer::trackers::TrackerRegistry;
+use crate::indexer::{BlockProcessor, get_last_indexed_height, load_utxo_cache};
 
 pub struct Worker {
     client: EsploraClient,
-    cache: UtxoCache,
     last_indexed_height: u64,
     interval: Interval,
     block_processor: BlockProcessor,
@@ -25,17 +25,14 @@ impl Worker {
             .await
             .expect("Failed to load active utxos");
 
+        let tracker_registry = TrackerRegistry::new(cache, settings.protocol_fee_keeper_asset_id);
+
         let interval = interval(Duration::from_millis(settings.interval));
 
-        let block_processor = BlockProcessor::new(
-            db_pool,
-            client.clone(),
-            settings.protocol_fee_keeper_asset_id,
-        );
+        let block_processor = BlockProcessor::new(db_pool, client.clone(), tracker_registry);
 
         Self {
             client,
-            cache,
             last_indexed_height,
             interval,
             block_processor,
@@ -57,11 +54,7 @@ impl Worker {
             while self.last_indexed_height < latest_height {
                 let next_height = self.last_indexed_height + 1;
 
-                match self
-                    .block_processor
-                    .process_block(&mut self.cache, next_height)
-                    .await
-                {
+                match self.block_processor.process_block(next_height).await {
                     Ok(_) => {
                         self.last_indexed_height = next_height;
                     }
