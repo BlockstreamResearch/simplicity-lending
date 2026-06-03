@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::DbTx;
-use crate::indexer::cache::UtxoCache;
+use crate::indexer::cache::WatchCache;
 use crate::models::{
     ActiveUtxo, OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType,
     UtxoData, UtxoType,
@@ -293,7 +293,7 @@ pub async fn get_offer_participant_asset_id(
 }
 
 #[tracing::instrument(name = "Loading all active UTXOs from DB", skip(db))]
-pub async fn load_utxo_cache(db: &PgPool) -> anyhow::Result<UtxoCache> {
+pub async fn load_utxo_cache(db: &PgPool) -> anyhow::Result<WatchCache<ActiveUtxo>> {
     let offer_rows = sqlx::query_as!(
         OfferUtxoModel,
         r#"
@@ -342,7 +342,7 @@ pub async fn load_utxo_cache(db: &PgPool) -> anyhow::Result<UtxoCache> {
     let offers_count = offer_rows.len();
     let offer_participants_count = participant_rows.len();
 
-    let mut cache = UtxoCache::with_capacity(offers_count + offer_participants_count);
+    let mut cache = WatchCache::with_capacity(offers_count + offer_participants_count);
 
     for rec in offer_rows {
         let outpoint = OutPoint {
@@ -375,7 +375,7 @@ pub async fn load_utxo_cache(db: &PgPool) -> anyhow::Result<UtxoCache> {
     tracing::info!(
         offers = offers_count,
         participants = offer_participants_count,
-        "Warm-up: UtxoCache populated"
+        "Warm-up: WatchCache populated"
     );
 
     Ok(cache)

@@ -3,10 +3,10 @@ use uuid::Uuid;
 
 use crate::indexer::handlers::{handle_offer_acceptance, handle_offer_cancellation};
 use crate::indexer::{
-    cache::UtxoCache, handle_loan_liquidation, handle_loan_repayment, handle_repayment_claim,
+    cache::WatchCache, handle_loan_liquidation, handle_loan_repayment, handle_repayment_claim,
     is_loan_repayment_tx,
 };
-use crate::models::UtxoType;
+use crate::models::{ActiveUtxo, UtxoType};
 use crate::{db::DbTx, indexer::is_offer_cancellation_tx};
 
 #[tracing::instrument(
@@ -17,7 +17,7 @@ use crate::{db::DbTx, indexer::is_offer_cancellation_tx};
 pub async fn handle_offer_transition(
     sql_tx: &mut DbTx<'_>,
     tx: &Transaction,
-    cache: &mut UtxoCache,
+    cache: &mut WatchCache<ActiveUtxo>,
     old_outpoint: &OutPoint,
     offer_id: Uuid,
     utxo_type: UtxoType,

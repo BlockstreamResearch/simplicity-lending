@@ -2,17 +2,17 @@ use simplex::simplicityhl::elements::{AssetId, Transaction, hex::ToHex};
 
 use crate::{
     db::DbTx,
-    indexer::{UtxoCache, handlers, is_offer_creation_tx},
-    models::UtxoData,
+    indexer::{WatchCache, handlers, is_offer_creation_tx},
+    models::{ActiveUtxo, UtxoData},
 };
 
 pub struct TrackerRegistry {
-    cache: UtxoCache,
+    cache: WatchCache<ActiveUtxo>,
     protocol_fee_keeper_asset_id: AssetId,
 }
 
 impl TrackerRegistry {
-    pub fn new(cache: UtxoCache, protocol_fee_keeper_asset_id: AssetId) -> Self {
+    pub fn new(cache: WatchCache<ActiveUtxo>, protocol_fee_keeper_asset_id: AssetId) -> Self {
         Self {
             cache,
             protocol_fee_keeper_asset_id,
@@ -31,7 +31,7 @@ impl TrackerRegistry {
         self.cache.abort_block();
     }
 
-    pub fn cache(&self) -> &UtxoCache {
+    pub fn cache(&self) -> &WatchCache<ActiveUtxo> {
         &self.cache
     }
 

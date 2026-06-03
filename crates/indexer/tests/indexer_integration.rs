@@ -15,7 +15,7 @@ use axum::{
 use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
 use lending_indexer::esplora_client::EsploraClient;
 use lending_indexer::indexer::{
-    BlockProcessor, TrackerRegistry, UtxoCache, get_last_indexed_height,
+    BlockProcessor, TrackerRegistry, WatchCache, get_last_indexed_height,
     handle_pending_offer_creation, load_utxo_cache, upsert_sync_state,
 };
 use lending_indexer::models::{
@@ -234,7 +234,7 @@ async fn process_tx_and_commit(
 #[serial]
 async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let offer_id = Uuid::new_v4();
     let pending_offer_outpoint = outpoint_with_txid_byte(11, 0);
@@ -308,7 +308,7 @@ async fn process_tx_full_repay_then_claim_lifecycle() -> anyhow::Result<()> {
 #[serial]
 async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let offer_id = Uuid::new_v4();
     let pending_offer_outpoint = outpoint_with_txid_byte(22, 0);
@@ -363,7 +363,7 @@ async fn process_tx_liquidation_updates_offer_and_archives_utxo() -> anyhow::Res
 #[serial]
 async fn process_tx_prelock_to_cancellation_sets_status_and_archives() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let offer_id = Uuid::new_v4();
     let pending_offer_outpoint = outpoint_with_txid_byte(55, 0);
@@ -405,7 +405,7 @@ async fn process_tx_prelock_to_cancellation_sets_status_and_archives() -> anyhow
 #[serial]
 async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let offer_id = Uuid::new_v4();
     let pending_offer_outpoint = outpoint_with_txid_byte(66, 0);
@@ -491,7 +491,7 @@ async fn participant_movement_updates_history_and_handles_burn() -> anyhow::Resu
 async fn participant_move_without_target_asset_marks_spent_without_new_utxo() -> anyhow::Result<()>
 {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let offer_id = Uuid::new_v4();
     let pending_offer_outpoint = outpoint_with_txid_byte(74, 0);
@@ -551,7 +551,7 @@ async fn participant_move_without_target_asset_marks_spent_without_new_utxo() ->
 #[serial]
 async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let offer_id = Uuid::new_v4();
     let pending_offer_outpoint = outpoint_with_txid_byte(72, 0);
@@ -639,7 +639,7 @@ async fn single_tx_with_multiple_known_inputs_applies_all_transitions() -> anyho
 #[serial]
 async fn process_block_rolls_back_db_and_cache_when_later_tx_fails() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     // Valid offer whose pre-lock the first tx of the block will consume.
     let valid_offer_id = Uuid::new_v4();
@@ -732,7 +732,7 @@ async fn process_block_rolls_back_db_and_cache_when_later_tx_fails() -> anyhow::
 #[serial]
 async fn process_block_successfully_commits_sync_state_and_cache() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let offer_id = Uuid::new_v4();
     let pending_offer_outpoint = outpoint_with_txid_byte(70, 0);
@@ -924,7 +924,7 @@ async fn process_block_returns_error_on_invalid_esplora_tx_payload() -> anyhow::
     .await?;
     let client = EsploraClient::with_base_url(&base_url);
 
-    let tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let tracker_registry = TrackerRegistry::new(WatchCache::new(), AssetId::default());
     let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
 
     let result = block_processor.process_block(700).await;
@@ -950,7 +950,7 @@ async fn process_block_returns_error_on_esplora_http_500() -> anyhow::Result<()>
 
     let client = EsploraClient::with_base_url(&base_url);
 
-    let tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let tracker_registry = TrackerRegistry::new(WatchCache::new(), AssetId::default());
     let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
 
     let result = block_processor.process_block(900).await;
@@ -1015,7 +1015,7 @@ fn pending_offer_shaped_tx(
 #[serial]
 async fn process_tx_pending_offer_creation_inserts_offer_and_participants() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let params = synthesized_pending_offer_parameters();
     let borrower_script = Script::from(vec![0xaa_u8, 0xbb]);
@@ -1113,7 +1113,7 @@ async fn process_tx_pending_offer_creation_inserts_offer_and_participants() -> a
 #[serial]
 async fn handle_pending_offer_creation_is_idempotent_on_replay() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let params = synthesized_pending_offer_parameters();
     let tx = pending_offer_shaped_tx(
@@ -1159,7 +1159,7 @@ async fn handle_pending_offer_creation_is_idempotent_on_replay() -> anyhow::Resu
 async fn handle_pending_offer_creation_with_malformed_outputs_returns_error() -> anyhow::Result<()>
 {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let params = synthesized_pending_offer_parameters();
     let malformed_tx = tx_with_input(
@@ -1189,7 +1189,7 @@ async fn handle_pending_offer_creation_with_malformed_outputs_returns_error() ->
 #[serial]
 async fn same_block_participant_transfer_routes_through_pending_cache() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let params = synthesized_pending_offer_parameters();
     let pending_offer_tx = pending_offer_shaped_tx(
@@ -1270,7 +1270,7 @@ const LENDER_ASSET_BYTE: u8 = 8;
 #[serial]
 async fn lender_nft_movement_updates_history() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let offer_id = Uuid::new_v4();
     // Seeded `lender_nft_asset_id` is `[8; 32]` -> movement tx must emit
@@ -1393,7 +1393,7 @@ async fn load_utxo_cache_excludes_spent_utxos() -> anyhow::Result<()> {
 #[serial]
 async fn process_block_rolls_back_when_first_tx_fails() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let valid_offer_id = Uuid::new_v4();
     let valid_prelock_outpoint = outpoint_with_txid_byte(0x70, 0);
@@ -1487,7 +1487,7 @@ async fn process_block_rolls_back_when_first_tx_fails() -> anyhow::Result<()> {
 #[serial]
 async fn process_block_empty_txids_still_commits_sync_state() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut cache = UtxoCache::new();
+    let mut cache = WatchCache::new();
 
     let pre_existing_offer_id = Uuid::new_v4();
     let pre_existing_outpoint = outpoint_with_txid_byte(0x80, 0);
@@ -1556,7 +1556,7 @@ async fn process_block_propagates_esplora_block_txids_500() -> anyhow::Result<()
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let tracker_registry = TrackerRegistry::new(WatchCache::new(), AssetId::default());
     let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
 
     let result = block_processor.process_block(9_100).await;
@@ -1592,7 +1592,7 @@ async fn process_block_propagates_esplora_tx_raw_500() -> anyhow::Result<()> {
     let (base_url, server_handle) = start_mock_server(app).await?;
 
     let client = EsploraClient::with_base_url(&base_url);
-    let tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let tracker_registry = TrackerRegistry::new(WatchCache::new(), AssetId::default());
     let mut block_processor = BlockProcessor::new(pool.clone(), client.clone(), tracker_registry);
 
     let result = block_processor.process_block(9_200).await;
@@ -1633,7 +1633,7 @@ async fn spent_utxo_does_not_reroute_from_cache() -> anyhow::Result<()> {
     // this spent outpoint. A tx that now spends it must be ignored entirely.
     let stale_spend_tx = tx_with_input(spent_pending_offer_outpoint, vec![normal_output(); 5]);
 
-    let mut tracker_registry = TrackerRegistry::new(UtxoCache::new(), AssetId::default());
+    let mut tracker_registry = TrackerRegistry::new(WatchCache::new(), AssetId::default());
 
     process_tx_and_commit(&pool, &stale_spend_tx, &mut tracker_registry, 10_100).await?;
 

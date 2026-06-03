@@ -1,21 +1,19 @@
 use simplex::simplicityhl::elements::OutPoint;
 use std::collections::HashMap;
 
-use crate::models::ActiveUtxo;
-
-#[derive(Debug)]
-enum PendingOp {
-    Upsert(ActiveUtxo),
+#[derive(Debug, Clone)]
+enum PendingOp<V> {
+    Upsert(V),
     Delete,
 }
 
-#[derive(Debug)]
-pub struct UtxoCache {
-    inner: HashMap<OutPoint, ActiveUtxo>,
-    block_pending: Option<HashMap<OutPoint, PendingOp>>,
+#[derive(Debug, Clone)]
+pub struct WatchCache<V> {
+    inner: HashMap<OutPoint, V>,
+    block_pending: Option<HashMap<OutPoint, PendingOp<V>>>,
 }
 
-impl UtxoCache {
+impl<V> WatchCache<V> {
     pub fn new() -> Self {
         Self {
             inner: HashMap::new(),
@@ -43,8 +41,8 @@ impl UtxoCache {
 
         for (outpoint, op) in pending {
             match op {
-                PendingOp::Upsert(active_utxo) => {
-                    self.inner.insert(outpoint, active_utxo);
+                PendingOp::Upsert(cached_data) => {
+                    self.inner.insert(outpoint, cached_data);
                 }
                 PendingOp::Delete => {
                     self.inner.remove(&outpoint);
@@ -57,20 +55,20 @@ impl UtxoCache {
         self.block_pending = None;
     }
 
-    pub fn insert(&mut self, outpoint: OutPoint, active_utxo: ActiveUtxo) {
+    pub fn insert(&mut self, outpoint: OutPoint, data: V) {
         if let Some(pending) = self.block_pending.as_mut() {
-            pending.insert(outpoint, PendingOp::Upsert(active_utxo));
+            pending.insert(outpoint, PendingOp::Upsert(data));
         } else {
-            self.inner.insert(outpoint, active_utxo);
+            self.inner.insert(outpoint, data);
         }
     }
 
-    pub fn get(&self, outpoint: &OutPoint) -> Option<&ActiveUtxo> {
+    pub fn get(&self, outpoint: &OutPoint) -> Option<&V> {
         if let Some(pending) = self.block_pending.as_ref()
             && let Some(op) = pending.get(outpoint)
         {
             return match op {
-                PendingOp::Upsert(active_utxo) => Some(active_utxo),
+                PendingOp::Upsert(cached_data) => Some(cached_data),
                 PendingOp::Delete => None,
             };
         }
@@ -87,7 +85,7 @@ impl UtxoCache {
     }
 }
 
-impl Default for UtxoCache {
+impl<V> Default for WatchCache<V> {
     fn default() -> Self {
         Self::new()
     }
@@ -95,7 +93,8 @@ impl Default for UtxoCache {
 
 #[cfg(test)]
 mod tests {
-    use super::UtxoCache;
+    use super::WatchCache;
+
     use crate::models::{ActiveUtxo, UtxoData, UtxoType};
     use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
     use uuid::Uuid;
@@ -116,7 +115,7 @@ mod tests {
 
     #[test]
     fn insert_and_remove_without_active_block_apply_immediately() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let op = outpoint(1, 0);
 
         cache.insert(op, active_utxo(10));
@@ -131,7 +130,7 @@ mod tests {
 
     #[test]
     fn begin_block_is_idempotent_and_preserves_pending_delta() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let op = outpoint(2, 0);
 
         cache.begin_block();
@@ -147,7 +146,7 @@ mod tests {
 
     #[test]
     fn pending_changes_are_visible_before_commit() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let existing = outpoint(3, 0);
         let pending = outpoint(4, 0);
 
@@ -165,7 +164,7 @@ mod tests {
 
     #[test]
     fn abort_block_discards_all_pending_changes() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let existing = outpoint(5, 0);
         let pending = outpoint(6, 0);
 
@@ -184,7 +183,7 @@ mod tests {
 
     #[test]
     fn commit_block_applies_pending_changes() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let existing = outpoint(7, 0);
         let pending = outpoint(8, 0);
 
@@ -203,7 +202,7 @@ mod tests {
 
     #[test]
     fn latest_pending_operation_wins_for_same_outpoint() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let op = outpoint(9, 0);
 
         cache.begin_block();
@@ -220,7 +219,7 @@ mod tests {
 
     #[test]
     fn commit_without_active_block_is_noop() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let op = outpoint(10, 0);
         cache.insert(op, active_utxo(100));
 
@@ -234,7 +233,7 @@ mod tests {
 
     #[test]
     fn abort_without_active_block_is_noop() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let op = outpoint(11, 0);
         cache.insert(op, active_utxo(110));
 
@@ -248,7 +247,7 @@ mod tests {
 
     #[test]
     fn abort_then_retry_produces_correct_state() {
-        let mut cache = UtxoCache::new();
+        let mut cache = WatchCache::new();
         let existing = outpoint(12, 0);
         let aborted_new = outpoint(13, 0);
         let committed_new = outpoint(14, 0);

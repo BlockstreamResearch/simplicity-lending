@@ -6,7 +6,7 @@ mod trackers;
 pub mod worker;
 
 pub use block_processor::*;
-pub use cache::UtxoCache;
+pub use cache::WatchCache;
 pub use db::*;
 pub use handlers::*;
 pub use trackers::*;

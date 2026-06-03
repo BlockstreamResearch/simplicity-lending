@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
 
-use crate::indexer::{cache::UtxoCache, db};
+use crate::indexer::{cache::WatchCache, db};
 use crate::models::{OfferParticipantModel, ParticipantType, UtxoData};
 use crate::{db::DbTx, models::ActiveUtxo};
 
@@ -19,7 +19,7 @@ use crate::{db::DbTx, models::ActiveUtxo};
 pub async fn handle_participant_movement(
     sql_tx: &mut DbTx<'_>,
     tx: &Transaction,
-    cache: &mut UtxoCache,
+    cache: &mut WatchCache<ActiveUtxo>,
     old_outpoint: &OutPoint,
     offer_id: Uuid,
     participant_type: ParticipantType,

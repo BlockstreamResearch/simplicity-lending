@@ -5,7 +5,7 @@ use simplex::simplicityhl::elements::{OutPoint, Transaction, hashes::Hash};
 
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters};
 
-use crate::indexer::{cache::UtxoCache, db};
+use crate::indexer::{cache::WatchCache, db};
 use crate::models::{OfferModel, OfferUtxoModel, UtxoType};
 use crate::{
     db::DbTx,
@@ -14,12 +14,12 @@ use crate::{
 
 #[tracing::instrument(
     name = "Handling offer creation transaction",
-    skip(sql_tx, offer_parameters, tx, block_height),
+    skip(sql_tx, cache, offer_parameters, tx, block_height),
     fields(txid = %tx.txid(), %block_height),
 )]
 pub async fn handle_pending_offer_creation(
     sql_tx: &mut DbTx<'_>,
-    cache: &mut UtxoCache,
+    cache: &mut WatchCache<ActiveUtxo>,
     offer_parameters: LendingOfferParameters,
     tx: &Transaction,
     block_height: u64,

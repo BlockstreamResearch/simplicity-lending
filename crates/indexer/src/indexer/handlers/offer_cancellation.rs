@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
 
-use crate::indexer::{cache::UtxoCache, db};
-use crate::models::{OfferUtxoModel, UtxoType};
+use crate::indexer::{cache::WatchCache, db};
+use crate::models::{ActiveUtxo, OfferUtxoModel, UtxoType};
 use crate::{db::DbTx, models::OfferStatus};
 
 #[tracing::instrument(
@@ -13,7 +13,7 @@ use crate::{db::DbTx, models::OfferStatus};
 )]
 pub async fn handle_offer_cancellation(
     sql_tx: &mut DbTx<'_>,
-    cache: &mut UtxoCache,
+    cache: &mut WatchCache<ActiveUtxo>,
     old_outpoint: &OutPoint,
     offer_id: Uuid,
     txid: Txid,
