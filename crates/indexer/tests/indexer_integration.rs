@@ -14,9 +14,8 @@ use axum::{
 };
 use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
 use lending_indexer::esplora_client::EsploraClient;
-use lending_indexer::indexer::process_tx;
 use lending_indexer::indexer::{
-    BlockProcessor, UtxoCache, get_last_indexed_height, handle_pending_offer_creation,
+    BlockProcessor, TxProcessor, UtxoCache, get_last_indexed_height, handle_pending_offer_creation,
     load_utxo_cache, upsert_sync_state,
 };
 use lending_indexer::models::{
@@ -222,14 +221,10 @@ async fn process_tx_and_commit(
     block_height: u64,
 ) -> anyhow::Result<()> {
     let mut sql_tx = pool.begin().await?;
-    process_tx(
-        &mut sql_tx,
-        tx,
-        cache,
-        block_height,
-        AssetId::from_slice(&[3; 32]).unwrap(),
-    )
-    .await?;
+    TxProcessor::new(AssetId::from_slice(&[3; 32]).unwrap())
+        .process_tx(&mut sql_tx, tx, cache, block_height)
+        .await?;
+
     sql_tx.commit().await?;
     Ok(())
 }
@@ -1133,14 +1128,10 @@ async fn same_block_participant_transfer_routes_through_pending_cache() -> anyho
     handle_pending_offer_creation(&mut sql_tx, &mut cache, params, &pending_offer_tx, 4_001)
         .await?;
 
-    process_tx(
-        &mut sql_tx,
-        &borrower_move_tx,
-        &mut cache,
-        4_001,
-        AssetId::default(),
-    )
-    .await?;
+    TxProcessor::new(AssetId::default())
+        .process_tx(&mut sql_tx, &borrower_move_tx, &mut cache, 4_001)
+        .await?;
+
     upsert_sync_state(
         &mut sql_tx,
         4_001,

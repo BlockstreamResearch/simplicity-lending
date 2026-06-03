@@ -1,20 +1,18 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::{AssetId, Transaction, hex::ToHex};
+use simplex::simplicityhl::elements::{AssetId, Transaction};
 
 use uuid::Uuid;
 
 use crate::{
-    db::DbTx,
     esplora_client::EsploraClient,
-    indexer::{cache::UtxoCache, db, handlers, is_offer_creation_tx},
-    models::UtxoData,
+    indexer::{TxProcessor, cache::UtxoCache, db},
 };
 
 pub struct BlockProcessor {
     db_pool: PgPool,
     client: EsploraClient,
-    protocol_fee_keeper_asset_id: AssetId,
+    tx_processor: TxProcessor,
 }
 
 impl BlockProcessor {
@@ -26,7 +24,7 @@ impl BlockProcessor {
         Self {
             db_pool,
             client,
-            protocol_fee_keeper_asset_id,
+            tx_processor: TxProcessor::new(protocol_fee_keeper_asset_id),
         }
     }
 
@@ -55,14 +53,9 @@ impl BlockProcessor {
 
         let process_result = async {
             for tx in txs {
-                process_tx(
-                    &mut sql_tx,
-                    &tx,
-                    cache,
-                    block_height,
-                    self.protocol_fee_keeper_asset_id,
-                )
-                .await?;
+                self.tx_processor
+                    .process_tx(&mut sql_tx, &tx, cache, block_height)
+                    .await?;
             }
 
             db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
@@ -88,64 +81,4 @@ impl BlockProcessor {
             }
         }
     }
-}
-
-#[tracing::instrument(
-    name = "Processing transaction",
-    skip(sql_tx, tx, block_height, cache, protocol_fee_keeper_asset_id),
-    fields(txid = %tx.txid().to_hex())
-)]
-pub async fn process_tx(
-    sql_tx: &mut DbTx<'_>,
-    tx: &Transaction,
-    cache: &mut UtxoCache,
-    block_height: u64,
-    protocol_fee_keeper_asset_id: AssetId,
-) -> anyhow::Result<()> {
-    let mut is_offer_tx = false;
-
-    for input in &tx.input {
-        if let Some(utxo_info) = cache.get(&input.previous_output) {
-            match utxo_info.data {
-                UtxoData::Offer(utxo_type) => {
-                    handlers::handle_offer_transition(
-                        sql_tx,
-                        tx,
-                        cache,
-                        &input.previous_output,
-                        utxo_info.offer_id,
-                        utxo_type,
-                        block_height,
-                    )
-                    .await?;
-                    is_offer_tx = true;
-                }
-                UtxoData::Participant(participant_type) => {
-                    handlers::handle_participant_movement(
-                        sql_tx,
-                        tx,
-                        cache,
-                        &input.previous_output,
-                        utxo_info.offer_id,
-                        participant_type,
-                        block_height,
-                    )
-                    .await?;
-                }
-            }
-        }
-    }
-
-    if !is_offer_tx && let Some(args) = is_offer_creation_tx(tx, protocol_fee_keeper_asset_id) {
-        handlers::pending_offer::handle_pending_offer_creation(
-            sql_tx,
-            cache,
-            args,
-            tx,
-            block_height,
-        )
-        .await?;
-    }
-
-    Ok(())
 }
