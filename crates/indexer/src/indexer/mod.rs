@@ -8,4 +8,4 @@ pub use cache::UtxoCache;
 pub use db::*;
 pub use handlers::*;
 pub use processors::*;
-pub use worker::*;
+pub use worker::Worker;
