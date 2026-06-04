@@ -129,7 +129,6 @@ export default function CreateBorrowerAccountDemo() {
       const issuanceFactoryProgram = loadIssuanceFactoryProgram({
         issuingUtxosCount: ISSUING_UTXOS_COUNT,
         reissuanceFlags: REISSUANCE_FLAGS,
-        factoryOwnerPubkey: key.toBytes(),
       })
       const factoryAddress = issuanceFactoryProgram.createP2trAddress(key, lwkNetwork)
       const factoryAddressString = factoryAddress.toString()
