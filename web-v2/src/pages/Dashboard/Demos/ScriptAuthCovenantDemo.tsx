@@ -16,15 +16,15 @@ import { useState } from 'react'
 
 import { broadcastTx, fetchAddressUtxo, fetchTxRaw } from '@/api/esplora/methods'
 import { getTxExplorerUrl } from '@/api/esplora/utils'
-import { findUtxoByOutpoint, outpointToString } from '@/lwk/utxo'
-import { useLwk } from '@/providers/lwk/useLwk'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { utxoToOutpointString } from '@/lwk/utxo'
 import {
   latestScriptAuthState,
   saveScriptAuthState,
   selectDemoScriptAuthInputs,
   useTxConfirmations,
-} from '@/simplicity/script-auth/helpers'
+} from '@/pages/Dashboard/Demos/helpers'
+import { useLwk } from '@/providers/lwk/useLwk'
+import { useWallet } from '@/providers/wallet/useWallet'
 import { buildScriptAuthWitness, loadScriptAuthProgram } from '@/simplicity/script-auth/program'
 import { hexToBytes } from '@/utils/hex'
 
@@ -113,14 +113,11 @@ export default function ScriptAuthCovenantDemo() {
       const covenantAddress = scriptAuthAddress.toString()
 
       const fundingAmount = fundingUtxo.unblinded().value() - DEFAULT_SCRIPT_AUTH_FEE_RESERVE
-      const fundingOutpoint = outpointToString(fundingUtxo)
+      const fundingOutpoint = utxoToOutpointString(fundingUtxo)
 
-      const authOutpoint = outpointToString(authUtxo)
+      const authOutpoint = utxoToOutpointString(authUtxo)
 
       const wollet = await getWollet()
-      if (!wollet) {
-        throw new Error('Wallet not connected')
-      }
 
       const fundingPset = new TxBuilder(lwkNetwork)
         .feeRate(DEFAULT_SCRIPT_AUTH_FEE_RATE)
@@ -195,11 +192,13 @@ export default function ScriptAuthCovenantDemo() {
 
       const walletUtxos = await getWalletUtxos()
 
-      const authUtxo = findUtxoByOutpoint(walletUtxos, scriptAuthState.authOutpoint)
+      const authUtxo =
+        walletUtxos.find(utxo => utxoToOutpointString(utxo) === scriptAuthState.authOutpoint) ??
+        null
       if (!authUtxo) {
         throw new Error('ScriptAuth auth UTXO not found')
       }
-      const authOutpointString = outpointToString(authUtxo)
+      const authOutpointString = utxoToOutpointString(authUtxo)
       const covenantOutpoint = `${covenantUtxo.txid}:${covenantUtxo.vout}`
 
       const covenantTx = Transaction.fromBytes(await fetchTxRaw(covenantUtxo.txid))
@@ -237,9 +236,6 @@ export default function ScriptAuthCovenantDemo() {
       }
 
       const wollet = await getWollet()
-      if (!wollet) {
-        throw new Error('Wallet not connected')
-      }
 
       const recipientAddress = Address.parse(receiveAddress, lwkNetwork).toUnconfidential()
       const recipientAddressString = recipientAddress.toString()

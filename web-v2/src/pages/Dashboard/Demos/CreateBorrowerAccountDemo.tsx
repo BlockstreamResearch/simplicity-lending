@@ -11,11 +11,11 @@ import { useState } from 'react'
 
 import { broadcastTx } from '@/api/esplora/methods'
 import { getTxExplorerUrl } from '@/api/esplora/utils'
-import { getPolicyAssetUtxos, outpointToString } from '@/lwk/utxo'
+import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { useTxConfirmations } from '@/pages/Dashboard/Demos/helpers'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
-import { useTxConfirmations } from '@/simplicity/script-auth/helpers'
 import { bytesToHex } from '@/utils/hex'
 
 interface CreateBorrowerAccountSummary {
@@ -110,13 +110,11 @@ export default function CreateBorrowerAccountDemo() {
       }
 
       const wollet = await getWollet()
-      if (!wollet) {
-        throw new Error('Wallet not connected')
-      }
 
       const policyAsset = lwkNetwork.policyAsset()
       const walletUtxos = await getWalletUtxos()
-      const feeUtxo = getPolicyAssetUtxos(walletUtxos, policyAsset)
+      const feeUtxo = walletUtxos
+        .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
         .filter(utxo => utxo.unblinded().value() > DEFAULT_FEE_RESERVE)
         .sort((a, b) => Number(a.unblinded().value() - b.unblinded().value()))[0]
 
@@ -124,7 +122,7 @@ export default function CreateBorrowerAccountDemo() {
         throw new Error('Need a wallet L-BTC UTXO larger than the fee reserve')
       }
 
-      const fundingOutpoint = outpointToString(feeUtxo)
+      const fundingOutpoint = utxoToOutpointString(feeUtxo)
       const receiveAddress = Address.parse(receiveAddressString, lwkNetwork).toUnconfidential()
       const issuanceFactoryProgram = loadIssuanceFactoryProgram({
         issuingUtxosCount: ISSUING_UTXOS_COUNT,

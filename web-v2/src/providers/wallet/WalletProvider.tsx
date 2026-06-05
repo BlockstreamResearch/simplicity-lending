@@ -246,23 +246,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return session.connector.signPset(pset)
   }, [])
 
-  const getReceiveAddress = useCallback(async (): Promise<string | null> => {
+  const getReceiveAddress = useCallback(async (): Promise<string> => {
     const session = sessionRef.current
-    if (!session) return null
+    if (!session) throw new Error('WalletProvider: not connected')
     return session.wollet.address(0).address().toString()
   }, [])
 
   const getXOnlyPublicKey = useCallback(async (): Promise<XOnlyPublicKey | null> => {
     const session = sessionRef.current
-    if (!session) return null
+    if (!session) throw new Error('WalletProvider: not connected')
     return session.connector.getXOnlyPublicKey?.() ?? null
   }, [])
 
-  const verifyReceiveAddress = useCallback(async (): Promise<string | null> => {
+  const verifyReceiveAddress = useCallback(async (): Promise<string> => {
     const session = sessionRef.current
-    if (!session) return null
+    if (!session) throw new Error('WalletProvider: not connected')
     if (!session.connector.getVerifiedReceiveAddress)
-      return session.wollet.address().address().toString()
+      return session.wollet.address(0).address().toString()
 
     return session.connector.getVerifiedReceiveAddress(state.walletType ?? 'Wpkh', session.wollet)
   }, [state.walletType])
@@ -277,9 +277,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return session.wollet.utxos()
   }, [])
 
-  const getWollet = useCallback(async (): Promise<Wollet | null> => {
+  const getWollet = useCallback(async (): Promise<Wollet> => {
     const session = sessionRef.current
-    if (!session) return null
+    if (!session) throw new Error('WalletProvider: not connected')
 
     return session.wollet
   }, [])

@@ -2,7 +2,7 @@ import type { AssetId, WalletTxOut } from 'lwk_web'
 import { useEffect, useState } from 'react'
 
 import { fetchTxConfirmations } from '@/api/esplora/methods'
-import { getPolicyAssetUtxos, outpointToString } from '@/lwk/utxo'
+import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 
 export interface DemoScriptAuthInputSelection {
   authUtxo: WalletTxOut
@@ -21,7 +21,7 @@ export function selectDemoScriptAuthInputs(
   policyAsset: AssetId | string,
   feeReserve: bigint,
 ): DemoScriptAuthInputSelection {
-  const lbtcUtxos = getPolicyAssetUtxos(walletUtxos, policyAsset)
+  const lbtcUtxos = walletUtxos.filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
 
   const fundingUtxo = lbtcUtxos
     .filter(utxo => utxo.unblinded().value() > feeReserve)
@@ -36,8 +36,8 @@ export function selectDemoScriptAuthInputs(
     throw new Error('Need a wallet L-BTC UTXO larger than the fee reserve to fund ScriptAuth')
   }
 
-  const fundingOutpoint = outpointToString(fundingUtxo)
-  const authUtxo = lbtcUtxos.find(utxo => outpointToString(utxo) !== fundingOutpoint)
+  const fundingOutpoint = utxoToOutpointString(fundingUtxo)
+  const authUtxo = lbtcUtxos.find(utxo => utxoToOutpointString(utxo) !== fundingOutpoint)
 
   if (!authUtxo) {
     throw new Error('Need a second wallet L-BTC UTXO to use as the ScriptAuth auth input')

@@ -1,6 +1,6 @@
-import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
-import ScriptAuthCovenantDemo from './ScriptAuthCovenantDemo'
-import { WalletDemo } from './WalletDemo'
+import CreateBorrowerAccountDemo from './Demos/CreateBorrowerAccountDemo'
+import ScriptAuthCovenantDemo from './Demos/ScriptAuthCovenantDemo'
+import { WalletDemo } from './Demos/WalletDemo'
 
 export default function DashboardPage() {
   return (
