@@ -1,14 +1,18 @@
-FROM rust:1.90-bookworm AS lwk-builder
+# TODO: Use original LWK repository, once all required methods are exposed
+# FROM rust:1.90-bookworm AS lwk-builder
+FROM rust:1.91-bookworm AS lwk-builder
 
-ARG LWK_REF=wasm_0.16.0
-ARG LWK_COMMIT=4786e456db6efc05413721f6489899a6426eaa47
+ARG LWK_REF=wasm-0.16-expose-external-utxos
+# ARG LWK_COMMIT=4786e456db6efc05413721f6489899a6426eaa47
+ARG LWK_COMMIT=9f1faea1a6765b7591a8377834be38f4a8f090ae
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git pkg-config libssl-dev ca-certificates clang \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup target add wasm32-unknown-unknown
 RUN cargo install wasm-pack --locked
-RUN git clone --depth 1 --branch "${LWK_REF}" https://github.com/Blockstream/lwk.git /tmp/lwk
+# RUN git clone --depth 1 --branch "${LWK_REF}" https://github.com/Blockstream/lwk.git /tmp/lwk
+RUN git clone --depth 1 --branch "${LWK_REF}" https://github.com/lilbonekit/lwk.git /tmp/lwk
 RUN test "$(git -C /tmp/lwk rev-parse HEAD)" = "${LWK_COMMIT}"
 WORKDIR /tmp/lwk/lwk_wasm
 RUN RUSTFLAGS='--cfg web_sys_unstable_apis' wasm-pack build --target web --out-dir pkg_web --features simplicity,serial

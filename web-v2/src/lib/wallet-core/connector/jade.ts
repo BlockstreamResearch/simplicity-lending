@@ -1,6 +1,11 @@
-import type { Jade, Network, Pset, Wollet, WolletDescriptor } from 'lwk_web'
-
-import type { Lwk } from '@/lwk'
+import {
+  Jade,
+  type Network,
+  type Pset,
+  Singlesig,
+  type Wollet,
+  type WolletDescriptor,
+} from 'lwk_web'
 
 import type { ConnectionStatus, JadeVersionInfo, WalletType } from '../types'
 import type { WalletConnector } from './types'
@@ -17,17 +22,14 @@ export class JadeConnector implements WalletConnector {
   private busy = false
   private _id: string | null = null
 
-  constructor(
-    private readonly lwk: Lwk,
-    private readonly lwkNetwork: Network,
-  ) {}
+  constructor(private readonly lwkNetwork: Network) {}
 
   async connect(): Promise<void> {
     if (this.jade !== null) return
     // HACK: The TS bindings declare this as a sync constructor, but wasm-bindgen
     // generates an async constructor under the hood that returns a Promise.
     // `await new this.lwk.Jade(...)` is intentional — not a mistake.
-    this.jade = await new this.lwk.Jade(this.lwkNetwork, true)
+    this.jade = await new Jade(this.lwkNetwork, true)
   }
 
   disconnect(): void {
@@ -91,7 +93,7 @@ export class JadeConnector implements WalletConnector {
     const addrResult = wollet.address()
     const index = addrResult.index()
     const path = wollet.addressFullPath(index)
-    const singlesig = this.lwk.Singlesig.from(variant)
+    const singlesig = Singlesig.from(variant)
     return await this.jade.getReceiveAddressSingle(singlesig, path)
   }
 

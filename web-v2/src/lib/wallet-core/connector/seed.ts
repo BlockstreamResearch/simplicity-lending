@@ -1,6 +1,12 @@
-import type { Network, Pset, Signer, WolletDescriptor } from 'lwk_web'
-
-import type { Lwk } from '@/lwk'
+import {
+  Mnemonic,
+  type Network,
+  type Pset,
+  Signer,
+  simplicityDeriveXonlyPubkey,
+  type WolletDescriptor,
+  XOnlyPublicKey,
+} from 'lwk_web'
 
 import type { ConnectionStatus, WalletType } from '../types'
 import type { WalletConnector } from './types'
@@ -19,7 +25,6 @@ export class SeedConnector implements WalletConnector {
   private _id: string | null = null
 
   constructor(
-    private readonly lwk: Lwk,
     private readonly lwkNetwork: Network,
     private readonly mnemonicStr: string,
   ) {
@@ -28,8 +33,8 @@ export class SeedConnector implements WalletConnector {
 
   async connect(): Promise<void> {
     if (this.signer !== null) return
-    const mnemonic = new this.lwk.Mnemonic(this.mnemonicStr)
-    this.signer = new this.lwk.Signer(mnemonic, this.lwkNetwork)
+    const mnemonic = new Mnemonic(this.mnemonicStr)
+    this.signer = new Signer(mnemonic, this.lwkNetwork)
     this._id = crypto.randomUUID()
   }
 
@@ -61,11 +66,11 @@ export class SeedConnector implements WalletConnector {
     return this.signer.sign(pset)
   }
 
-  async getXOnlyPublicKey(): Promise<string> {
+  async getXOnlyPublicKey(): Promise<XOnlyPublicKey> {
     if (!this.signer) throw new Error('SeedConnector: not connected')
     //github.com/BlockstreamResearch/smplx/blob/1945d11b47fff8838c3e99c210133519a9522324/crates/sdk/src/signer/core.rs#L621C1-L628C2
     const path = this.lwkNetwork.isMainnet() ? 'm/84h/1776h/0h/0/1' : 'm/84h/1h/0h/0/1'
-    return this.lwk.simplicityDeriveXonlyPubkey(this.signer, path).toString()
+    return simplicityDeriveXonlyPubkey(this.signer, path)
   }
 
   async getConnectionStatus(): Promise<ConnectionStatus> {
