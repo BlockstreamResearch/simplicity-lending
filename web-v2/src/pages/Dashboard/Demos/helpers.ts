@@ -134,3 +134,13 @@ export function removeScriptAuthState(authOutpoint: string): void {
 
   localStorage.setItem(SCRIPT_AUTH_STORAGE_KEY, JSON.stringify(filteredStates))
 }
+
+export function formatCollateralUtxoOption(utxo: WalletTxOut): { id: string; label: string } {
+  const outpoint = utxoToOutpointString(utxo)
+  const height = utxo.height()
+  const status = height === undefined ? 'mempool' : `height ${height}`
+  return {
+    id: outpoint,
+    label: `${outpoint} | ${utxo.unblinded().value().toString()} sats | ${status}`,
+  }
+}
