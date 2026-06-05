@@ -12,11 +12,12 @@ import { useState } from 'react'
 import { broadcastTx } from '@/api/esplora/methods'
 import { getTxExplorerUrl } from '@/api/esplora/utils'
 import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
-import { useTxConfirmations } from '@/pages/Dashboard/Demos/helpers'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
 import { bytesToHex } from '@/utils/hex'
+
+import { useTxConfirmations } from './helpers'
 
 interface CreateBorrowerAccountSummary {
   fundingOutpoint: string
@@ -127,7 +128,6 @@ export default function CreateBorrowerAccountDemo() {
       const issuanceFactoryProgram = loadIssuanceFactoryProgram({
         issuingUtxosCount: ISSUING_UTXOS_COUNT,
         reissuanceFlags: REISSUANCE_FLAGS,
-        factoryOwnerPubkey: key.toBytes(),
       })
       const factoryAddress = issuanceFactoryProgram.createP2trAddress(key, lwkNetwork)
       const factoryAddressString = factoryAddress.toString()

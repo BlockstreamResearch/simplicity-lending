@@ -9,15 +9,22 @@ const network = env.VITE_NETWORK
 
 export function LwkProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  if (error) throw error
 
   useEffect(() => {
     let cancelled = false
 
-    getLwk().then(() => {
-      if (!cancelled) {
-        setIsReady(true)
-      }
-    })
+    getLwk()
+      .then(() => {
+        if (!cancelled) {
+          setIsReady(true)
+        }
+      })
+      .catch(err => {
+        setError(new Error('Failed to load LWK', { cause: err }))
+      })
 
     return () => {
       cancelled = true
