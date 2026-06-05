@@ -180,6 +180,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         const balances = await syncBalances(wollet, esploraClient)
 
+        const address = wollet.address().address()
+        const receiveAddress = address.toString()
+        const scriptPubkey = address.scriptPubkey().toString()
+        const xOnlyPubkey = (await connector.getXOnlyPublicKey?.()) ?? null
+
         setState(s => ({
           ...s,
           connectionStatus: 'ready',
@@ -187,6 +192,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           error: null,
           isError: false,
           balances,
+          receiveAddress,
+          scriptPubkey,
+          xOnlyPubkey,
         }))
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)

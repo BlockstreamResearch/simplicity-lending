@@ -34,6 +34,10 @@ export interface WalletState {
   connectorId: string | null
   walletType: WalletType | null
   balances: Record<string, string>
+  // Resolved once on connect; null until ready.
+  receiveAddress: string | null
+  scriptPubkey: string | null
+  xOnlyPubkey: string | null
   syncing: boolean
   usbDeviceDetected: boolean
   /** Last error message. Persists even after isError is cleared. */
@@ -47,6 +51,9 @@ export const INITIAL_WALLET_STATE: WalletState = {
   connectorId: null,
   walletType: null,
   balances: {},
+  receiveAddress: null,
+  scriptPubkey: null,
+  xOnlyPubkey: null,
   syncing: false,
   usbDeviceDetected: false,
   error: null,

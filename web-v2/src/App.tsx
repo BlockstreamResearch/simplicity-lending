@@ -10,6 +10,7 @@ import BorrowPage from './pages/Borrow'
 import DashboardPage from './pages/Dashboard'
 import DesignSystemPage from './pages/DesignSystem'
 import SupplyPage from './pages/Supply'
+import WalletDemoPage from './pages/WalletDemo'
 
 const router = createBrowserRouter([
   {
@@ -34,6 +35,10 @@ const router = createBrowserRouter([
             {
               path: RoutePath.DesignSystem,
               element: <DesignSystemPage />,
+            },
+            {
+              path: RoutePath.WalletDemo,
+              element: <WalletDemoPage />,
             },
           ]
         : []),

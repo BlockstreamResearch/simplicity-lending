@@ -14,11 +14,15 @@ import {
 import { offersQueryKeys } from './queryKeys'
 import type { OfferDetails, OfferParticipant, OfferShort, OfferUtxo } from './schemas'
 
-export function useOffers(params: ListOffersParams = {}): UseQueryResult<OfferShort[]> {
+export function useOffers(
+  params: ListOffersParams = {},
+  options: { refetchInterval?: number } = {},
+): UseQueryResult<OfferShort[]> {
   return useQuery({
     queryKey: offersQueryKeys.list(params),
     queryFn: ({ signal }) => fetchOffers(params, { signal }),
     staleTime: STALE_TIME_MS.medium,
+    refetchInterval: options.refetchInterval,
   })
 }
 

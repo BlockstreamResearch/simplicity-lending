@@ -3,6 +3,7 @@ export const RoutePath = {
   Borrow: '/borrow',
   Supply: '/supply',
   DesignSystem: '/design-system',
+  WalletDemo: '/wallet-demo',
 } as const
 
 export type RoutePath = (typeof RoutePath)[keyof typeof RoutePath]
