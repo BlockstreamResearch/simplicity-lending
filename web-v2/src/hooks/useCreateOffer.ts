@@ -82,7 +82,6 @@ export function useCreateOffer() {
 
       stage = 'get wollet'
       const wollet = await getWollet()
-      if (!wollet) throw new Error('Wallet not connected')
 
       stage = 'sync wallet and load UTXOs'
       await syncWallet()
