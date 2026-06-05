@@ -1,8 +1,6 @@
 import type { XOnlyPublicKey } from 'lwk_web'
 import { useEffect, useState } from 'react'
 
-import { fetchTxConfirmations } from '@/api/esplora/methods'
-import { getTxExplorerUrl } from '@/api/esplora/utils'
 import { env } from '@/constants/env'
 import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -31,7 +29,6 @@ export function WalletDemo() {
     balances,
     usbDeviceDetected,
     connect,
-    sendLbtc,
     getReceiveAddress,
     verifyReceiveAddress,
     getXOnlyPublicKey,
@@ -41,10 +38,6 @@ export function WalletDemo() {
   const [walletType, setWalletType] = useState<WalletType>('Wpkh')
   const [sendAddress, setSendAddress] = useState('')
   const [sendAmount, setSendAmount] = useState('')
-  const [sendTxid, setSendTxid] = useState<string | null>(null)
-  const [sendError, setSendError] = useState<string | null>(null)
-  const [sending, setSending] = useState(false)
-  const [txConfirmations, setTxConfirmations] = useState<number | null>(null)
   const [verifyingAddress, setVerifyingAddress] = useState(false)
   const [xOnlyPubKey, setXOnlyPubKey] = useState<XOnlyPublicKey | null>(null)
   const [receiveAddress, setReceiveAddress] = useState<string | null>(null)
@@ -75,24 +68,6 @@ export function WalletDemo() {
     }
   }, [connectionStatus, getReceiveAddress])
 
-  // Poll Esplora directly for first confirmation after sending.
-  useEffect(() => {
-    if (!sendTxid || txConfirmations !== null) return
-
-    const id = setInterval(() => {
-      fetchTxConfirmations(sendTxid)
-        .then(confs => {
-          if (confs !== null && confs >= 1) {
-            setTxConfirmations(confs)
-            clearInterval(id)
-          }
-        })
-        .catch(console.warn)
-    }, 15_000)
-
-    return () => clearInterval(id)
-  }, [sendTxid, txConfirmations])
-
   const phase = resolvePhase(connectionStatus, usbDeviceDetected, syncing)
 
   const handleVerifyAddress = async () => {
@@ -105,26 +80,6 @@ export function WalletDemo() {
       console.warn('[Dashboard] handleVerifyAddress: error', err)
     } finally {
       setVerifyingAddress(false)
-    }
-  }
-
-  const handleSend = async () => {
-    setSendError(null)
-    setSendTxid(null)
-    setSending(true)
-    console.warn('[Dashboard] handleSend: start', { sendAddress, sendAmount })
-    try {
-      const txid = await sendLbtc(sendAddress, BigInt(sendAmount))
-      console.warn('[Dashboard] handleSend: txid received', txid)
-      setSendTxid(txid)
-      setSendAddress('')
-      setSendAmount('')
-      setTxConfirmations(null)
-    } catch (err) {
-      console.warn('[Dashboard] handleSend: error', err)
-      setSendError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setSending(false)
     }
   }
 
@@ -256,34 +211,6 @@ export function WalletDemo() {
               value={sendAmount}
               onChange={e => setSendAmount(e.target.value)}
             />
-            <button
-              className='rounded bg-accent-soft-hover px-4 py-2 text-sm disabled:opacity-50'
-              disabled={sending || !sendAddress || !sendAmount}
-              onClick={handleSend}
-            >
-              {sending ? 'Sending…' : 'Send'}
-            </button>
-            {sendTxid && (
-              <div className='space-y-1 text-xs text-green-600'>
-                <p>
-                  Sent!{' '}
-                  <a
-                    href={getTxExplorerUrl(sendTxid)}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='underline'
-                  >
-                    {sendTxid}
-                  </a>
-                </p>
-                <p className='text-gray-500'>
-                  {txConfirmations !== null
-                    ? `${txConfirmations} confirmation${txConfirmations === 1 ? '' : 's'}`
-                    : 'Waiting for confirmation...'}
-                </p>
-              </div>
-            )}
-            {sendError && <p className='text-xs text-red-500'>{sendError}</p>}
           </div>
         </div>
       )}

@@ -5,7 +5,6 @@ import {
   ContractHash,
   ExternalUtxo,
   IssuanceRecipient,
-  type Network,
   OutPoint,
   Script,
   SimplicityLogLevel,
@@ -256,9 +255,9 @@ export default function CreateOfferDemo() {
       )
 
       createStage = 'prepare validated form values'
-      const factoryAsset = parseAssetId(parsedForm.factoryAssetId)
-      const principalAsset = parseAssetId(parsedForm.principalAssetId)
-      const protocolFeeKeeperAsset = parseAssetId(parsedForm.protocolFeeKeeperAssetId)
+      const factoryAsset = AssetId.fromString(parsedForm.factoryAssetId)
+      const principalAsset = AssetId.fromString(parsedForm.principalAssetId)
+      const protocolFeeKeeperAsset = AssetId.fromString(parsedForm.protocolFeeKeeperAssetId)
       const policyAsset = lwkNetwork.policyAsset()
       const factoryAssetString = factoryAsset.toString()
       const principalAssetString = principalAsset.toString()
@@ -283,8 +282,8 @@ export default function CreateOfferDemo() {
       const factoryAuthOutpointString = parsedForm.factoryAuthOutpoint
       const issuanceFactoryOutpointString = parsedForm.issuanceFactoryOutpoint
       const collateralOutpointString = parsedForm.collateralOutpoint
-      const issuanceFactoryOutpoint = parseOutPoint(issuanceFactoryOutpointString)
-      const collateralOutpoint = parseOutPoint(collateralOutpointString)
+      const issuanceFactoryOutpoint = new OutPoint(issuanceFactoryOutpointString)
+      const collateralOutpoint = new OutPoint(collateralOutpointString)
 
       createStage = 'prepare addresses and IssuanceFactory external UTXO'
       const receiveAddressExplicitString = Address.parse(receiveAddressString, lwkNetwork)
@@ -308,7 +307,7 @@ export default function CreateOfferDemo() {
       const issuanceFactoryExternalUtxo = new ExternalUtxo(
         issuanceFactoryOutpoint.vout(),
         issuanceFactoryTx,
-        TxOutSecrets.fromExplicit(parseAssetId(factoryAssetString), NFT_AMOUNT),
+        TxOutSecrets.fromExplicit(AssetId.fromString(factoryAssetString), NFT_AMOUNT),
         DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
         true,
       )
@@ -321,8 +320,14 @@ export default function CreateOfferDemo() {
             'FactoryAuth',
           )
 
-      const borrowerNftAsset = assetIdFromIssuance(issuanceFactoryOutpoint, emptyContractHash())
-      const lenderNftAsset = assetIdFromIssuance(collateralOutpoint, emptyContractHash())
+      const borrowerNftAsset = assetIdFromIssuance(
+        issuanceFactoryOutpoint,
+        ContractHash.fromBytes(new Uint8Array(32)),
+      )
+      const lenderNftAsset = assetIdFromIssuance(
+        collateralOutpoint,
+        ContractHash.fromBytes(new Uint8Array(32)),
+      )
       const borrowerNftAssetString = borrowerNftAsset.toString()
       const lenderNftAssetString = lenderNftAsset.toString()
       const currentBlockHeight = await fetchLatestBlockHeight()
@@ -337,11 +342,11 @@ export default function CreateOfferDemo() {
       createStage = 'compile lending and ScriptAuth programs'
       const derivedLendingParams = buildDerivedLendingOfferProgramParams(
         {
-          collateralAssetId: parseAssetId(policyAssetString).toBytes(),
-          principalAssetId: parseAssetId(principalAssetString).toBytes(),
-          borrowerNftAssetId: parseAssetId(borrowerNftAssetString).toBytes(),
-          lenderNftAssetId: parseAssetId(lenderNftAssetString).toBytes(),
-          protocolFeeKeeperAssetId: parseAssetId(protocolFeeKeeperAssetString).toBytes(),
+          collateralAssetId: AssetId.fromString(policyAssetString).toBytes(),
+          principalAssetId: AssetId.fromString(principalAssetString).toBytes(),
+          borrowerNftAssetId: AssetId.fromString(borrowerNftAssetString).toBytes(),
+          lenderNftAssetId: AssetId.fromString(lenderNftAssetString).toBytes(),
+          protocolFeeKeeperAssetId: AssetId.fromString(protocolFeeKeeperAssetString).toBytes(),
           offerParameters,
         },
         key,
@@ -359,7 +364,7 @@ export default function CreateOfferDemo() {
       )
       const lenderNftScriptAuthAddressString = lenderNftScriptAuthAddress.toString()
       const metadata = await buildPendingOfferMetadata({
-        principalAssetId: parseAssetId(principalAssetString).toBytes(),
+        principalAssetId: AssetId.fromString(principalAssetString).toBytes(),
         offerParameters,
       })
 
@@ -371,9 +376,9 @@ export default function CreateOfferDemo() {
 
       createStage = 'TxBuilder.setInputOrder'
       txBuilder = txBuilder.setInputOrder([
-        parseOutPoint(factoryAuthOutpointString),
-        parseOutPoint(issuanceFactoryOutpointString),
-        parseOutPoint(collateralOutpointString),
+        new OutPoint(factoryAuthOutpointString),
+        new OutPoint(issuanceFactoryOutpointString),
+        new OutPoint(collateralOutpointString),
       ])
 
       const externalUtxos = factoryAuthExternalUtxo
@@ -385,58 +390,48 @@ export default function CreateOfferDemo() {
 
       createStage = 'TxBuilder.addExplicitRecipient FactoryAuth back to user'
       txBuilder = txBuilder.addExplicitRecipient(
-        parseAddress(receiveAddressExplicitString, lwkNetwork),
+        new Address(receiveAddressExplicitString), // tex1… explicit addresses not supported by Address.parse
         NFT_AMOUNT,
-        parseAssetId(factoryAssetString),
+        AssetId.fromString(factoryAssetString),
       )
 
       createStage = 'TxBuilder.addExplicitRecipient IssuanceFactory covenant'
       txBuilder = txBuilder.addExplicitRecipient(
-        parseAddress(issuanceFactoryAddressString, lwkNetwork),
+        new Address(issuanceFactoryAddressString),
         NFT_AMOUNT,
-        parseAssetId(factoryAssetString),
+        AssetId.fromString(factoryAssetString),
       )
 
       createStage = 'TxBuilder.issueAssetToRecipients Borrower NFT to user'
       txBuilder = txBuilder.issueAssetToRecipients(
-        [
-          IssuanceRecipient.fromAddress(
-            NFT_AMOUNT,
-            parseAddress(receiveAddressExplicitString, lwkNetwork),
-          ),
-        ],
+        [IssuanceRecipient.fromAddress(NFT_AMOUNT, new Address(receiveAddressExplicitString))],
         REISSUANCE_TOKEN_AMOUNT,
         null,
         null,
-        parseOutPoint(issuanceFactoryOutpointString),
+        new OutPoint(issuanceFactoryOutpointString),
       )
 
       createStage = 'TxBuilder.issueAssetToRecipients Lender NFT to ScriptAuth'
       txBuilder = txBuilder.issueAssetToRecipients(
-        [
-          IssuanceRecipient.fromAddress(
-            NFT_AMOUNT,
-            parseAddress(lenderNftScriptAuthAddressString, lwkNetwork),
-          ),
-        ],
+        [IssuanceRecipient.fromAddress(NFT_AMOUNT, new Address(lenderNftScriptAuthAddressString))],
         REISSUANCE_TOKEN_AMOUNT,
         null,
         null,
-        parseOutPoint(collateralOutpointString),
+        new OutPoint(collateralOutpointString),
       )
 
       createStage = 'TxBuilder.addExplicitScriptOutput metadata OP_RETURN'
       txBuilder = txBuilder.addExplicitScriptOutput(
         Script.newOpReturn(metadata),
         0n,
-        parseAssetId(policyAssetString),
+        AssetId.fromString(policyAssetString),
       )
 
       createStage = 'TxBuilder.addExplicitScriptOutput Lending covenant collateral'
       txBuilder = txBuilder.addExplicitScriptOutput(
         new Script(lendingScriptPubkeyHex),
         offerParameters.collateralAmount,
-        parseAssetId(policyAssetString),
+        AssetId.fromString(policyAssetString),
       )
 
       createStage = 'TxBuilder.finish'
@@ -449,8 +444,8 @@ export default function CreateOfferDemo() {
       const finalizedWalletPset = wollet.finalize(signedPset)
 
       createStage = 'load previous txouts for Simplicity finalize'
-      const finalizationFactoryAuthOutpoint = parseOutPoint(factoryAuthOutpointString)
-      const finalizationCollateralOutpoint = parseOutPoint(collateralOutpointString)
+      const finalizationFactoryAuthOutpoint = new OutPoint(factoryAuthOutpointString)
+      const finalizationCollateralOutpoint = new OutPoint(collateralOutpointString)
       const factoryAuthTx = Transaction.fromBytes(
         await fetchTxRaw(finalizationFactoryAuthOutpoint.txid().toString()),
       )
@@ -571,71 +566,67 @@ export default function CreateOfferDemo() {
         and LBTC collateral input. Borrower account UTXOs are entered manually.
       </p>
 
-      <div className='mt-4 space-y-4'>
-        <div className='grid gap-3 md:grid-cols-2'>
-          {renderTextField({
-            name: 'factoryAuthOutpoint',
-            label: 'FactoryAuth outpoint',
-            placeholder: 'txid:0',
-            description: 'Manual fallback for explicit wallet UTXOs that LWK scan does not list',
-          })}
-          {renderTextField({
-            name: 'issuanceFactoryOutpoint',
-            label: 'IssuanceFactory covenant outpoint',
-            placeholder: 'txid:1',
-          })}
-          {renderTextField({
-            name: 'factoryAssetId',
-            label: 'Factory asset id',
-            placeholder: '64 hex chars',
-          })}
-          <Controller
-            control={control}
-            name='collateralOutpoint'
-            render={({ field, fieldState }) => (
-              <UiSelect
-                label='Collateral LBTC outpoint'
-                placeholder='Select wallet LBTC UTXO'
-                options={collateralUtxoOptions}
-                selectedKey={field.value || null}
-                errorMessage={fieldState.error?.message}
-                onSelectionChange={key => field.onChange(key ? String(key) : '')}
-                description={
-                  collateralUtxoOptions.length
-                    ? `${collateralUtxoOptions.length} wallet LBTC UTXO(s)`
-                    : 'No wallet LBTC UTXOs loaded'
-                }
-              />
-            )}
-          />
-        </div>
+      <div className='mt-4 flex flex-col gap-3'>
+        {renderTextField({
+          name: 'factoryAuthOutpoint',
+          label: 'FactoryAuth outpoint',
+          placeholder: 'txid:0',
+          description: 'Manual fallback for explicit wallet UTXOs that LWK scan does not list',
+        })}
+        {renderTextField({
+          name: 'issuanceFactoryOutpoint',
+          label: 'IssuanceFactory covenant outpoint',
+          placeholder: 'txid:1',
+        })}
+        {renderTextField({
+          name: 'factoryAssetId',
+          label: 'Factory asset id',
+          placeholder: '64 hex chars',
+        })}
+        <Controller
+          control={control}
+          name='collateralOutpoint'
+          render={({ field, fieldState }) => (
+            <UiSelect
+              label='Collateral LBTC outpoint'
+              placeholder='Select wallet LBTC UTXO'
+              options={collateralUtxoOptions}
+              selectedKey={field.value || null}
+              errorMessage={fieldState.error?.message}
+              onSelectionChange={key => field.onChange(key ? String(key) : '')}
+              description={
+                collateralUtxoOptions.length
+                  ? `${collateralUtxoOptions.length} wallet LBTC UTXO(s)`
+                  : 'No wallet LBTC UTXOs loaded'
+              }
+            />
+          )}
+        />
 
-        <div className='grid gap-3 md:grid-cols-2'>
-          {renderTextField({
-            name: 'collateralAmount',
-            label: 'Collateral amount',
-          })}
-          {renderTextField({
-            name: 'principalAmount',
-            label: 'Principal amount',
-          })}
-          {renderTextField({
-            name: 'principalAssetId',
-            label: 'Principal asset id',
-          })}
-          {renderTextField({
-            name: 'protocolFeeKeeperAssetId',
-            label: 'Protocol fee keeper asset id',
-          })}
-          {renderTextField({
-            name: 'principalInterestRate',
-            label: 'Interest rate bps',
-          })}
-          {renderTextField({
-            name: 'loanDurationBlocks',
-            label: 'Loan duration blocks',
-          })}
-        </div>
+        {renderTextField({
+          name: 'collateralAmount',
+          label: 'Collateral amount',
+        })}
+        {renderTextField({
+          name: 'principalAmount',
+          label: 'Principal amount',
+        })}
+        {renderTextField({
+          name: 'principalAssetId',
+          label: 'Principal asset id',
+        })}
+        {renderTextField({
+          name: 'protocolFeeKeeperAssetId',
+          label: 'Protocol fee keeper asset id',
+        })}
+        {renderTextField({
+          name: 'principalInterestRate',
+          label: 'Interest rate bps',
+        })}
+        {renderTextField({
+          name: 'loanDurationBlocks',
+          label: 'Loan duration blocks',
+        })}
       </div>
 
       <div className='mt-3 rounded bg-gray-50 p-3 text-xs text-gray-600'>
@@ -720,29 +711,13 @@ function formatCollateralUtxoOption(utxo: WalletTxOut): UiSelectOption {
   }
 }
 
-function parseOutPoint(value: string): OutPoint {
-  return new OutPoint(value)
-}
-
-function parseAssetId(value: string): AssetId {
-  return AssetId.fromString(value)
-}
-
-function parseAddress(value: string, network: Network): Address {
-  // Address.parse currently rejects explicit tex1... addresses in lwk_wasm.
-  // TxBuilder still needs explicit addresses for addExplicitRecipient, so use
-  // the constructor here and keep network-specific validation at call sites.
-  void network
-  return new Address(value)
-}
-
 async function buildExplicitExternalUtxo(
   outpointString: string,
   assetIdString: string,
   amount: bigint,
   label: string,
 ): Promise<ExternalUtxo> {
-  const outpoint = parseOutPoint(outpointString)
+  const outpoint = new OutPoint(outpointString)
   const tx = Transaction.fromBytes(await fetchTxRaw(outpoint.txid().toString()))
   const txOut = tx.outputs[outpoint.vout()]
   if (!txOut) {
@@ -752,7 +727,7 @@ async function buildExplicitExternalUtxo(
   return new ExternalUtxo(
     outpoint.vout(),
     tx,
-    TxOutSecrets.fromExplicit(parseAssetId(assetIdString), amount),
+    TxOutSecrets.fromExplicit(AssetId.fromString(assetIdString), amount),
     DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
     true,
   )
@@ -791,8 +766,4 @@ function assertWalletUtxoAssetAndAmount(
   if (unblinded.value() < minAmount) {
     throw new Error(`${label} UTXO amount is lower than ${minAmount.toString()}`)
   }
-}
-
-function emptyContractHash(): ContractHash {
-  return ContractHash.fromBytes(new Uint8Array(32))
 }

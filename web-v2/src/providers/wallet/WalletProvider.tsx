@@ -262,7 +262,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const session = sessionRef.current
     if (!session) return null
     if (!session.connector.getVerifiedReceiveAddress)
-      return session.wollet.address().address().toString()
+      return session.wollet.address(0).address().toString()
 
     return session.connector.getVerifiedReceiveAddress(state.walletType ?? 'Wpkh', session.wollet)
   }, [state.walletType])
