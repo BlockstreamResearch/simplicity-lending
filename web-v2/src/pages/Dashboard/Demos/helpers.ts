@@ -53,6 +53,11 @@ export interface SavedScriptAuthState {
   fundingTxid: string
 }
 
+export function latestScriptAuthState() {
+  const states = getScriptAuthStates()
+  return states[states.length - 1] ?? null
+}
+
 export function useTxConfirmations(txid: string | null): number | null {
   const [confirmedTx, setConfirmedTx] = useState<{
     confirmations: number
@@ -100,4 +105,32 @@ export function useTxConfirmations(txid: string | null): number | null {
   }, [txid])
 
   return confirmedTx?.txid === txid ? confirmedTx.confirmations : null
+}
+
+const SCRIPT_AUTH_STORAGE_KEY = 'script-auth-covenants'
+
+export function getScriptAuthStates(): SavedScriptAuthState[] {
+  const raw = localStorage.getItem(SCRIPT_AUTH_STORAGE_KEY)
+
+  if (!raw) {
+    return []
+  }
+
+  return JSON.parse(raw)
+}
+
+export function saveScriptAuthState(state: SavedScriptAuthState): void {
+  const existingStates = getScriptAuthStates()
+
+  existingStates.push(state)
+
+  localStorage.setItem(SCRIPT_AUTH_STORAGE_KEY, JSON.stringify(existingStates))
+}
+
+export function removeScriptAuthState(authOutpoint: string): void {
+  const existingStates = getScriptAuthStates()
+
+  const filteredStates = existingStates.filter(state => state.authOutpoint !== authOutpoint)
+
+  localStorage.setItem(SCRIPT_AUTH_STORAGE_KEY, JSON.stringify(filteredStates))
 }

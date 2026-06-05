@@ -22,7 +22,7 @@ import { getTxExplorerUrl } from '@/api/esplora/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect, type UiSelectOption } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { findUtxoByOutpoint, getPolicyAssetUtxos, outpointToString } from '@/lwk/utxo'
+import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import {
@@ -34,9 +34,10 @@ import {
   buildPendingOfferMetadata,
   loadLendingProgram,
 } from '@/simplicity/lending/program'
-import { useTxConfirmations } from '@/simplicity/script-auth/helpers'
 import { loadScriptAuthProgram } from '@/simplicity/script-auth/program'
 import { bytesToHex, hexToBytes, isHexStringOfByteLength, normalizeHex } from '@/utils/hex'
+
+import { useTxConfirmations } from './helpers'
 
 const integerStringSchema = (label: string) =>
   zod.string().trim().regex(/^\d+$/, `${label} must be an integer`)
@@ -185,7 +186,10 @@ export default function CreateOfferDemo() {
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const collateralUtxoOptions = useMemo(
-    () => getPolicyAssetUtxos(walletUtxos, policyAssetId).map(formatCollateralUtxoOption),
+    () =>
+      walletUtxos
+        .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
+        .map(formatCollateralUtxoOption),
     [policyAssetId, walletUtxos],
   )
 
@@ -247,7 +251,9 @@ export default function CreateOfferDemo() {
       await syncWallet()
       const walletUtxos = await getWalletUtxos()
       setWalletUtxos(walletUtxos)
-      const factoryAuthUtxo = findUtxoByOutpoint(walletUtxos, parsedForm.factoryAuthOutpoint)
+      const factoryAuthUtxo = walletUtxos.find(
+        utxo => utxoToOutpointString(utxo) === parsedForm.factoryAuthOutpoint,
+      )
       const collateralUtxo = requireWalletUtxo(
         walletUtxos,
         parsedForm.collateralOutpoint,
@@ -702,7 +708,7 @@ function BroadcastResult({
 }
 
 function formatCollateralUtxoOption(utxo: WalletTxOut): UiSelectOption {
-  const outpoint = outpointToString(utxo)
+  const outpoint = utxoToOutpointString(utxo)
   const height = utxo.height()
   const status = height === undefined ? 'mempool' : `height ${height}`
   return {
@@ -746,7 +752,7 @@ function requireWalletUtxo(
   outpoint: string,
   label: string,
 ): WalletTxOut {
-  const utxo = findUtxoByOutpoint(walletUtxos, outpoint.trim())
+  const utxo = walletUtxos.find(utxo => utxoToOutpointString(utxo) === outpoint.trim())
   if (!utxo) {
     throw new Error(`${label} wallet UTXO not found`)
   }

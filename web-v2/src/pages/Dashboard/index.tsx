@@ -1,5 +1,5 @@
-import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
-import CreateOfferDemo from './CreateOfferDemo'
+import CreateBorrowerAccountDemo from './Demos/CreateBorrowerAccountDemo'
+import CreateOfferDemo from './Demos/CreateOfferDemo'
 import ScriptAuthCovenantDemo from './Demos/ScriptAuthCovenantDemo'
 import { WalletDemo } from './Demos/WalletDemo'
 
