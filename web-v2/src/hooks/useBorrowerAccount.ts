@@ -14,7 +14,6 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
 import { bytesToHex } from '@/utils/hex'
 
-const STORAGE_KEY = 'borrower-account-demo'
 const FEE_RESERVE = 10_000n
 const ISSUING_UTXOS_COUNT = 2
 const REISSUANCE_FLAGS = 0n
@@ -26,15 +25,6 @@ const ISSUANCE_FACTORY_AMOUNT = 1n
 export interface BorrowerAccountCreationResult {
   txid: string
   fundingOutpoint: string
-  factoryAddress: string
-  factoryAuthOutpoint: string
-  issuanceFactoryOutpoint: string
-  issuedAssetId: string
-  metadataOpReturnHex: string
-}
-
-interface PersistedAccount {
-  txid: string
   factoryAddress: string
   factoryAuthOutpoint: string
   issuanceFactoryOutpoint: string
@@ -106,14 +96,10 @@ export function useBorrowerAccount() {
       metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
     }
 
-    persistAccount(result)
-
     return result
   }
 
   const removeBorrowerAccount = async (): Promise<void> => {
-    if (!loadLatestAccount()) throw new Error('Create a borrower account first')
-
     throw new Error(
       'Remove is scaffolded but not wired: the wallet connector must expose Schnorr signing for IssuanceFactory sig_all_hash.',
     )
@@ -138,24 +124,4 @@ async function buildMetadata(): Promise<Uint8Array> {
   data[4] = ISSUING_UTXOS_COUNT
   new DataView(data.buffer).setBigUint64(5, REISSUANCE_FLAGS, true)
   return data
-}
-
-function loadAccounts(): PersistedAccount[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as PersistedAccount[]) : []
-  } catch {
-    return []
-  }
-}
-
-function loadLatestAccount(): PersistedAccount | null {
-  const accounts = loadAccounts()
-  return accounts[accounts.length - 1] ?? null
-}
-
-function persistAccount(account: PersistedAccount): void {
-  const accounts = loadAccounts()
-  accounts.push(account)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts))
 }
