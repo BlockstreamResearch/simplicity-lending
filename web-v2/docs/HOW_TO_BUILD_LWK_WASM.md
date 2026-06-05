@@ -15,6 +15,7 @@ docker build -f web-v2/Dockerfile --target lwk-builder -t lwk-builder .
 docker create --name tmp lwk-builder
 docker cp tmp:/tmp/lwk/lwk_wasm/pkg_web ./pkg_web_from_docker
 docker rm tmp
+rm -rf ./lwk_wasm/pkg_web
 mkdir -p ./lwk_wasm
 mv ./pkg_web_from_docker ./lwk_wasm/pkg_web
 ```
@@ -23,6 +24,15 @@ mv ./pkg_web_from_docker ./lwk_wasm/pkg_web
 
 ```bash
 cd web-v2
-pnpm install
+pnpm install --force
+rm -rf node_modules/.vite
 pnpm dev
+```
+
+If `node_modules` already existed, `pnpm install --force` is important because `lwk_web` is a local `file:` dependency. Clearing only `node_modules/.vite` refreshes Vite's prebundle cache, but it does not guarantee that the installed `lwk_web` package was refreshed.
+
+## **4. Optional check after install**:
+
+```bash
+shasum -a 256 ../lwk_wasm/pkg_web/lwk_wasm_bg.wasm node_modules/lwk_web/lwk_wasm_bg.wasm
 ```
