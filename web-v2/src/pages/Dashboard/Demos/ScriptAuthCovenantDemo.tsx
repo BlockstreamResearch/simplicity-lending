@@ -17,10 +17,14 @@ import { useState } from 'react'
 import { broadcastTx, fetchAddressUtxo, fetchTxRaw } from '@/api/esplora/methods'
 import { getTxExplorerUrl } from '@/api/esplora/utils'
 import { utxoToOutpointString } from '@/lwk/utxo'
-import { selectDemoScriptAuthInputs, useTxConfirmations } from '@/pages/Dashboard/Demos/helpers'
+import {
+  latestScriptAuthState,
+  saveScriptAuthState,
+  selectDemoScriptAuthInputs,
+  useTxConfirmations,
+} from '@/pages/Dashboard/Demos/helpers'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { latestScriptAuthState, saveScriptAuthState } from '@/simplicity/script-auth/helpers'
 import { buildScriptAuthWitness, loadScriptAuthProgram } from '@/simplicity/script-auth/program'
 import { hexToBytes } from '@/utils/hex'
 

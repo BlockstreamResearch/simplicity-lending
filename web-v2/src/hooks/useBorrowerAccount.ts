@@ -1,0 +1,127 @@
+import {
+  Address,
+  assetIdFromIssuance,
+  ContractHash,
+  IssuanceRecipient,
+  Script,
+  TxBuilder,
+} from 'lwk_web'
+
+import { broadcastTx } from '@/api/esplora/methods'
+import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { useLwk } from '@/providers/lwk/useLwk'
+import { useWallet } from '@/providers/wallet/useWallet'
+import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
+import { bytesToHex } from '@/utils/hex'
+
+const FEE_RESERVE = 10_000n
+const ISSUING_UTXOS_COUNT = 2
+const REISSUANCE_FLAGS = 0n
+const ISSUANCE_AMOUNT = 2n
+const REISSUANCE_TOKEN_AMOUNT = 0n
+const FACTORY_AUTH_AMOUNT = 1n
+const ISSUANCE_FACTORY_AMOUNT = 1n
+
+export interface BorrowerAccountCreationResult {
+  txid: string
+  fundingOutpoint: string
+  factoryAddress: string
+  factoryAuthOutpoint: string
+  issuanceFactoryOutpoint: string
+  issuedAssetId: string
+  metadataOpReturnHex: string
+}
+
+export function useBorrowerAccount() {
+  const { lwkNetwork } = useLwk()
+  const { getReceiveAddress, getWalletUtxos, getWollet, getXOnlyPublicKey, signPset } = useWallet()
+
+  const createBorrowerAccount = async (): Promise<BorrowerAccountCreationResult> => {
+    const xOnlyPublicKey = await getXOnlyPublicKey()
+    if (!xOnlyPublicKey) throw new Error('Missing x-only public key')
+
+    const receiveAddressString = await getReceiveAddress()
+    if (!receiveAddressString) throw new Error('Missing receive address')
+
+    const wollet = await getWollet()
+    const policyAsset = lwkNetwork.policyAsset()
+    const walletUtxos = await getWalletUtxos()
+
+    const feeUtxo = walletUtxos
+      .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
+      .filter(utxo => utxo.unblinded().value() > FEE_RESERVE)
+      .sort((a, b) => Number(a.unblinded().value() - b.unblinded().value()))[0]
+
+    if (!feeUtxo) throw new Error('Need a wallet L-BTC UTXO larger than the fee reserve')
+
+    if (FACTORY_AUTH_AMOUNT + ISSUANCE_FACTORY_AMOUNT !== ISSUANCE_AMOUNT) {
+      throw new Error('Invalid issuance split')
+    }
+
+    const fundingOutpoint = utxoToOutpointString(feeUtxo)
+    const receiveAddress = Address.parse(receiveAddressString, lwkNetwork).toUnconfidential()
+    const issuanceFactoryProgram = loadIssuanceFactoryProgram({
+      issuingUtxosCount: ISSUING_UTXOS_COUNT,
+      reissuanceFlags: REISSUANCE_FLAGS,
+    })
+    const factoryAddress = issuanceFactoryProgram.createP2trAddress(xOnlyPublicKey, lwkNetwork)
+    const issuedAssetId = assetIdFromIssuance(feeUtxo.outpoint(), emptyContractHash())
+    const metadata = await buildMetadata()
+
+    const pset = new TxBuilder(lwkNetwork)
+      .setWalletUtxos([feeUtxo.outpoint()])
+      .issueAssetToRecipients(
+        [
+          IssuanceRecipient.fromAddress(FACTORY_AUTH_AMOUNT, receiveAddress),
+          IssuanceRecipient.fromAddress(ISSUANCE_FACTORY_AMOUNT, factoryAddress),
+        ],
+        REISSUANCE_TOKEN_AMOUNT,
+        null,
+        null,
+      )
+      .addExplicitScriptOutput(Script.newOpReturn(metadata), 0n, policyAsset)
+      .finish(wollet)
+
+    const signedPset = await signPset(pset)
+    const finalizedPset = wollet.finalize(signedPset)
+    const txid = await broadcastTx(finalizedPset.extractTx().toString())
+
+    const result: BorrowerAccountCreationResult = {
+      txid,
+      fundingOutpoint,
+      factoryAddress: factoryAddress.toString(),
+      factoryAuthOutpoint: `${txid}:0`,
+      issuanceFactoryOutpoint: `${txid}:1`,
+      issuedAssetId: issuedAssetId.toString(),
+      metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
+    }
+
+    return result
+  }
+
+  const removeBorrowerAccount = async (): Promise<void> => {
+    throw new Error(
+      'Remove is scaffolded but not wired: the wallet connector must expose Schnorr signing for IssuanceFactory sig_all_hash.',
+    )
+  }
+
+  return { createBorrowerAccount, removeBorrowerAccount }
+}
+
+function emptyContractHash(): ContractHash {
+  return ContractHash.fromBytes(new Uint8Array(32))
+}
+
+async function buildMetadata(): Promise<Uint8Array> {
+  const { sources } = await import('virtual:simplicity-sources')
+  const hash = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(sources.issuance_factory),
+  )
+  const programId = new Uint8Array(hash).slice(0, 4)
+  const data = new Uint8Array(13)
+  data.set(programId, 0)
+  data[4] = ISSUING_UTXOS_COUNT
+  new DataView(data.buffer).setBigUint64(5, REISSUANCE_FLAGS, true)
+  return data
+}

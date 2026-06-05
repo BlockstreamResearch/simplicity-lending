@@ -1,7 +1,7 @@
 import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
 import CreateOfferDemo from './CreateOfferDemo'
-import ScriptAuthCovenantDemo from './ScriptAuthCovenantDemo'
-import { WalletDemo } from './WalletDemo'
+import ScriptAuthCovenantDemo from './Demos/ScriptAuthCovenantDemo'
+import { WalletDemo } from './Demos/WalletDemo'
 
 export default function DashboardPage() {
   return (
