@@ -1,4 +1,5 @@
 import { Skeleton, Table } from '@heroui/react'
+import { keepPreviousData } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
@@ -10,9 +11,7 @@ import { OfferStatusBadge } from '@/components/ui/OfferStatusBadge'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiPagination } from '@/components/ui/UiPagination'
 import { ASSET_DECIMALS } from '@/constants/assets'
-import { env } from '@/constants/env'
 import { DASHBOARD_REFETCH_INTERVAL_MS, TABLE_PAGE_SIZE } from '@/constants/lending'
-import { MOCK_OFFERS } from '@/mocks/offers'
 import { formatAsset, formatTermLeft } from '@/utils/format'
 import { bpsToPercent, calcInterest } from '@/utils/lending'
 
@@ -68,16 +67,12 @@ export function OffersTable() {
 
   const offersQuery = useOffers(
     { limit: FETCH_LIMIT, offset },
-    { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS },
+    { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS, placeholderData: keepPreviousData },
   )
   const blockHeightQuery = useBlockHeight(DASHBOARD_REFETCH_INTERVAL_MS)
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
-  // In DEV, slice mock data to simulate server-side pagination
-  const rawBatch: OfferShort[] = useMemo(() => {
-    if (env.DEV) return MOCK_OFFERS.slice(offset, offset + FETCH_LIMIT)
-    return offersQuery.data ?? []
-  }, [offersQuery.data, offset])
+  const rawBatch: OfferShort[] = offersQuery.data ?? []
 
   const hasNextPage = rawBatch.length > TABLE_PAGE_SIZE
   const pageOffers = rawBatch.slice(0, TABLE_PAGE_SIZE)
@@ -106,8 +101,9 @@ export function OffersTable() {
     })
   }, [displayOffers, sort])
 
-  const isLoading = (env.DEV ? false : offersQuery.isLoading) || blockHeightQuery.isLoading
-  const error = env.DEV ? null : (offersQuery.error as Error | null)
+  const isLoading = offersQuery.isLoading || blockHeightQuery.isLoading
+  const isFetching = offersQuery.isFetching || blockHeightQuery.isFetching
+  const error = offersQuery.error as Error | null
   const handleRetry = () => {
     void offersQuery.refetch()
     void blockHeightQuery.refetch()
@@ -120,9 +116,10 @@ export function OffersTable() {
           type='button'
           aria-label='Refresh offers'
           onClick={handleRetry}
-          className='text-muted hover:text-foreground'
+          className='text-muted hover:text-foreground disabled:opacity-60'
+          disabled={isFetching}
         >
-          <ArrowsRotateIcon className='size-5' />
+          <ArrowsRotateIcon className={`size-5 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
         <h3 className='text-h4'>Most recent Borrow Offers</h3>
       </header>

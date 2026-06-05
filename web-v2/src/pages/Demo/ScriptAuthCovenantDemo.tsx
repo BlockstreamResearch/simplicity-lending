@@ -22,7 +22,7 @@ import {
   saveScriptAuthState,
   selectDemoScriptAuthInputs,
   useTxConfirmations,
-} from '@/pages/Dashboard/Demos/helpers'
+} from '@/pages/Demo/helpers'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { buildScriptAuthWitness, loadScriptAuthProgram } from '@/simplicity/script-auth/program'

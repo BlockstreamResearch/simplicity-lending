@@ -1,4 +1,9 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import {
+  useQuery,
+  type QueryKey,
+  type UseQueryResult,
+  type UseQueryOptions,
+} from '@tanstack/react-query'
 
 import { GC_TIME_MS, STALE_TIME_MS } from '../staleTime'
 import {
@@ -16,13 +21,17 @@ import type { OfferDetails, OfferParticipant, OfferShort, OfferUtxo } from './sc
 
 export function useOffers(
   params: ListOffersParams = {},
-  options: { refetchInterval?: number } = {},
+  options: {
+    refetchInterval?: number
+    placeholderData?: UseQueryOptions<OfferShort[], Error, OfferShort[], QueryKey>['placeholderData']
+  } = {},
 ): UseQueryResult<OfferShort[]> {
   return useQuery({
     queryKey: offersQueryKeys.list(params),
     queryFn: ({ signal }) => fetchOffers(params, { signal }),
     staleTime: STALE_TIME_MS.medium,
     refetchInterval: options.refetchInterval,
+    placeholderData: options.placeholderData,
   })
 }
 

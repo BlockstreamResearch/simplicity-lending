@@ -18,6 +18,7 @@ const NAV = [
     ? [
         { to: RoutePath.DesignSystem, label: 'System' },
         { to: RoutePath.WalletDemo, label: 'Wallet Demo' },
+        { to: RoutePath.Demo, label: 'Demo' },
       ]
     : []),
 ]

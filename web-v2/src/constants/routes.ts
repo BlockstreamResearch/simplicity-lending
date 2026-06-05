@@ -4,6 +4,7 @@ export const RoutePath = {
   Supply: '/supply',
   DesignSystem: '/design-system',
   WalletDemo: '/wallet-demo',
+  Demo: '/demo',
 } as const
 
 export type RoutePath = (typeof RoutePath)[keyof typeof RoutePath]

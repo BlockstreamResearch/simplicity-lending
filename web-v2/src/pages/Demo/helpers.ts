@@ -53,6 +53,26 @@ export interface SavedScriptAuthState {
   fundingTxid: string
 }
 
+const SCRIPT_AUTH_STATE_KEY = 'demo:scriptAuthState'
+
+export function saveScriptAuthState(state: SavedScriptAuthState): void {
+  try {
+    localStorage.setItem(SCRIPT_AUTH_STATE_KEY, JSON.stringify(state))
+  } catch (err) {
+    console.warn(err)
+  }
+}
+
+export function latestScriptAuthState(): SavedScriptAuthState | null {
+  try {
+    const raw = localStorage.getItem(SCRIPT_AUTH_STATE_KEY)
+    return raw ? (JSON.parse(raw) as SavedScriptAuthState) : null
+  } catch (err) {
+    console.warn(err)
+    return null
+  }
+}
+
 export function useTxConfirmations(txid: string | null): number | null {
   const [confirmedTx, setConfirmedTx] = useState<{
     confirmations: number

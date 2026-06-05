@@ -7,7 +7,6 @@ import type { DisplayStatus } from '@/components/ui/OfferStatusBadge'
 import { ASSET_ID } from '@/constants/assets'
 import { env } from '@/constants/env'
 import { DASHBOARD_REFETCH_INTERVAL_MS, REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/lending'
-import { MOCK_OFFERS } from '@/mocks/offers'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { getAssetBalance } from '@/utils/balance'
 import { calcInterest } from '@/utils/lending'
@@ -70,10 +69,7 @@ export function useDashboard() {
 
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
-  const allOffers = useMemo(
-    () => (env.DEV ? MOCK_OFFERS : (offersQuery.data ?? [])),
-    [offersQuery.data],
-  )
+  const allOffers = useMemo(() => offersQuery.data ?? [], [offersQuery.data])
 
   const displayOffers = useMemo<DisplayOffer[]>(
     () =>
