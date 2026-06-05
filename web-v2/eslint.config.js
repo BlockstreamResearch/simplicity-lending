@@ -41,6 +41,7 @@ export default defineConfig([
       },
     },
     settings: {
+      'import/core-modules': ['virtual:simplicity-sources'],
       'import/resolver': {
         typescript: {},
         node: {

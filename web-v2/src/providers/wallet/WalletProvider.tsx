@@ -1,4 +1,4 @@
-import type { Pset } from 'lwk_web'
+import { type Pset, Wollet, type XOnlyPublicKey } from 'lwk_web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -23,7 +23,7 @@ const SESSION_STORAGE_KEY = 'jade_wallet_session'
 const DISCONNECT_ERROR_KEY = 'jade_disconnect_error'
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const { lwk, lwkNetwork } = useLwk()
+  const { lwkNetwork } = useLwk()
 
   const sessionRef = useRef<WalletSession | null>(null)
   const connectingRef = useRef(false)
@@ -150,24 +150,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const walletType: WalletType = env.VITE_DEBUG_MNEMONIC ? 'Wpkh' : variant
 
         connector = env.VITE_DEBUG_MNEMONIC
-          ? new SeedConnector(lwk, lwkNetwork, env.VITE_DEBUG_MNEMONIC)
-          : new JadeConnector(lwk, lwkNetwork)
+          ? new SeedConnector(lwkNetwork, env.VITE_DEBUG_MNEMONIC)
+          : new JadeConnector(lwkNetwork)
 
         await connector.connect()
-
         const connectionStatus = await connector.getConnectionStatus()
 
-        // Show the intermediate state (locked/ready) before PIN prompt blocks.
-        setState(s => ({
-          ...s,
-          connectionStatus,
-          connectorId: connector!.id,
-          walletType,
-        }))
+        // Show 'locked' in the UI before getDescriptor() blocks waiting for Jade PIN.
+        if (connectionStatus === 'locked') {
+          setState(s => ({
+            ...s,
+            connectionStatus: 'locked',
+            connectorId: connector!.id,
+            walletType,
+          }))
+        }
 
         const descriptor = await connector.getDescriptor(walletType)
-        const wollet = new lwk.Wollet(lwkNetwork, descriptor)
-        const esploraClient = createEsploraClient(lwk, lwkNetwork)
+        const wollet = new Wollet(lwkNetwork, descriptor)
+        const esploraClient = createEsploraClient(lwkNetwork)
 
         sessionRef.current = { connector, descriptor, wollet, esploraClient }
 
@@ -208,7 +209,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connectingRef.current = false
       }
     },
-    [lwk, lwkNetwork, setSavedSession],
+    [lwkNetwork, setSavedSession],
   )
 
   const resumeSession = useCallback(async () => {
@@ -238,60 +239,50 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const signAndBroadcast = useCallback(async (pset: Pset): Promise<string> => {
+  const signPset = useCallback(async (pset: Pset): Promise<Pset> => {
     const session = sessionRef.current
     if (!session) throw new Error('WalletProvider: not connected')
 
-    const signedPset = await session.connector.signPset(pset)
-    const finalizedPset = session.wollet.finalize(signedPset)
-    const txid = await session.esploraClient.broadcast(finalizedPset)
-    const txidStr = txid.toString()
-
-    // Auto-sync balances after broadcast (fire-and-forget, errors are non-fatal).
-    syncBalances(session.wollet, session.esploraClient)
-      .then(balances => {
-        setState(s => ({ ...s, balances }))
-      })
-      .catch(console.warn)
-
-    return txidStr
+    return session.connector.signPset(pset)
   }, [])
 
-  const getLastReceiveAddress = useCallback(async (): Promise<string | null> => {
+  const getReceiveAddress = useCallback(async (): Promise<string> => {
     const session = sessionRef.current
-    if (!session) return null
-    return session.wollet.address().address().toString()
+    if (!session) throw new Error('WalletProvider: not connected')
+    return session.wollet.address(0).address().toString()
   }, [])
 
-  const getXOnlyPublicKey = useCallback(async (): Promise<string | null> => {
+  const getXOnlyPublicKey = useCallback(async (): Promise<XOnlyPublicKey | null> => {
     const session = sessionRef.current
-    if (!session) return null
+    if (!session) throw new Error('WalletProvider: not connected')
     return session.connector.getXOnlyPublicKey?.() ?? null
   }, [])
 
-  const verifyReceiveAddress = useCallback(async (): Promise<string | null> => {
+  const verifyReceiveAddress = useCallback(async (): Promise<string> => {
     const session = sessionRef.current
-    if (!session) return null
+    if (!session) throw new Error('WalletProvider: not connected')
     if (!session.connector.getVerifiedReceiveAddress)
-      return session.wollet.address().address().toString()
+      return session.wollet.address(0).address().toString()
 
     return session.connector.getVerifiedReceiveAddress(state.walletType ?? 'Wpkh', session.wollet)
   }, [state.walletType])
 
-  const sendLbtc = useCallback(
-    async (recipientAddress: string, satoshi: bigint): Promise<string> => {
-      const session = sessionRef.current
-      if (!session) throw new Error('WalletProvider: not connected')
+  const getWalletUtxos = useCallback(async () => {
+    const session = sessionRef.current
 
-      const addr = lwk.Address.parse(recipientAddress, lwkNetwork)
-      const txBuilder = await new lwk.TxBuilder(lwkNetwork)
-        .feeRate(100)
-        .addLbtcRecipient(addr, satoshi)
-      const pset = txBuilder.finish(session.wollet)
-      return signAndBroadcast(pset)
-    },
-    [lwk, lwkNetwork, signAndBroadcast],
-  )
+    if (!session) {
+      throw new Error('WalletProvider: not connected')
+    }
+
+    return session.wollet.utxos()
+  }, [])
+
+  const getWollet = useCallback(async (): Promise<Wollet> => {
+    const session = sessionRef.current
+    if (!session) throw new Error('WalletProvider: not connected')
+
+    return session.wollet
+  }, [])
 
   return (
     <WalletContext.Provider
@@ -300,13 +291,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connect,
         disconnect,
         syncWallet: sync,
-        signAndBroadcast,
-        sendLbtc,
-        getLastReceiveAddress,
+        signPset,
+        getReceiveAddress,
         verifyReceiveAddress,
         getXOnlyPublicKey,
-        resumeSession,
-        savedSession,
+        getWollet,
+        getWalletUtxos,
       }}
     >
       {children}
