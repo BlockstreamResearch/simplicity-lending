@@ -41,11 +41,17 @@ function postBatch<Schema extends z.ZodTypeAny>(
   })
 }
 
+export type SortDir = 'asc' | 'desc'
+
 export interface ListOffersParams {
   status?: OfferStatus
   asset?: string
   limit?: number
   offset?: number
+  // Server-side sort. NOTE: backend does not honor these yet — sent as a
+  // forward-compatible convention; results are currently returned unsorted.
+  sortBy?: string
+  sortDir?: SortDir
 }
 
 function toQueryParams(params: ListOffersParams): Record<string, string> {
@@ -54,6 +60,8 @@ function toQueryParams(params: ListOffersParams): Record<string, string> {
   if (params.asset) queryParams.asset = params.asset
   if (params.limit !== undefined) queryParams.limit = String(params.limit)
   if (params.offset !== undefined) queryParams.offset = String(params.offset)
+  if (params.sortBy) queryParams.sort_by = params.sortBy
+  if (params.sortDir) queryParams.sort_dir = params.sortDir
   return queryParams
 }
 

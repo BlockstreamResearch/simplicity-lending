@@ -4,9 +4,10 @@ import type { ListOffersParams } from './methods'
 
 export const offersQueryKeys = {
   all: ['offers'] as const,
-  list: ({ status, asset, limit, offset }: ListOffersParams) =>
-    ['offers', 'list', status, asset, limit, offset] as const,
+  list: ({ status, asset, limit, offset, sortBy, sortDir }: ListOffersParams) =>
+    ['offers', 'list', status, asset, limit, offset, sortBy, sortDir] as const,
   detail: (offerId: string) => ['offers', 'detail', offerId] as const,
+  batch: (ids: string[]) => ['offers', 'batch', [...ids].sort()] as const,
   utxos: (offerId: string) => ['offers', 'utxos', offerId] as const,
   participants: (offerId: string) => ['offers', 'participants', offerId] as const,
   participantsHistory: (offerId: string) => ['offers', 'participants-history', offerId] as const,

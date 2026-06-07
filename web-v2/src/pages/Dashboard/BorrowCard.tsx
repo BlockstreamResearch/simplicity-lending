@@ -5,7 +5,7 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiDataRow, UiDataRows } from '@/components/ui/UiDataRow'
 import { ASSET_DECIMALS } from '@/constants/assets'
 import { RoutePath } from '@/constants/routes'
-import { formatAsset, truncateAddress, USD_PLACEHOLDER } from '@/utils/format'
+import { formatAsset, truncateAddress } from '@/utils/format'
 
 import { BalanceCard } from './BalanceCard'
 import { AssetAmount, CardAlert } from './BaseCard'
@@ -35,7 +35,6 @@ export function BorrowCard({ data, isLoading, isReady, onRetry }: BorrowCardProp
       errorMessage='Failed to load your borrows.'
       onRetry={onRetry}
       balance={<AssetAmount value={formatAsset(data.balance, ASSET_DECIMALS.LBTC)} unit='LBTC' />}
-      fiat={USD_PLACEHOLDER}
     >
       <UiDataRows>
         <UiDataRow

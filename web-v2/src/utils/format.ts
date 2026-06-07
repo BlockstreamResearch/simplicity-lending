@@ -26,8 +26,8 @@ export function formatTermLeft(blocksLeft: number): string {
   return `>${Math.floor(minutes / MINUTES_PER_DAY)}d`
 }
 
-// TODO: real LBTC/USDT → USD once a price oracle exists.
-export const USD_PLACEHOLDER = '$0.00 USD'
+// TODO(oracle): add fiat conversion (LBTC/USDT → USD). `fiat` props left unset
+// until then — a "$0.00" placeholder would read as a real zero balance.
 
 export function truncateAddress(address: string): string {
   if (address.length <= 10) return address

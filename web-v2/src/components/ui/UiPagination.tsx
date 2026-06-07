@@ -13,9 +13,8 @@ interface UiPaginationProps {
   currentPage: number
   onPageChange: (page: number) => void
   summary?: ReactNode
-  // Known total — enables page number list
+  // pageCount = numbered pages; hasNextPage = prev/next only (no total count)
   pageCount?: number
-  // Unknown total (server-side without count) — only prev/next
   hasNextPage?: boolean
 }
 

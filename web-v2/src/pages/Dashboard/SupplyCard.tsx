@@ -5,7 +5,7 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiDataRow, UiDataRows } from '@/components/ui/UiDataRow'
 import { ASSET_DECIMALS } from '@/constants/assets'
 import { RoutePath } from '@/constants/routes'
-import { formatAsset, truncateAddress, USD_PLACEHOLDER } from '@/utils/format'
+import { formatAsset, truncateAddress } from '@/utils/format'
 
 import { BalanceCard } from './BalanceCard'
 import { AssetAmount, CardAlert } from './BaseCard'
@@ -35,7 +35,6 @@ export function SupplyCard({ data, isLoading, isReady, onRetry }: SupplyCardProp
       errorMessage='Failed to load your supply.'
       onRetry={onRetry}
       balance={<AssetAmount value={formatAsset(data.balance, ASSET_DECIMALS.USDT)} unit='USDT' />}
-      fiat={USD_PLACEHOLDER}
     >
       <UiDataRows>
         <UiDataRow

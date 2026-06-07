@@ -2,7 +2,7 @@ import { Skeleton } from '@heroui/react'
 import { useMemo } from 'react'
 
 import { ASSET_DECIMALS } from '@/constants/assets'
-import { formatAsset, USD_PLACEHOLDER } from '@/utils/format'
+import { formatAsset } from '@/utils/format'
 import { bpsToPercent } from '@/utils/lending'
 
 import { AssetAmount } from './BaseCard'
@@ -17,7 +17,6 @@ interface OverviewStat {
   label: string
   value: string
   unit?: string
-  // No price oracle yet, so monetary tiles fall back to USD_PLACEHOLDER.
   fiat?: string
 }
 
@@ -46,13 +45,11 @@ export function OverviewStats({ data, isLoading }: OverviewStatsProps) {
         label: 'Collateral Locked',
         value: formatAsset(data.totalCollateral, ASSET_DECIMALS.LBTC),
         unit: 'LBTC',
-        fiat: USD_PLACEHOLDER,
       },
       {
         label: 'Borrowings',
         value: formatAsset(data.totalBorrowings, ASSET_DECIMALS.USDT),
         unit: 'USDT',
-        fiat: USD_PLACEHOLDER,
       },
       { label: 'Average APR', value: bpsToPercent(data.avgApr) },
       { label: 'Active Loans', value: String(data.activeLoans) },

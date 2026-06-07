@@ -1,23 +1,22 @@
 import { useCallback, useMemo } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
-import { useOfferIdsByBorrowerPubkey, useOfferIdsByScript, useOffers } from '@/api/indexer/hooks'
-import type { OfferShort } from '@/api/indexer/schemas'
-import type { DisplayStatus } from '@/components/ui/OfferStatusBadge'
+import {
+  useOfferIdsByBorrowerPubkey,
+  useOfferIdsByScript,
+  useOffers,
+  useOffersBatch,
+} from '@/api/indexer/hooks'
 import { ASSET_ID } from '@/constants/assets'
 import { env } from '@/constants/env'
 import { DASHBOARD_REFETCH_INTERVAL_MS, REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/lending'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { getAssetBalance } from '@/utils/balance'
-import { calcInterest } from '@/utils/lending'
+import { type DisplayOffer, toDisplayOffer } from '@/utils/lending'
 
 const NETWORK_ASSETS = ASSET_ID[env.VITE_NETWORK]
 
-export interface DisplayOffer extends OfferShort {
-  termLeft: number
-  displayStatus: DisplayStatus
-  earn: bigint // total interest, precomputed for sorting
-}
+export type { DisplayOffer }
 
 export interface DashboardOverview {
   totalCollateral: bigint
@@ -62,36 +61,38 @@ export function useDashboard() {
   const { connectionStatus, balances, xOnlyPubkey, scriptPubkey } = useWallet()
   const isReady = connectionStatus === 'ready'
 
-  const offersQuery = useOffers({}, { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS })
-  const borrowerIdsQuery = useOfferIdsByBorrowerPubkey(xOnlyPubkey ?? '')
-  const supplyIdsQuery = useOfferIdsByScript(scriptPubkey ?? '')
+  const poll = { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS }
+
+  const offersQuery = useOffers({}, poll)
+  const borrowerIdsQuery = useOfferIdsByBorrowerPubkey(xOnlyPubkey ?? '', poll)
+  const supplyIdsQuery = useOfferIdsByScript(scriptPubkey ?? '', poll)
   const blockHeightQuery = useBlockHeight(DASHBOARD_REFETCH_INTERVAL_MS)
 
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
-  const allOffers = useMemo(() => offersQuery.data ?? [], [offersQuery.data])
-
+  // Overview is computed from the first offers page (see FIXME below).
   const displayOffers = useMemo<DisplayOffer[]>(
-    () =>
-      allOffers.map(offer => {
-        const termLeft = offer.loan_expiration_time - currentBlockHeight
-        const displayStatus = offer.status === 'pending' && termLeft <= 0 ? 'expired' : offer.status
-        return {
-          ...offer,
-          termLeft,
-          displayStatus,
-          earn: calcInterest(offer.principal_amount, offer.interest_rate),
-        }
-      }),
-    [allOffers, currentBlockHeight],
+    () => (offersQuery.data ?? []).map(offer => toDisplayOffer(offer, currentBlockHeight)),
+    [offersQuery.data, currentBlockHeight],
   )
 
-  const offerById = useMemo(() => {
-    const map = new Map<string, DisplayOffer>()
-    for (const offer of displayOffers) map.set(offer.id, offer)
-    return map
-  }, [displayOffers])
+  // The user's own offers are resolved by exact id (batch), not joined against
+  // the offers page — otherwise any offer outside page 1 would be silently dropped.
+  const borrowerOffersQuery = useOffersBatch(borrowerIdsQuery.data ?? [], poll)
+  const supplyOffersQuery = useOffersBatch(supplyIdsQuery.data ?? [], poll)
 
+  const borrowerOffers = useMemo<DisplayOffer[]>(
+    () => (borrowerOffersQuery.data ?? []).map(o => toDisplayOffer(o, currentBlockHeight)),
+    [borrowerOffersQuery.data, currentBlockHeight],
+  )
+
+  const supplyOffers = useMemo<DisplayOffer[]>(
+    () => (supplyOffersQuery.data ?? []).map(o => toDisplayOffer(o, currentBlockHeight)),
+    [supplyOffersQuery.data, currentBlockHeight],
+  )
+
+  // FIXME(backend): computed over one page (`useOffers({})`), not all offers — totals
+  // are approximate. Needs a server-side aggregate endpoint (GET /offers/stats).
   const overview = useMemo<DashboardOverview>(() => {
     const active = displayOffers.filter(o => o.status === 'active')
     const totalCollateral = active.reduce((acc, o) => acc + o.collateral_amount, 0n)
@@ -112,10 +113,8 @@ export function useDashboard() {
   const usdtBalance = getAssetBalance(balances, NETWORK_ASSETS.USDT)
 
   const borrows = useMemo<DashboardBorrows>(() => {
-    const ids = borrowerIdsQuery.data ?? []
-    const mine = ids.map(id => offerById.get(id)).filter((o): o is DisplayOffer => !!o)
-    const active = mine.filter(o => o.status === 'active')
-    const pending = mine.filter(o => o.status === 'pending')
+    const active = borrowerOffers.filter(o => o.status === 'active')
+    const pending = borrowerOffers.filter(o => o.status === 'pending')
     const nearExpiryOffers = active.filter(
       o => o.termLeft > 0 && o.termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS,
     )
@@ -129,55 +128,66 @@ export function useDashboard() {
         toRepay: nearExpiryOffers.length,
       },
       nearExpiryOffers,
-      isLoading: isReady && borrowerIdsQuery.isLoading,
-      error: borrowerIdsQuery.error,
+      isLoading: isReady && (borrowerIdsQuery.isLoading || borrowerOffersQuery.isLoading),
+      error: borrowerIdsQuery.error ?? borrowerOffersQuery.error,
     }
   }, [
     isReady,
     lbtcBalance,
-    borrowerIdsQuery.data,
+    borrowerOffers,
     borrowerIdsQuery.isLoading,
     borrowerIdsQuery.error,
-    offerById,
+    borrowerOffersQuery.isLoading,
+    borrowerOffersQuery.error,
   ])
 
   const supply = useMemo<DashboardSupply>(() => {
-    const ids = supplyIdsQuery.data ?? []
-    const mine = ids.map(id => offerById.get(id)).filter((o): o is DisplayOffer => !!o)
-    const active = mine.filter(o => o.status === 'active')
-    const claimableOffers = mine.filter(o => o.status === 'repaid')
+    const active = supplyOffers.filter(o => o.status === 'active')
+    const claimableOffers = supplyOffers.filter(o => o.status === 'repaid')
     return {
       balance: usdtBalance,
       stats: {
-        suppliedLoans: mine.reduce((acc, o) => acc + o.principal_amount, 0n),
+        suppliedLoans: supplyOffers.reduce((acc, o) => acc + o.principal_amount, 0n),
         interestOutstanding: active.reduce((acc, o) => acc + o.earn, 0n),
         activeLoans: active.length,
         repaidToClaim: claimableOffers.length,
       },
       claimableOffers,
-      isLoading: isReady && supplyIdsQuery.isLoading,
-      error: supplyIdsQuery.error,
+      isLoading: isReady && (supplyIdsQuery.isLoading || supplyOffersQuery.isLoading),
+      error: supplyIdsQuery.error ?? supplyOffersQuery.error,
     }
   }, [
     isReady,
     usdtBalance,
-    supplyIdsQuery.data,
+    supplyOffers,
     supplyIdsQuery.isLoading,
     supplyIdsQuery.error,
-    offerById,
+    supplyOffersQuery.isLoading,
+    supplyOffersQuery.error,
   ])
 
   const offersRefetch = offersQuery.refetch
   const borrowerIdsRefetch = borrowerIdsQuery.refetch
   const supplyIdsRefetch = supplyIdsQuery.refetch
+  const borrowerOffersRefetch = borrowerOffersQuery.refetch
+  const supplyOffersRefetch = supplyOffersQuery.refetch
   const blockHeightRefetch = blockHeightQuery.refetch
 
   const refetch = useCallback(() => {
     void offersRefetch()
     void borrowerIdsRefetch()
     void supplyIdsRefetch()
+    void borrowerOffersRefetch()
+    void supplyOffersRefetch()
     void blockHeightRefetch()
-  }, [offersRefetch, borrowerIdsRefetch, supplyIdsRefetch, blockHeightRefetch])
+  }, [
+    offersRefetch,
+    borrowerIdsRefetch,
+    supplyIdsRefetch,
+    borrowerOffersRefetch,
+    supplyOffersRefetch,
+    blockHeightRefetch,
+  ])
 
   return {
     overview,

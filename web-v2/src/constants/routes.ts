@@ -3,7 +3,6 @@ export const RoutePath = {
   Borrow: '/borrow',
   Supply: '/supply',
   DesignSystem: '/design-system',
-  WalletDemo: '/wallet-demo',
   Demo: '/demo',
 } as const
 

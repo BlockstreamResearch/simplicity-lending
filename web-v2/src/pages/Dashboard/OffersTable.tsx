@@ -6,6 +6,7 @@ import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffers } from '@/api/indexer/hooks'
 import type { OfferShort } from '@/api/indexer/schemas'
 import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
+import ChevronDownIcon from '@/components/icons/ChevronDownIcon'
 import ChevronsExpandVerticalIcon from '@/components/icons/ChevronsExpandVerticalIcon'
 import { OfferStatusBadge } from '@/components/ui/OfferStatusBadge'
 import { UiButton } from '@/components/ui/UiButton'
@@ -13,24 +14,18 @@ import { UiPagination } from '@/components/ui/UiPagination'
 import { ASSET_DECIMALS } from '@/constants/assets'
 import { DASHBOARD_REFETCH_INTERVAL_MS, TABLE_PAGE_SIZE } from '@/constants/lending'
 import { formatAsset, formatTermLeft } from '@/utils/format'
-import { bpsToPercent, calcInterest } from '@/utils/lending'
-
-import type { DisplayOffer } from './useDashboard'
+import { bpsToPercent, type DisplayOffer, toDisplayOffer } from '@/utils/lending'
 
 type SortCol = 'collateral_amount' | 'principal_amount' | 'earn' | 'interest_rate' | 'termLeft'
 type SortState = { col: SortCol; dir: 'asc' | 'desc' } | null
 
-const FETCH_LIMIT = TABLE_PAGE_SIZE + 1 // n+1 to detect next page without total count
-
-function toDisplayOffer(offer: OfferShort, currentBlockHeight: number): DisplayOffer {
-  const termLeft = offer.loan_expiration_time - currentBlockHeight
-  const displayStatus = offer.status === 'pending' && termLeft <= 0 ? 'expired' : offer.status
-  return {
-    ...offer,
-    termLeft,
-    displayStatus,
-    earn: calcInterest(offer.principal_amount, offer.interest_rate),
-  }
+// UI sort columns → API fields (termLeft sorts by expiration height).
+const SORT_FIELD: Record<SortCol, string> = {
+  collateral_amount: 'collateral_amount',
+  principal_amount: 'principal_amount',
+  earn: 'earn',
+  interest_rate: 'interest_rate',
+  termLeft: 'loan_expiration_time',
 }
 
 function SortableHeader({
@@ -52,9 +47,13 @@ function SortableHeader({
       className='hover:text-foreground inline-flex items-center gap-1'
     >
       {label}
-      <ChevronsExpandVerticalIcon
-        className={`size-3.5 ${active ? 'text-foreground' : 'text-muted'}`}
-      />
+      {active ? (
+        <ChevronDownIcon
+          className={`text-foreground size-3.5 ${sort?.dir === 'asc' ? 'rotate-180' : ''}`}
+        />
+      ) : (
+        <ChevronsExpandVerticalIcon className='text-muted size-3.5' />
+      )}
     </button>
   )
 }
@@ -66,40 +65,35 @@ export function OffersTable() {
   const offset = (page - 1) * TABLE_PAGE_SIZE
 
   const offersQuery = useOffers(
-    { limit: FETCH_LIMIT, offset },
+    {
+      limit: TABLE_PAGE_SIZE + 1,
+      offset,
+      sortBy: sort ? SORT_FIELD[sort.col] : undefined,
+      sortDir: sort?.dir,
+    },
     { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS, placeholderData: keepPreviousData },
   )
   const blockHeightQuery = useBlockHeight(DASHBOARD_REFETCH_INTERVAL_MS)
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
   const rawBatch: OfferShort[] = offersQuery.data ?? []
-
   const hasNextPage = rawBatch.length > TABLE_PAGE_SIZE
-  const pageOffers = rawBatch.slice(0, TABLE_PAGE_SIZE)
 
   const displayOffers = useMemo<DisplayOffer[]>(
-    () => pageOffers.map(o => toDisplayOffer(o, currentBlockHeight)),
-    [pageOffers, currentBlockHeight],
+    () =>
+      (offersQuery.data ?? [])
+        .slice(0, TABLE_PAGE_SIZE)
+        .map(o => toDisplayOffer(o, currentBlockHeight)),
+    [offersQuery.data, currentBlockHeight],
   )
 
+  // Sort is server-side (refetches from offset 0) — reset to page 1.
   const handleSort = (col: SortCol) => {
     setSort(prev =>
       prev?.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
     )
+    setPage(1)
   }
-
-  // Sort applies to current page only (server-side sort not yet supported by API)
-  const sorted = useMemo(() => {
-    if (!sort) return displayOffers
-    const dir = sort.dir === 'asc' ? 1 : -1
-    return [...displayOffers].sort((a, b) => {
-      const av = a[sort.col]
-      const bv = b[sort.col]
-      if (av < bv) return -dir
-      if (av > bv) return dir
-      return 0
-    })
-  }, [displayOffers, sort])
 
   const isLoading = offersQuery.isLoading || blockHeightQuery.isLoading
   const isFetching = offersQuery.isFetching || blockHeightQuery.isFetching
@@ -137,7 +131,7 @@ export function OffersTable() {
             Retry
           </UiButton>
         </div>
-      ) : sorted.length === 0 ? (
+      ) : displayOffers.length === 0 ? (
         <p className='text-muted py-10 text-center text-sm'>No offers found</p>
       ) : (
         <Table variant='secondary'>
@@ -181,7 +175,7 @@ export function OffersTable() {
                 </Table.Column>
                 <Table.Column>Status</Table.Column>
               </Table.Header>
-              <Table.Body items={sorted}>
+              <Table.Body items={displayOffers}>
                 {offer => (
                   <Table.Row id={offer.id}>
                     <Table.Cell>
@@ -202,14 +196,7 @@ export function OffersTable() {
             </Table.Content>
           </Table.ScrollContainer>
           <Table.Footer className='pr-2 pl-4'>
-            <UiPagination
-              currentPage={page}
-              hasNextPage={hasNextPage}
-              onPageChange={p => {
-                setPage(p)
-                setSort(null)
-              }}
-            />
+            <UiPagination currentPage={page} hasNextPage={hasNextPage} onPageChange={setPage} />
           </Table.Footer>
         </Table>
       )}
