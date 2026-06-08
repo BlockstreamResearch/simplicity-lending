@@ -73,11 +73,11 @@ impl OfferCreationsTracker {
             return Ok(());
         }
 
-        let lending_offer_outpoint = OutPoint { txid, vout: 0 };
+        let lending_offer_outpoint = OutPoint { txid, vout: 5 };
         let lending_offer_utxo = OfferUtxoModel {
             offer_id: offer_model.id,
             txid: txid.to_byte_array().to_vec(),
-            vout: 0,
+            vout: lending_offer_outpoint.vout as i32,
             utxo_type: UtxoType::PendingOffer,
             created_at_height: block_height as i64,
             spent_at_height: None,
@@ -93,7 +93,7 @@ impl OfferCreationsTracker {
             },
         );
 
-        let borrower_nft_outpoint = OutPoint { txid, vout: 3 };
+        let borrower_nft_outpoint = OutPoint { txid, vout: 2 };
         let borrower_participant_utxo = OfferParticipantModel {
             offer_id: offer_model.id,
             participant_type: ParticipantType::Borrower,
@@ -113,7 +113,7 @@ impl OfferCreationsTracker {
             },
         );
 
-        let lender_nft_outpoint = OutPoint { txid, vout: 4 };
+        let lender_nft_outpoint = OutPoint { txid, vout: 3 };
         let lender_participant_utxo = OfferParticipantModel {
             offer_id: offer_model.id,
             participant_type: ParticipantType::Lender,

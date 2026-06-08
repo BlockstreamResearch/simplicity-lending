@@ -96,9 +96,7 @@ impl LendingOffer {
         protocol_fee_keeper_asset_id: AssetId,
         network: SimplicityNetwork,
     ) -> Result<Self, LendingOfferError> {
-        if tx.output.len() <= CREATION_METADATA_OUTPUT_INDEX
-            || !tx.output[CREATION_METADATA_OUTPUT_INDEX].is_null_data()
-        {
+        if tx.output.len() <= 6 || !tx.output[CREATION_METADATA_OUTPUT_INDEX].is_null_data() {
             return Err(LendingOfferError::NotALendingOfferCreationTx(tx.txid()));
         }
 
@@ -112,9 +110,9 @@ impl LendingOffer {
             return Err(LendingOfferError::NotALendingOfferCreationTx(tx.txid()));
         }
 
-        let borrower_nft_tx_out = tx.output[1].clone();
-        let lender_nft_tx_out = tx.output[2].clone();
-        let pending_offer_tx_out = tx.output[3].clone();
+        let borrower_nft_tx_out = tx.output[2].clone();
+        let lender_nft_tx_out = tx.output[3].clone();
+        let pending_offer_tx_out = tx.output[5].clone();
 
         let offer_parameters = OfferParameters {
             collateral_amount: pending_offer_tx_out.value.explicit().unwrap(),
