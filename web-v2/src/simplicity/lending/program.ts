@@ -134,7 +134,7 @@ export function buildLendingArguments(params: LendingOfferProgramParams): Simpli
     )
 }
 
-export function buildFinalizedLenderVaultParams(
+function buildFinalizedLenderVaultParams(
   params: Pick<
     LendingOfferProgramParams,
     'principalAssetId' | 'lenderNftAssetId' | 'borrowerNftAssetId'
@@ -152,7 +152,7 @@ export function buildFinalizedLenderVaultParams(
   }
 }
 
-export function buildFinalizedProtocolFeeVaultParams(
+function buildFinalizedProtocolFeeVaultParams(
   params: Pick<
     LendingOfferProgramParams,
     'principalAssetId' | 'protocolFeeKeeperAssetId' | 'borrowerNftAssetId'
@@ -168,17 +168,6 @@ export function buildFinalizedProtocolFeeVaultParams(
     finalizedVaultCovHash: toBytes32(new Uint8Array(32)),
     isActive: false,
   }
-}
-
-export function buildLendingWitness(params: LendingOfferWitnessParams): SimplicityWitnessValues {
-  const pathType = SimplicityType.fromString(
-    'Either<Either<(), ()>, Either<Either<(u64, u64), u64>, u64>>',
-  )
-
-  return new SimplicityWitnessValues().addValue(
-    WITNESS.PATH,
-    SimplicityTypedValue.parse(buildLendingPathExpression(params), pathType),
-  )
 }
 
 export function buildDerivedLendingOfferProgramParams(
@@ -265,6 +254,19 @@ export async function buildPendingOfferMetadata(params: {
 async function getLendingProgramId(): Promise<Uint8Array> {
   const hash = await sha256(new TextEncoder().encode(sources.lending))
   return new Uint8Array(hash).slice(0, 4)
+}
+
+// TODO: Will be used in the offer acceptance,
+// cancellation, repayment, and liquidation flows to construct the appropriate witness values for each branch of the program
+export function buildLendingWitness(params: LendingOfferWitnessParams): SimplicityWitnessValues {
+  const pathType = SimplicityType.fromString(
+    'Either<Either<(), ()>, Either<Either<(u64, u64), u64>, u64>>',
+  )
+
+  return new SimplicityWitnessValues().addValue(
+    WITNESS.PATH,
+    SimplicityTypedValue.parse(buildLendingPathExpression(params), pathType),
+  )
 }
 
 function buildLendingPathExpression(params: LendingOfferWitnessParams): string {
