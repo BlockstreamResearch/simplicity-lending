@@ -1,5 +1,6 @@
 import { env } from '@/constants/env'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
+import { sha256 } from '@/utils/sha256'
 
 function buildExplorerUrl(path: string): string {
   return `${env.VITE_ESPLORA_BASE_URL}${path}`
@@ -19,7 +20,7 @@ export function getAddressExplorerUrl(address: string): string {
 
 export async function hashScriptPubkeyHex(scriptPubkeyHex: string): Promise<Uint8Array> {
   const scriptBytes = hexToBytes(scriptPubkeyHex)
-  const digestBuffer = await crypto.subtle.digest('SHA-256', scriptBytes)
+  const digestBuffer = await sha256(scriptBytes)
   return new Uint8Array(digestBuffer)
 }
 

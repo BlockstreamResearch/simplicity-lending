@@ -8,7 +8,7 @@ import {
 import { sources } from 'virtual:simplicity-sources'
 
 import { bytes32ToHex } from '@/utils/hex'
-import { assertBytes32, assertUint32, assertUint64 } from '@/utils/uint'
+import type { Bytes32, Uint32, Uint64 } from '@/utils/uint'
 
 const ARGUMENTS = {
   VAULT_ASSET_ID: 'VAULT_ASSET_ID',
@@ -26,11 +26,11 @@ const WITNESS = {
 } as const
 
 export interface AssetAuthVaultProgramParams {
-  vaultAssetId: Uint8Array
-  keeperAuthAssetId: Uint8Array
-  supplierAuthAssetId: Uint8Array
-  keeperAuthAssetAmount: bigint
-  finalizedVaultCovHash: Uint8Array
+  vaultAssetId: Bytes32
+  keeperAuthAssetId: Bytes32
+  supplierAuthAssetId: Bytes32
+  keeperAuthAssetAmount: Uint64
+  finalizedVaultCovHash: Bytes32
   isActive: boolean
   withKeeperAssetBurn: boolean
   withSupplierAssetBurn: boolean
@@ -39,29 +39,29 @@ export interface AssetAuthVaultProgramParams {
 export type AssetAuthVaultWitnessParams =
   | {
       branch: 'WithdrawAll'
-      inputKeeperIndex: number
-      outputKeeperIndex: number
+      inputKeeperIndex: Uint32
+      outputKeeperIndex: Uint32
     }
   | {
       branch: 'WithdrawPart'
-      inputKeeperIndex: number
-      outputKeeperIndex: number
-      vaultOutputIndex: number
-      amountToWithdraw: bigint
+      inputKeeperIndex: Uint32
+      outputKeeperIndex: Uint32
+      vaultOutputIndex: Uint32
+      amountToWithdraw: Uint64
     }
   | {
       branch: 'Supply'
-      inputSupplierIndex: number
-      outputSupplierIndex: number
-      vaultOutputIndex: number
-      amountToSupply: bigint
+      inputSupplierIndex: Uint32
+      outputSupplierIndex: Uint32
+      vaultOutputIndex: Uint32
+      amountToSupply: Uint64
     }
   | {
       branch: 'FinalSupply'
-      inputSupplierIndex: number
-      outputSupplierIndex: number
-      finalizedVaultOutputIndex: number
-      amountToSupply: bigint
+      inputSupplierIndex: Uint32
+      outputSupplierIndex: Uint32
+      finalizedVaultOutputIndex: Uint32
+      amountToSupply: Uint64
     }
 
 export function loadAssetAuthVaultProgram(params: AssetAuthVaultProgramParams): SimplicityProgram {
@@ -81,13 +81,6 @@ export function buildAssetAuthVaultArguments(
     withKeeperAssetBurn,
     withSupplierAssetBurn,
   } = params
-
-  assertBytes32(vaultAssetId, 'vaultAssetId')
-  assertBytes32(keeperAuthAssetId, 'keeperAuthAssetId')
-  assertBytes32(supplierAuthAssetId, 'supplierAuthAssetId')
-  assertBytes32(finalizedVaultCovHash, 'finalizedVaultCovHash')
-
-  assertUint64(keeperAuthAssetAmount, 'keeperAuthAssetAmount')
 
   return new SimplicityArguments()
     .addValue(
@@ -121,27 +114,6 @@ export function buildAssetAuthVaultArguments(
     )
 }
 
-export function buildFinalizedAssetAuthVaultParams(
-  params: Omit<AssetAuthVaultProgramParams, 'finalizedVaultCovHash' | 'isActive'>,
-): AssetAuthVaultProgramParams {
-  return {
-    ...params,
-    finalizedVaultCovHash: new Uint8Array(32),
-    isActive: false,
-  }
-}
-
-export function buildActiveAssetAuthVaultParams(
-  finalizedParams: AssetAuthVaultProgramParams,
-  finalizedVaultCovHash: Uint8Array,
-): AssetAuthVaultProgramParams {
-  return {
-    ...finalizedParams,
-    finalizedVaultCovHash,
-    isActive: true,
-  }
-}
-
 export function buildAssetAuthVaultWitness(
   params: AssetAuthVaultWitnessParams,
 ): SimplicityWitnessValues {
@@ -158,26 +130,12 @@ export function buildAssetAuthVaultWitness(
 function buildAssetAuthVaultPathExpression(params: AssetAuthVaultWitnessParams): string {
   switch (params.branch) {
     case 'WithdrawAll':
-      assertUint32(params.inputKeeperIndex, 'inputKeeperIndex')
-      assertUint32(params.outputKeeperIndex, 'outputKeeperIndex')
       return `Left(Left((${params.inputKeeperIndex}, ${params.outputKeeperIndex})))`
     case 'WithdrawPart':
-      assertUint32(params.inputKeeperIndex, 'inputKeeperIndex')
-      assertUint32(params.outputKeeperIndex, 'outputKeeperIndex')
-      assertUint32(params.vaultOutputIndex, 'vaultOutputIndex')
-      assertUint64(params.amountToWithdraw, 'amountToWithdraw')
       return `Left(Right((${params.inputKeeperIndex}, ${params.outputKeeperIndex}, ${params.vaultOutputIndex}, ${params.amountToWithdraw})))`
     case 'Supply':
-      assertUint32(params.inputSupplierIndex, 'inputSupplierIndex')
-      assertUint32(params.outputSupplierIndex, 'outputSupplierIndex')
-      assertUint32(params.vaultOutputIndex, 'vaultOutputIndex')
-      assertUint64(params.amountToSupply, 'amountToSupply')
       return `Right(Left((${params.inputSupplierIndex}, ${params.outputSupplierIndex}, ${params.vaultOutputIndex}, ${params.amountToSupply})))`
     case 'FinalSupply':
-      assertUint32(params.inputSupplierIndex, 'inputSupplierIndex')
-      assertUint32(params.outputSupplierIndex, 'outputSupplierIndex')
-      assertUint32(params.finalizedVaultOutputIndex, 'finalizedVaultOutputIndex')
-      assertUint64(params.amountToSupply, 'amountToSupply')
       return `Right(Right((${params.inputSupplierIndex}, ${params.outputSupplierIndex}, ${params.finalizedVaultOutputIndex}, ${params.amountToSupply})))`
   }
 }

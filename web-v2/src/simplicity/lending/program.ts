@@ -9,15 +9,22 @@ import {
 } from 'lwk_web'
 import { sources } from 'virtual:simplicity-sources'
 
-import { type AssetAuthProgramParams, loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
+import { loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
 import {
   type AssetAuthVaultProgramParams,
-  buildActiveAssetAuthVaultParams,
-  buildFinalizedAssetAuthVaultParams,
   loadAssetAuthVaultProgram,
 } from '@/simplicity/asset-auth-vault/program'
+import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
 import { bytes32ToHex, hexToBytes } from '@/utils/hex'
-import { isUint16, isUint32, isUint64 } from '@/utils/uint'
+import { sha256 } from '@/utils/sha256'
+import {
+  type Bytes32,
+  toBytes32,
+  toUint64,
+  type Uint16,
+  type Uint32,
+  type Uint64,
+} from '@/utils/uint'
 
 const ARGUMENTS = {
   COLLATERAL_ASSET_ID: 'COLLATERAL_ASSET_ID',
@@ -40,49 +47,38 @@ const WITNESS = {
 } as const
 
 export interface OfferParameters {
-  collateralAmount: bigint
-  principalAmount: bigint
-  principalInterestRate: number
-  loanExpirationTime: number
+  collateralAmount: Uint64
+  principalAmount: Uint64
+  principalInterestRate: Uint16
+  loanExpirationTime: Uint32
 }
 
 export interface LendingOfferProgramParams {
-  collateralAssetId: Uint8Array
-  principalAssetId: Uint8Array
-  borrowerNftAssetId: Uint8Array
-  lenderNftAssetId: Uint8Array
-  protocolFeeKeeperAssetId: Uint8Array
+  collateralAssetId: Bytes32
+  principalAssetId: Bytes32
+  borrowerNftAssetId: Bytes32
+  lenderNftAssetId: Bytes32
+  protocolFeeKeeperAssetId: Bytes32
   offerParameters: OfferParameters
-  lenderVaultCovHash: Uint8Array
-  finalizedLenderVaultCovHash: Uint8Array
-  protocolFeeVaultCovHash: Uint8Array
-  finalizedProtocolFeeVaultCovHash: Uint8Array
-  principalOutputScriptHash: Uint8Array
+  lenderVaultCovHash: Bytes32
+  finalizedLenderVaultCovHash: Bytes32
+  protocolFeeVaultCovHash: Bytes32
+  finalizedProtocolFeeVaultCovHash: Bytes32
+  principalOutputScriptHash: Bytes32
 }
 
 export type LendingOfferWitnessParams =
   | { branch: 'OfferAcceptance' }
   | { branch: 'OfferCancellation' }
-  | { branch: 'PartialRepayment'; currentDebt: bigint; amountToRepay: bigint }
-  | { branch: 'FullRepayment'; currentDebt: bigint }
-  | { branch: 'Liquidation'; currentDebt: bigint }
+  | { branch: 'PartialRepayment'; currentDebt: Uint64; amountToRepay: Uint64 }
+  | { branch: 'FullRepayment'; currentDebt: Uint64 }
+  | { branch: 'Liquidation'; currentDebt: Uint64 }
 
 export function loadLendingProgram(params: LendingOfferProgramParams): SimplicityProgram {
   return SimplicityProgram.load(sources.lending, buildLendingArguments(params))
 }
 
 export function buildLendingArguments(params: LendingOfferProgramParams): SimplicityArguments {
-  assertBytes32(params.collateralAssetId, 'collateralAssetId')
-  assertBytes32(params.principalAssetId, 'principalAssetId')
-  assertBytes32(params.borrowerNftAssetId, 'borrowerNftAssetId')
-  assertBytes32(params.lenderNftAssetId, 'lenderNftAssetId')
-  assertBytes32(params.lenderVaultCovHash, 'lenderVaultCovHash')
-  assertBytes32(params.finalizedLenderVaultCovHash, 'finalizedLenderVaultCovHash')
-  assertBytes32(params.protocolFeeVaultCovHash, 'protocolFeeVaultCovHash')
-  assertBytes32(params.finalizedProtocolFeeVaultCovHash, 'finalizedProtocolFeeVaultCovHash')
-  assertBytes32(params.principalOutputScriptHash, 'principalOutputScriptHash')
-  assertOfferParameters(params.offerParameters)
-
   return new SimplicityArguments()
     .addValue(
       ARGUMENTS.COLLATERAL_ASSET_ID,
@@ -138,30 +134,22 @@ export function buildLendingArguments(params: LendingOfferProgramParams): Simpli
     )
 }
 
-export function buildPrincipalOutputAssetAuthParams(
-  params: Pick<LendingOfferProgramParams, 'borrowerNftAssetId' | 'offerParameters'>,
-): AssetAuthProgramParams {
-  return {
-    assetId: params.borrowerNftAssetId,
-    assetAmount: getTotalAmountToRepay(params.offerParameters),
-    withAssetBurn: false,
-  }
-}
-
 export function buildFinalizedLenderVaultParams(
   params: Pick<
     LendingOfferProgramParams,
     'principalAssetId' | 'lenderNftAssetId' | 'borrowerNftAssetId'
   >,
 ): AssetAuthVaultProgramParams {
-  return buildFinalizedAssetAuthVaultParams({
+  return {
     vaultAssetId: params.principalAssetId,
     keeperAuthAssetId: params.lenderNftAssetId,
-    keeperAuthAssetAmount: 1n,
+    keeperAuthAssetAmount: toUint64(1n),
     withKeeperAssetBurn: true,
     supplierAuthAssetId: params.borrowerNftAssetId,
     withSupplierAssetBurn: true,
-  })
+    finalizedVaultCovHash: toBytes32(new Uint8Array(32)),
+    isActive: false,
+  }
 }
 
 export function buildFinalizedProtocolFeeVaultParams(
@@ -170,14 +158,16 @@ export function buildFinalizedProtocolFeeVaultParams(
     'principalAssetId' | 'protocolFeeKeeperAssetId' | 'borrowerNftAssetId'
   >,
 ): AssetAuthVaultProgramParams {
-  return buildFinalizedAssetAuthVaultParams({
+  return {
     vaultAssetId: params.principalAssetId,
     keeperAuthAssetId: params.protocolFeeKeeperAssetId,
-    keeperAuthAssetAmount: 1n,
+    keeperAuthAssetAmount: toUint64(1n),
     withKeeperAssetBurn: false,
     supplierAuthAssetId: params.borrowerNftAssetId,
     withSupplierAssetBurn: true,
-  })
+    finalizedVaultCovHash: toBytes32(new Uint8Array(32)),
+    isActive: false,
+  }
 }
 
 export function buildLendingWitness(params: LendingOfferWitnessParams): SimplicityWitnessValues {
@@ -203,7 +193,11 @@ export function buildDerivedLendingOfferProgramParams(
   internalKey: XOnlyPublicKey,
   network: Network,
 ): LendingOfferProgramParams {
-  const principalOutputAssetAuth = loadAssetAuthProgram(buildPrincipalOutputAssetAuthParams(params))
+  const principalOutputAssetAuth = loadAssetAuthProgram({
+    assetId: params.borrowerNftAssetId,
+    assetAmount: getTotalAmountToRepay(params.offerParameters),
+    withAssetBurn: false,
+  })
   const finalizedLenderVault = loadAssetAuthVaultProgram(buildFinalizedLenderVaultParams(params))
   const finalizedProtocolFeeVault = loadAssetAuthVaultProgram(
     buildFinalizedProtocolFeeVaultParams(params),
@@ -218,18 +212,16 @@ export function buildDerivedLendingOfferProgramParams(
     internalKey,
     network,
   )
-  const activeLenderVault = loadAssetAuthVaultProgram(
-    buildActiveAssetAuthVaultParams(
-      buildFinalizedLenderVaultParams(params),
-      finalizedLenderVaultCovHash,
-    ),
-  )
-  const activeProtocolFeeVault = loadAssetAuthVaultProgram(
-    buildActiveAssetAuthVaultParams(
-      buildFinalizedProtocolFeeVaultParams(params),
-      finalizedProtocolFeeVaultCovHash,
-    ),
-  )
+  const activeLenderVault = loadAssetAuthVaultProgram({
+    ...buildFinalizedLenderVaultParams(params),
+    finalizedVaultCovHash: finalizedLenderVaultCovHash,
+    isActive: true,
+  })
+  const activeProtocolFeeVault = loadAssetAuthVaultProgram({
+    ...buildFinalizedProtocolFeeVaultParams(params),
+    finalizedVaultCovHash: finalizedProtocolFeeVaultCovHash,
+    isActive: true,
+  })
 
   return {
     ...params,
@@ -241,39 +233,24 @@ export function buildDerivedLendingOfferProgramParams(
   }
 }
 
-export function getProgramScriptHash(
+function getProgramScriptHash(
   program: SimplicityProgram,
   internalKey: XOnlyPublicKey,
   network: Network,
-): Uint8Array {
-  return hexToBytes(program.createP2trAddress(internalKey, network).scriptPubkey().jet_sha256_hex())
-}
-
-export function getTotalAmountToRepay(params: OfferParameters): bigint {
-  assertOfferParameters(params)
-
-  return (
-    params.principalAmount +
-    (params.principalAmount * BigInt(params.principalInterestRate)) / 10_000n
+): Bytes32 {
+  return toBytes32(
+    hexToBytes(program.createP2trAddress(internalKey, network).scriptPubkey().jet_sha256_hex()),
+    'programScriptHash',
   )
 }
 
 export async function buildPendingOfferMetadata(params: {
-  principalAssetId: Uint8Array
+  principalAssetId: Bytes32
   offerParameters: Pick<
     OfferParameters,
     'principalAmount' | 'loanExpirationTime' | 'principalInterestRate'
   >
 }): Promise<Uint8Array> {
-  assertBytes32(params.principalAssetId, 'principalAssetId')
-  assertUint64(params.offerParameters.principalAmount, 'principalAmount')
-  if (!isUint32(params.offerParameters.loanExpirationTime)) {
-    throw new Error('loanExpirationTime must fit into u32')
-  }
-  if (!isUint16(params.offerParameters.principalInterestRate)) {
-    throw new Error('principalInterestRate must fit into u16')
-  }
-
   const programId = await getLendingProgramId()
   const data = new Uint8Array(50)
   const view = new DataView(data.buffer)
@@ -286,7 +263,7 @@ export async function buildPendingOfferMetadata(params: {
 }
 
 async function getLendingProgramId(): Promise<Uint8Array> {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sources.lending))
+  const hash = await sha256(new TextEncoder().encode(sources.lending))
   return new Uint8Array(hash).slice(0, 4)
 }
 
@@ -297,37 +274,10 @@ function buildLendingPathExpression(params: LendingOfferWitnessParams): string {
     case 'OfferCancellation':
       return 'Left(Right(()))'
     case 'PartialRepayment':
-      assertUint64(params.currentDebt, 'currentDebt')
-      assertUint64(params.amountToRepay, 'amountToRepay')
       return `Right(Left(Left((${params.currentDebt}, ${params.amountToRepay}))))`
     case 'FullRepayment':
-      assertUint64(params.currentDebt, 'currentDebt')
       return `Right(Left(Right(${params.currentDebt})))`
     case 'Liquidation':
-      assertUint64(params.currentDebt, 'currentDebt')
       return `Right(Right(${params.currentDebt}))`
-  }
-}
-
-function assertOfferParameters(params: OfferParameters): void {
-  assertUint64(params.collateralAmount, 'collateralAmount')
-  assertUint64(params.principalAmount, 'principalAmount')
-  if (!isUint16(params.principalInterestRate)) {
-    throw new Error('principalInterestRate must fit into u16')
-  }
-  if (!isUint32(params.loanExpirationTime)) {
-    throw new Error('loanExpirationTime must fit into u32')
-  }
-}
-
-function assertBytes32(value: Uint8Array, label: string): void {
-  if (value.length !== 32) {
-    throw new Error(`${label} must be 32 bytes`)
-  }
-}
-
-function assertUint64(value: bigint, label: string): void {
-  if (!isUint64(value)) {
-    throw new Error(`${label} must fit into u64`)
   }
 }

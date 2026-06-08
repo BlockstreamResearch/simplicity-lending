@@ -6,7 +6,7 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { type CreateOfferSummary, useCreateOffer } from '@/hooks/useCreateOffer'
+import { type CreateOfferResult, useCreateOffer } from '@/hooks/useCreateOffer'
 import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -85,7 +85,7 @@ const createOfferFormResolver: Resolver<CreateOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  summary: CreateOfferSummary | null
+  summary: CreateOfferResult['summary'] | null
   txid: string | null
 }
 
@@ -108,8 +108,11 @@ const INITIAL_STATE: BroadcastState = {
 }
 
 const EMPTY_FORM: CreateOfferForm = {
-  factoryAuthOutpoint: '6ad27ff9c22819f98a8f08cf777d370c0b30549bee6f8cd86c3522ab203b5018:0',
-  issuanceFactoryOutpoint: '6ad27ff9c22819f98a8f08cf777d370c0b30549bee6f8cd86c3522ab203b5018:1',
+  // Update factoryAuthOutpoint and issuanceFactoryOutpoint
+  // with the last create offer tx:0 and tx:1
+  // every time you use VITE_DEBUG_MNEMONIC
+  factoryAuthOutpoint: '822ffbd963cf31e6e20b4ba0bf99312c27b00ace07499aa330f7559cec1ea1e7:0',
+  issuanceFactoryOutpoint: '822ffbd963cf31e6e20b4ba0bf99312c27b00ace07499aa330f7559cec1ea1e7:1',
   factoryAssetId: 'a61ab9c860e382039cb5df9386319887c1a3e60116f5fcb7ad3497b430806d18',
   collateralOutpoint: '',
   collateralAmount: DEFAULT_COLLATERAL_AMOUNT,

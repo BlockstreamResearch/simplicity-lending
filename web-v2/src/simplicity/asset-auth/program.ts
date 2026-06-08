@@ -7,7 +7,7 @@ import {
 import { sources } from 'virtual:simplicity-sources'
 
 import { bytes32ToHex } from '@/utils/hex'
-import { assertBytes32, assertUint32, assertUint64 } from '@/utils/uint'
+import type { Bytes32, Uint32, Uint64 } from '@/utils/uint'
 
 const ARGUMENTS = {
   ASSET_ID: 'ASSET_ID',
@@ -21,14 +21,14 @@ const WITNESS = {
 } as const
 
 export interface AssetAuthProgramParams {
-  assetId: Uint8Array
-  assetAmount: bigint
+  assetId: Bytes32
+  assetAmount: Uint64
   withAssetBurn: boolean
 }
 
 export interface AssetAuthWitnessParams {
-  inputAssetIndex: number
-  outputAssetIndex: number
+  inputAssetIndex: Uint32
+  outputAssetIndex: Uint32
 }
 
 export function loadAssetAuthProgram(params: AssetAuthProgramParams): SimplicityProgram {
@@ -36,9 +36,6 @@ export function loadAssetAuthProgram(params: AssetAuthProgramParams): Simplicity
 }
 
 export function buildAssetAuthArguments(params: AssetAuthProgramParams): SimplicityArguments {
-  assertBytes32(params.assetId, 'assetId')
-  assertUint64(params.assetAmount, 'assetAmount')
-
   return new SimplicityArguments()
     .addValue(ARGUMENTS.ASSET_ID, SimplicityTypedValue.fromU256Hex(bytes32ToHex(params.assetId)))
     .addValue(ARGUMENTS.ASSET_AMOUNT, SimplicityTypedValue.fromU64(params.assetAmount))
@@ -46,9 +43,6 @@ export function buildAssetAuthArguments(params: AssetAuthProgramParams): Simplic
 }
 
 export function buildAssetAuthWitness(params: AssetAuthWitnessParams): SimplicityWitnessValues {
-  assertUint32(params.inputAssetIndex, 'inputAssetIndex')
-  assertUint32(params.outputAssetIndex, 'outputAssetIndex')
-
   return new SimplicityWitnessValues()
     .addValue(WITNESS.INPUT_ASSET_INDEX, SimplicityTypedValue.fromU32(params.inputAssetIndex))
     .addValue(WITNESS.OUTPUT_ASSET_INDEX, SimplicityTypedValue.fromU32(params.outputAssetIndex))

@@ -7,7 +7,7 @@ import {
 } from 'lwk_web'
 import { sources } from 'virtual:simplicity-sources'
 
-import { isUint8, isUint32, isUint64 } from '@/utils/uint'
+import type { Uint8, Uint32, Uint64 } from '@/utils/uint'
 
 const ARGUMENTS = {
   ISSUING_UTXOS_COUNT: 'ISSUING_UTXOS_COUNT',
@@ -19,13 +19,13 @@ const WITNESS = {
 } as const
 
 export interface IssuanceFactoryProgramParams {
-  issuingUtxosCount: number
-  reissuanceFlags: bigint
+  issuingUtxosCount: Uint8
+  reissuanceFlags: Uint64
 }
 
 export interface IssuanceFactoryWitnessParams {
   branch: 'IssueAssets' | 'RemoveFactory'
-  outputIndex: number
+  outputIndex: Uint32
 }
 
 export function loadIssuanceFactoryProgram(
@@ -37,13 +37,6 @@ export function loadIssuanceFactoryProgram(
 export function buildIssuanceFactoryArguments(
   params: IssuanceFactoryProgramParams,
 ): SimplicityArguments {
-  if (!isUint8(params.issuingUtxosCount)) {
-    throw new Error('issuingUtxosCount must fit into u8')
-  }
-  if (!isUint64(params.reissuanceFlags)) {
-    throw new Error('reissuanceFlags must fit into u64')
-  }
-
   return new SimplicityArguments()
     .addValue(ARGUMENTS.ISSUING_UTXOS_COUNT, SimplicityTypedValue.fromU8(params.issuingUtxosCount))
     .addValue(ARGUMENTS.REISSUANCE_FLAGS, SimplicityTypedValue.fromU64(params.reissuanceFlags))
@@ -52,10 +45,6 @@ export function buildIssuanceFactoryArguments(
 export function buildIssuanceFactoryWitness(
   params: IssuanceFactoryWitnessParams,
 ): SimplicityWitnessValues {
-  if (!isUint32(params.outputIndex)) {
-    throw new Error('outputIndex must fit into u32')
-  }
-
   const pathType = SimplicityType.fromString('Either<u32, u32>')
   const pathExpression =
     params.branch === 'IssueAssets' ? `Left(${params.outputIndex})` : `Right(${params.outputIndex})`
