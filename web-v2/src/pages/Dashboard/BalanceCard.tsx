@@ -16,6 +16,8 @@ export function BalanceCard({
   onRetry,
   balance,
   fiat,
+  unsupported,
+  unsupportedMessage,
   children,
 }: {
   icon: ReactNode
@@ -29,9 +31,11 @@ export function BalanceCard({
   onRetry: () => void
   balance: ReactNode
   fiat?: string
+  unsupported?: boolean
+  unsupportedMessage?: string
   children: ReactNode
 }) {
-  const showBody = isReady && !error
+  const showBody = isReady && !error && !unsupported
   return (
     <CardShell>
       <CardHeader
@@ -46,6 +50,10 @@ export function BalanceCard({
         <div className='bg-surface flex flex-col items-start gap-4 rounded-lg p-4 sm:p-6'>
           <p className='text-muted text-sm'>{connectMessage}</p>
           <WalletButton />
+        </div>
+      ) : unsupported ? (
+        <div className='bg-surface flex flex-col items-start gap-4 rounded-lg p-4 sm:p-6'>
+          <p className='text-muted text-sm'>{unsupportedMessage}</p>
         </div>
       ) : error ? (
         <CardError message={error.message || errorMessage} onRetry={onRetry} />

@@ -184,7 +184,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const address = wollet.address().address()
         const receiveAddress = address.toString()
         const scriptPubkey = address.scriptPubkey().toString()
-        const xOnlyPubkey = (await connector.getXOnlyPublicKey?.()) ?? null
+        const xOnlyPubkey = (await connector.getXOnlyPublicKey?.())?.toString() ?? null
 
         setState(s => ({
           ...s,

@@ -33,6 +33,8 @@ export function BorrowCard({ data, isLoading, isReady, onRetry }: BorrowCardProp
       error={data.error}
       connectMessage='Connect your wallet to view your borrows.'
       errorMessage='Failed to load your borrows.'
+      unsupported={data.unsupported}
+      unsupportedMessage="This wallet can't expose a borrower key, so your borrows can't be shown."
       onRetry={onRetry}
       balance={<AssetAmount value={formatAsset(data.balance, ASSET_DECIMALS.LBTC)} unit='LBTC' />}
     >

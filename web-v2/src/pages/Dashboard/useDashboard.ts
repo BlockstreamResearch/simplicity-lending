@@ -47,6 +47,8 @@ export interface DashboardBorrows {
   nearExpiryOffers: DisplayOffer[]
   isLoading: boolean
   error: Error | null
+  // Wallet can't expose an x-only pubkey → borrows can't be looked up (≠ "no borrows").
+  unsupported: boolean
 }
 
 export interface DashboardSupply {
@@ -130,9 +132,11 @@ export function useDashboard() {
       nearExpiryOffers,
       isLoading: isReady && (borrowerIdsQuery.isLoading || borrowerOffersQuery.isLoading),
       error: borrowerIdsQuery.error ?? borrowerOffersQuery.error,
+      unsupported: isReady && !xOnlyPubkey,
     }
   }, [
     isReady,
+    xOnlyPubkey,
     lbtcBalance,
     borrowerOffers,
     borrowerIdsQuery.isLoading,
@@ -194,7 +198,8 @@ export function useDashboard() {
     borrows,
     supply,
     isReady,
-    isLoading: isReady && (offersQuery.isLoading || blockHeightQuery.isLoading),
+    // Overview is public — must not gate loading on isReady (else flashes zeros).
+    isLoading: offersQuery.isLoading || blockHeightQuery.isLoading,
     refetch,
   }
 }

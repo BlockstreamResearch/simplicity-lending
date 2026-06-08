@@ -97,7 +97,7 @@ export function OffersTable() {
 
   const isLoading = offersQuery.isLoading || blockHeightQuery.isLoading
   const isFetching = offersQuery.isFetching || blockHeightQuery.isFetching
-  const error = offersQuery.error as Error | null
+  const error = (offersQuery.error ?? blockHeightQuery.error) as Error | null
   const handleRetry = () => {
     void offersQuery.refetch()
     void blockHeightQuery.refetch()
