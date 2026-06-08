@@ -53,24 +53,9 @@ export interface SavedScriptAuthState {
   fundingTxid: string
 }
 
-const SCRIPT_AUTH_STATE_KEY = 'demo:scriptAuthState'
-
-export function saveScriptAuthState(state: SavedScriptAuthState): void {
-  try {
-    localStorage.setItem(SCRIPT_AUTH_STATE_KEY, JSON.stringify(state))
-  } catch (err) {
-    console.warn(err)
-  }
-}
-
-export function latestScriptAuthState(): SavedScriptAuthState | null {
-  try {
-    const raw = localStorage.getItem(SCRIPT_AUTH_STATE_KEY)
-    return raw ? (JSON.parse(raw) as SavedScriptAuthState) : null
-  } catch (err) {
-    console.warn(err)
-    return null
-  }
+export function latestScriptAuthState() {
+  const states = getScriptAuthStates()
+  return states[states.length - 1] ?? null
 }
 
 export function useTxConfirmations(txid: string | null): number | null {
@@ -120,4 +105,42 @@ export function useTxConfirmations(txid: string | null): number | null {
   }, [txid])
 
   return confirmedTx?.txid === txid ? confirmedTx.confirmations : null
+}
+
+const SCRIPT_AUTH_STORAGE_KEY = 'script-auth-covenants'
+
+export function getScriptAuthStates(): SavedScriptAuthState[] {
+  const raw = localStorage.getItem(SCRIPT_AUTH_STORAGE_KEY)
+
+  if (!raw) {
+    return []
+  }
+
+  return JSON.parse(raw)
+}
+
+export function saveScriptAuthState(state: SavedScriptAuthState): void {
+  const existingStates = getScriptAuthStates()
+
+  existingStates.push(state)
+
+  localStorage.setItem(SCRIPT_AUTH_STORAGE_KEY, JSON.stringify(existingStates))
+}
+
+export function removeScriptAuthState(authOutpoint: string): void {
+  const existingStates = getScriptAuthStates()
+
+  const filteredStates = existingStates.filter(state => state.authOutpoint !== authOutpoint)
+
+  localStorage.setItem(SCRIPT_AUTH_STORAGE_KEY, JSON.stringify(filteredStates))
+}
+
+export function formatCollateralUtxoOption(utxo: WalletTxOut): { id: string; label: string } {
+  const outpoint = utxoToOutpointString(utxo)
+  const height = utxo.height()
+  const status = height === undefined ? 'mempool' : `height ${height}`
+  return {
+    id: outpoint,
+    label: `${outpoint} | ${utxo.unblinded().value().toString()} sats | ${status}`,
+  }
 }

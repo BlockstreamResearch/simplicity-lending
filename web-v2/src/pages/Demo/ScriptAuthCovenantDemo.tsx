@@ -27,6 +27,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { buildScriptAuthWitness, loadScriptAuthProgram } from '@/simplicity/script-auth/program'
 import { hexToBytes } from '@/utils/hex'
+import { toBytes32, toUint32 } from '@/utils/uint'
 
 interface FundingSummary {
   covenantAddress: string
@@ -108,7 +109,9 @@ export default function ScriptAuthCovenantDemo() {
         DEFAULT_SCRIPT_AUTH_FEE_RESERVE,
       )
       const scriptHashHex = authUtxo.scriptPubkey().jet_sha256_hex()
-      const scriptAuthProgram = loadScriptAuthProgram(hexToBytes(scriptHashHex))
+      const scriptAuthProgram = loadScriptAuthProgram(
+        toBytes32(hexToBytes(scriptHashHex), 'scriptHash'),
+      )
       const scriptAuthAddress = scriptAuthProgram.createP2trAddress(key, lwkNetwork)
       const covenantAddress = scriptAuthAddress.toString()
 
@@ -173,7 +176,9 @@ export default function ScriptAuthCovenantDemo() {
       }
       const { scriptHashHex } = scriptAuthState
 
-      const scriptAuthProgram = loadScriptAuthProgram(hexToBytes(scriptHashHex))
+      const scriptAuthProgram = loadScriptAuthProgram(
+        toBytes32(hexToBytes(scriptHashHex), 'scriptHash'),
+      )
       const key = xOnlyPublicKey ?? (await getXOnlyPublicKey())
       if (!key) {
         throw new Error('Missing x-only public key')
@@ -258,7 +263,7 @@ export default function ScriptAuthCovenantDemo() {
         key,
         [covenantTxOut, authTxOut],
         COVENANT_INPUT_INDEX,
-        buildScriptAuthWitness(AUTH_INPUT_INDEX),
+        buildScriptAuthWitness(toUint32(AUTH_INPUT_INDEX, 'authInputIndex')),
         lwkNetwork,
         SimplicityLogLevel.Trace,
       )

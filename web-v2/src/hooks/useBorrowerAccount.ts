@@ -13,6 +13,8 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
 import { bytesToHex } from '@/utils/hex'
+import { sha256 } from '@/utils/sha256'
+import { toUint8, toUint64 } from '@/utils/uint'
 
 const FEE_RESERVE = 10_000n
 const ISSUING_UTXOS_COUNT = 2
@@ -61,8 +63,8 @@ export function useBorrowerAccount() {
     const fundingOutpoint = utxoToOutpointString(feeUtxo)
     const receiveAddress = Address.parse(receiveAddressString, lwkNetwork).toUnconfidential()
     const issuanceFactoryProgram = loadIssuanceFactoryProgram({
-      issuingUtxosCount: ISSUING_UTXOS_COUNT,
-      reissuanceFlags: REISSUANCE_FLAGS,
+      issuingUtxosCount: toUint8(ISSUING_UTXOS_COUNT, 'issuingUtxosCount'),
+      reissuanceFlags: toUint64(REISSUANCE_FLAGS, 'reissuanceFlags'),
     })
     const factoryAddress = issuanceFactoryProgram.createP2trAddress(xOnlyPublicKey, lwkNetwork)
     const issuedAssetId = assetIdFromIssuance(feeUtxo.outpoint(), emptyContractHash())
@@ -114,10 +116,7 @@ function emptyContractHash(): ContractHash {
 
 async function buildMetadata(): Promise<Uint8Array> {
   const { sources } = await import('virtual:simplicity-sources')
-  const hash = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(sources.issuance_factory),
-  )
+  const hash = await sha256(new TextEncoder().encode(sources.issuance_factory))
   const programId = new Uint8Array(hash).slice(0, 4)
   const data = new Uint8Array(13)
   data.set(programId, 0)

@@ -1,4 +1,5 @@
 import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
+import CreateOfferDemo from './CreateOfferDemo'
 import ScriptAuthCovenantDemo from './ScriptAuthCovenantDemo'
 import { WalletDemo } from './WalletDemo'
 
@@ -9,6 +10,7 @@ export default function DemoPage() {
       <WalletDemo />
       <CreateBorrowerAccountDemo />
       <ScriptAuthCovenantDemo />
+      <CreateOfferDemo />
     </div>
   )
 }
