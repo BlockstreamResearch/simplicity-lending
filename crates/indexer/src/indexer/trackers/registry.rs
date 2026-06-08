@@ -1,38 +1,47 @@
-use simplex::simplicityhl::elements::{AssetId, Transaction, hex::ToHex};
+use sqlx::PgPool;
+
+use simplex::{
+    provider::SimplicityNetwork,
+    simplicityhl::elements::{AssetId, Transaction, hex::ToHex},
+};
 
 use crate::{
     db::DbTx,
-    indexer::{WatchCache, handlers, is_offer_creation_tx},
-    models::{ActiveUtxo, UtxoData},
+    indexer::{OfferCreationsTracker, OfferParticipantsTracker, OffersTracker},
 };
 
 pub struct TrackerRegistry {
-    cache: WatchCache<ActiveUtxo>,
-    protocol_fee_keeper_asset_id: AssetId,
+    offers: OffersTracker,
+    participants: OfferParticipantsTracker,
+    creations: OfferCreationsTracker,
 }
 
 impl TrackerRegistry {
-    pub fn new(cache: WatchCache<ActiveUtxo>, protocol_fee_keeper_asset_id: AssetId) -> Self {
-        Self {
-            cache,
-            protocol_fee_keeper_asset_id,
-        }
+    pub async fn load(
+        db_pool: &PgPool,
+        protocol_fee_keeper_asset_id: AssetId,
+        network: SimplicityNetwork,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            offers: OffersTracker::load(db_pool).await?,
+            participants: OfferParticipantsTracker::load(db_pool).await?,
+            creations: OfferCreationsTracker::new(protocol_fee_keeper_asset_id, network),
+        })
     }
 
     pub fn begin_block(&mut self) {
-        self.cache.begin_block();
+        self.offers.begin_block();
+        self.participants.begin_block();
     }
 
     pub fn commit_block(&mut self) {
-        self.cache.commit_block();
+        self.offers.commit_block();
+        self.participants.commit_block();
     }
 
     pub fn abort_block(&mut self) {
-        self.cache.abort_block();
-    }
-
-    pub fn cache(&self) -> &WatchCache<ActiveUtxo> {
-        &self.cache
+        self.offers.abort_block();
+        self.participants.abort_block();
     }
 
     #[tracing::instrument(
@@ -46,51 +55,24 @@ impl TrackerRegistry {
         tx: &Transaction,
         block_height: u64,
     ) -> anyhow::Result<()> {
-        let mut is_offer_tx = false;
-
-        for input in &tx.input {
-            if let Some(utxo_info) = self.cache.get(&input.previous_output).copied() {
-                match utxo_info.data {
-                    UtxoData::Offer(utxo_type) => {
-                        handlers::handle_offer_transition(
-                            sql_tx,
-                            tx,
-                            &mut self.cache,
-                            &input.previous_output,
-                            utxo_info.offer_id,
-                            utxo_type,
-                            block_height,
-                        )
-                        .await?;
-                        is_offer_tx = true;
-                    }
-                    UtxoData::Participant(participant_type) => {
-                        handlers::handle_participant_movement(
-                            sql_tx,
-                            tx,
-                            &mut self.cache,
-                            &input.previous_output,
-                            utxo_info.offer_id,
-                            participant_type,
-                            block_height,
-                        )
-                        .await?;
-                    }
-                }
-            }
-        }
-
-        if !is_offer_tx
-            && let Some(args) = is_offer_creation_tx(tx, self.protocol_fee_keeper_asset_id)
-        {
-            handlers::pending_offer::handle_pending_offer_creation(
-                sql_tx,
-                &mut self.cache,
-                args,
-                tx,
-                block_height,
-            )
+        let offer_spent = self
+            .offers
+            .process_tx_spends(sql_tx, tx, block_height)
             .await?;
+        self.participants
+            .process_tx_spends(sql_tx, tx, block_height)
+            .await?;
+
+        if !offer_spent {
+            self.creations
+                .process_creation_tx(
+                    sql_tx,
+                    tx,
+                    block_height,
+                    &mut self.offers,
+                    &mut self.participants,
+                )
+                .await?;
         }
 
         Ok(())

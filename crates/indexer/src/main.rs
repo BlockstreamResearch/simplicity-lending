@@ -24,7 +24,9 @@ async fn main() -> Result<(), std::io::Error> {
 
             tracing::info!("Starting indexer service");
 
-            let mut worker = Worker::new(configuration.indexer, pool, esplora_client).await;
+            let mut worker = Worker::new(configuration.indexer, pool, esplora_client)
+                .await
+                .expect("Failed to start indexer service");
 
             worker.run().await;
         }
