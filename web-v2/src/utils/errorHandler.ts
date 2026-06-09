@@ -14,6 +14,20 @@ export class ErrorHandler {
     ErrorHandler.processWithoutFeedback(error)
   }
 
+  static processWithRetry(error: unknown, onRetry: () => void, message?: string): void {
+    if (error instanceof ApiAbortError) return
+
+    const description =
+      message ?? (error instanceof Error ? ErrorHandler.getErrorMessage(error) : String(error))
+
+    toast.danger('Error', {
+      description,
+      actionProps: { children: 'Retry', onPress: onRetry },
+    })
+
+    ErrorHandler.processWithoutFeedback(error)
+  }
+
   static processWithoutFeedback(error: unknown): void {
     console.error(error)
   }

@@ -2,7 +2,11 @@ import type { XOnlyPublicKey } from 'lwk_web'
 import { useEffect, useState } from 'react'
 
 import { env } from '@/constants/env'
-import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
+import {
+  type ConnectionStatus,
+  DEFAULT_WALLET_TYPE,
+  type WalletType,
+} from '@/lib/wallet-core/types'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -35,7 +39,7 @@ export function WalletDemo() {
     connectorId,
   } = useWallet()
 
-  const [walletType, setWalletType] = useState<WalletType>('Wpkh')
+  const [walletType, setWalletType] = useState<WalletType>(DEFAULT_WALLET_TYPE)
   const [sendAddress, setSendAddress] = useState('')
   const [sendAmount, setSendAmount] = useState('')
   const [verifyingAddress, setVerifyingAddress] = useState(false)

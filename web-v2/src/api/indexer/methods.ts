@@ -43,14 +43,18 @@ function postBatch<Schema extends z.ZodTypeAny>(
 
 export type SortDir = 'asc' | 'desc'
 
+export type SortField =
+  | 'collateral_amount'
+  | 'principal_amount'
+  | 'interest_rate'
+  | 'loan_expiration_time'
+
 export interface ListOffersParams {
   status?: OfferStatus
   asset?: string
   limit?: number
   offset?: number
-  // Server-side sort. NOTE: backend does not honor these yet — sent as a
-  // forward-compatible convention; results are currently returned unsorted.
-  sortBy?: string
+  sortBy?: SortField
   sortDir?: SortDir
 }
 

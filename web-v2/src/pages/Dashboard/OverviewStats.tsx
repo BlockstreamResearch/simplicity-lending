@@ -1,67 +1,53 @@
 import { Skeleton } from '@heroui/react'
 import { useMemo } from 'react'
 
-import { ASSET_DECIMALS } from '@/constants/assets'
-import { formatAsset } from '@/utils/format'
-import { bpsToPercent } from '@/utils/lending'
+import { LENDING } from '@/constants/config'
+import { formatAmount } from '@/utils/format'
+import { bpsToPercent } from '@/utils/offers'
 
-import { AssetAmount } from './BaseCard'
-import type { DashboardOverview } from './useDashboard'
-
-interface OverviewStatsProps {
-  data: DashboardOverview
-  isLoading: boolean
-}
+import { AssetAmount } from './AssetAmount'
+import { useOverview } from './useOverview'
 
 interface OverviewStat {
   label: string
   value: string
   unit?: string
-  fiat?: string
 }
 
-const GRID = 'grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:gap-6'
+export default function OverviewStats() {
+  const { overview, isLoading } = useOverview()
 
-function Tile({ label, value, unit, fiat, isLoading }: OverviewStat & { isLoading?: boolean }) {
-  return (
-    <div className='bg-surface-secondary flex flex-col gap-3 rounded-2xl p-6'>
-      <h4 className='text-muted text-h4'>{label}</h4>
-      {isLoading ? (
-        <Skeleton className='h-8 w-24 rounded-lg' />
-      ) : (
-        <div>
-          <p className='text-display'>{unit ? <AssetAmount value={value} unit={unit} /> : value}</p>
-          {fiat && <p className='text-muted mt-1 text-xs'>{fiat}</p>}
-        </div>
-      )}
-    </div>
-  )
-}
-
-export function OverviewStats({ data, isLoading }: OverviewStatsProps) {
   const stats = useMemo<OverviewStat[]>(
     () => [
       {
-        label: 'Collateral Locked',
-        value: formatAsset(data.totalCollateral, ASSET_DECIMALS.LBTC),
-        unit: 'LBTC',
+        label: 'Total Collateral Locked',
+        value: formatAmount(overview.totalCollateral, LENDING.collateralDecimals),
+        unit: LENDING.collateralSymbol,
       },
       {
-        label: 'Borrowings',
-        value: formatAsset(data.totalBorrowings, ASSET_DECIMALS.USDT),
-        unit: 'USDT',
+        label: 'Total Active Loans',
+        value: formatAmount(overview.totalActiveLoans, LENDING.principalDecimals),
+        unit: LENDING.principalSymbol,
       },
-      { label: 'Average APR', value: bpsToPercent(data.avgApr) },
-      { label: 'Active Loans', value: String(data.activeLoans) },
-      { label: 'Pending Offers', value: String(data.pendingOffers) },
+      { label: 'Average Interest Rate', value: bpsToPercent(overview.avgInterestRate) },
+      { label: 'Number of Active Loans', value: String(overview.activeLoansCount) },
     ],
-    [data],
+    [overview],
   )
 
   return (
-    <div className={GRID}>
+    <div className='grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6'>
       {stats.map(stat => (
-        <Tile key={stat.label} {...stat} isLoading={isLoading} />
+        <div key={stat.label} className='bg-surface-secondary flex flex-col gap-3 rounded-2xl p-6'>
+          <h3 className='text-muted text-h4'>{stat.label}</h3>
+          {isLoading ? (
+            <Skeleton className='h-8 w-24 rounded-lg' />
+          ) : (
+            <p className='text-display'>
+              {stat.unit ? <AssetAmount value={stat.value} unit={stat.unit} /> : stat.value}
+            </p>
+          )}
+        </div>
       ))}
     </div>
   )

@@ -1,8 +1,7 @@
 import type { NetworkName } from '@/constants/env'
 
 // Asset IDs per network — Liquid mainnet / testnet / regtest.
-// Use as `ASSET_ID[env.VITE_NETWORK].LBTC`.
-export const ASSET_ID: Record<NetworkName, { LBTC: string; USDT: string }> = {
+export const NETWORK_ASSETS_CONFIG: Record<NetworkName, { LBTC: string; USDT: string }> = {
   liquid: {
     LBTC: '6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d',
     USDT: 'ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2',
@@ -17,4 +16,6 @@ export const ASSET_ID: Record<NetworkName, { LBTC: string; USDT: string }> = {
   },
 }
 
-export const ASSET_DECIMALS = { LBTC: 8, USDT: 2 } as const
+// TEST asset used as the principal on testnet (in place of USDT) — see the offer demos.
+export const TESTNET_PRINCIPAL_ASSET_ID =
+  '38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5'

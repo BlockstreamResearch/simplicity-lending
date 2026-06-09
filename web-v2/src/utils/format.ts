@@ -3,7 +3,7 @@ const MINUTES_PER_HOUR = 60
 const MINUTES_PER_DAY = 1440
 
 // satoshis → grouped decimal string, trailing zeros trimmed.
-export function formatAsset(amount: bigint, decimals: number): string {
+export function formatAmount(amount: bigint, decimals: number): string {
   const negative = amount < 0n
   const abs = negative ? -amount : amount
   const base = 10n ** BigInt(decimals)
@@ -25,9 +25,6 @@ export function formatTermLeft(blocksLeft: number): string {
   if (minutes < MINUTES_PER_DAY) return `~${Math.round(minutes / MINUTES_PER_HOUR)}h`
   return `>${Math.floor(minutes / MINUTES_PER_DAY)}d`
 }
-
-// TODO(oracle): add fiat conversion (LBTC/USDT → USD). `fiat` props left unset
-// until then — a "$0.00" placeholder would read as a real zero balance.
 
 export function truncateAddress(address: string): string {
   if (address.length <= 10) return address

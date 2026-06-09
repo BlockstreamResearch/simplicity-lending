@@ -3,7 +3,7 @@ import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
 
-export function WalletButton() {
+export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
   const { connectionStatus, receiveAddress, connect } = useWallet()
 
   if (connectionStatus === 'ready' && receiveAddress) {
@@ -11,7 +11,11 @@ export function WalletButton() {
   }
 
   return (
-    <UiButton variant='primary' onPress={() => connect(DEFAULT_WALLET_TYPE)}>
+    <UiButton
+      variant='primary'
+      isDisabled={isDisabled}
+      onPress={() => connect(DEFAULT_WALLET_TYPE)}
+    >
       Connect Wallet
     </UiButton>
   )

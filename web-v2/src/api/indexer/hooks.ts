@@ -20,22 +20,20 @@ import {
 import { offersQueryKeys } from './queryKeys'
 import type { OfferDetails, OfferParticipant, OfferShort, OfferUtxo } from './schemas'
 
+export interface ExtraQueryOptions<T = unknown> {
+  refetchInterval?: number
+  staleTime?: number
+  placeholderData?: UseQueryOptions<T, Error, T, QueryKey>['placeholderData']
+}
+
 export function useOffers(
   params: ListOffersParams = {},
-  options: {
-    refetchInterval?: number
-    placeholderData?: UseQueryOptions<
-      OfferShort[],
-      Error,
-      OfferShort[],
-      QueryKey
-    >['placeholderData']
-  } = {},
+  options: ExtraQueryOptions<OfferShort[]> = {},
 ): UseQueryResult<OfferShort[]> {
   return useQuery({
     queryKey: offersQueryKeys.list(params),
     queryFn: ({ signal }) => fetchOffers(params, { signal }),
-    staleTime: STALE_TIME_MS.medium,
+    staleTime: options.staleTime ?? STALE_TIME_MS.medium,
     refetchInterval: options.refetchInterval,
     placeholderData: options.placeholderData,
   })
@@ -46,12 +44,12 @@ export function useOffers(
 // paginated `useOffers`, which only returns one page.
 export function useOffersBatch(
   ids: string[],
-  options: { refetchInterval?: number } = {},
+  options: ExtraQueryOptions<OfferDetails[]> = {},
 ): UseQueryResult<OfferDetails[]> {
   return useQuery({
     queryKey: offersQueryKeys.batch(ids),
     queryFn: ({ signal }) => fetchOffersBatch(ids, { signal }),
-    staleTime: STALE_TIME_MS.realtime,
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
     refetchInterval: options.refetchInterval,
     enabled: ids.length > 0,
   })
@@ -96,12 +94,12 @@ export function useOfferParticipantsHistory(offerId: string): UseQueryResult<Off
 
 export function useOfferIdsByScript(
   scriptPubkeyHex: string,
-  options: { refetchInterval?: number } = {},
+  options: ExtraQueryOptions<string[]> = {},
 ): UseQueryResult<string[]> {
   return useQuery({
     queryKey: offersQueryKeys.byScript(scriptPubkeyHex),
     queryFn: ({ signal }) => fetchOfferIdsByScript(scriptPubkeyHex, { signal }),
-    staleTime: STALE_TIME_MS.realtime,
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
     refetchInterval: options.refetchInterval,
     enabled: !!scriptPubkeyHex,
   })
@@ -109,12 +107,12 @@ export function useOfferIdsByScript(
 
 export function useOfferIdsByBorrowerPubkey(
   borrowerPubkeyHex: string,
-  options: { refetchInterval?: number } = {},
+  options: ExtraQueryOptions<string[]> = {},
 ): UseQueryResult<string[]> {
   return useQuery({
     queryKey: offersQueryKeys.byBorrower(borrowerPubkeyHex),
     queryFn: ({ signal }) => fetchOfferIdsByBorrowerPubkey(borrowerPubkeyHex, { signal }),
-    staleTime: STALE_TIME_MS.realtime,
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
     refetchInterval: options.refetchInterval,
     enabled: !!borrowerPubkeyHex,
   })

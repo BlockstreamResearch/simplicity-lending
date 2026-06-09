@@ -6,6 +6,7 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
+import { LENDING } from '@/constants/config'
 import { type CreateOfferResult, useCreateOffer } from '@/hooks/useCreateOffer'
 import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -94,7 +95,6 @@ interface WalletUtxosState {
   error: string | null
 }
 
-const TEST_ASSET_ID = '38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5'
 const DEFAULT_COLLATERAL_AMOUNT = '3000'
 const DEFAULT_PRINCIPAL_AMOUNT = '10000'
 const DEFAULT_INTEREST_RATE_BPS = '1000'
@@ -116,11 +116,11 @@ const EMPTY_FORM: CreateOfferForm = {
   factoryAssetId: 'a61ab9c860e382039cb5df9386319887c1a3e60116f5fcb7ad3497b430806d18',
   collateralOutpoint: '',
   collateralAmount: DEFAULT_COLLATERAL_AMOUNT,
-  principalAssetId: TEST_ASSET_ID,
+  principalAssetId: LENDING.principalAssetId,
   principalAmount: DEFAULT_PRINCIPAL_AMOUNT,
   principalInterestRate: DEFAULT_INTEREST_RATE_BPS,
   loanDurationBlocks: DEFAULT_LOAN_DURATION_BLOCKS,
-  protocolFeeKeeperAssetId: TEST_ASSET_ID,
+  protocolFeeKeeperAssetId: LENDING.principalAssetId,
 }
 
 export default function CreateOfferDemo() {

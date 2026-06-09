@@ -6,7 +6,7 @@ import { useSessionStorage } from '@/hooks/useSessionStorage'
 import { JadeConnector } from '@/lib/wallet-core/connector/jade'
 import { SeedConnector } from '@/lib/wallet-core/connector/seed'
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
-import type { WalletType } from '@/lib/wallet-core/types'
+import { DEFAULT_WALLET_TYPE, type WalletType } from '@/lib/wallet-core/types'
 import { syncBalances } from '@/lib/wallet-core/wallet/sync'
 import { createEsploraClient } from '@/lwk'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -147,7 +147,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       let connector: WalletConnector | null = null
 
       try {
-        const walletType: WalletType = env.VITE_DEBUG_MNEMONIC ? 'Wpkh' : variant
+        const walletType: WalletType = env.VITE_DEBUG_MNEMONIC ? DEFAULT_WALLET_TYPE : variant
 
         connector = env.VITE_DEBUG_MNEMONIC
           ? new SeedConnector(lwkNetwork, env.VITE_DEBUG_MNEMONIC)
@@ -181,7 +181,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         const balances = await syncBalances(wollet, esploraClient)
 
-        const address = wollet.address().address()
+        const address = wollet.address(0).address()
         const receiveAddress = address.toString()
         const scriptPubkey = address.scriptPubkey().toString()
         const xOnlyPubkey = (await connector.getXOnlyPublicKey?.())?.toString() ?? null
@@ -254,11 +254,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return session.connector.signPset(pset)
   }, [])
 
-  const getReceiveAddress = useCallback(async (): Promise<string> => {
-    const session = sessionRef.current
-    if (!session) throw new Error('WalletProvider: not connected')
-    return session.wollet.address(0).address().toString()
-  }, [])
+  // Returns the snapshot derived once on connect — single source of truth for the
+  // deterministic address(0). Live wollet/utxos still come from get* below.
+  const getReceiveAddress = useCallback(
+    async (): Promise<string | null> => state.receiveAddress,
+    [state.receiveAddress],
+  )
 
   const getXOnlyPublicKey = useCallback(async (): Promise<XOnlyPublicKey | null> => {
     const session = sessionRef.current
@@ -272,7 +273,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!session.connector.getVerifiedReceiveAddress)
       return session.wollet.address(0).address().toString()
 
-    return session.connector.getVerifiedReceiveAddress(state.walletType ?? 'Wpkh', session.wollet)
+    return session.connector.getVerifiedReceiveAddress(
+      state.walletType ?? DEFAULT_WALLET_TYPE,
+      session.wollet,
+    )
   }, [state.walletType])
 
   const getWalletUtxos = useCallback(async () => {

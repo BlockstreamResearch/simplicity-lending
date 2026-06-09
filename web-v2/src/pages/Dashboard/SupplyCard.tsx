@@ -1,63 +1,69 @@
+import { Skeleton } from '@heroui/react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
 import { UiButton } from '@/components/ui/UiButton'
-import { UiDataRow, UiDataRows } from '@/components/ui/UiDataRow'
-import { ASSET_DECIMALS } from '@/constants/assets'
+import { LENDING } from '@/constants/config'
 import { RoutePath } from '@/constants/routes'
-import { formatAsset, truncateAddress } from '@/utils/format'
+import { ErrorHandler } from '@/utils/errorHandler'
+import { formatAmount, truncateAddress } from '@/utils/format'
 
-import { BalanceCard } from './BalanceCard'
-import { AssetAmount, CardAlert } from './BaseCard'
-import type { DashboardSupply } from './useDashboard'
+import { AssetAmount } from './AssetAmount'
+import { CardAlert } from './CardAlert'
+import { DataRow, DataRows } from './DataRow'
+import { useSupply } from './useSupply'
 
-interface SupplyCardProps {
-  data: DashboardSupply
-  isLoading: boolean
-  isReady: boolean
-  onRetry: () => void
-}
-
-export function SupplyCard({ data, isLoading, isReady, onRetry }: SupplyCardProps) {
+export function SupplyCard() {
   const navigate = useNavigate()
-  const { stats, claimableOffers } = data
+  const { balance, stats, claimableOffers, isLoading, error, refetch } = useSupply()
   const alertOffer = claimableOffers[0]
 
+  useEffect(() => {
+    if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your supply.')
+  }, [error, refetch])
+
   return (
-    <BalanceCard
-      icon={<ArrowSquareUpIcon className='size-5' />}
-      title='Your Supply'
-      subtitle='Complete Balance USDT'
-      isLoading={isLoading}
-      isReady={isReady}
-      error={data.error}
-      connectMessage='Connect your wallet to view your supply.'
-      errorMessage='Failed to load your supply.'
-      onRetry={onRetry}
-      balance={<AssetAmount value={formatAsset(data.balance, ASSET_DECIMALS.USDT)} unit='USDT' />}
-    >
-      <UiDataRows>
-        <UiDataRow
+    <section className='bg-surface-secondary flex flex-1 flex-col gap-4 rounded-2xl p-4 sm:p-6'>
+      <header className='flex flex-col gap-2'>
+        <div className='flex items-center gap-2'>
+          <span className='text-foreground'>
+            <ArrowSquareUpIcon className='size-5' />
+          </span>
+          <h3 className='text-h3'>Your Supply</h3>
+        </div>
+        <p className='text-muted text-h4'>Complete Balance {LENDING.principalSymbol}</p>
+      </header>
+
+      {isLoading ? (
+        <Skeleton className='h-8 w-32 rounded-lg' />
+      ) : (
+        <p className='text-display'>
+          <AssetAmount
+            value={formatAmount(balance, LENDING.principalDecimals)}
+            unit={LENDING.principalSymbol}
+          />
+        </p>
+      )}
+
+      <DataRows>
+        <DataRow
           label='Supplied Loans:'
-          value={`${formatAsset(stats.suppliedLoans, ASSET_DECIMALS.USDT)} USDT`}
+          value={`${formatAmount(stats.suppliedLoans, LENDING.principalDecimals)} ${LENDING.principalSymbol}`}
           isLoading={isLoading}
         />
-        <UiDataRow
+        <DataRow
           label='Interest Outstanding:'
-          value={`${formatAsset(stats.interestOutstanding, ASSET_DECIMALS.USDT)} USDT`}
+          value={`${formatAmount(stats.interestOutstanding, LENDING.principalDecimals)} ${LENDING.principalSymbol}`}
           isLoading={isLoading}
         />
-        <UiDataRow
-          label='Number of Active Loans:'
-          value={stats.activeLoans}
-          isLoading={isLoading}
-        />
-        <UiDataRow
+        <DataRow label='Number of Active Loans:' value={stats.activeLoans} isLoading={isLoading} />
+        <DataRow
           label='Number of Repaid to be Claimed Loans:'
           value={stats.repaidToClaim}
           isLoading={isLoading}
         />
-      </UiDataRows>
+      </DataRows>
 
       {alertOffer && (
         <CardAlert
@@ -72,6 +78,6 @@ export function SupplyCard({ data, isLoading, isReady, onRetry }: SupplyCardProp
       <UiButton className='self-start' variant='primary' onPress={() => navigate(RoutePath.Supply)}>
         Supply
       </UiButton>
-    </BalanceCard>
+    </section>
   )
 }

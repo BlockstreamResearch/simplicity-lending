@@ -1,6 +1,6 @@
 # TODO: Use original LWK repository, once all required methods are exposed
 # FROM rust:1.90-bookworm AS lwk-builder
-FROM rust:1.91-bookworm AS lwk-builder
+FROM rust:1.93-bookworm AS lwk-builder
 
 ARG LWK_REF=wasm-0.16-expose-external-utxos
 # ARG LWK_COMMIT=4786e456db6efc05413721f6489899a6426eaa47

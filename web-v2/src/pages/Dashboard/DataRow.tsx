@@ -1,11 +1,11 @@
 import { Skeleton } from '@heroui/react'
 import type { ReactNode } from 'react'
 
-export function UiDataRows({ children }: { children: ReactNode }) {
+export function DataRows({ children }: { children: ReactNode }) {
   return <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>{children}</div>
 }
 
-export function UiDataRow({
+export function DataRow({
   label,
   value,
   isLoading,

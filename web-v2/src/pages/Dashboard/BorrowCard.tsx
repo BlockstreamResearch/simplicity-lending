@@ -1,65 +1,72 @@
+import { Skeleton } from '@heroui/react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import { UiButton } from '@/components/ui/UiButton'
-import { UiDataRow, UiDataRows } from '@/components/ui/UiDataRow'
-import { ASSET_DECIMALS } from '@/constants/assets'
+import { LENDING } from '@/constants/config'
 import { RoutePath } from '@/constants/routes'
-import { formatAsset, truncateAddress } from '@/utils/format'
+import { ErrorHandler } from '@/utils/errorHandler'
+import { formatAmount, truncateAddress } from '@/utils/format'
 
-import { BalanceCard } from './BalanceCard'
-import { AssetAmount, CardAlert } from './BaseCard'
-import type { DashboardBorrows } from './useDashboard'
+import { AssetAmount } from './AssetAmount'
+import { CardAlert } from './CardAlert'
+import { DataRow, DataRows } from './DataRow'
+import { useBorrows } from './useBorrows'
 
-interface BorrowCardProps {
-  data: DashboardBorrows
-  isLoading: boolean
-  isReady: boolean
-  onRetry: () => void
-}
-
-export function BorrowCard({ data, isLoading, isReady, onRetry }: BorrowCardProps) {
+export function BorrowCard() {
   const navigate = useNavigate()
-  const { stats, nearExpiryOffers } = data
+  const { balance, stats, nearExpiryOffers, isLoading, error, unsupported, refetch } = useBorrows()
   const alertOffer = nearExpiryOffers[0]
 
+  useEffect(() => {
+    if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your borrows.')
+  }, [error, refetch])
+
+  // This wallet can't expose a borrower key → nothing to show.
+  if (unsupported) return null
+
   return (
-    <BalanceCard
-      icon={<CoinsIcon className='size-5' />}
-      title='Your Borrows'
-      subtitle='Complete Balance LBTC'
-      isLoading={isLoading}
-      isReady={isReady}
-      error={data.error}
-      connectMessage='Connect your wallet to view your borrows.'
-      errorMessage='Failed to load your borrows.'
-      unsupported={data.unsupported}
-      unsupportedMessage="This wallet can't expose a borrower key, so your borrows can't be shown."
-      onRetry={onRetry}
-      balance={<AssetAmount value={formatAsset(data.balance, ASSET_DECIMALS.LBTC)} unit='LBTC' />}
-    >
-      <UiDataRows>
-        <UiDataRow
+    <section className='bg-surface-secondary flex flex-1 flex-col gap-4 rounded-2xl p-4 sm:p-6'>
+      <header className='flex flex-col gap-2'>
+        <div className='flex items-center gap-2'>
+          <span className='text-foreground'>
+            <CoinsIcon className='size-5' />
+          </span>
+          <h3 className='text-h3'>Your Borrows</h3>
+        </div>
+        <p className='text-muted text-h4'>Complete Balance {LENDING.collateralSymbol}</p>
+      </header>
+
+      {isLoading ? (
+        <Skeleton className='h-8 w-32 rounded-lg' />
+      ) : (
+        <p className='text-display'>
+          <AssetAmount
+            value={formatAmount(balance, LENDING.collateralDecimals)}
+            unit={LENDING.collateralSymbol}
+          />
+        </p>
+      )}
+
+      <DataRows>
+        <DataRow
           label='User Total Locked Collateral:'
-          value={`${formatAsset(stats.lockedCollateral, ASSET_DECIMALS.LBTC)} LBTC`}
+          value={`${formatAmount(stats.lockedCollateral, LENDING.collateralDecimals)} ${LENDING.collateralSymbol}`}
           isLoading={isLoading}
         />
-        <UiDataRow
+        <DataRow
           label='Borrowings:'
-          value={`${formatAsset(stats.borrowings, ASSET_DECIMALS.USDT)} USDT`}
+          value={`${formatAmount(stats.borrowings, LENDING.principalDecimals)} ${LENDING.principalSymbol}`}
           isLoading={isLoading}
         />
-        <UiDataRow
-          label='Number of active loans:'
-          value={stats.activeLoans}
-          isLoading={isLoading}
-        />
-        <UiDataRow
+        <DataRow label='Number of active loans:' value={stats.activeLoans} isLoading={isLoading} />
+        <DataRow
           label='Number of pending offers:'
           value={stats.pendingOffers}
           isLoading={isLoading}
         />
-      </UiDataRows>
+      </DataRows>
 
       {alertOffer && (
         <CardAlert
@@ -74,6 +81,6 @@ export function BorrowCard({ data, isLoading, isReady, onRetry }: BorrowCardProp
       <UiButton className='self-start' variant='primary' onPress={() => navigate(RoutePath.Borrow)}>
         Borrow
       </UiButton>
-    </BalanceCard>
+    </section>
   )
 }
