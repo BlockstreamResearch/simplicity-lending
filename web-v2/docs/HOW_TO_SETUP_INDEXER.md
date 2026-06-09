@@ -1,19 +1,5 @@
 # Indexer / Backend Setup
 
-## Checkout the `dev` branch
-
-```bash
-git checkout dev
-```
-
-## Make sure you have .env file in the root
-
-From repo root:
-
-```bash
-cp .env.example .env
-```
-
 ## Install dependencies
 
 ### Install cargo
@@ -35,6 +21,20 @@ git checkout v0.0.5
 cargo install --path crates/cli
 
 simplex --version # Simplex 0.0.5
+```
+
+## Checkout the `dev` branch
+
+```bash
+git checkout dev
+```
+
+## Make sure you have .env file in the root
+
+From repo root:
+
+```bash
+cp .env.example .env
 ```
 
 ## Build contracts
