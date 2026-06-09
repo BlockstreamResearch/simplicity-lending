@@ -83,3 +83,34 @@ CREATE TABLE offer_participants (
 CREATE INDEX idx_participants_current_owner 
 ON offer_participants(script_pubkey) 
 WHERE spent_txid IS NULL;
+
+CREATE TYPE factory_status AS ENUM (
+    'active',
+    'removed'
+);
+
+CREATE TABLE factories (
+    id uuid NOT NULL,
+    PRIMARY KEY (id),
+    factory_asset_id BYTEA NOT NULL,
+    program_script_pubkey BYTEA NOT NULL,
+    issuing_utxos_count SMALLINT NOT NULL,
+    reissuance_flags BIGINT NOT NULL,
+    current_status factory_status NOT NULL DEFAULT 'active',
+    created_at_height BIGINT NOT NULL,
+    created_at_txid BYTEA NOT NULL UNIQUE
+);
+
+CREATE TABLE factory_auths (
+    factory_id uuid NOT NULL REFERENCES factories(id) ON DELETE CASCADE,
+    script_pubkey BYTEA NOT NULL,
+
+    txid BYTEA NOT NULL,
+    vout INTEGER NOT NULL,
+    created_at_height BIGINT NOT NULL,
+
+    spent_txid BYTEA,
+    spent_at_height BIGINT,
+
+    PRIMARY KEY (txid, vout)
+);

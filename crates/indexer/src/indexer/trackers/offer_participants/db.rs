@@ -126,16 +126,16 @@ pub async fn insert_participant_utxo(
 
 #[tracing::instrument(
     name = "Marking offer participant UTXO as spent in DB",
-    skip(sql_tx, out_point, block_height, txid),
+    skip(sql_tx, outpoint, block_height, txid),
     fields(
         spent_txid = %txid.to_hex(),
-        txid = %out_point.txid.to_hex(),
-        vout = %out_point.vout
+        txid = %outpoint.txid.to_hex(),
+        vout = %outpoint.vout
     )
 )]
 pub async fn spend_participant_utxo(
     sql_tx: &mut DbTx<'_>,
-    out_point: &OutPoint,
+    outpoint: &OutPoint,
     block_height: u64,
     txid: Txid,
 ) -> Result<(), sqlx::Error> {
@@ -145,8 +145,8 @@ pub async fn spend_participant_utxo(
         "#,
         txid.as_byte_array(),
         block_height as i64,
-        out_point.txid.as_byte_array(),
-        out_point.vout as i32
+        outpoint.txid.as_byte_array(),
+        outpoint.vout as i32
     )
     .execute(&mut **sql_tx)
     .await

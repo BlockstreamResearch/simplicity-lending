@@ -7,10 +7,13 @@ use simplex::{
 
 use crate::{
     db::DbTx,
-    indexer::{OfferCreationsTracker, OfferParticipantsTracker, OffersTracker},
+    indexer::{
+        FactoryAuthsTracker, OfferCreationsTracker, OfferParticipantsTracker, OffersTracker,
+    },
 };
 
 pub struct TrackerRegistry {
+    factory_auths: FactoryAuthsTracker,
     offers: OffersTracker,
     participants: OfferParticipantsTracker,
     creations: OfferCreationsTracker,
@@ -23,6 +26,7 @@ impl TrackerRegistry {
         network: SimplicityNetwork,
     ) -> anyhow::Result<Self> {
         Ok(Self {
+            factory_auths: FactoryAuthsTracker::load(db_pool).await?,
             offers: OffersTracker::load(db_pool).await?,
             participants: OfferParticipantsTracker::load(db_pool).await?,
             creations: OfferCreationsTracker::new(protocol_fee_keeper_asset_id, network),
@@ -30,16 +34,19 @@ impl TrackerRegistry {
     }
 
     pub fn begin_block(&mut self) {
+        self.factory_auths.begin_block();
         self.offers.begin_block();
         self.participants.begin_block();
     }
 
     pub fn commit_block(&mut self) {
+        self.factory_auths.commit_block();
         self.offers.commit_block();
         self.participants.commit_block();
     }
 
     pub fn abort_block(&mut self) {
+        self.factory_auths.abort_block();
         self.offers.abort_block();
         self.participants.abort_block();
     }
@@ -55,6 +62,10 @@ impl TrackerRegistry {
         tx: &Transaction,
         block_height: u64,
     ) -> anyhow::Result<()> {
+        self.factory_auths
+            .process_tx_spends(sql_tx, tx, block_height)
+            .await?;
+
         let offer_spent = self
             .offers
             .process_tx_spends(sql_tx, tx, block_height)
