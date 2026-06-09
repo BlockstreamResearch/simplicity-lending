@@ -8,6 +8,7 @@ mod registry;
 
 pub use factories::*;
 pub use factory_auths::*;
+pub use factory_creation::*;
 pub use offer_participants::*;
 pub use offers::*;
 pub use offers_creation::*;

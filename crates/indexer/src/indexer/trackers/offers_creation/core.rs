@@ -137,7 +137,6 @@ impl OfferCreationsTracker {
     }
 
     fn is_offer_creation_tx(&self, tx: &Transaction) -> Option<LendingOfferParameters> {
-        // TODO: Move network to config
         let offer =
             LendingOffer::try_from_tx(tx, self.protocol_fee_keeper_asset_id, self.network).ok()?;
 

@@ -8,12 +8,14 @@ use simplex::{
 use crate::{
     db::DbTx,
     indexer::{
-        FactoryAuthsTracker, OfferCreationsTracker, OfferParticipantsTracker, OffersTracker,
+        FactoryAuthsTracker, FactoryCreationsTracker, OfferCreationsTracker,
+        OfferParticipantsTracker, OffersTracker,
     },
 };
 
 pub struct TrackerRegistry {
     factory_auths: FactoryAuthsTracker,
+    factory_creations: FactoryCreationsTracker,
     offers: OffersTracker,
     participants: OfferParticipantsTracker,
     creations: OfferCreationsTracker,
@@ -25,8 +27,10 @@ impl TrackerRegistry {
         protocol_fee_keeper_asset_id: AssetId,
         network: SimplicityNetwork,
     ) -> anyhow::Result<Self> {
+        // TODO: move factory parameters to config
         Ok(Self {
             factory_auths: FactoryAuthsTracker::load(db_pool).await?,
+            factory_creations: FactoryCreationsTracker::new(2, 0, network),
             offers: OffersTracker::load(db_pool).await?,
             participants: OfferParticipantsTracker::load(db_pool).await?,
             creations: OfferCreationsTracker::new(protocol_fee_keeper_asset_id, network),
@@ -72,6 +76,10 @@ impl TrackerRegistry {
             .await?;
         self.participants
             .process_tx_spends(sql_tx, tx, block_height)
+            .await?;
+
+        self.factory_creations
+            .process_creation_tx(sql_tx, tx, block_height, &mut self.factory_auths)
             .await?;
 
         if !offer_spent {
