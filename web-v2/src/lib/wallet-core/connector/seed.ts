@@ -74,7 +74,7 @@ export class SeedConnector implements WalletConnector {
   }
 
   async getConnectionStatus(): Promise<ConnectionStatus> {
-    return 'ready'
+    return this.signer ? 'ready' : 'disconnected'
   }
 
   get isConnected(): boolean {

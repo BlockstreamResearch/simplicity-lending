@@ -24,12 +24,12 @@ mv ./pkg_web_from_docker ./lwk_wasm/pkg_web
 
 ```bash
 cd web-v2
+rm -rf node_modules
 pnpm install --force
-rm -rf node_modules/.vite
 pnpm dev
 ```
 
-If `node_modules` already existed, `pnpm install --force` is important because `lwk_web` is a local `file:` dependency. Clearing only `node_modules/.vite` refreshes Vite's prebundle cache, but it does not guarantee that the installed `lwk_web` package was refreshed.
+If `node_modules` already existed, `pnpm install --force` is important because `lwk_web` is a local `file:` dependency.
 
 ## **4. Optional check after install**:
 

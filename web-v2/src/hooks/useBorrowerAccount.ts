@@ -5,6 +5,7 @@ import {
   IssuanceRecipient,
   Script,
   TxBuilder,
+  XOnlyPublicKey,
 } from 'lwk_web'
 
 import { broadcastTx } from '@/api/esplora/methods'
@@ -12,6 +13,7 @@ import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
+import { NUMS_KEY } from '@/simplicity/taproot'
 import { bytesToHex } from '@/utils/hex'
 import { sha256 } from '@/utils/sha256'
 import { toUint8, toUint64 } from '@/utils/uint'
@@ -36,12 +38,9 @@ export interface BorrowerAccountCreationResult {
 
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getWalletUtxos, getWollet, getXOnlyPublicKey, signPset } = useWallet()
+  const { getReceiveAddress, getWalletUtxos, getWollet, signPset } = useWallet()
 
   const createBorrowerAccount = async (): Promise<BorrowerAccountCreationResult> => {
-    const xOnlyPublicKey = await getXOnlyPublicKey()
-    if (!xOnlyPublicKey) throw new Error('Missing x-only public key')
-
     const receiveAddressString = await getReceiveAddress()
     if (!receiveAddressString) throw new Error('Missing receive address')
 
@@ -66,7 +65,10 @@ export function useBorrowerAccount() {
       issuingUtxosCount: toUint8(ISSUING_UTXOS_COUNT, 'issuingUtxosCount'),
       reissuanceFlags: toUint64(REISSUANCE_FLAGS, 'reissuanceFlags'),
     })
-    const factoryAddress = issuanceFactoryProgram.createP2trAddress(xOnlyPublicKey, lwkNetwork)
+    const factoryAddress = issuanceFactoryProgram.createP2trAddress(
+      XOnlyPublicKey.fromString(NUMS_KEY),
+      lwkNetwork,
+    )
     const issuedAssetId = assetIdFromIssuance(feeUtxo.outpoint(), emptyContractHash())
     const metadata = await buildMetadata()
 

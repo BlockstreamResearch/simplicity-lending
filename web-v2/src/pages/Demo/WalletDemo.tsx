@@ -1,4 +1,3 @@
-import type { XOnlyPublicKey } from 'lwk_web'
 import { useEffect, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -35,7 +34,6 @@ export function WalletDemo() {
     connect,
     getReceiveAddress,
     verifyReceiveAddress,
-    getXOnlyPublicKey,
     connectorId,
   } = useWallet()
 
@@ -43,21 +41,7 @@ export function WalletDemo() {
   const [sendAddress, setSendAddress] = useState('')
   const [sendAmount, setSendAmount] = useState('')
   const [verifyingAddress, setVerifyingAddress] = useState(false)
-  const [xOnlyPubKey, setXOnlyPubKey] = useState<XOnlyPublicKey | null>(null)
   const [receiveAddress, setReceiveAddress] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (connectionStatus !== 'ready') return
-    let cancelled = false
-    getXOnlyPublicKey()
-      .then(key => {
-        if (!cancelled) setXOnlyPubKey(key)
-      })
-      .catch(console.warn)
-    return () => {
-      cancelled = true
-    }
-  }, [connectionStatus, getXOnlyPublicKey])
 
   useEffect(() => {
     if (connectionStatus !== 'ready') return
@@ -191,13 +175,6 @@ export function WalletDemo() {
               </ul>
             )}
           </div>
-
-          {env.VITE_DEBUG_MNEMONIC && xOnlyPubKey && (
-            <div className='space-y-1'>
-              <p className='text-sm font-medium'>X-Only Public Key (Simplicity)</p>
-              <code className='break-all text-xs'>{xOnlyPubKey.toString()}</code>
-            </div>
-          )}
 
           <div className='space-y-2 rounded border border-gray-200 p-4'>
             <p className='text-sm font-medium'>Send Transfer</p>

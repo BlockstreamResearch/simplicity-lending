@@ -1,11 +1,12 @@
 import {
-  type Network,
   SimplicityArguments,
   SimplicityProgram,
   SimplicityType,
   SimplicityTypedValue,
   SimplicityWitnessValues,
-  type XOnlyPublicKey,
+  StateTaprootBuilder,
+  type StateTaprootSpendInfo,
+  XOnlyPublicKey,
 } from 'lwk_web'
 import { sources } from 'virtual:simplicity-sources'
 
@@ -15,8 +16,8 @@ import {
   loadAssetAuthVaultProgram,
 } from '@/simplicity/asset-auth-vault/program'
 import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
+import { buildCovenantSpendInfo, NUMS_KEY } from '@/simplicity/taproot'
 import { bytes32ToHex, hexToBytes } from '@/utils/hex'
-import { sha256 } from '@/utils/sha256'
 import {
   type Bytes32,
   toBytes32,
@@ -179,8 +180,6 @@ export function buildDerivedLendingOfferProgramParams(
     | 'finalizedProtocolFeeVaultCovHash'
     | 'principalOutputScriptHash'
   >,
-  internalKey: XOnlyPublicKey,
-  network: Network,
 ): LendingOfferProgramParams {
   const principalOutputAssetAuth = loadAssetAuthProgram({
     assetId: params.borrowerNftAssetId,
@@ -191,16 +190,8 @@ export function buildDerivedLendingOfferProgramParams(
   const finalizedProtocolFeeVault = loadAssetAuthVaultProgram(
     buildFinalizedProtocolFeeVaultParams(params),
   )
-  const finalizedLenderVaultCovHash = getProgramScriptHash(
-    finalizedLenderVault,
-    internalKey,
-    network,
-  )
-  const finalizedProtocolFeeVaultCovHash = getProgramScriptHash(
-    finalizedProtocolFeeVault,
-    internalKey,
-    network,
-  )
+  const finalizedLenderVaultCovHash = getProgramScriptHash(finalizedLenderVault)
+  const finalizedProtocolFeeVaultCovHash = getProgramScriptHash(finalizedProtocolFeeVault)
   const activeLenderVault = loadAssetAuthVaultProgram({
     ...buildFinalizedLenderVaultParams(params),
     finalizedVaultCovHash: finalizedLenderVaultCovHash,
@@ -214,46 +205,42 @@ export function buildDerivedLendingOfferProgramParams(
 
   return {
     ...params,
-    lenderVaultCovHash: getProgramScriptHash(activeLenderVault, internalKey, network),
+    lenderVaultCovHash: getProgramScriptHash(activeLenderVault),
     finalizedLenderVaultCovHash,
-    protocolFeeVaultCovHash: getProgramScriptHash(activeProtocolFeeVault, internalKey, network),
+    protocolFeeVaultCovHash: getProgramScriptHash(activeProtocolFeeVault),
     finalizedProtocolFeeVaultCovHash,
-    principalOutputScriptHash: getProgramScriptHash(principalOutputAssetAuth, internalKey, network),
+    principalOutputScriptHash: getProgramScriptHash(principalOutputAssetAuth),
   }
 }
 
-function getProgramScriptHash(
-  program: SimplicityProgram,
-  internalKey: XOnlyPublicKey,
-  network: Network,
-): Bytes32 {
+function getProgramScriptHash(program: SimplicityProgram): Bytes32 {
   return toBytes32(
-    hexToBytes(program.createP2trAddress(internalKey, network).scriptPubkey().jet_sha256_hex()),
+    hexToBytes(buildCovenantSpendInfo(program).scriptPubkey.jet_sha256_hex()),
     'programScriptHash',
   )
 }
 
-export async function buildPendingOfferMetadata(params: {
-  principalAssetId: Bytes32
-  offerParameters: Pick<
-    OfferParameters,
-    'principalAmount' | 'loanExpirationTime' | 'principalInterestRate'
-  >
-}): Promise<Uint8Array> {
-  const programId = await getLendingProgramId()
-  const data = new Uint8Array(50)
-  const view = new DataView(data.buffer)
-  data.set(programId, 0)
-  data.set(params.principalAssetId, 4)
-  view.setBigUint64(36, params.offerParameters.principalAmount, true)
-  view.setUint32(44, params.offerParameters.loanExpirationTime, true)
-  view.setUint16(48, params.offerParameters.principalInterestRate, true)
-  return data
-}
+export function buildLendingOfferSpendInfo(
+  lendingProgram: SimplicityProgram,
+  offerParameters: {
+    principalAmount: Uint64
+    principalInterestRate: Uint16
+  },
+): StateTaprootSpendInfo {
+  const totalAmountToRepay = getTotalAmountToRepay(offerParameters)
 
-async function getLendingProgramId(): Promise<Uint8Array> {
-  const hash = await sha256(new TextEncoder().encode(sources.lending))
-  return new Uint8Array(hash).slice(0, 4)
+  const isActiveSlot = new Uint8Array(32)
+
+  const debtSlot = new Uint8Array(32)
+  new DataView(debtSlot.buffer).setBigUint64(24, totalAmountToRepay, false)
+
+  const numsKey = XOnlyPublicKey.fromString(NUMS_KEY)
+
+  return new StateTaprootBuilder()
+    .addSimplicityLeaf(2, lendingProgram.cmr)
+    .addDataLeaf(2, isActiveSlot)
+    .addDataLeaf(1, debtSlot)
+    .finalize(numsKey)
 }
 
 // TODO: Will be used in the offer acceptance,

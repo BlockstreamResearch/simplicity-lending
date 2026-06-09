@@ -1,4 +1,4 @@
-import { type WalletTxOut } from 'lwk_web'
+import type { WalletTxOut } from 'lwk_web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -111,8 +111,8 @@ const EMPTY_FORM: CreateOfferForm = {
   // Update factoryAuthOutpoint and issuanceFactoryOutpoint
   // with the last create offer tx:0 and tx:1
   // every time you use VITE_DEBUG_MNEMONIC
-  factoryAuthOutpoint: '822ffbd963cf31e6e20b4ba0bf99312c27b00ace07499aa330f7559cec1ea1e7:0',
-  issuanceFactoryOutpoint: '822ffbd963cf31e6e20b4ba0bf99312c27b00ace07499aa330f7559cec1ea1e7:1',
+  factoryAuthOutpoint: '0d9998a979d7ef048b514d9186e756b869119d234f32824a59f0f2c0d174be34:0',
+  issuanceFactoryOutpoint: '0d9998a979d7ef048b514d9186e756b869119d234f32824a59f0f2c0d174be34:1',
   factoryAssetId: 'a61ab9c860e382039cb5df9386319887c1a3e60116f5fcb7ad3497b430806d18',
   collateralOutpoint: '',
   collateralAmount: DEFAULT_COLLATERAL_AMOUNT,
@@ -125,7 +125,7 @@ const EMPTY_FORM: CreateOfferForm = {
 
 export default function CreateOfferDemo() {
   const { lwkNetwork } = useLwk()
-  const { connectionStatus, getWalletUtxos, syncWallet } = useWallet()
+  const { connectionStatus, syncing, syncWallet, getWalletUtxos } = useWallet()
   const { createOffer } = useCreateOffer()
   const { control, handleSubmit } = useForm<CreateOfferForm>({
     defaultValues: EMPTY_FORM,
@@ -141,22 +141,17 @@ export default function CreateOfferDemo() {
   const confirmations = useTxConfirmations(state.txid)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
-  const collateralUtxoOptions = useMemo(
-    () =>
-      walletUtxos
-        .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
-        .map(formatCollateralUtxoOption),
-    [policyAssetId, walletUtxos],
-  )
+  const collateralUtxoOptions = useMemo(() => {
+    if (connectionStatus !== 'ready') return []
+
+    return walletUtxos
+      .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
+      .map(formatCollateralUtxoOption)
+  }, [connectionStatus, policyAssetId, walletUtxos])
 
   const refreshWalletUtxos = useCallback(async () => {
-    if (connectionStatus !== 'ready') {
-      setWalletUtxos([])
-      setWalletUtxosState({ busy: false, error: null })
-      return
-    }
-
     setWalletUtxosState({ busy: true, error: null })
+
     try {
       await syncWallet()
       setWalletUtxos(await getWalletUtxos())
@@ -167,15 +162,29 @@ export default function CreateOfferDemo() {
         error: err instanceof Error ? err.message : String(err),
       })
     }
-  }, [connectionStatus, getWalletUtxos, syncWallet])
+  }, [getWalletUtxos, syncWallet])
 
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      void refreshWalletUtxos()
-    }, 0)
+    if (connectionStatus !== 'ready') return
 
-    return () => clearTimeout(timeoutId)
-  }, [refreshWalletUtxos])
+    let cancelled = false
+    getWalletUtxos()
+      .then(utxos => {
+        if (!cancelled) setWalletUtxos(utxos)
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setWalletUtxosState({
+            busy: false,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [connectionStatus, getWalletUtxos])
 
   const onSubmit = async (formValues: CreateOfferForm) => {
     setState(current => ({ ...current, busy: true, error: null, summary: null, txid: null }))
@@ -292,8 +301,8 @@ export default function CreateOfferDemo() {
       <div className='mt-4 flex flex-wrap gap-2'>
         <UiButton
           variant='outline'
-          isDisabled={connectionStatus !== 'ready' || walletUtxosState.busy}
-          isPending={walletUtxosState.busy}
+          isDisabled={connectionStatus !== 'ready' || syncing || walletUtxosState.busy}
+          isPending={syncing || walletUtxosState.busy}
           loadingText='Refreshing...'
           onPress={refreshWalletUtxos}
         >

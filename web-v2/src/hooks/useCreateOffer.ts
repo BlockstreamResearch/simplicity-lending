@@ -12,6 +12,7 @@ import {
   TxBuilder,
   TxOutSecrets,
   type WalletTxOut,
+  XOnlyPublicKey,
 } from 'lwk_web'
 
 import { broadcastTx, fetchLatestBlockHeight, fetchTxRaw } from '@/api/esplora/methods'
@@ -22,12 +23,14 @@ import {
   buildIssuanceFactoryWitness,
   loadIssuanceFactoryProgram,
 } from '@/simplicity/issuance-factory/program'
+import { buildPendingOfferMetadata } from '@/simplicity/lending/metadata'
 import {
   buildDerivedLendingOfferProgramParams,
-  buildPendingOfferMetadata,
+  buildLendingOfferSpendInfo,
   loadLendingProgram,
 } from '@/simplicity/lending/program'
 import { loadScriptAuthProgram } from '@/simplicity/script-auth/program'
+import { buildCovenantSpendInfo, NUMS_KEY } from '@/simplicity/taproot'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
 import { toBytes32, toUint8, toUint16, toUint32, toUint64 } from '@/utils/uint'
 
@@ -65,19 +68,13 @@ export interface CreateOfferResult {
 
 export function useCreateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getWalletUtxos, getWollet, getXOnlyPublicKey, signPset, syncWallet } =
-    useWallet()
+  const { getReceiveAddress, getWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
 
   const createOffer = async (params: CreateOfferParams): Promise<CreateOfferResult> => {
     let stage = 'initializing'
     try {
       stage = 'load wallet context'
-      const [xOnlyPublicKey, receiveAddressString, wollet] = await Promise.all([
-        getXOnlyPublicKey(),
-        getReceiveAddress(),
-        getWollet(),
-      ])
-      if (!xOnlyPublicKey) throw new Error('Missing x-only public key')
+      const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
       if (!receiveAddressString) throw new Error('Missing receive address')
 
       stage = 'sync wallet and load UTXOs'
@@ -143,7 +140,7 @@ export function useCreateOffer() {
         reissuanceFlags: toUint64(REISSUANCE_FLAGS, 'reissuanceFlags'),
       })
       const issuanceFactoryAddress = issuanceFactoryProgram.createP2trAddress(
-        xOnlyPublicKey,
+        XOnlyPublicKey.fromString(NUMS_KEY),
         lwkNetwork,
       )
       const issuanceFactoryAddressString = issuanceFactoryAddress.toString()
@@ -198,35 +195,37 @@ export function useCreateOffer() {
       )
 
       stage = 'compile lending and ScriptAuth programs'
-      const derivedLendingParams = buildDerivedLendingOfferProgramParams(
-        {
-          collateralAssetId,
-          principalAssetId,
-          borrowerNftAssetId,
-          lenderNftAssetId,
-          protocolFeeKeeperAssetId,
-          offerParameters,
-        },
-        xOnlyPublicKey,
-        lwkNetwork,
-      )
+      // TODO: Indexer will handle this
+      const derivedLendingParams = buildDerivedLendingOfferProgramParams({
+        collateralAssetId,
+        principalAssetId,
+        borrowerNftAssetId,
+        lenderNftAssetId,
+        protocolFeeKeeperAssetId,
+        offerParameters,
+      })
       const lendingProgram = loadLendingProgram(derivedLendingParams)
-      const lendingAddress = lendingProgram.createP2trAddress(xOnlyPublicKey, lwkNetwork)
-      const lendingAddressString = lendingAddress.toString()
-      const lendingScriptPubkeyHex = bytesToHex(lendingAddress.scriptPubkey().bytes())
+      const lendingSpendInfo = buildLendingOfferSpendInfo(lendingProgram, {
+        principalAmount: offerParameters.principalAmount,
+        principalInterestRate: offerParameters.principalInterestRate,
+      })
+      const lendingScript = lendingSpendInfo.scriptPubkey
+      const lendingAddressString = bytesToHex(lendingScript.bytes())
       const lendingScriptHash = toBytes32(
-        hexToBytes(new Script(lendingScriptPubkeyHex).jet_sha256_hex()),
+        hexToBytes(lendingScript.jet_sha256_hex()),
         'lendingScriptHash',
       )
       const lenderNftScriptAuthProgram = loadScriptAuthProgram(lendingScriptHash)
       const lenderNftScriptAuthAddress = lenderNftScriptAuthProgram.createP2trAddress(
-        xOnlyPublicKey,
+        XOnlyPublicKey.fromString(NUMS_KEY),
         lwkNetwork,
       )
       const lenderNftScriptAuthAddressString = lenderNftScriptAuthAddress.toString()
       const metadata = await buildPendingOfferMetadata({
         principalAssetId,
-        offerParameters,
+        principalAmount: offerParameters.principalAmount,
+        loanExpirationTime: offerParameters.loanExpirationTime,
+        principalInterestRate: offerParameters.principalInterestRate,
       })
 
       stage = 'TxBuilder.new'
@@ -290,7 +289,7 @@ export function useCreateOffer() {
 
       stage = 'TxBuilder.addExplicitScriptOutput Lending covenant collateral'
       txBuilder = txBuilder.addExplicitScriptOutput(
-        new Script(lendingScriptPubkeyHex),
+        lendingScript,
         offerParameters.collateralAmount,
         AssetId.fromString(policyAssetString),
       )
@@ -306,9 +305,9 @@ export function useCreateOffer() {
 
       stage = 'finalize IssuanceFactory covenant input'
       const txWithWalletWitnesses = finalizedWalletPset.extractTx()
-      const finalizedTx = issuanceFactoryProgram.finalizeTransaction(
+      const finalizedTx = issuanceFactoryProgram.finalizeTransactionWithSpendInfo(
         txWithWalletWitnesses,
-        xOnlyPublicKey,
+        buildCovenantSpendInfo(issuanceFactoryProgram),
         [factoryAuthTxOut, issuanceFactoryTxOut, collateralTxOut],
         1,
         buildIssuanceFactoryWitness({
