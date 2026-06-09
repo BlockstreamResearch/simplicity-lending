@@ -3,11 +3,12 @@ import { useCallback, useMemo } from 'react'
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOfferIdsByBorrowerPubkey, useOffersBatch } from '@/api/indexer/hooks'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { LENDING } from '@/constants/config'
-import { DASHBOARD_REFETCH_INTERVAL_MS } from '@/constants/dashboard'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/offers'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { getOfferTermLeft } from '@/utils/offers'
+
+import { DASHBOARD_REFETCH_INTERVAL_MS } from '../constants'
 
 export interface BorrowStats {
   lockedCollateral: bigint
@@ -38,7 +39,7 @@ export function useBorrows(): DashboardBorrows {
   const blockHeightQuery = useBlockHeight(DASHBOARD_REFETCH_INTERVAL_MS)
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
-  const balance = BigInt(balances[LENDING.collateralAssetId] ?? 0)
+  const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
 
   const idsRefetch = idsQuery.refetch
   const offersRefetch = offersQuery.refetch

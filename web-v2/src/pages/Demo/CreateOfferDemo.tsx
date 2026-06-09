@@ -6,7 +6,7 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { LENDING } from '@/constants/config'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type CreateOfferResult, useCreateOffer } from '@/hooks/useCreateOffer'
 import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -116,11 +116,11 @@ const EMPTY_FORM: CreateOfferForm = {
   factoryAssetId: 'a61ab9c860e382039cb5df9386319887c1a3e60116f5fcb7ad3497b430806d18',
   collateralOutpoint: '',
   collateralAmount: DEFAULT_COLLATERAL_AMOUNT,
-  principalAssetId: LENDING.principalAssetId,
+  principalAssetId: NETWORK_CONFIG.principalAsset.id,
   principalAmount: DEFAULT_PRINCIPAL_AMOUNT,
   principalInterestRate: DEFAULT_INTEREST_RATE_BPS,
   loanDurationBlocks: DEFAULT_LOAN_DURATION_BLOCKS,
-  protocolFeeKeeperAssetId: LENDING.principalAssetId,
+  protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
 }
 
 export default function CreateOfferDemo() {

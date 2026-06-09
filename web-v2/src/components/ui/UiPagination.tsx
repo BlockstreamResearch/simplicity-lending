@@ -9,14 +9,16 @@ function buildPageList(current: number, total: number): (number | 'ellipsis')[] 
   return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total]
 }
 
-interface UiPaginationProps {
+interface UiPaginationBaseProps {
   currentPage: number
   onPageChange: (page: number) => void
   summary?: ReactNode
-  // pageCount = numbered pages; hasNextPage = prev/next only (no total count)
-  pageCount?: number
-  hasNextPage?: boolean
 }
+
+// Exactly one mode must be provided:
+// pageCount = numbered pages; hasNextPage = prev/next only (no total count).
+type UiPaginationProps = UiPaginationBaseProps &
+  ({ pageCount: number; hasNextPage?: never } | { hasNextPage: boolean; pageCount?: never })
 
 export function UiPagination({
   currentPage,

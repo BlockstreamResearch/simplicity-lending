@@ -1,10 +1,6 @@
 import { Skeleton } from '@heroui/react'
 import type { ReactNode } from 'react'
 
-export function DataRows({ children }: { children: ReactNode }) {
-  return <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>{children}</div>
-}
-
 export function DataRow({
   label,
   value,

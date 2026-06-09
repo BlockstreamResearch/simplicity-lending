@@ -16,6 +16,14 @@ cp .env.example .env
 
 ## Install dependencies
 
+### Install cargo
+
+```bash
+curl https://sh.rustup.rs -sSf | sh
+
+cargo --version
+```
+
 ### Install simplex
 
 ```bash
@@ -27,14 +35,6 @@ git checkout v0.0.5
 cargo install --path crates/cli
 
 simplex --version # Simplex 0.0.5
-```
-
-### Install cargo
-
-```bash
-curl https://sh.rustup.rs -sSf | sh
-
-cargo --version
 ```
 
 ## Build contracts

@@ -8,6 +8,7 @@ import {
 } from 'lwk_web'
 
 import type { ConnectionStatus, JadeVersionInfo, WalletType } from '../types'
+import { DEFAULT_WALLET_TYPE } from '../types'
 import type { WalletConnector } from './types'
 
 /**
@@ -68,7 +69,7 @@ export class JadeConnector implements WalletConnector {
   async getDescriptor(variant: WalletType): Promise<WolletDescriptor> {
     if (!this.jade) throw new Error('JadeConnector: not connected')
     // wpkh = elwpkh native segwit; shWpkh = nested segwit (sh-wpkh).
-    return variant === 'Wpkh' ? this.jade.wpkh() : this.jade.shWpkh()
+    return variant === DEFAULT_WALLET_TYPE ? this.jade.wpkh() : this.jade.shWpkh()
   }
 
   async signPset(pset: Pset): Promise<Pset> {

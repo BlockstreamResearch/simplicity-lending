@@ -1,19 +1,19 @@
 import { UiButton } from '@/components/ui/UiButton'
 
-export function CardAlert({
+export default function CardAlert({
   variant,
   title,
   description,
   actionLabel,
-  onAction,
   isDisabled,
+  onAction,
 }: {
   variant: 'warning' | 'accent'
   title: string
   description: string
   actionLabel: string
-  onAction?: () => void
   isDisabled?: boolean
+  onAction?: () => void
 }) {
   const titleColor = variant === 'warning' ? 'text-warning' : 'text-foreground'
   return (

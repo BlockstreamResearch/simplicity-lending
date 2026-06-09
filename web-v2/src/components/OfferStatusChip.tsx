@@ -10,7 +10,7 @@ const OFFER_STATUS_CHIP_CONFIG: Record<OfferDisplayStatus, { color: ChipColor; l
   pending: { color: 'warning', label: 'Pending' },
   repaid: { color: 'accent', label: 'Repaid' },
   liquidated: { color: 'danger', label: 'Liquidated' },
-  // Neutral/terminal states intentionally share the 'default' chip color.
+  // TODO: distinct colors once design provides them.
   cancelled: { color: 'default', label: 'Cancelled' },
   claimed: { color: 'default', label: 'Claimed' },
   unknown: { color: 'default', label: 'Unknown' },

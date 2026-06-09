@@ -4,15 +4,15 @@ import { useNavigate } from 'react-router-dom'
 
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import { UiButton } from '@/components/ui/UiButton'
-import { LENDING } from '@/constants/config'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
 import { ErrorHandler } from '@/utils/errorHandler'
 import { formatAmount, truncateAddress } from '@/utils/format'
 
+import { useBorrows } from '../hooks/useBorrows'
 import { AssetAmount } from './AssetAmount'
-import { CardAlert } from './CardAlert'
-import { DataRow, DataRows } from './DataRow'
-import { useBorrows } from './useBorrows'
+import CardAlert from './CardAlert'
+import { DataRow } from './DataRow'
 
 export function BorrowCard() {
   const navigate = useNavigate()
@@ -28,14 +28,16 @@ export function BorrowCard() {
 
   return (
     <section className='bg-surface-secondary flex flex-1 flex-col gap-4 rounded-2xl p-4 sm:p-6'>
-      <header className='flex flex-col gap-2'>
+      <header className='flex flex-col gap-3'>
         <div className='flex items-center gap-2'>
           <span className='text-foreground'>
             <CoinsIcon className='size-5' />
           </span>
           <h3 className='text-h3'>Your Borrows</h3>
         </div>
-        <p className='text-muted text-h4'>Complete Balance {LENDING.collateralSymbol}</p>
+        <p className='text-muted text-h4'>
+          Complete Balance {NETWORK_CONFIG.collateralAsset.symbol}
+        </p>
       </header>
 
       {isLoading ? (
@@ -43,21 +45,21 @@ export function BorrowCard() {
       ) : (
         <p className='text-display'>
           <AssetAmount
-            value={formatAmount(balance, LENDING.collateralDecimals)}
-            unit={LENDING.collateralSymbol}
+            value={formatAmount(balance, NETWORK_CONFIG.collateralAsset.decimals)}
+            unit={NETWORK_CONFIG.collateralAsset.symbol}
           />
         </p>
       )}
 
-      <DataRows>
+      <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>
         <DataRow
           label='User Total Locked Collateral:'
-          value={`${formatAmount(stats.lockedCollateral, LENDING.collateralDecimals)} ${LENDING.collateralSymbol}`}
+          value={`${formatAmount(stats.lockedCollateral, NETWORK_CONFIG.collateralAsset.decimals)} ${NETWORK_CONFIG.collateralAsset.symbol}`}
           isLoading={isLoading}
         />
         <DataRow
           label='Borrowings:'
-          value={`${formatAmount(stats.borrowings, LENDING.principalDecimals)} ${LENDING.principalSymbol}`}
+          value={`${formatAmount(stats.borrowings, NETWORK_CONFIG.principalAsset.decimals)} ${NETWORK_CONFIG.principalAsset.symbol}`}
           isLoading={isLoading}
         />
         <DataRow label='Number of active loans:' value={stats.activeLoans} isLoading={isLoading} />
@@ -66,7 +68,7 @@ export function BorrowCard() {
           value={stats.pendingOffers}
           isLoading={isLoading}
         />
-      </DataRows>
+      </div>
 
       {alertOffer && (
         <CardAlert

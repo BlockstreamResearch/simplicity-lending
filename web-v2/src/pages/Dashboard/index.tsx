@@ -1,9 +1,9 @@
 import { useWallet } from '@/providers/wallet/useWallet'
 
-import { BorrowCard } from './BorrowCard'
-import OverviewStats from './OverviewStats'
-import { RecentOffers } from './RecentOffers'
-import { SupplyCard } from './SupplyCard'
+import { BorrowCard } from './components/BorrowCard'
+import OverviewStats from './components/OverviewStats'
+import { RecentOffers } from './components/RecentOffers'
+import { SupplyCard } from './components/SupplyCard'
 
 export default function DashboardPage() {
   const { connectionStatus } = useWallet()
