@@ -248,6 +248,7 @@ impl OffersTracker {
         Ok(())
     }
 
+    // TODO: Add partial repayment handling
     #[tracing::instrument(
         name = "Handling offer repayment",
         skip(self, sql_tx, old_outpoint, offer_id, txid, block_height),
@@ -370,14 +371,11 @@ impl OffersTracker {
     }
 
     fn is_offer_cancellation_tx(tx: &Transaction) -> bool {
-        if tx.output.len() < 5 {
+        if tx.output.len() < 4 {
             return false;
         }
 
-        tx.output[1].is_null_data()
-            && tx.output[2].is_null_data()
-            && tx.output[3].is_null_data()
-            && tx.output[4].is_null_data()
+        tx.output[0].is_null_data() && tx.output[1].is_null_data() && !tx.output[2].is_null_data()
     }
 
     fn is_loan_repayment_tx(tx: &Transaction) -> bool {
