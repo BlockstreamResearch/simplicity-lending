@@ -68,8 +68,54 @@ impl OffersTracker {
         self.cache.abort_block();
     }
 
-    pub fn watch_insert(&mut self, outpoint: OutPoint, entry: OffersWatchEntry) {
-        self.cache.insert(outpoint, entry);
+    pub async fn seed_creation_pending_offer_utxo(
+        &mut self,
+        sql_tx: &mut DbTx<'_>,
+        offer_id: Uuid,
+        txid: Txid,
+        vout: u32,
+        block_height: u64,
+    ) -> anyhow::Result<()> {
+        let offer_utxo =
+            Self::new_offer_utxo_model(offer_id, txid, vout, UtxoType::PendingOffer, block_height);
+
+        let outpoint = OutPoint { txid, vout };
+
+        insert_offer_utxo(sql_tx, &offer_utxo).await?;
+        self.cache.insert(
+            outpoint,
+            OffersWatchEntry {
+                offer_id,
+                utxo_type: UtxoType::PendingOffer,
+            },
+        );
+
+        tracing::info!(
+            %offer_id,
+            %txid,
+            ?outpoint,
+            "Offer UTXO indexed on offer creation"
+        );
+
+        Ok(())
+    }
+
+    fn new_offer_utxo_model(
+        offer_id: Uuid,
+        txid: Txid,
+        vout: u32,
+        utxo_type: UtxoType,
+        block_height: u64,
+    ) -> OfferUtxoModel {
+        OfferUtxoModel {
+            offer_id,
+            txid: txid.to_byte_array().to_vec(),
+            vout: vout as i32,
+            utxo_type,
+            created_at_height: block_height as i64,
+            spent_at_height: None,
+            spent_txid: None,
+        }
     }
 
     async fn on_spend(

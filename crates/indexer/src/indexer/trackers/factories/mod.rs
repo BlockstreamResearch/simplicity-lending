@@ -7,4 +7,4 @@ pub use db::{
     get_factory_identity, insert_factory_utxo, load_factory_utxos_cache, spend_factory_utxo,
     update_factory_status,
 };
-pub use tx_outputs::{FactoryCreationOutputs, scan_creation_outputs};
+pub use tx_outputs::{FactoryCreationOutputs, scan_factory_creation_outputs};

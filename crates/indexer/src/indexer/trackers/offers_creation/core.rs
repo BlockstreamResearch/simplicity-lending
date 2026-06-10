@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, OutPoint, Transaction, hashes::Hash},
+    simplicityhl::elements::{AssetId, Transaction},
 };
 
 use lending_contracts::programs::{
@@ -12,15 +12,17 @@ use lending_contracts::programs::{
 
 use crate::{
     db::DbTx,
-    indexer::trackers::{
-        offer_participants::{
-            OfferParticipantsTracker, ParticipantWatchEntry, insert_participant_utxo,
-        },
-        offers::{OffersTracker, OffersWatchEntry, insert_offer_utxo},
-        offers_creation::insert_offer,
+    indexer::{
+        OfferCreationOutputs, OfferParticipantsTracker, OffersTracker, ParticipantCreationUtxo,
+        scan_offer_creation_outputs, trackers::offers_creation::insert_offer,
     },
-    models::{OfferModel, OfferParticipantModel, OfferUtxoModel, ParticipantType, UtxoType},
+    models::{OfferModel, ParticipantType},
 };
+
+struct ParsedOfferCreation {
+    parameters: LendingOfferParameters,
+    outputs: OfferCreationOutputs,
+}
 
 pub struct OfferCreationsTracker {
     protocol_fee_keeper_asset_id: AssetId,
@@ -44,10 +46,10 @@ impl OfferCreationsTracker {
         offers: &mut OffersTracker,
         participants: &mut OfferParticipantsTracker,
     ) -> anyhow::Result<()> {
-        if let Some(offer_parameters) = self.is_offer_creation_tx(tx) {
+        if let Some(creation) = self.parse_offer_creation_tx(tx) {
             Self::handle_offer_creation(
                 sql_tx,
-                offer_parameters,
+                creation,
                 factory_id,
                 tx,
                 block_height,
@@ -62,7 +64,7 @@ impl OfferCreationsTracker {
 
     async fn handle_offer_creation(
         sql_tx: &mut DbTx<'_>,
-        offer_parameters: LendingOfferParameters,
+        creation: ParsedOfferCreation,
         factory_id: Uuid,
         tx: &Transaction,
         block_height: u64,
@@ -71,87 +73,64 @@ impl OfferCreationsTracker {
     ) -> anyhow::Result<()> {
         let txid = tx.txid();
 
-        let offer_model = OfferModel::new(&offer_parameters, factory_id, block_height, txid);
+        let offer_model = OfferModel::new(&creation.parameters, factory_id, block_height, txid);
 
         if insert_offer(sql_tx, &offer_model).await?.is_none() {
             tracing::debug!(%txid, "Offer already indexed, skipping");
             return Ok(());
         }
 
-        let lending_offer_outpoint = OutPoint { txid, vout: 5 };
-        let lending_offer_utxo = OfferUtxoModel {
-            offer_id: offer_model.id,
-            txid: txid.to_byte_array().to_vec(),
-            vout: lending_offer_outpoint.vout as i32,
-            utxo_type: UtxoType::PendingOffer,
-            created_at_height: block_height as i64,
-            spent_at_height: None,
-            spent_txid: None,
-        };
+        offers
+            .seed_creation_pending_offer_utxo(
+                sql_tx,
+                offer_model.id,
+                txid,
+                creation.outputs.pending_offer_vout,
+                block_height,
+            )
+            .await?;
 
-        insert_offer_utxo(sql_tx, &lending_offer_utxo).await?;
-        offers.watch_insert(
-            lending_offer_outpoint,
-            OffersWatchEntry {
-                offer_id: offer_model.id,
-                utxo_type: UtxoType::PendingOffer,
-            },
-        );
+        participants
+            .seed_creation_participant_utxo(
+                sql_tx,
+                offer_model.id,
+                ParticipantType::Borrower,
+                ParticipantCreationUtxo {
+                    txid,
+                    vout: creation.outputs.borrower_nft_vout,
+                    script_pubkey: creation.outputs.borrower_nft_script_pubkey,
+                },
+                block_height,
+            )
+            .await?;
 
-        let borrower_nft_outpoint = OutPoint { txid, vout: 2 };
-        let borrower_participant_utxo = OfferParticipantModel {
-            offer_id: offer_model.id,
-            participant_type: ParticipantType::Borrower,
-            script_pubkey: tx.output[2].script_pubkey.to_bytes().to_vec(),
-            txid: txid.to_byte_array().to_vec(),
-            vout: borrower_nft_outpoint.vout as i32,
-            created_at_height: block_height as i64,
-            spent_txid: None,
-            spent_at_height: None,
-        };
-        insert_participant_utxo(sql_tx, &borrower_participant_utxo).await?;
-        participants.watch_insert(
-            borrower_nft_outpoint,
-            ParticipantWatchEntry {
-                offer_id: offer_model.id,
-                participant_type: ParticipantType::Borrower,
-            },
-        );
-
-        let lender_nft_outpoint = OutPoint { txid, vout: 3 };
-        let lender_participant_utxo = OfferParticipantModel {
-            offer_id: offer_model.id,
-            participant_type: ParticipantType::Lender,
-            script_pubkey: tx.output[3].script_pubkey.to_bytes().to_vec(),
-            txid: txid.to_byte_array().to_vec(),
-            vout: lender_nft_outpoint.vout as i32,
-            created_at_height: block_height as i64,
-            spent_txid: None,
-            spent_at_height: None,
-        };
-        insert_participant_utxo(sql_tx, &lender_participant_utxo).await?;
-        participants.watch_insert(
-            lender_nft_outpoint,
-            ParticipantWatchEntry {
-                offer_id: offer_model.id,
-                participant_type: ParticipantType::Lender,
-            },
-        );
+        participants
+            .seed_creation_participant_utxo(
+                sql_tx,
+                offer_model.id,
+                ParticipantType::Lender,
+                ParticipantCreationUtxo {
+                    txid,
+                    vout: creation.outputs.lender_nft_vout,
+                    script_pubkey: creation.outputs.lender_nft_script_pubkey,
+                },
+                block_height,
+            )
+            .await?;
 
         Ok(())
     }
 
-    fn is_offer_creation_tx(&self, tx: &Transaction) -> Option<LendingOfferParameters> {
+    fn parse_offer_creation_tx(&self, tx: &Transaction) -> Option<ParsedOfferCreation> {
         let offer =
             LendingOffer::try_from_tx(tx, self.protocol_fee_keeper_asset_id, self.network).ok()?;
 
-        let offer_script_pubkey = offer.get_script_pubkey();
+        let parameters = *offer.get_parameters();
+        let outputs = scan_offer_creation_outputs(&parameters, &offer.get_script_pubkey(), tx)?;
 
-        // TODO: Get UTXO indexes from the PendingLendingOffer program
-        if tx.output[5].script_pubkey != offer_script_pubkey {
-            return None;
-        }
-
-        Some(*offer.get_parameters())
+        Some(ParsedOfferCreation {
+            parameters,
+            outputs,
+        })
     }
 }

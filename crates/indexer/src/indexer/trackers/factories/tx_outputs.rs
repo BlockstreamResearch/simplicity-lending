@@ -61,7 +61,7 @@ pub fn find_program_output(
     }
 }
 
-pub fn scan_creation_outputs(
+pub fn scan_factory_creation_outputs(
     identity: &FactoryIdentity,
     tx: &Transaction,
 ) -> Option<FactoryCreationOutputs> {

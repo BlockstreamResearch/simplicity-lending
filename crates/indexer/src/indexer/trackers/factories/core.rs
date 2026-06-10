@@ -82,10 +82,6 @@ impl FactoriesTracker {
         self.cache.abort_block();
     }
 
-    pub fn watch_insert(&mut self, outpoint: OutPoint, factory_id: Uuid) {
-        self.cache.insert(outpoint, factory_id);
-    }
-
     pub async fn seed_creation_program_utxo(
         &mut self,
         sql_tx: &mut DbTx<'_>,

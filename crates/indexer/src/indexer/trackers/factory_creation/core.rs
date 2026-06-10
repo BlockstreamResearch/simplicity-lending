@@ -7,7 +7,9 @@ use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFac
 
 use crate::{
     db::DbTx,
-    indexer::{FactoriesTracker, FactoryAuthsTracker, insert_factory, scan_creation_outputs},
+    indexer::{
+        FactoriesTracker, FactoryAuthsTracker, insert_factory, scan_factory_creation_outputs,
+    },
     models::{FactoryIdentity, FactoryModel},
 };
 
@@ -70,7 +72,7 @@ impl FactoryCreationsTracker {
         }
 
         let identity = FactoryIdentity::from_factory_model(&factory_model);
-        let outputs = scan_creation_outputs(&identity, tx).ok_or_else(|| {
+        let outputs = scan_factory_creation_outputs(&identity, tx).ok_or_else(|| {
             anyhow::anyhow!("Factory outputs not found in validated creation tx {txid}")
         })?;
 
