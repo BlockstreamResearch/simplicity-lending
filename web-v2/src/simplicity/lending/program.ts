@@ -183,7 +183,7 @@ export function buildDerivedLendingOfferProgramParams(
 ): LendingOfferProgramParams {
   const principalOutputAssetAuth = loadAssetAuthProgram({
     assetId: params.borrowerNftAssetId,
-    assetAmount: getTotalAmountToRepay(params.offerParameters),
+    assetAmount: toUint64(1n),
     withAssetBurn: false,
   })
   const finalizedLenderVault = loadAssetAuthVaultProgram(buildFinalizedLenderVaultParams(params))

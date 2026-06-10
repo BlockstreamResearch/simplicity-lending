@@ -195,7 +195,7 @@ export function useCreateOffer() {
       )
 
       stage = 'compile lending and ScriptAuth programs'
-      // TODO: Indexer will handle this
+
       const derivedLendingParams = buildDerivedLendingOfferProgramParams({
         collateralAssetId,
         principalAssetId,

@@ -121,6 +121,7 @@ export function useCancelOffer() {
         AssetId.fromString(PROTOCOL_FEE_KEEPER_ASSET_ID).toBytes(),
         'protocolFeeKeeperAssetId',
       )
+      // TODO: Indexer will handle this
       const derivedLendingParams = buildDerivedLendingOfferProgramParams({
         collateralAssetId: toBytes32(collateralAsset.toBytes(), 'collateralAssetId'),
         principalAssetId: metadata.principalAssetId,
