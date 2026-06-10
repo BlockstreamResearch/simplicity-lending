@@ -16,7 +16,7 @@ env:
   SQLX_VERSION: 0.8.0
   SQLX_FEATURES: "rustls,postgres"
   SQLX_FEATURES_KEY: "rustls-postgres"
-  SIMPLEX_VERSION: v0.0.5
+  SIMPLEX_VERSION: v0.0.6
   APP_USER: app
   APP_USER_PWD: secret
   APP_DB_NAME: lending-indexer
@@ -121,7 +121,7 @@ jobs:
         shell: bash
         run: |
           cd crates/contracts
-          simplex test --nocapture
+          simplex test
 
       - name: Check that queries are fresh
         run: cargo sqlx prepare --workspace --check -- --all-targets

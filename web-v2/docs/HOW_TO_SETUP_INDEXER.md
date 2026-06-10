@@ -16,11 +16,11 @@ cargo --version
 git clone https://github.com/BlockstreamResearch/smplx.git
 cd smplx
 
-git checkout v0.0.5
+git checkout v0.0.6
 
 cargo install --path crates/cli
 
-simplex --version # Simplex 0.0.5
+simplex --version # Simplex 0.0.6
 ```
 
 ## Checkout the `dev` branch
