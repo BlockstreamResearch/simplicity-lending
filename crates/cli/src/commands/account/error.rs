@@ -12,10 +12,13 @@ pub enum AccountCommandError {
     #[error("Not a signer utxo: {0}")]
     NotASignerUTXO(OutPoint),
 
+    #[error("The following outpoints do not belong to the signer: {}", .0.iter().map(|o| o.to_string()).collect::<Vec<_>>().join(", "))]
+    NotSignerUTXOs(Vec<OutPoint>),
+
     #[error("Duplicate outpoint in merge input: {0}")]
     DuplicateOutpoint(OutPoint),
 
-    #[error("At least one outpoint is required for merge-utxo")]
+    #[error("At least two outpoints are required for merge-utxo")]
     MissingOutpointsToMerge,
 
     #[error(

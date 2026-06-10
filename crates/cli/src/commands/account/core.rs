@@ -2,7 +2,6 @@ use std::{collections::HashSet, str::FromStr};
 
 use clap::Subcommand;
 use simplex::{
-    provider::ProviderTrait,
     simplicityhl::elements::{Address, AssetId, OutPoint, hex::ToHex},
     simplicityhl::simplicity::bitcoin::PublicKey,
     transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature},
@@ -71,9 +70,12 @@ pub enum AccountCommand {
     },
     /// Merge specific UTXOs into a single output
     MergeUTXO {
-        /// UTXOs to merge
-        #[arg(long = "outpoints", value_delimiter = ',', num_args = 1..)]
+        /// UTXOs to merge (at least 2 required)
+        #[arg(long = "outpoints", value_delimiter = ',', num_args = 2..)]
         outpoints: Vec<OutPoint>,
+        /// Make the merged output confidential using the account blinding key
+        #[arg(long = "confidential")]
+        confidential: bool,
     },
     /// Show current account info
     ShowAccountInfo,
@@ -119,9 +121,10 @@ impl Account {
             AccountCommand::SplitUTXO { outpoint, amounts } => {
                 Account::split_account_utxo(context, *outpoint, amounts)
             }
-            AccountCommand::MergeUTXO { outpoints } => {
-                Account::merge_account_utxos(context, outpoints)
-            }
+            AccountCommand::MergeUTXO {
+                outpoints,
+                confidential,
+            } => Account::merge_account_utxos(context, outpoints, *confidential),
             AccountCommand::ShowAccountInfo => Account::show_account_info(context),
             AccountCommand::ShowAccountUTXOS => Account::show_account_utxos(context),
         }
@@ -161,19 +164,12 @@ impl Account {
         recipient_blinding_pubkey: &str,
         amount: u64,
     ) -> Result<(), AccountCommandError> {
-        let blinding_pubkey = PublicKey::from_str(recipient_blinding_pubkey).map_err(|source| {
-            AccountCommandError::InvalidRecipientBlindingPublicKey {
-                key: recipient_blinding_pubkey.to_owned(),
-                source,
-            }
-        })?;
         let policy_asset_id = context.get_network().policy_asset();
-
         Account::send_asset_with_blinding(
             context,
             to_address,
             policy_asset_id,
-            Some(blinding_pubkey),
+            Some(recipient_blinding_pubkey),
             amount,
         )
     }
@@ -185,19 +181,12 @@ impl Account {
         asset_id_hex_be: &str,
         amount: u64,
     ) -> Result<(), AccountCommandError> {
-        let blinding_pubkey = PublicKey::from_str(recipient_blinding_pubkey).map_err(|source| {
-            AccountCommandError::InvalidRecipientBlindingPublicKey {
-                key: recipient_blinding_pubkey.to_owned(),
-                source,
-            }
-        })?;
         let asset_id = AssetId::from_str(asset_id_hex_be)?;
-
         Account::send_asset_with_blinding(
             context,
             to_address,
             asset_id,
-            Some(blinding_pubkey),
+            Some(recipient_blinding_pubkey),
             amount,
         )
     }
@@ -206,16 +195,26 @@ impl Account {
         context: CliContext,
         to_address: &Address,
         asset_id: AssetId,
-        recipient_blinding_pubkey: Option<PublicKey>,
+        recipient_blinding_pubkey: Option<&str>,
         amount: u64,
     ) -> Result<(), AccountCommandError> {
+        let recipient_blinding_pubkey = recipient_blinding_pubkey
+            .map(|key| {
+                PublicKey::from_str(key).map_err(|source| {
+                    AccountCommandError::InvalidRecipientBlindingPublicKey {
+                        key: key.to_owned(),
+                        source,
+                    }
+                })
+            })
+            .transpose()?;
         let asset_utxos = context.signer.get_utxos_asset(asset_id)?;
 
         let mut inputs = Vec::new();
         let mut total_inputs_amount = 0;
 
         for utxo in asset_utxos {
-            total_inputs_amount += utxo.explicit_amount();
+            total_inputs_amount += utxo.amount();
             inputs.push((utxo, RequiredSignature::NativeEcdsa));
 
             if total_inputs_amount >= amount {
@@ -256,12 +255,10 @@ impl Account {
             asset_id.to_hex()
         );
 
-        let (tx, _) = context.signer.finalize(&ft)?;
-
-        let txid = context.esplora_provider.broadcast_transaction(&tx)?;
+        let receipt = context.signer.broadcast(&ft)?;
 
         println!("Asset successfully sent");
-        println!("Broadcast txid: {txid}");
+        println!("Broadcast txid: {receipt}");
 
         Ok(())
     }
@@ -322,11 +319,10 @@ impl Account {
 
         println!("Splitting UTXO with {:?} outpoint", outpoint);
 
-        let (tx, _) = context.signer.finalize(&ft)?;
-        let txid = context.esplora_provider.broadcast_transaction(&tx)?;
+        let receipt = context.signer.broadcast(&ft)?;
 
         println!("UTXO successfully split!");
-        println!("Broadcast txid: {txid}");
+        println!("Broadcast txid: {receipt}");
 
         Ok(())
     }
@@ -334,8 +330,9 @@ impl Account {
     fn merge_account_utxos(
         context: CliContext,
         outpoints: &[OutPoint],
+        confidential: bool,
     ) -> Result<(), AccountCommandError> {
-        if outpoints.is_empty() {
+        if outpoints.len() < 2 {
             return Err(AccountCommandError::MissingOutpointsToMerge);
         }
 
@@ -353,16 +350,16 @@ impl Account {
 
         let found_outpoints: HashSet<OutPoint> =
             found_utxos.iter().map(|utxo| utxo.outpoint).collect();
-        if let Some(missing_outpoint) = selected_outpoints
+        let missing: Vec<OutPoint> = selected_outpoints
             .iter()
-            .find(|outpoint| !found_outpoints.contains(outpoint))
-        {
-            return Err(AccountCommandError::NotASignerUTXO(*missing_outpoint));
+            .filter(|op| !found_outpoints.contains(*op))
+            .copied()
+            .collect();
+        if !missing.is_empty() {
+            return Err(AccountCommandError::NotSignerUTXOs(missing));
         }
 
-        let first_utxo = found_utxos
-            .first()
-            .ok_or(AccountCommandError::MissingOutpointsToMerge)?;
+        let first_utxo = &found_utxos[0];
         let merged_asset_id = first_utxo.asset();
         let mut total_amount = 0;
         let mut ft = FinalTransaction::new();
@@ -381,22 +378,33 @@ impl Account {
             ft.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
         }
 
-        ft.add_output(PartialOutput::new(
+        let merged_output = PartialOutput::new(
             context.signer.get_address().script_pubkey(),
             total_amount,
             merged_asset_id,
-        ));
+        );
+        ft.add_output(if confidential {
+            merged_output.with_blinding_key(context.signer.get_blinding_public_key())
+        } else {
+            merged_output
+        });
 
         println!(
-            "Merging {} UTXOs into a single output",
-            selected_outpoints.len()
+            "Merging {} UTXOs into a single {} output (asset: {}, amount: {})",
+            selected_outpoints.len(),
+            if confidential {
+                "confidential"
+            } else {
+                "explicit"
+            },
+            merged_asset_id.to_hex(),
+            total_amount,
         );
 
-        let (tx, _) = context.signer.finalize(&ft)?;
-        let txid = context.esplora_provider.broadcast_transaction(&tx)?;
+        let receipt = context.signer.broadcast(&ft)?;
 
         println!("UTXOs successfully merged!");
-        println!("Broadcast txid: {txid}");
+        println!("Broadcast txid: {receipt}");
 
         Ok(())
     }
