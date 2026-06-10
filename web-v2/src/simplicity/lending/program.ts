@@ -16,7 +16,7 @@ import {
   loadAssetAuthVaultProgram,
 } from '@/simplicity/asset-auth-vault/program'
 import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
-import { buildCovenantSpendInfo, NUMS_KEY } from '@/simplicity/taproot'
+import { buildCovenantSpendInfo, UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { bytes32ToHex, hexToBytes } from '@/utils/hex'
 import {
   type Bytes32,
@@ -234,7 +234,7 @@ export function buildLendingOfferSpendInfo(
   const debtSlot = new Uint8Array(32)
   new DataView(debtSlot.buffer).setBigUint64(24, totalAmountToRepay, false)
 
-  const numsKey = XOnlyPublicKey.fromString(NUMS_KEY)
+  const numsKey = XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY)
 
   return new StateTaprootBuilder()
     .addSimplicityLeaf(2, lendingProgram.cmr)

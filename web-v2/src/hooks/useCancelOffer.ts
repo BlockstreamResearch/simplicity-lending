@@ -5,16 +5,23 @@ import {
   OutPoint,
   Script,
   SimplicityLogLevel,
-  Transaction,
   TxBuilder,
   TxOutSecrets,
-  type WalletTxOut,
   XOnlyPublicKey,
 } from 'lwk_web'
 
-import { broadcastTx, fetchTxRaw } from '@/api/esplora/methods'
+import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import {
+  assertDistinctOutpoints,
+  assertExplicitAmount,
+  assertScriptMatches,
+  fetchTransaction,
+  requireExplicitAmount,
+  requireExplicitAsset,
+  requireTxOut,
+} from '@/lwk/transaction'
+import { isPolicyAssetUtxo, requireWalletUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
@@ -25,11 +32,10 @@ import {
   loadLendingProgram,
 } from '@/simplicity/lending/program'
 import { buildScriptAuthWitness, loadScriptAuthProgram } from '@/simplicity/script-auth/program'
-import { buildCovenantSpendInfo, NUMS_KEY } from '@/simplicity/taproot'
+import { buildCovenantSpendInfo, UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
+import { wrapErrorWithContext } from '@/utils/errorHandler'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
-
-const PROTOCOL_FEE_KEEPER_ASSET_ID = NETWORK_CONFIG.principalAsset.id
 
 const NFT_AMOUNT = 1n
 const DEFAULT_FEE_RATE = 100
@@ -66,12 +72,10 @@ export function useCancelOffer() {
       const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
       const borrowerNftOutpoint = new OutPoint(params.borrowerNftOutpoint)
       const feeOutpoint = new OutPoint(params.feeOutpoint)
-      assertDistinctOutpoints([
-        pendingOfferOutpoint,
-        lenderNftOutpoint,
-        borrowerNftOutpoint,
-        feeOutpoint,
-      ])
+      assertDistinctOutpoints(
+        [pendingOfferOutpoint, lenderNftOutpoint, borrowerNftOutpoint, feeOutpoint],
+        'Cancellation inputs must use four distinct outpoints',
+      )
 
       stage = 'load wallet context'
       const wollet = await getWollet()
@@ -118,7 +122,7 @@ export function useCancelOffer() {
 
       stage = 'compile Lending and ScriptAuth programs'
       const protocolFeeKeeperAssetId = toBytes32(
-        AssetId.fromString(PROTOCOL_FEE_KEEPER_ASSET_ID).toBytes(),
+        AssetId.fromString(NETWORK_CONFIG.protocolFeeAsset.id).toBytes(),
         'protocolFeeKeeperAssetId',
       )
       // TODO: Indexer will handle this
@@ -155,7 +159,7 @@ export function useCancelOffer() {
       )
       const scriptAuthProgram = loadScriptAuthProgram(lendingScriptHash)
       const scriptAuthAddress = scriptAuthProgram.createP2trAddress(
-        XOnlyPublicKey.fromString(NUMS_KEY),
+        XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
         lwkNetwork,
       )
       assertScriptMatches(
@@ -255,6 +259,7 @@ export function useCancelOffer() {
 
       return {
         txid,
+        // TODO: Remove debug summary before release
         summary: {
           inputs: {
             '0 Pending offer Lending': params.pendingOfferOutpoint,
@@ -276,68 +281,9 @@ export function useCancelOffer() {
         },
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      const errorBody =
-        err instanceof Error && 'body' in err && typeof err.body === 'string' ? err.body : null
-      throw new Error(`${stage}: ${errorMessage}${errorBody ? ` | response: ${errorBody}` : ''}`)
+      throw wrapErrorWithContext(err, stage)
     }
   }
 
   return { cancelOffer }
-}
-
-function requireTxOut(tx: Transaction, vout: number, label: string) {
-  const txOut = tx.outputs[vout]
-  if (!txOut) throw new Error(`${label} transaction does not have output ${vout}`)
-  return txOut
-}
-
-async function fetchTransaction(outpoint: OutPoint): Promise<Transaction> {
-  return Transaction.fromBytes(await fetchTxRaw(outpoint.txid().toString()))
-}
-
-function requireExplicitAsset(txOut: ReturnType<typeof requireTxOut>, label: string): AssetId {
-  const asset = txOut.asset()
-  if (!asset) throw new Error(`${label} output must have an explicit asset`)
-  return asset
-}
-
-function requireExplicitAmount(txOut: ReturnType<typeof requireTxOut>, label: string): bigint {
-  const amount = txOut.value()
-  if (amount === undefined) throw new Error(`${label} output must have an explicit amount`)
-  return amount
-}
-
-function assertExplicitAmount(
-  txOut: ReturnType<typeof requireTxOut>,
-  expectedAmount: bigint,
-  label: string,
-) {
-  const amount = requireExplicitAmount(txOut, label)
-  if (amount !== expectedAmount) {
-    throw new Error(`${label} output must have amount ${expectedAmount.toString()}`)
-  }
-}
-
-function requireWalletUtxo(
-  walletUtxos: WalletTxOut[],
-  expectedOutpoint: string,
-  label: string,
-): WalletTxOut {
-  const utxo = walletUtxos.find(candidate => utxoToOutpointString(candidate) === expectedOutpoint)
-  if (!utxo) throw new Error(`${label} outpoint is not an unspent UTXO owned by the wallet`)
-  return utxo
-}
-
-function assertDistinctOutpoints(outpoints: OutPoint[]) {
-  const values = outpoints.map(outpoint => `${outpoint.txid().toString()}:${outpoint.vout()}`)
-  if (new Set(values).size !== values.length) {
-    throw new Error('Cancellation inputs must use four distinct outpoints')
-  }
-}
-
-function assertScriptMatches(actual: Script, expected: Script, message: string) {
-  if (bytesToHex(actual.bytes()) !== bytesToHex(expected.bytes())) {
-    throw new Error(message)
-  }
 }

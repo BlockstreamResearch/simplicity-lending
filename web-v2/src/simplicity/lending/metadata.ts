@@ -28,15 +28,17 @@ export interface PendingOfferMetadata {
   principalInterestRate: Uint16
 }
 
-export async function buildPendingOfferMetadata(params: PendingOfferMetadata): Promise<Uint8Array> {
+export async function encodePendingOfferMetadata(
+  metadata: PendingOfferMetadata,
+): Promise<Uint8Array> {
   const data = new Uint8Array(PENDING_OFFER_METADATA_LENGTH)
   const view = new DataView(data.buffer)
 
   data.set(await getLendingProgramId(), 0)
-  data.set(params.principalAssetId, PRINCIPAL_ASSET_ID_OFFSET)
-  view.setBigUint64(PRINCIPAL_AMOUNT_OFFSET, params.principalAmount, true)
-  view.setUint32(LOAN_EXPIRATION_TIME_OFFSET, params.loanExpirationTime, true)
-  view.setUint16(PRINCIPAL_INTEREST_RATE_OFFSET, params.principalInterestRate, true)
+  data.set(metadata.principalAssetId, PRINCIPAL_ASSET_ID_OFFSET)
+  view.setBigUint64(PRINCIPAL_AMOUNT_OFFSET, metadata.principalAmount, true)
+  view.setUint32(LOAN_EXPIRATION_TIME_OFFSET, metadata.loanExpirationTime, true)
+  view.setUint16(PRINCIPAL_INTEREST_RATE_OFFSET, metadata.principalInterestRate, true)
 
   return data
 }

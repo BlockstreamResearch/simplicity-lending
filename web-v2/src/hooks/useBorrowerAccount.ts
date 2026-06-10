@@ -13,7 +13,7 @@ import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
-import { NUMS_KEY } from '@/simplicity/taproot'
+import { UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { bytesToHex } from '@/utils/hex'
 import { sha256 } from '@/utils/sha256'
 import { toUint8, toUint64 } from '@/utils/uint'
@@ -66,7 +66,7 @@ export function useBorrowerAccount() {
       reissuanceFlags: toUint64(REISSUANCE_FLAGS, 'reissuanceFlags'),
     })
     const factoryAddress = issuanceFactoryProgram.createP2trAddress(
-      XOnlyPublicKey.fromString(NUMS_KEY),
+      XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
       lwkNetwork,
     )
     const issuedAssetId = assetIdFromIssuance(feeUtxo.outpoint(), emptyContractHash())

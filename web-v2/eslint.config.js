@@ -13,7 +13,7 @@ import eslintConfigPrettier from 'eslint-config-prettier/flat'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'eslint.config.js']),
+  globalIgnores(['dist', 'eslint.config.js', 'lwk_wasm/**']),
 
   // Base config for all JS/JSX/TS/TSX files
   {

@@ -8,29 +8,33 @@ import {
   OutPoint,
   Script,
   SimplicityLogLevel,
-  Transaction,
   TxBuilder,
   TxOutSecrets,
-  type WalletTxOut,
   XOnlyPublicKey,
 } from 'lwk_web'
 
-import { broadcastTx, fetchLatestBlockHeight, fetchTxRaw } from '@/api/esplora/methods'
-import { utxoToOutpointString } from '@/lwk/utxo'
+import { broadcastTx, fetchLatestBlockHeight } from '@/api/esplora/methods'
+import { fetchTransaction, requireTxOut } from '@/lwk/transaction'
+import {
+  assertWalletUtxoAssetAndMinimumAmount,
+  findWalletUtxo,
+  requireWalletUtxo,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import {
   buildIssuanceFactoryWitness,
   loadIssuanceFactoryProgram,
 } from '@/simplicity/issuance-factory/program'
-import { buildPendingOfferMetadata } from '@/simplicity/lending/metadata'
+import { encodePendingOfferMetadata } from '@/simplicity/lending/metadata'
 import {
   buildDerivedLendingOfferProgramParams,
   buildLendingOfferSpendInfo,
   loadLendingProgram,
 } from '@/simplicity/lending/program'
 import { loadScriptAuthProgram } from '@/simplicity/script-auth/program'
-import { buildCovenantSpendInfo, NUMS_KEY } from '@/simplicity/taproot'
+import { buildCovenantSpendInfo, UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
+import { wrapErrorWithContext } from '@/utils/errorHandler'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
 import { toBytes32, toUint8, toUint16, toUint32, toUint64 } from '@/utils/uint'
 
@@ -80,9 +84,7 @@ export function useCreateOffer() {
       stage = 'sync wallet and load UTXOs'
       await syncWallet()
       const walletUtxos = await getWalletUtxos()
-      const factoryAuthUtxo = walletUtxos.find(
-        utxo => utxoToOutpointString(utxo) === params.factoryAuthOutpoint,
-      )
+      const factoryAuthUtxo = findWalletUtxo(walletUtxos, params.factoryAuthOutpoint)
       const collateralUtxo = requireWalletUtxo(walletUtxos, params.collateralOutpoint, 'Collateral')
 
       stage = 'prepare validated params'
@@ -92,14 +94,14 @@ export function useCreateOffer() {
       const policyAssetString = lwkNetwork.policyAsset().toString()
 
       if (factoryAuthUtxo) {
-        assertWalletUtxoAssetAndAmount(
+        assertWalletUtxoAssetAndMinimumAmount(
           factoryAuthUtxo,
           factoryAssetString,
           NFT_AMOUNT,
           'FactoryAuth',
         )
       }
-      assertWalletUtxoAssetAndAmount(
+      assertWalletUtxoAssetAndMinimumAmount(
         collateralUtxo,
         policyAssetString,
         params.collateralAmount,
@@ -111,25 +113,24 @@ export function useCreateOffer() {
       const collateralOutpoint = new OutPoint(params.collateralOutpoint)
 
       stage = 'load transaction context'
-      const [factoryAuthTxBytes, issuanceFactoryTxBytes, collateralTxBytes, currentBlockHeight] =
+      const [factoryAuthTx, issuanceFactoryTx, collateralTx, currentBlockHeight] =
         await Promise.all([
-          fetchTxRaw(factoryAuthOutpoint.txid().toString()),
-          fetchTxRaw(issuanceFactoryOutpoint.txid().toString()),
-          fetchTxRaw(collateralOutpoint.txid().toString()),
+          fetchTransaction(factoryAuthOutpoint),
+          fetchTransaction(issuanceFactoryOutpoint),
+          fetchTransaction(collateralOutpoint),
           fetchLatestBlockHeight(),
         ])
-      const factoryAuthTx = Transaction.fromBytes(factoryAuthTxBytes)
-      const issuanceFactoryTx = Transaction.fromBytes(issuanceFactoryTxBytes)
-      const collateralTx = Transaction.fromBytes(collateralTxBytes)
-      const factoryAuthTxOut = factoryAuthTx.outputs[factoryAuthOutpoint.vout()]
-      const issuanceFactoryTxOut = issuanceFactoryTx.outputs[issuanceFactoryOutpoint.vout()]
-      const collateralTxOut = collateralTx.outputs[collateralOutpoint.vout()]
-      if (!factoryAuthTxOut)
-        throw new Error('FactoryAuth transaction does not have the selected output')
-      if (!issuanceFactoryTxOut)
-        throw new Error('IssuanceFactory transaction does not have the selected output')
-      if (!collateralTxOut)
-        throw new Error('Collateral transaction does not have the selected output')
+      const factoryAuthTxOut = requireTxOut(
+        factoryAuthTx,
+        factoryAuthOutpoint.vout(),
+        'FactoryAuth',
+      )
+      const issuanceFactoryTxOut = requireTxOut(
+        issuanceFactoryTx,
+        issuanceFactoryOutpoint.vout(),
+        'IssuanceFactory',
+      )
+      const collateralTxOut = requireTxOut(collateralTx, collateralOutpoint.vout(), 'Collateral')
 
       stage = 'prepare addresses and external UTXOs'
       const receiveAddressExplicitString = Address.parse(receiveAddressString, lwkNetwork)
@@ -140,7 +141,7 @@ export function useCreateOffer() {
         reissuanceFlags: toUint64(REISSUANCE_FLAGS, 'reissuanceFlags'),
       })
       const issuanceFactoryAddress = issuanceFactoryProgram.createP2trAddress(
-        XOnlyPublicKey.fromString(NUMS_KEY),
+        XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
         lwkNetwork,
       )
       const issuanceFactoryAddressString = issuanceFactoryAddress.toString()
@@ -210,23 +211,17 @@ export function useCreateOffer() {
         principalInterestRate: offerParameters.principalInterestRate,
       })
       const lendingScript = lendingSpendInfo.scriptPubkey
-      const lendingAddressString = bytesToHex(lendingScript.bytes())
+      const lendingScriptPubkeyHex = bytesToHex(lendingScript.bytes())
       const lendingScriptHash = toBytes32(
         hexToBytes(lendingScript.jet_sha256_hex()),
         'lendingScriptHash',
       )
       const lenderNftScriptAuthProgram = loadScriptAuthProgram(lendingScriptHash)
       const lenderNftScriptAuthAddress = lenderNftScriptAuthProgram.createP2trAddress(
-        XOnlyPublicKey.fromString(NUMS_KEY),
+        XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
         lwkNetwork,
       )
       const lenderNftScriptAuthAddressString = lenderNftScriptAuthAddress.toString()
-      const metadata = await buildPendingOfferMetadata({
-        principalAssetId,
-        principalAmount: offerParameters.principalAmount,
-        loanExpirationTime: offerParameters.loanExpirationTime,
-        principalInterestRate: offerParameters.principalInterestRate,
-      })
 
       stage = 'TxBuilder.new'
       let txBuilder = new TxBuilder(lwkNetwork)
@@ -281,8 +276,16 @@ export function useCreateOffer() {
       )
 
       stage = 'TxBuilder.addExplicitScriptOutput metadata OP_RETURN'
+      const pendingOfferMetadataPayload = await encodePendingOfferMetadata({
+        principalAssetId,
+        principalAmount: offerParameters.principalAmount,
+        loanExpirationTime: offerParameters.loanExpirationTime,
+        principalInterestRate: offerParameters.principalInterestRate,
+      })
+      const pendingOfferMetadataScript = Script.newOpReturn(pendingOfferMetadataPayload)
+
       txBuilder = txBuilder.addExplicitScriptOutput(
-        Script.newOpReturn(metadata),
+        pendingOfferMetadataScript,
         0n,
         AssetId.fromString(policyAssetString),
       )
@@ -323,6 +326,7 @@ export function useCreateOffer() {
 
       return {
         txid,
+        // TODO: Remove debug summary before release
         summary: {
           inputs: {
             '0 FactoryAuth': params.factoryAuthOutpoint,
@@ -334,8 +338,8 @@ export function useCreateOffer() {
             '1 IssuanceFactory back to covenant': issuanceFactoryAddressString,
             '2 Borrower NFT to user': receiveAddressExplicitString,
             '3 Lender NFT to ScriptAuth': lenderNftScriptAuthAddressString,
-            '4 Metadata OP_RETURN': bytesToHex(Script.newOpReturn(metadata).bytes()),
-            '5 Lending covenant': lendingAddressString,
+            '4 Metadata OP_RETURN': bytesToHex(pendingOfferMetadataScript.bytes()),
+            '5 Lending covenant': lendingScriptPubkeyHex,
           },
           assetIds: {
             factoryAssetId: factoryAssetString,
@@ -365,39 +369,13 @@ export function useCreateOffer() {
             loanDurationBlocks: loanDurationBlocks.toString(),
             loanExpirationTime: offerParameters.loanExpirationTime.toString(),
           },
-          metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
+          metadataOpReturnHex: bytesToHex(pendingOfferMetadataScript.bytes()),
         },
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      const errorBody =
-        err instanceof Error && 'body' in err && typeof err.body === 'string' ? err.body : null
-      throw new Error(`${stage}: ${errorMessage}${errorBody ? ` | response: ${errorBody}` : ''}`)
+      throw wrapErrorWithContext(err, stage)
     }
   }
 
   return { createOffer }
-}
-
-function requireWalletUtxo(
-  walletUtxos: WalletTxOut[],
-  outpoint: string,
-  label: string,
-): WalletTxOut {
-  const utxo = walletUtxos.find(u => utxoToOutpointString(u) === outpoint.trim())
-  if (!utxo) throw new Error(`${label} wallet UTXO not found`)
-  return utxo
-}
-
-function assertWalletUtxoAssetAndAmount(
-  utxo: WalletTxOut,
-  assetId: string,
-  minAmount: bigint,
-  label: string,
-) {
-  const unblinded = utxo.unblinded()
-  if (unblinded.asset().toString() !== assetId)
-    throw new Error(`${label} UTXO has unexpected asset ${unblinded.asset().toString()}`)
-  if (unblinded.value() < minAmount)
-    throw new Error(`${label} UTXO amount is lower than ${minAmount.toString()}`)
 }

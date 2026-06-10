@@ -6,11 +6,7 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
-import {
-  type CancelOfferParams,
-  type CancelOfferResult,
-  useCancelOffer,
-} from '@/hooks/useCancelOffer'
+import { type CancelOfferResult, useCancelOffer } from '@/hooks/useCancelOffer'
 import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -168,7 +164,7 @@ export default function CancelOfferDemo() {
       setState({
         busy: false,
         error: null,
-        result: await cancelOffer(result.data as CancelOfferParams),
+        result: await cancelOffer(result.data),
       })
     } catch (err) {
       setState({

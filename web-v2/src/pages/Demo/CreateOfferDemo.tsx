@@ -120,7 +120,7 @@ const EMPTY_FORM: CreateOfferForm = {
   principalAmount: DEFAULT_PRINCIPAL_AMOUNT,
   principalInterestRate: DEFAULT_INTEREST_RATE_BPS,
   loanDurationBlocks: DEFAULT_LOAN_DURATION_BLOCKS,
-  protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
+  protocolFeeKeeperAssetId: NETWORK_CONFIG.protocolFeeAsset.id,
 }
 
 export default function CreateOfferDemo() {

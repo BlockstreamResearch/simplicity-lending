@@ -17,6 +17,7 @@ export interface ConfigAsset {
 export interface NetworkConfig {
   collateralAsset: ConfigAsset
   principalAsset: ConfigAsset
+  protocolFeeAsset: ConfigAsset
 }
 
 // Which asset plays the collateral vs principal role, per network. Covenants
@@ -31,6 +32,12 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
     },
     // USDT on liquid mainnet has 8 decimals.
     principalAsset: {
+      id: 'ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2',
+      decimals: 8,
+      symbol: 'USDT',
+      icon: UsdtIcon,
+    },
+    protocolFeeAsset: {
       id: 'ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2',
       decimals: 8,
       symbol: 'USDT',
@@ -51,6 +58,12 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
       symbol: 'TEST',
       icon: CoinsIcon,
     },
+    protocolFeeAsset: {
+      id: '38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5',
+      decimals: 3,
+      symbol: 'TEST',
+      icon: CoinsIcon,
+    },
   },
   regtest: {
     collateralAsset: {
@@ -60,6 +73,12 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
       icon: LbtcIcon,
     },
     principalAsset: {
+      id: '25b17682b0e4f7b0711de7e8ee2e33cd01d65680eed82cce1af84cfbdde30064',
+      decimals: 2,
+      symbol: 'USDT',
+      icon: UsdtIcon,
+    },
+    protocolFeeAsset: {
       id: '25b17682b0e4f7b0711de7e8ee2e33cd01d65680eed82cce1af84cfbdde30064',
       decimals: 2,
       symbol: 'USDT',
