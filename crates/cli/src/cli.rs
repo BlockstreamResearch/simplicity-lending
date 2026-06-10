@@ -6,7 +6,6 @@ use simplex::signer::Signer;
 use crate::commands::account::Account;
 use crate::commands::core::Command;
 use crate::commands::issuance::Issuance;
-use crate::commands::utility::Utility;
 use crate::config::CliConfig;
 use crate::error::CliError;
 
@@ -42,7 +41,6 @@ impl Cli {
 
                 Ok(Issuance::run(context, command)?)
             }
-            Command::Utility { command } => Ok(Utility::run(command)?),
         }
     }
 
