@@ -226,10 +226,12 @@ export function buildLendingOfferSpendInfo(
     principalAmount: Uint64
     principalInterestRate: Uint16
   },
+  state: 'pending' | 'active' = 'pending',
 ): StateTaprootSpendInfo {
   const totalAmountToRepay = getTotalAmountToRepay(offerParameters)
 
   const isActiveSlot = new Uint8Array(32)
+  isActiveSlot[31] = state === 'active' ? 1 : 0
 
   const debtSlot = new Uint8Array(32)
   new DataView(debtSlot.buffer).setBigUint64(24, totalAmountToRepay, false)
