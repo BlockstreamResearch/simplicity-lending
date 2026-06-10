@@ -1,6 +1,5 @@
 use clap::Subcommand;
 
-use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::simplicityhl::elements::{AssetId, OutPoint};
 use simplex::transaction::partial_input::IssuanceInput;
@@ -24,13 +23,25 @@ pub enum IssuanceCommand {
         #[arg(long = "inflation-amount")]
         inflation_amount: Option<u64>,
     },
+    /// Reissue asset using owned reissuance token UTXO
+    ReissueAsset {
+        /// Reissuance token outpoint in txid:vout format
+        #[arg(long = "reissuance-outpoint")]
+        reissuance_outpoint: OutPoint,
+        /// Asset entropy bytes as 32-byte hex (64 chars, optional 0x prefix).
+        #[arg(long = "asset-entropy")]
+        asset_entropy: String,
+        /// Amount of asset to reissue
+        #[arg(long = "asset-amount")]
+        asset_amount: u64,
+    },
     /// Calculate deterministic asset id from issuance outpoint and entropy
     #[command(name = "calculate_asset_id", visible_alias = "calculate-asset-id")]
     CalculateAssetId {
         /// Issuance outpoint in txid:vout format
         #[arg(long = "issuance-outpoint")]
         issuance_outpoint: OutPoint,
-        /// Issuance entropy as 32-byte hex (64 chars, optional 0x prefix)
+        /// Input entropy (issuance seed) as 32-byte hex (64 chars, optional 0x prefix)
         #[arg(long = "entropy")]
         entropy: String,
         /// Show reissuance token id in output
@@ -48,6 +59,13 @@ impl Issuance {
                 asset_amount,
                 inflation_amount,
             } => Issuance::issue_asset(context, *asset_amount, *inflation_amount),
+            IssuanceCommand::ReissueAsset {
+                reissuance_outpoint,
+                asset_entropy,
+                asset_amount,
+            } => {
+                Issuance::reissue_asset(context, *reissuance_outpoint, asset_entropy, *asset_amount)
+            }
             IssuanceCommand::CalculateAssetId {
                 issuance_outpoint,
                 entropy,
@@ -96,19 +114,21 @@ impl Issuance {
         }
 
         println!(
-            "Issuing new asset with id - {}, amount - {}, entropy - {}",
+            "Issuing new asset with id - {}, amount - {}",
             issuance_details.asset_id.to_hex(),
             asset_amount,
-            issuance_details.asset_entropy,
         );
         println!("Issuance outpoint: {}", first_utxo.outpoint);
+        println!(
+            "Asset entropy bytes (hex, 32 bytes): {}",
+            hex::encode(issuance_details.asset_entropy.to_byte_array())
+        );
         println!("Input entropy: {}", hex::encode(asset_entropy));
 
-        let (tx, _) = context.signer.finalize(&ft)?;
-        let txid = context.esplora_provider.broadcast_transaction(&tx)?;
+        let receipt = context.signer.broadcast(&ft)?;
 
         println!("New asset successfully issued!");
-        println!("Broadcast txid: {txid}");
+        println!("Broadcast txid: {receipt}");
 
         Ok(())
     }
@@ -130,6 +150,86 @@ impl Issuance {
             let reissuance_token_id = AssetId::reissuance_token_from_entropy(asset_entropy, false);
             println!("Reissuance token ID: {}", reissuance_token_id.to_hex());
         }
+
+        Ok(())
+    }
+
+    fn reissue_asset(
+        context: CliContext,
+        reissuance_outpoint: OutPoint,
+        asset_entropy: &str,
+        asset_amount: u64,
+    ) -> Result<(), IssuanceCommandError> {
+        let asset_entropy_bytes = Issuance::parse_entropy(asset_entropy)?;
+        let matching_utxos = context
+            .signer
+            .get_utxos_filter(&|utxo| utxo.outpoint == reissuance_outpoint, &|utxo| {
+                utxo.outpoint == reissuance_outpoint
+            })?;
+        let reissuance_utxo = matching_utxos
+            .first()
+            .ok_or(IssuanceCommandError::NotASignerUTXO(reissuance_outpoint))?;
+
+        if reissuance_utxo.secrets.is_none() {
+            return Err(IssuanceCommandError::ReissuanceInputMustBeConfidential(
+                reissuance_outpoint,
+            ));
+        }
+
+        let reissuance_utxo_asset_id = reissuance_utxo.asset();
+
+        let reissuance_token_amount = reissuance_utxo.amount();
+        let mut ft = FinalTransaction::new();
+        let issuance_details = ft.add_issuance_input(
+            PartialInput::new(reissuance_utxo.clone()),
+            IssuanceInput::new_reissuance(asset_amount, asset_entropy_bytes),
+            RequiredSignature::NativeEcdsa,
+        );
+        let expected_reissuance_token_id = issuance_details.inflation_asset_id;
+
+        if reissuance_utxo_asset_id != expected_reissuance_token_id {
+            return Err(IssuanceCommandError::InvalidReissuanceTokenAsset {
+                outpoint: reissuance_outpoint,
+                expected_asset_id: expected_reissuance_token_id.to_hex(),
+                actual_asset_id: reissuance_utxo_asset_id.to_hex(),
+            });
+        }
+
+        let signer_script_pubkey = context.signer.get_address().script_pubkey();
+
+        ft.add_output(PartialOutput::new(
+            signer_script_pubkey.clone(),
+            asset_amount,
+            issuance_details.asset_id,
+        ));
+        ft.add_output(
+            PartialOutput::new(
+                signer_script_pubkey,
+                reissuance_token_amount,
+                expected_reissuance_token_id,
+            )
+            .with_blinding_key(context.signer.get_blinding_public_key()),
+        );
+
+        println!(
+            "Reissuing asset with id - {}, amount - {}",
+            issuance_details.asset_id.to_hex(),
+            asset_amount,
+        );
+        println!("Reissuance outpoint: {reissuance_outpoint}");
+        println!(
+            "Reissuance token asset id: {}",
+            expected_reissuance_token_id.to_hex()
+        );
+        println!(
+            "Asset entropy bytes (hex, 32 bytes): {}",
+            hex::encode(asset_entropy_bytes)
+        );
+
+        let receipt = context.signer.broadcast(&ft)?;
+
+        println!("Asset successfully reissued!");
+        println!("Broadcast txid: {receipt}");
 
         Ok(())
     }
