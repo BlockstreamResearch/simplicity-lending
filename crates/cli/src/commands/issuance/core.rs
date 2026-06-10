@@ -64,10 +64,22 @@ impl Issuance {
             issuance_details.asset_id,
         ));
 
+        if let Some(amount) = inflation_amount.filter(|&a| a > 0) {
+            ft.add_output(
+                PartialOutput::new(
+                    signer_script_pubkey.clone(),
+                    amount,
+                    issuance_details.inflation_asset_id,
+                )
+                .with_blinding_key(context.signer.get_blinding_public_key()),
+            );
+        }
+
         println!(
-            "Issuing new asset with id - {} and amount - {}",
+            "Issuing new asset with id - {}, amount - {}, entropy - {}",
             issuance_details.asset_id.to_hex(),
             asset_amount,
+            issuance_details.asset_entropy,
         );
 
         let (tx, _) = context.signer.finalize(&ft)?;
