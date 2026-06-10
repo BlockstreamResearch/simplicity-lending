@@ -55,6 +55,26 @@ impl FactoryAuthsTracker {
         self.cache.insert(outpoint, factory_id);
     }
 
+    pub async fn seed_creation_auth_utxo(
+        &mut self,
+        sql_tx: &mut DbTx<'_>,
+        factory_id: Uuid,
+        txid: Txid,
+        vout: u32,
+        script_pubkey: &[u8],
+        block_height: u64,
+    ) -> anyhow::Result<()> {
+        let factory_auth =
+            Self::new_factory_auth_model(factory_id, txid, vout, script_pubkey, block_height);
+
+        self.insert_factory_auth(
+            sql_tx,
+            &factory_auth,
+            "Factory auth UTXO indexed on factory creation",
+        )
+        .await
+    }
+
     async fn on_spend(
         &mut self,
         sql_tx: &mut DbTx<'_>,
@@ -83,14 +103,19 @@ impl FactoryAuthsTracker {
 
         if candidates.len() == 1 {
             let (vout, output) = candidates[0];
+            let factory_auth = Self::new_factory_auth_model(
+                factory_id,
+                txid,
+                vout,
+                output.script_pubkey.as_bytes(),
+                block_height,
+            );
+
             return self
                 .insert_factory_auth(
                     sql_tx,
-                    factory_id,
-                    txid,
-                    vout,
-                    output.script_pubkey.as_bytes(),
-                    block_height,
+                    &factory_auth,
+                    "Factory auth NFT moved to new location",
                 )
                 .await;
         }
@@ -119,13 +144,18 @@ impl FactoryAuthsTracker {
             return Ok(());
         };
 
-        self.insert_factory_auth(
-            sql_tx,
+        let factory_auth = Self::new_factory_auth_model(
             factory_id,
             txid,
             *vout,
             output.script_pubkey.as_bytes(),
             block_height,
+        );
+
+        self.insert_factory_auth(
+            sql_tx,
+            &factory_auth,
+            "Factory auth NFT moved to new location",
         )
         .await
     }
@@ -160,15 +190,35 @@ impl FactoryAuthsTracker {
     async fn insert_factory_auth(
         &mut self,
         sql_tx: &mut DbTx<'_>,
+        factory_auth: &FactoryAuthModel,
+        log_message: &'static str,
+    ) -> anyhow::Result<()> {
+        let new_outpoint = OutPoint {
+            txid: Txid::from_slice(&factory_auth.txid)?,
+            vout: factory_auth.vout as u32,
+        };
+
+        insert_factory_auth_utxo(sql_tx, factory_auth).await?;
+        self.cache.insert(new_outpoint, factory_auth.factory_id);
+
+        tracing::info!(
+            factory_id = %factory_auth.factory_id,
+            txid = %new_outpoint.txid,
+            ?new_outpoint,
+            message = log_message
+        );
+
+        Ok(())
+    }
+
+    fn new_factory_auth_model(
         factory_id: Uuid,
         txid: Txid,
         vout: u32,
         script_pubkey: &[u8],
         block_height: u64,
-    ) -> anyhow::Result<()> {
-        let new_outpoint = OutPoint { txid, vout };
-
-        let new_factory_auth = FactoryAuthModel {
+    ) -> FactoryAuthModel {
+        FactoryAuthModel {
             factory_id,
             script_pubkey: script_pubkey.to_vec(),
             txid: txid.to_byte_array().to_vec(),
@@ -176,18 +226,6 @@ impl FactoryAuthsTracker {
             created_at_height: block_height as i64,
             spent_txid: None,
             spent_at_height: None,
-        };
-
-        insert_factory_auth_utxo(sql_tx, &new_factory_auth).await?;
-        self.cache.insert(new_outpoint, factory_id);
-
-        tracing::info!(
-            %factory_id,
-            %txid,
-            ?new_outpoint,
-            "Factory auth NFT moved to new location"
-        );
-
-        Ok(())
+        }
     }
 }

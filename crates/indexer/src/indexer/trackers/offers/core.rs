@@ -7,7 +7,7 @@ use crate::{
     db::DbTx,
     indexer::cache::WatchCache,
     indexer::trackers::offers::{
-        insert_offer_utxo, load_offers_utxo_cache, spend_offer_utxo, update_offer_status,
+        insert_offer_utxo, load_offer_utxos_cache, spend_offer_utxo, update_offer_status,
     },
     models::{OfferStatus, OfferUtxoModel, UtxoType},
 };
@@ -25,7 +25,7 @@ pub struct OffersTracker {
 impl OffersTracker {
     pub async fn load(db_pool: &PgPool) -> anyhow::Result<Self> {
         Ok(Self {
-            cache: load_offers_utxo_cache(db_pool).await?,
+            cache: load_offer_utxos_cache(db_pool).await?,
         })
     }
 

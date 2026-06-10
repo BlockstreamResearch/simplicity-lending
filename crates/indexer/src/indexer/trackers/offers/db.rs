@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[tracing::instrument(name = "Loading all active offer UTXOs from DB", skip(db))]
-pub async fn load_offers_utxo_cache(db: &PgPool) -> anyhow::Result<WatchCache<OffersWatchEntry>> {
+pub async fn load_offer_utxos_cache(db: &PgPool) -> anyhow::Result<WatchCache<OffersWatchEntry>> {
     let offer_rows = sqlx::query_as!(
         OfferUtxoModel,
         r#"

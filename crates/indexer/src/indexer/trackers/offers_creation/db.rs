@@ -14,15 +14,16 @@ pub async fn insert_offer(
     let row = sqlx::query!(
         r#"
         INSERT INTO offers (
-            id, collateral_asset_id, principal_asset_id,
+            id, issuance_factory_id, collateral_asset_id, principal_asset_id,
             borrower_nft_asset_id, lender_nft_asset_id, protocol_fee_keeper_asset_id,
             collateral_amount, principal_amount, interest_rate,
             loan_expiration_time, created_at_height, created_at_txid
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (created_at_txid) DO NOTHING
         RETURNING id
         "#,
         offer.id,
+        offer.issuance_factory_id,
         offer.collateral_asset_id,
         offer.principal_asset_id,
         offer.borrower_nft_asset_id,

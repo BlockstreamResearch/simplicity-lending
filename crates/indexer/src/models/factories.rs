@@ -11,6 +11,15 @@ pub struct FactoryIdentity {
     pub program_script_pubkey: Vec<u8>,
 }
 
+impl FactoryIdentity {
+    pub fn from_factory_model(model: &FactoryModel) -> Self {
+        Self {
+            factory_asset_id: model.factory_asset_id.clone(),
+            program_script_pubkey: model.program_script_pubkey.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "factory_status", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]

@@ -121,6 +121,7 @@ mod tests {
         let id = Uuid::new_v4();
         let model = OfferModel {
             id,
+            issuance_factory_id: Uuid::new_v4(),
             collateral_asset_id: vec![0x01, 0x02],
             principal_asset_id: vec![0x03, 0x04],
             borrower_nft_asset_id: vec![0x09, 0x0a],

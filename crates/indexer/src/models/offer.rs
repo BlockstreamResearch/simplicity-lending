@@ -34,6 +34,7 @@ pub enum OfferStatus {
 #[derive(Debug, sqlx::FromRow)]
 pub struct OfferModel {
     pub id: Uuid,
+    pub issuance_factory_id: Uuid,
     pub collateral_asset_id: Vec<u8>,
     pub principal_asset_id: Vec<u8>,
     pub borrower_nft_asset_id: Vec<u8>,
@@ -49,9 +50,15 @@ pub struct OfferModel {
 }
 
 impl OfferModel {
-    pub fn new(offer_parameters: &LendingOfferParameters, block_height: u64, txid: Txid) -> Self {
+    pub fn new(
+        offer_parameters: &LendingOfferParameters,
+        factory_id: Uuid,
+        block_height: u64,
+        txid: Txid,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
+            issuance_factory_id: factory_id,
             collateral_asset_id: offer_parameters.collateral_asset_id.into_inner().0.to_vec(),
             principal_asset_id: offer_parameters.principal_asset_id.into_inner().0.to_vec(),
             borrower_nft_asset_id: offer_parameters
@@ -98,6 +105,7 @@ mod tests {
         provider::SimplicityNetwork,
         simplicityhl::elements::{AssetId, Txid, hashes::Hash},
     };
+    use uuid::Uuid;
 
     fn make_offer_params() -> LendingOfferParameters {
         LendingOfferParameters {
@@ -120,10 +128,12 @@ mod tests {
     fn offer_model_new_maps_all_fields_from_offer_parameters() {
         let params = make_offer_params();
         let block_height = 777_u64;
+        let factory_id = Uuid::new_v4();
         let txid = Txid::from_slice(&[10_u8; 32]).expect("txid");
 
-        let model = OfferModel::new(&params, block_height, txid);
+        let model = OfferModel::new(&params, factory_id, block_height, txid);
 
+        assert_eq!(model.issuance_factory_id, factory_id);
         assert_eq!(
             model.collateral_asset_id,
             params.collateral_asset_id.into_inner().0.to_vec()
@@ -158,8 +168,8 @@ mod tests {
         let params = make_offer_params();
         let txid = Txid::from_slice(&[11_u8; 32]).expect("txid");
 
-        let model = OfferModel::new(&params, 1, txid);
+        let model = OfferModel::new(&params, Uuid::new_v4(), 1, txid);
 
-        assert_ne!(model.id, uuid::Uuid::nil());
+        assert_ne!(model.id, Uuid::nil());
     }
 }

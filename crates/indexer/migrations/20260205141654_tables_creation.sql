@@ -7,6 +7,54 @@ CREATE TABLE sync_state (
     CONSTRAINT single_row CHECK (id = 1)
 );
 
+CREATE TYPE factory_status AS ENUM (
+    'active',
+    'removed'
+);
+
+CREATE TABLE factories (
+    id uuid NOT NULL,
+    PRIMARY KEY (id),
+    factory_asset_id BYTEA NOT NULL,
+    program_script_pubkey BYTEA NOT NULL,
+    issuing_utxos_count SMALLINT NOT NULL,
+    reissuance_flags BIGINT NOT NULL,
+    current_status factory_status NOT NULL DEFAULT 'active',
+    created_at_height BIGINT NOT NULL,
+    created_at_txid BYTEA NOT NULL UNIQUE
+);
+
+CREATE TABLE factory_utxos (
+    factory_id uuid NOT NULL REFERENCES factories(id) ON DELETE CASCADE,
+
+    txid BYTEA NOT NULL,
+    vout INTEGER NOT NULL,
+    created_at_height BIGINT NOT NULL,
+
+    spent_txid BYTEA,
+    spent_at_height BIGINT,
+
+    PRIMARY KEY (txid, vout)
+);
+
+CREATE UNIQUE INDEX idx_factory_utxos_one_active_per_factory
+ON factory_utxos (factory_id)
+WHERE spent_txid IS NULL;
+
+CREATE TABLE factory_auths (
+    factory_id uuid NOT NULL REFERENCES factories(id) ON DELETE CASCADE,
+    script_pubkey BYTEA NOT NULL,
+
+    txid BYTEA NOT NULL,
+    vout INTEGER NOT NULL,
+    created_at_height BIGINT NOT NULL,
+
+    spent_txid BYTEA,
+    spent_at_height BIGINT,
+
+    PRIMARY KEY (txid, vout)
+);
+
 CREATE TYPE offer_status AS ENUM (
     'pending',
     'active',
@@ -19,6 +67,7 @@ CREATE TYPE offer_status AS ENUM (
 CREATE TABLE offers (
     id uuid NOT NULL,
     PRIMARY KEY (id),
+    issuance_factory_id uuid NOT NULL REFERENCES factories(id) ON DELETE CASCADE,
     collateral_asset_id BYTEA NOT NULL,
     principal_asset_id BYTEA NOT NULL,
     borrower_nft_asset_id BYTEA NOT NULL,
@@ -83,34 +132,3 @@ CREATE TABLE offer_participants (
 CREATE INDEX idx_participants_current_owner 
 ON offer_participants(script_pubkey) 
 WHERE spent_txid IS NULL;
-
-CREATE TYPE factory_status AS ENUM (
-    'active',
-    'removed'
-);
-
-CREATE TABLE factories (
-    id uuid NOT NULL,
-    PRIMARY KEY (id),
-    factory_asset_id BYTEA NOT NULL,
-    program_script_pubkey BYTEA NOT NULL,
-    issuing_utxos_count SMALLINT NOT NULL,
-    reissuance_flags BIGINT NOT NULL,
-    current_status factory_status NOT NULL DEFAULT 'active',
-    created_at_height BIGINT NOT NULL,
-    created_at_txid BYTEA NOT NULL UNIQUE
-);
-
-CREATE TABLE factory_auths (
-    factory_id uuid NOT NULL REFERENCES factories(id) ON DELETE CASCADE,
-    script_pubkey BYTEA NOT NULL,
-
-    txid BYTEA NOT NULL,
-    vout INTEGER NOT NULL,
-    created_at_height BIGINT NOT NULL,
-
-    spent_txid BYTEA,
-    spent_at_height BIGINT,
-
-    PRIMARY KEY (txid, vout)
-);

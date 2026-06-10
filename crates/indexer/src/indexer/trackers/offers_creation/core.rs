@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use simplex::{
     provider::SimplicityNetwork,
     simplicityhl::elements::{AssetId, OutPoint, Transaction, hashes::Hash},
@@ -38,6 +40,7 @@ impl OfferCreationsTracker {
         sql_tx: &mut DbTx<'_>,
         tx: &Transaction,
         block_height: u64,
+        factory_id: Uuid,
         offers: &mut OffersTracker,
         participants: &mut OfferParticipantsTracker,
     ) -> anyhow::Result<()> {
@@ -45,6 +48,7 @@ impl OfferCreationsTracker {
             Self::handle_offer_creation(
                 sql_tx,
                 offer_parameters,
+                factory_id,
                 tx,
                 block_height,
                 offers,
@@ -59,6 +63,7 @@ impl OfferCreationsTracker {
     async fn handle_offer_creation(
         sql_tx: &mut DbTx<'_>,
         offer_parameters: LendingOfferParameters,
+        factory_id: Uuid,
         tx: &Transaction,
         block_height: u64,
         offers: &mut OffersTracker,
@@ -66,7 +71,7 @@ impl OfferCreationsTracker {
     ) -> anyhow::Result<()> {
         let txid = tx.txid();
 
-        let offer_model = OfferModel::new(&offer_parameters, block_height, txid);
+        let offer_model = OfferModel::new(&offer_parameters, factory_id, block_height, txid);
 
         if insert_offer(sql_tx, &offer_model).await?.is_none() {
             tracing::debug!(%txid, "Offer already indexed, skipping");

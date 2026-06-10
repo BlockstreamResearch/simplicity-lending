@@ -31,7 +31,7 @@ pub async fn insert_factory(
     .fetch_optional(&mut **sql_tx)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to insert offer to the DB: {e:?}");
+        tracing::error!("Failed to insert factory to the DB: {e:?}");
         e
     })?;
 
