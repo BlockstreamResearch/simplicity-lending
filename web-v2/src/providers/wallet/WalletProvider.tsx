@@ -300,6 +300,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     <WalletContext.Provider
       value={{
         ...state,
+        isReady: state.connectionStatus === 'ready',
         connect,
         disconnect,
         syncWallet: sync,

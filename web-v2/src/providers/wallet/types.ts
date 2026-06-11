@@ -11,6 +11,7 @@ import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
 
 export interface WalletContextValue extends WalletState {
+  isReady: boolean
   connect(variant: WalletType): Promise<void>
   disconnect(): Promise<void>
   syncWallet(): Promise<void>
