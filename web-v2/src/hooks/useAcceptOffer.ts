@@ -176,7 +176,7 @@ export function useAcceptOffer() {
       const activeLendingSpendInfo = buildLendingOfferSpendInfo(
         lendingProgram,
         offerParameters,
-        'active',
+        true,
       )
 
       assertScriptMatches(
