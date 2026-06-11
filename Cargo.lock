@@ -3035,9 +3035,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-build"
-version = "0.0.6"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb75724fd0329de24895b58a4010efeeca9773092294845a324aee141ec3c864"
+checksum = "3170d79eafea8c119d0b491014aaf2054679ba8c285c453c2acb879b52896b5e"
 dependencies = [
  "glob",
  "globwalk",
@@ -3054,9 +3054,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-macros"
-version = "0.0.6"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4777f6ff9a27faf98396181d67f04f720e0c472c2a3f1db76c5475b45da8963f"
+checksum = "05e591d0bb8c971f38ea525b5e1bc18a39b369bc1fdecc07632120142afb7e34"
 dependencies = [
  "smplx-build",
  "smplx-test",
@@ -3065,9 +3065,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-regtest"
-version = "0.0.6"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf3711284f8ad7859ae0605841e90316bdf41be5b09011639e765667f07feb5d"
+checksum = "9b42c1ad54f123195eb90543e88a2e3b1519a11479862ac29a5cd7a0e24f13d7"
 dependencies = [
  "electrsd",
  "hex",
@@ -3081,9 +3081,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-sdk"
-version = "0.0.6"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c96c7de4f86f4a74dc4c910d6d0541d63cd661e3f616566054a36e589ffcda2c"
+checksum = "fe05e7d0f9cef029968453f087f323df01f92e13fc240796a732cffac734074a"
 dependencies = [
  "bip39",
  "bitcoin_hashes",
@@ -3101,9 +3101,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-std"
-version = "0.0.6"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38cef91f2523cfb6e8937bb1c8004869d539e0dcd8c62fef68c93cc3a6233117"
+checksum = "8465bd3dae0d1bf37c88f2ba4144e5b5157d390a3c5e56016ff04b64ee9fc199"
 dependencies = [
  "either",
  "serde",
@@ -3115,9 +3115,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-test"
-version = "0.0.6"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9c8878fae6868b9fbf7ed7cb3e261dc308b55ea418bb4421685dad99f98fc1f"
+checksum = "f1025e34b6101ab8e92b6baa4807227894ca324e0405d22a703c2ddd6c5af979"
 dependencies = [
  "electrsd",
  "proc-macro2",
