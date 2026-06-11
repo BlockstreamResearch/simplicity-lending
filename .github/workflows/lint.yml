@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SQLX_OFFLINE: true
-      SIMPLEX_VERSION: v0.0.6
+      SIMPLEX_COMMIT: 1945d11b47fff8838c3e99c210133519a9522324
 
     steps:
       - name: Checkout
@@ -45,7 +45,7 @@ jobs:
           BASE_DIR="${XDG_CONFIG_HOME:-$HOME}"
           SIMPLEX_DIR="${SIMPLEX_DIR:-$BASE_DIR/.simplex}"
           SIMPLEX_BIN_DIR="$SIMPLEX_DIR/bin"
-          "$SIMPLEX_BIN_DIR/simplexup" --install "$SIMPLEX_VERSION"
+          "$SIMPLEX_BIN_DIR/simplexup" --commit "$SIMPLEX_COMMIT"
           echo "$SIMPLEX_BIN_DIR" >> "$GITHUB_PATH"
           "$SIMPLEX_BIN_DIR/simplex" --version
 
