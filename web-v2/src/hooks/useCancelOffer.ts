@@ -170,10 +170,7 @@ export function useCancelOffer() {
 
       stage = 'build cancellation PSET'
       const burnScript = Script.newOpReturn(BURN_PAYLOAD)
-      const collateralRecipient = Address.parse(
-        params.collateralRecipientAddress,
-        lwkNetwork,
-      ).toUnconfidential()
+      const collateralRecipient = Address.parse(params.collateralRecipientAddress, lwkNetwork)
       const pendingOfferVout = pendingOfferOutpoint.vout()
       const lenderNftVout = lenderNftOutpoint.vout()
       const borrowerNftVout = borrowerNftOutpoint.vout()
@@ -213,11 +210,7 @@ export function useCancelOffer() {
         ])
         .addExplicitScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
         .addExplicitScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
-        .addExplicitScriptOutput(
-          collateralRecipient.scriptPubkey(),
-          collateralAmount,
-          collateralAsset,
-        )
+        .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
         .finish(wollet)
 
       stage = 'sign wallet inputs'

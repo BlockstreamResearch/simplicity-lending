@@ -93,10 +93,7 @@ export function useAcceptOffer() {
       stage = 'load wallet context'
       const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
       if (!receiveAddressString) throw new Error('Missing receive address')
-      const walletReceiveAddress = Address.parse(
-        receiveAddressString,
-        lwkNetwork,
-      ).toUnconfidential()
+      const walletReceiveAddress = Address.parse(receiveAddressString, lwkNetwork)
       const lenderNftRecipient = Address.parse(
         params.lenderNftRecipientAddress?.trim() || receiveAddressString,
         lwkNetwork,
@@ -258,8 +255,8 @@ export function useAcceptOffer() {
         .addExplicitScriptOutput(lenderNftRecipient.scriptPubkey(), NFT_AMOUNT, lenderNftAsset)
 
       if (principalChangeAmount > 0n) {
-        txBuilder = txBuilder.addExplicitScriptOutput(
-          walletReceiveAddress.scriptPubkey(),
+        txBuilder = txBuilder.addPostIssuanceRecipient(
+          walletReceiveAddress,
           principalChangeAmount,
           principalAsset,
         )
