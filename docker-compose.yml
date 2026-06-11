@@ -77,7 +77,6 @@ services:
       - '${WEB_PORT}:80'
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./web-v2/dist:/usr/share/nginx/html:ro
     depends_on:
       api:
         condition: service_started
