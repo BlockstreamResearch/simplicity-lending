@@ -70,18 +70,13 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  web:
-    build:
-      context: .
-      dockerfile: web/Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL}
-        VITE_ESPLORA_BASE_URL: ${VITE_ESPLORA_BASE_URL}
-        VITE_ESPLORA_EXPLORER_URL: ${VITE_ESPLORA_EXPLORER_URL}
-        VITE_FAUCET_URL: ${VITE_FAUCET_URL}
+  nginx:
+    image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
       - '${WEB_PORT}:80'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       api:
         condition: service_started
