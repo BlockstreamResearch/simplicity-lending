@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            factory_id,\n            txid,\n            vout,\n            created_at_height,\n            spent_txid,\n            spent_at_height\n        FROM factory_utxos \n        WHERE spent_txid IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "factory_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "vout",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "spent_txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "spent_at_height",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "bb7813cf0caa40bf3ca4fa099ddaa559269d3af99ca02d6686edcf36754d0c53"
+}

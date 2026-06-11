@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO factory_utxos (\n            factory_id, txid, vout, created_at_height, spent_txid, spent_at_height\n        ) VALUES ($1, $2, $3, $4, $5, $6)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Int4",
+        "Int8",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c870574d7a89a1f3b88990266b00617446323ef7b3a63d36e0747f376620d697"
+}
