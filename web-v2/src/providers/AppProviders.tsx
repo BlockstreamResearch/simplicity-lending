@@ -5,6 +5,7 @@ import type { PropsWithChildren } from 'react'
 import { env } from '@/constants/env'
 
 import { LwkProvider } from './lwk/LwkProvider'
+import { NotificationsProvider } from './notifications/NotificationsProvider'
 import { queryClient } from './queryClient'
 import { WalletProvider } from './wallet/WalletProvider'
 
@@ -12,7 +13,9 @@ export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
       <LwkProvider>
-        <WalletProvider>{children}</WalletProvider>
+        <WalletProvider>
+          <NotificationsProvider>{children}</NotificationsProvider>
+        </WalletProvider>
       </LwkProvider>
       {env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>

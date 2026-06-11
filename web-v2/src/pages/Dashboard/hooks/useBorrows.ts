@@ -16,11 +16,14 @@ export interface BorrowStats {
   activeLoans: number
   pendingOffers: number
   toRepay: number
+  averageApr: number
 }
 
 export interface DashboardBorrows {
   balance: bigint
   stats: BorrowStats
+  offers: OfferShort[]
+  currentBlockHeight: number
   nearExpiryOffers: OfferShort[]
   isLoading: boolean
   error: Error | null
@@ -30,8 +33,7 @@ export interface DashboardBorrows {
 }
 
 export function useBorrows(): DashboardBorrows {
-  const { connectionStatus, balances, xOnlyPubkey } = useWallet()
-  const isReady = connectionStatus === 'ready'
+  const { isReady, balances, xOnlyPubkey } = useWallet()
 
   const poll = { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS }
   const idsQuery = useOfferIdsByBorrowerPubkey(xOnlyPubkey ?? '', poll)
@@ -66,7 +68,12 @@ export function useBorrows(): DashboardBorrows {
         activeLoans: active.length,
         pendingOffers: pending.length,
         toRepay: nearExpiryOffers.length,
+        averageApr: active.length
+          ? active.reduce((acc, o) => acc + o.interest_rate, 0) / active.length
+          : 0,
       },
+      offers,
+      currentBlockHeight,
       nearExpiryOffers,
       isLoading: isReady && (idsQuery.isLoading || offersQuery.isLoading),
       error: idsQuery.error ?? offersQuery.error,

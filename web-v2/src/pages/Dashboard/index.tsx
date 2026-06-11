@@ -6,8 +6,7 @@ import { RecentOffers } from './components/RecentOffers'
 import { SupplyCard } from './components/SupplyCard'
 
 export default function DashboardPage() {
-  const { connectionStatus } = useWallet()
-  const isReady = connectionStatus === 'ready'
+  const { isReady } = useWallet()
 
   return (
     <div className='flex flex-col gap-6'>

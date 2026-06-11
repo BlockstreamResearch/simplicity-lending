@@ -30,3 +30,16 @@ export function truncateAddress(address: string): string {
   if (address.length <= 10) return address
   return `${address.slice(0, 6)}...${address.slice(-4)}`
 }
+
+export function parseBaseUnits(value?: string, decimals = 2): bigint {
+  const parsed = Number(value)
+  if (!value || !Number.isFinite(parsed) || parsed === 0) return 0n
+  if (parsed < 0) throw new Error('parseBaseUnits: negative amount')
+  try {
+    const [whole, frac = ''] = value.trim().split('.')
+    const fracPadded = (frac + '0'.repeat(decimals)).slice(0, decimals)
+    return BigInt(whole || '0') * 10n ** BigInt(decimals) + BigInt(fracPadded || '0')
+  } catch {
+    return 0n
+  }
+}

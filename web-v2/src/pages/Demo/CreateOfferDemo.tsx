@@ -7,7 +7,11 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type CreateOfferResult, useCreateOffer } from '@/hooks/useCreateOffer'
+import {
+  type CreateOfferParams,
+  type CreateOfferResult,
+  useCreateOffer,
+} from '@/hooks/useCreateOffer'
 import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -193,7 +197,7 @@ export default function CreateOfferDemo() {
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-      const { txid, summary } = await createOffer(result.data)
+      const { txid, summary } = await createOffer(result.data as CreateOfferParams)
       setState({ busy: false, error: null, txid, summary })
     } catch (err) {
       setState(current => ({

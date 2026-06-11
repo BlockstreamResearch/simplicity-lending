@@ -60,6 +60,8 @@ export interface CreateOfferParams {
 
 export interface CreateOfferResult {
   txid: string
+  factoryAuthOutpoint: string
+  issuanceFactoryOutpoint: string
   summary: {
     inputs: Record<string, string>
     outputs: Record<string, string>
@@ -326,6 +328,8 @@ export function useCreateOffer() {
 
       return {
         txid,
+        factoryAuthOutpoint: `${txid}:0`,
+        issuanceFactoryOutpoint: `${txid}:1`,
         // TODO: Remove debug summary before release
         summary: {
           inputs: {

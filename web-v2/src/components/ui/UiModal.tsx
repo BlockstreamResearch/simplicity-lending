@@ -39,8 +39,8 @@ export function UiModal({
                 {showCloseButton ? <Modal.CloseTrigger /> : null}
               </Modal.Header>
             ) : null}
-            <Modal.Body>{children}</Modal.Body>
-            {footer ? <Modal.Footer>{footer}</Modal.Footer> : null}
+            <Modal.Body className='mt-8 px-1 pb-1'>{children}</Modal.Body>
+            {footer ? <Modal.Footer className='mt-8'>{footer}</Modal.Footer> : null}
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>

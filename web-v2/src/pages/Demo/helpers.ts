@@ -1,8 +1,8 @@
-// Helpers for ScriptAuth demo flows, including input selection and local storage management for demo state.
 import type { AssetId, WalletTxOut } from 'lwk_web'
 import { useEffect, useState } from 'react'
 
 import { fetchTxConfirmations } from '@/api/esplora/methods'
+import type { ConfirmedTx } from '@/hooks/useTxConfirmations'
 import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 
 export interface DemoScriptAuthInputSelection {
@@ -59,10 +59,7 @@ export function latestScriptAuthState() {
 }
 
 export function useTxConfirmations(txid: string | null): number | null {
-  const [confirmedTx, setConfirmedTx] = useState<{
-    confirmations: number
-    txid: string
-  } | null>(null)
+  const [confirmedTx, setConfirmedTx] = useState<ConfirmedTx | null>(null)
 
   useEffect(() => {
     if (!txid) {
@@ -81,7 +78,7 @@ export function useTxConfirmations(txid: string | null): number | null {
         }
 
         if (nextConfirmations !== null && nextConfirmations >= 1) {
-          setConfirmedTx({ confirmations: nextConfirmations, txid })
+          setConfirmedTx({ txid, phase: 'confirmed', confirmations: nextConfirmations })
           if (intervalId) {
             clearInterval(intervalId)
           }

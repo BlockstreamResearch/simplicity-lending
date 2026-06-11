@@ -25,8 +25,7 @@ export interface DashboardSupply {
 }
 
 export function useSupply(): DashboardSupply {
-  const { connectionStatus, balances, scriptPubkey } = useWallet()
-  const isReady = connectionStatus === 'ready'
+  const { isReady, balances, scriptPubkey } = useWallet()
 
   const poll = { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS }
   const idsQuery = useOfferIdsByScript(scriptPubkey ?? '', poll)
