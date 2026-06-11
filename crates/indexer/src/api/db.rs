@@ -29,7 +29,7 @@ pub async fn fetch_offers_full_info_filtered(
 ) -> Result<Vec<OfferListItemFull>, sqlx::Error> {
     let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"
-            SELECT id, current_status, collateral_asset_id, principal_asset_id, 
+            SELECT id, issuance_factory_id, current_status, collateral_asset_id, principal_asset_id, 
             borrower_nft_asset_id, protocol_fee_keeper_asset_id, 
             lender_nft_asset_id, collateral_amount, principal_amount, interest_rate, 
             loan_expiration_time, created_at_height, created_at_txid FROM offers WHERE 1=1 
@@ -138,6 +138,7 @@ pub async fn fetch_offer_full_info_by_id(
         r#"
         SELECT 
             id,
+            issuance_factory_id,
             current_status AS "current_status: OfferStatus",
             collateral_asset_id,
             principal_asset_id,
@@ -180,7 +181,7 @@ pub async fn fetch_offer_details_by_ids(
         OfferModel,
         r#"
         SELECT 
-            id, current_status AS "current_status: OfferStatus",
+            id, issuance_factory_id, current_status AS "current_status: OfferStatus",
             collateral_asset_id, principal_asset_id,
             borrower_nft_asset_id, lender_nft_asset_id, protocol_fee_keeper_asset_id,
             collateral_amount, principal_amount, interest_rate,

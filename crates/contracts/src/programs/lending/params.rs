@@ -27,7 +27,7 @@ impl LendingOfferParameters {
     pub fn get_principal_output_asset_auth(&self) -> AssetAuth {
         AssetAuth::new(AssetAuthParameters {
             asset_id: self.borrower_nft_asset_id,
-            asset_amount: self.offer_parameters.get_total_amount_to_repay(),
+            asset_amount: 1,
             with_asset_burn: false,
             network: self.network,
         })

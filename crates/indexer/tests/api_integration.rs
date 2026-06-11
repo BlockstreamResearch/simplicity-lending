@@ -14,8 +14,8 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::common::{
-    offer_model, outpoint_from_uuid_vout, seed_offer_row, seed_offer_utxo_row,
-    seed_participant_utxo_row, spent_offer_utxo, spent_participant, test_pool,
+    factory_model, offer_model, outpoint_from_uuid_vout, seed_factory_row, seed_offer_row,
+    seed_offer_utxo_row, seed_participant_utxo_row, spent_offer_utxo, spent_participant, test_pool,
     unique_32_bytes_from_uuid, unspent_offer_utxo, unspent_participant,
 };
 
@@ -103,12 +103,14 @@ fn assert_uuid_values_match_unordered(value: &Value, expected: &[Uuid]) {
 ///   unspent borrower participant (vout 3, `52ac`).
 async fn seed_offer_graph(
     pool: &PgPool,
+    factory_id: Uuid,
     offer_id: Uuid,
     status: OfferStatus,
     created_at_height: i64,
 ) -> anyhow::Result<()> {
     let mut offer = offer_model(
         offer_id,
+        factory_id,
         created_at_height,
         unique_32_bytes_from_uuid(offer_id),
     );
@@ -164,16 +166,27 @@ async fn seed_offer_graph(
     Ok(())
 }
 
+const FACTORY_CREATION_HEIGHT: i64 = 41;
 const PENDING_OFFER_HEIGHT: i64 = 42;
 const ACTIVE_OFFER_HEIGHT: i64 = 43;
 
 async fn setup_seeded_api() -> anyhow::Result<(String, tokio::task::JoinHandle<()>, Uuid, Uuid)> {
     let pool = test_pool().await?;
 
+    let factory_id = Uuid::new_v4();
     let pending_offer = Uuid::new_v4();
     let active_offer = Uuid::new_v4();
+
+    let factory = factory_model(
+        factory_id,
+        FACTORY_CREATION_HEIGHT,
+        unique_32_bytes_from_uuid(factory_id),
+    );
+    seed_factory_row(&pool, &factory).await?;
+
     seed_offer_graph(
         &pool,
+        factory_id,
         pending_offer,
         OfferStatus::Pending,
         PENDING_OFFER_HEIGHT,
@@ -181,6 +194,7 @@ async fn setup_seeded_api() -> anyhow::Result<(String, tokio::task::JoinHandle<(
     .await?;
     seed_offer_graph(
         &pool,
+        factory_id,
         active_offer,
         OfferStatus::Active,
         ACTIVE_OFFER_HEIGHT,
@@ -398,13 +412,18 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     let offer_c = Uuid::new_v4();
     let offer_d = Uuid::new_v4();
 
+    let factory_id = Uuid::new_v4();
+
+    let factory = factory_model(factory_id, 30, unique_32_bytes_from_uuid(factory_id));
+    seed_factory_row(&pool, &factory).await?;
+
     for (id, status, height, collat, princ) in [
         (offer_a, OfferStatus::Pending, 40, 0xaa_u8, 0x10_u8),
         (offer_b, OfferStatus::Active, 60, 0xbb, 0xaa),
         (offer_c, OfferStatus::Pending, 80, 0xcc, 0xdd),
         (offer_d, OfferStatus::Pending, 70, 0xaa, 0xee),
     ] {
-        let mut offer = offer_model(id, height, unique_32_bytes_from_uuid(id));
+        let mut offer = offer_model(id, factory_id, height, unique_32_bytes_from_uuid(id));
         offer.current_status = status;
         offer.collateral_asset_id = vec![collat; 32];
         offer.principal_asset_id = vec![princ; 32];

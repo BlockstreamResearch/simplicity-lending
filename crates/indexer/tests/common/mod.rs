@@ -2,10 +2,12 @@
 
 use anyhow::Context;
 use lending_indexer::indexer::{
-    insert_offer, insert_offer_utxo, insert_participant_utxo, update_offer_status,
+    insert_factory, insert_offer, insert_offer_utxo, insert_participant_utxo,
+    update_factory_status, update_offer_status,
 };
 use lending_indexer::models::{
-    OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType, UtxoType,
+    FactoryModel, FactoryStatus, OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel,
+    ParticipantType, UtxoType,
 };
 use simplex::simplicityhl::elements::{
     AssetId, LockTime, OutPoint, Script, Transaction, TxIn, TxOut, Txid, confidential, hashes::Hash,
@@ -50,9 +52,28 @@ pub fn unique_32_bytes_from_uuid(id: Uuid) -> Vec<u8> {
     buf.to_vec()
 }
 
-pub fn offer_model(id: Uuid, created_at_height: i64, created_at_txid: Vec<u8>) -> OfferModel {
+pub fn factory_model(id: Uuid, created_at_height: i64, created_at_txid: Vec<u8>) -> FactoryModel {
+    FactoryModel {
+        id,
+        factory_asset_id: vec![10; 32],
+        program_script_pubkey: vec![11; 32],
+        issuing_utxos_count: 2,
+        reissuance_flags: 0,
+        current_status: FactoryStatus::Active,
+        created_at_height,
+        created_at_txid,
+    }
+}
+
+pub fn offer_model(
+    id: Uuid,
+    issuance_factory_id: Uuid,
+    created_at_height: i64,
+    created_at_txid: Vec<u8>,
+) -> OfferModel {
     OfferModel {
         id,
+        issuance_factory_id,
         collateral_asset_id: vec![1; 32],
         principal_asset_id: vec![2; 32],
         borrower_nft_asset_id: vec![7; 32],
@@ -66,6 +87,16 @@ pub fn offer_model(id: Uuid, created_at_height: i64, created_at_txid: Vec<u8>) -
         created_at_height,
         created_at_txid,
     }
+}
+
+pub async fn seed_factory_row(pool: &PgPool, factory: &FactoryModel) -> anyhow::Result<()> {
+    let mut sql_tx = pool.begin().await?;
+    insert_factory(&mut sql_tx, factory).await?;
+    if !matches!(factory.current_status, FactoryStatus::Removed) {
+        update_factory_status(&mut sql_tx, factory.id, factory.current_status).await?;
+    }
+    sql_tx.commit().await?;
+    Ok(())
 }
 
 pub async fn seed_offer_row(pool: &PgPool, offer: &OfferModel) -> anyhow::Result<()> {

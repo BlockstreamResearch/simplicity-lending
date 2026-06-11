@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT factory_asset_id, program_script_pubkey\n        FROM factories\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "factory_asset_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "program_script_pubkey",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2726ea43cdbb2f7788050357097e03ea196f7e6b884290e02e0831f914d8c858"
+}

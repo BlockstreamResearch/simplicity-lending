@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO factories (\n            id, factory_asset_id, program_script_pubkey, issuing_utxos_count,\n            reissuance_flags, created_at_height, created_at_txid\n        ) VALUES ($1, $2, $3, $4, $5, $6, $7)\n        ON CONFLICT (created_at_txid) DO NOTHING\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Int2",
+        "Int8",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "224a388efd8921f5a6ddf9091f9025e0ba041352bdfc1a2ce7514f0f26410f39"
+}

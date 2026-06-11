@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE factories SET current_status = $1 WHERE id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "factory_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "removed"
+              ]
+            }
+          }
+        },
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d3f927bfcdc42991d91eaf824f72e6514659ebbe551639eb6da71700c56723ac"
+}

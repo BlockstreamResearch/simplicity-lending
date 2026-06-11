@@ -1,6 +1,7 @@
+use lending_indexer::api;
 use lending_indexer::esplora_client::EsploraClient;
+use lending_indexer::indexer::Worker;
 use lending_indexer::telemetry::{get_subscriber, init_subscriber};
-use lending_indexer::{api, indexer};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 
@@ -22,7 +23,12 @@ async fn main() -> Result<(), std::io::Error> {
             let esplora_client = EsploraClient::with_base_url(&configuration.esplora.base_url);
 
             tracing::info!("Starting indexer service");
-            indexer::worker::run_indexer(configuration.indexer, pool, esplora_client).await;
+
+            let mut worker = Worker::new(configuration.indexer, pool, esplora_client)
+                .await
+                .expect("Failed to start indexer service");
+
+            worker.run().await;
         }
         _ => {
             let address = format!(
