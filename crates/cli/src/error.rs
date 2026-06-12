@@ -1,11 +1,16 @@
 use simplex::signer::SignerError;
 
-use crate::commands::{account::AccountCommandError, issuance::IssuanceCommandError};
+use crate::commands::{
+    account::AccountCommandError, factory::FactoryCommandError, issuance::IssuanceCommandError,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CliError {
     #[error(transparent)]
     UserAccountCommand(#[from] AccountCommandError),
+
+    #[error(transparent)]
+    FactoryCommand(#[from] FactoryCommandError),
 
     #[error(transparent)]
     IssuanceCommand(#[from] IssuanceCommandError),

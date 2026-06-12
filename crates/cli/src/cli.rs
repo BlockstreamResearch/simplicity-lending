@@ -5,6 +5,7 @@ use simplex::signer::Signer;
 
 use crate::commands::account::Account;
 use crate::commands::core::Command;
+use crate::commands::factory::Factory;
 use crate::commands::issuance::Issuance;
 use crate::config::CliConfig;
 use crate::error::CliError;
@@ -35,6 +36,11 @@ impl Cli {
                 let context = Cli::build_context()?;
 
                 Ok(Account::run(context, command)?)
+            }
+            Command::Factory { command } => {
+                let context = Cli::build_context()?;
+
+                Ok(Factory::run(context, command)?)
             }
             Command::Issuance { command } => {
                 let context = Cli::build_context()?;
