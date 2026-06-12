@@ -176,6 +176,12 @@ The following parameters are available for `/offers` and `/offers/full` endpoint
 - `limit`: Maximum number of records to return (default: 50).
 - `offset`: Pagination offset (default: 0).
 
+### Factories Endpoints
+
+| Method | Endpoint | Description | Params / Body |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/factories/by-script` | Get active factories owned by a wallet `script_pubkey`, including current auth and program UTXOs | `script_pubkey` (query param, hex) |
+
 ### Offers Endpoints
 
 | Method | Endpoint | Description | Params / Body |

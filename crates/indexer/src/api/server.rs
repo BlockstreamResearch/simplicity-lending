@@ -10,9 +10,9 @@ use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
 use crate::api::handlers::{
-    get_latest_offer_participants, get_offer_details, get_offer_details_batch,
-    get_offer_ids_by_script, get_offer_participants_history, get_offer_utxos_history,
-    get_offers_full_info, get_offers_short_info,
+    get_factories_by_script, get_latest_offer_participants, get_offer_details,
+    get_offer_details_batch, get_offer_ids_by_script, get_offer_participants_history,
+    get_offer_utxos_history, get_offers_full_info, get_offers_short_info,
 };
 
 pub struct AppState {
@@ -23,6 +23,7 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
     let state = Arc::new(AppState { db: db_pool });
 
     let app = Router::new()
+        .route("/factories/by-script", get(get_factories_by_script))
         .route("/offers", get(get_offers_short_info))
         .route("/offers/full", get(get_offers_full_info))
         .route("/offers/batch", post(get_offer_details_batch))

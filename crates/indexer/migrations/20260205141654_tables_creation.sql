@@ -55,6 +55,10 @@ CREATE TABLE factory_auths (
     PRIMARY KEY (txid, vout)
 );
 
+CREATE INDEX idx_factory_auths_script_pubkey_active
+ON factory_auths (script_pubkey)
+WHERE spent_txid IS NULL;
+
 CREATE TYPE offer_status AS ENUM (
     'pending',
     'active',
