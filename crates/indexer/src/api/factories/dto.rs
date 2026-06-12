@@ -122,7 +122,7 @@ mod tests {
             FactoryAuthUtxoDto {
                 txid: "2211".to_string(),
                 vout: 0,
-                script_pubkey: "4433".to_string(),
+                script_pubkey: "3344".to_string(),
                 created_at_height: 100,
             }
         );

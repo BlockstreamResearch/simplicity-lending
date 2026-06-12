@@ -3,6 +3,11 @@ use serde::Deserialize;
 use crate::models::OfferStatus;
 
 #[derive(Deserialize)]
+pub struct ScriptQuery {
+    pub script_pubkey: String,
+}
+
+#[derive(Deserialize)]
 pub struct Pagination {
     pub limit: Option<u64>,
     pub offset: Option<u64>,
