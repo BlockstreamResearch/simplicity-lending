@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use simplex::simplicityhl::elements::hex::ToHex;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
@@ -53,49 +51,6 @@ pub(crate) fn push_offer_list_order_by(
         SortDir::Asc => " ASC",
         SortDir::Desc => " DESC",
     });
-}
-
-#[tracing::instrument(
-    name = "Fetching full offers info list with filters from DB",
-    skip(db, query),
-    fields(
-        limit = %query.effective_limit(),
-        offset = %query.effective_offset(),
-        status = ?query.status,
-        asset = ?query.asset
-    )
-)]
-pub async fn fetch_full_info_filtered(
-    db: &PgPool,
-    query: OfferListQuery,
-) -> Result<Vec<OfferListItemFull>, sqlx::Error> {
-    let limit = query.effective_limit();
-    let offset = query.effective_offset();
-
-    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-        r#"
-            SELECT id, issuance_factory_id, current_status, collateral_asset_id, principal_asset_id, 
-            borrower_nft_asset_id, protocol_fee_keeper_asset_id, 
-            lender_nft_asset_id, collateral_amount, principal_amount, interest_rate, 
-            loan_expiration_time, created_at_height, created_at_txid FROM offers WHERE 1=1 
-        "#,
-    );
-
-    apply_offer_list_filters(&mut query_builder, &query);
-    push_offer_list_order_by(&mut query_builder, &query);
-
-    query_builder.push(" LIMIT ");
-    query_builder.push_bind(limit as i64);
-
-    query_builder.push(" OFFSET ");
-    query_builder.push_bind(offset as i64);
-
-    let query = query_builder.build_query_as::<OfferModel>();
-    let rows = query.fetch_all(db).await?;
-
-    let offers = rows.into_iter().map(OfferListItemFull::from).collect();
-
-    Ok(offers)
 }
 
 #[tracing::instrument(
@@ -166,19 +121,14 @@ pub async fn fetch_list(
     })
 }
 
-#[tracing::instrument(
-    name = "Fetching offer full info from DB",
-    skip(db, offer_id),
-    fields(%offer_id)
-)]
-pub async fn fetch_full_info_by_id(
+async fn fetch_full_info_by_id(
     db: &PgPool,
     offer_id: Uuid,
 ) -> Result<Option<OfferListItemFull>, sqlx::Error> {
     let model = sqlx::query_as!(
         OfferModel,
         r#"
-        SELECT 
+        SELECT
             id,
             issuance_factory_id,
             current_status AS "current_status: OfferStatus",
@@ -196,7 +146,7 @@ pub async fn fetch_full_info_by_id(
         FROM offers
         WHERE id = $1
         "#,
-        offer_id
+        offer_id,
     )
     .fetch_optional(db)
     .await?;
@@ -204,116 +154,7 @@ pub async fn fetch_full_info_by_id(
     Ok(model.map(OfferListItemFull::from))
 }
 
-#[tracing::instrument(
-    name = "Fetching offer details by ids from DB",
-    skip(db, ids),
-    fields(
-        ids_count = %ids.len(),
-    )
-)]
-pub async fn fetch_details_by_ids(
-    db: &PgPool,
-    ids: &[Uuid],
-) -> Result<Vec<OfferDetailsResponse>, sqlx::Error> {
-    if ids.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let offers = sqlx::query_as!(
-        OfferModel,
-        r#"
-        SELECT 
-            id, issuance_factory_id, current_status AS "current_status: OfferStatus",
-            collateral_asset_id, principal_asset_id,
-            borrower_nft_asset_id, lender_nft_asset_id, protocol_fee_keeper_asset_id,
-            collateral_amount, principal_amount, interest_rate,
-            loan_expiration_time, created_at_height, created_at_txid
-        FROM offers
-        WHERE id = ANY($1)
-        "#,
-        ids
-    )
-    .fetch_all(db)
-    .await?;
-
-    let participants = sqlx::query_as!(
-        OfferParticipantModel,
-        r#"
-        SELECT DISTINCT ON (offer_id, participant_type)
-            offer_id, participant_type AS "participant_type: ParticipantType",
-            script_pubkey, txid, vout, created_at_height, spent_txid, spent_at_height
-        FROM offer_participants
-        WHERE offer_id = ANY($1)
-        ORDER BY offer_id, participant_type, created_at_height DESC
-        "#,
-        ids
-    )
-    .fetch_all(db)
-    .await?;
-
-    let mut participants_map: HashMap<Uuid, Vec<ParticipantDto>> = HashMap::new();
-
-    for p_model in participants {
-        participants_map
-            .entry(p_model.offer_id)
-            .or_default()
-            .push(ParticipantDto::from(p_model));
-    }
-
-    let result = offers
-        .into_iter()
-        .map(|o_model| {
-            let id = o_model.id;
-            OfferDetailsResponse {
-                info: OfferListItemFull::from(o_model),
-                participants: participants_map.remove(&id).unwrap_or_default(),
-            }
-        })
-        .collect();
-
-    Ok(result)
-}
-
-#[tracing::instrument(
-    name = "Fetching offer participants movement history from DB",
-    skip(db, offer_id),
-    fields(%offer_id)
-)]
-pub async fn fetch_participants_history(
-    db: &PgPool,
-    offer_id: Uuid,
-) -> Result<Vec<ParticipantDto>, sqlx::Error> {
-    let rows = sqlx::query_as!(
-        OfferParticipantModel,
-        r#"
-        SELECT
-            offer_id,
-            participant_type as "participant_type: ParticipantType",
-            script_pubkey,
-            txid,
-            vout,
-            created_at_height,
-            spent_txid,
-            spent_at_height
-        FROM offer_participants
-        WHERE offer_id = $1
-        "#,
-        offer_id
-    )
-    .fetch_all(db)
-    .await?;
-
-    let participants = rows.into_iter().map(ParticipantDto::from).collect();
-
-    Ok(participants)
-}
-
-#[tracing::instrument(
-    name = "Fetching latest offer participants from DB",
-    skip(db, offer_id),
-    fields(%offer_id)
-)]
-pub async fn fetch_latest_participants(
+async fn fetch_latest_participants(
     db: &PgPool,
     offer_id: Uuid,
 ) -> Result<Vec<ParticipantDto>, sqlx::Error> {
@@ -333,14 +174,65 @@ pub async fn fetch_latest_participants(
         WHERE offer_id = $1
         ORDER BY participant_type, created_at_height DESC
         "#,
-        offer_id
+        offer_id,
     )
     .fetch_all(db)
     .await?;
 
-    let participants = rows.into_iter().map(ParticipantDto::from).collect();
+    Ok(rows.into_iter().map(ParticipantDto::from).collect())
+}
 
-    Ok(participants)
+async fn fetch_unspent_utxos(
+    db: &PgPool,
+    offer_id: Uuid,
+) -> Result<Vec<OfferUtxoDto>, sqlx::Error> {
+    let rows = sqlx::query_as!(
+        OfferUtxoModel,
+        r#"
+        SELECT
+            offer_id,
+            txid,
+            vout,
+            utxo_type AS "utxo_type: UtxoType",
+            created_at_height,
+            spent_txid,
+            spent_at_height
+        FROM offer_utxos
+        WHERE offer_id = $1
+          AND spent_txid IS NULL
+        ORDER BY created_at_height ASC
+        "#,
+        offer_id,
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows.into_iter().map(OfferUtxoDto::from).collect())
+}
+
+#[tracing::instrument(
+    name = "Fetching offer details from DB",
+    skip(db, offer_id),
+    fields(%offer_id)
+)]
+pub async fn fetch_details_by_id(
+    db: &PgPool,
+    offer_id: Uuid,
+) -> Result<Option<OfferDetailsResponse>, sqlx::Error> {
+    let Some(info) = fetch_full_info_by_id(db, offer_id).await? else {
+        return Ok(None);
+    };
+
+    let (participants, utxos) = tokio::try_join!(
+        fetch_latest_participants(db, offer_id),
+        fetch_unspent_utxos(db, offer_id),
+    )?;
+
+    Ok(Some(OfferDetailsResponse {
+        info,
+        participants,
+        utxos,
+    }))
 }
 
 #[tracing::instrument(
@@ -356,7 +248,7 @@ pub async fn fetch_ids_by_script(
         r#"
         SELECT DISTINCT offer_id
         FROM offer_participants
-        WHERE script_pubkey = $1 
+        WHERE script_pubkey = $1
           AND spent_txid IS NULL
         "#,
         script_pubkey
@@ -364,41 +256,5 @@ pub async fn fetch_ids_by_script(
     .fetch_all(db)
     .await?;
 
-    let offer_ids = rows.into_iter().map(|r| r.offer_id).collect();
-
-    Ok(offer_ids)
-}
-
-#[tracing::instrument(
-    name = "Fetching offer utxos history from DB",
-    skip(db, offer_id),
-    fields(%offer_id)
-)]
-pub async fn fetch_utxos_history(
-    db: &PgPool,
-    offer_id: Uuid,
-) -> Result<Vec<OfferUtxoDto>, sqlx::Error> {
-    let rows = sqlx::query_as!(
-        OfferUtxoModel,
-        r#"
-        SELECT
-            offer_id,
-            txid,
-            vout,
-            utxo_type as "utxo_type: UtxoType",
-            created_at_height,
-            spent_txid,
-            spent_at_height
-        FROM offer_utxos
-        WHERE offer_id = $1
-        ORDER BY created_at_height ASC
-        "#,
-        offer_id
-    )
-    .fetch_all(db)
-    .await?;
-
-    let offer_utxos = rows.into_iter().map(OfferUtxoDto::from).collect();
-
-    Ok(offer_utxos)
+    Ok(rows.into_iter().map(|row| row.offer_id).collect())
 }
