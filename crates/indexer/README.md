@@ -170,11 +170,14 @@ SQLX_OFFLINE=true cargo check
 
 ### Filtering Parameters (Query Params)
 
-The following parameters are available for `/offers` and `/offers/full` endpoints:
-- `status`: Filter by offer state (`pending`, `active`, `repaid`, `liquidated`, `cancelled`, `claimed`). Values are lowercase in the API.
+The following parameters are available for `GET /offers` and `GET /offers/full`:
+- `status`: Filter by one or more offer states (`pending`, `active`, `repaid`, `liquidated`, `cancelled`, `claimed`). Use a comma-separated list, e.g. `status=pending,active`.
+- `factory_id`: Filter by issuance factory UUID.
 - `asset`: Hex identifier of the asset (matches either collateral or principal asset).
-- `limit`: Maximum number of records to return (default: 50).
+- `limit`: Maximum number of records to return (default: 50, max: 100).
 - `offset`: Pagination offset (default: 0).
+- `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_time` (default: `created_at_height`).
+- `sort_dir`: `asc` or `desc` (default: `desc`).
 
 ### Factories Endpoints
 
@@ -187,8 +190,8 @@ The following parameters are available for `/offers` and `/offers/full` endpoint
 
 | Method | Endpoint | Description | Params / Body |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/offers` | Get list of offers with short information | `status`, `asset`, `limit`, `offset` |
-| `GET` | `/offers/full` | Get list of offers with full information | `status`, `asset`, `limit`, `offset` |
+| `GET` | `/offers` | Get paginated list of offers with short information | `status`, `factory_id`, `asset`, `limit`, `offset`, `sort_by`, `sort_dir` |
+| `GET` | `/offers/full` | Get list of offers with full information | same filters as `/offers` |
 | `GET` | `/offers/by-script` | Find offer IDs by `script_pubkey` | `script_pubkey` (query param) |
 | `GET` | `/offers/by-borrower-pubkey` | Find offer IDs where the given key is the borrower (e.g. pending offers) | `borrower_pubkey` (query param, 32-byte hex) |
 | `POST` | `/offers/batch` | Get detailed information for multiple offers | JSON Body (list of UUIDs in `ids` field) |

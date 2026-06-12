@@ -7,29 +7,29 @@ use axum::{
 use uuid::Uuid;
 
 use crate::api::params::ScriptQuery;
-use crate::api::{ApiError, AppState, OfferFilters};
+use crate::api::{ApiError, AppState, OfferListQuery};
 
 use super::dto::{
-    BatchIdsRequest, OfferDetailsResponse, OfferListItemFull, OfferListItemShort, OfferUtxoDto,
+    BatchIdsRequest, OfferDetailsResponse, OfferListItemFull, OfferListResponse, OfferUtxoDto,
     ParticipantDto,
 };
 
-#[tracing::instrument(name = "Getting offers short info", skip(state, filters))]
-pub async fn get_short_info(
+#[tracing::instrument(name = "Getting offers list", skip(state, query))]
+pub async fn list_offers(
     State(state): State<Arc<AppState>>,
-    Query(filters): Query<OfferFilters>,
-) -> Result<Json<Vec<OfferListItemShort>>, ApiError> {
-    let offers = super::db::fetch_short_info_filtered(&state.db, filters).await?;
+    Query(query): Query<OfferListQuery>,
+) -> Result<Json<OfferListResponse>, ApiError> {
+    let offers = super::db::fetch_list(&state.db, query).await?;
 
     Ok(Json(offers))
 }
 
-#[tracing::instrument(name = "Getting offers full info", skip(state, filters))]
+#[tracing::instrument(name = "Getting offers full info", skip(state, query))]
 pub async fn get_full_info(
     State(state): State<Arc<AppState>>,
-    Query(filters): Query<OfferFilters>,
+    Query(query): Query<OfferListQuery>,
 ) -> Result<Json<Vec<OfferListItemFull>>, ApiError> {
-    let offers = super::db::fetch_full_info_filtered(&state.db, filters).await?;
+    let offers = super::db::fetch_full_info_filtered(&state.db, query).await?;
 
     Ok(Json(offers))
 }

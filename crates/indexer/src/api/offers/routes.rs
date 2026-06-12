@@ -11,7 +11,7 @@ use super::handlers;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/offers", get(handlers::get_short_info))
+        .route("/offers", get(handlers::list_offers))
         .route("/offers/full", get(handlers::get_full_info))
         .route("/offers/batch", post(handlers::get_details_batch))
         .route("/offers/by-script", get(handlers::get_ids_by_script))

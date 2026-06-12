@@ -12,6 +12,7 @@ use crate::models::{
 #[derive(Serialize)]
 pub struct OfferListItemShort {
     pub id: Uuid,
+    pub issuance_factory_id: Uuid,
     pub status: OfferStatus,
     pub collateral_asset: String,
     pub principal_asset: String,
@@ -23,10 +24,19 @@ pub struct OfferListItemShort {
     pub created_at_txid: String,
 }
 
+#[derive(Serialize)]
+pub struct OfferListResponse {
+    pub items: Vec<OfferListItemShort>,
+    pub total: u64,
+    pub limit: u64,
+    pub offset: u64,
+}
+
 impl From<OfferModelShort> for OfferListItemShort {
     fn from(value: OfferModelShort) -> Self {
         Self {
             id: value.id,
+            issuance_factory_id: value.issuance_factory_id,
             status: value.current_status,
             collateral_asset: format_hex(value.collateral_asset_id),
             principal_asset: format_hex(value.principal_asset_id),
@@ -55,6 +65,7 @@ impl From<OfferModel> for OfferListItemFull {
         Self {
             base: OfferListItemShort {
                 id: value.id,
+                issuance_factory_id: value.issuance_factory_id,
                 status: value.current_status,
                 collateral_asset: format_hex(value.collateral_asset_id),
                 principal_asset: format_hex(value.principal_asset_id),
@@ -150,6 +161,7 @@ mod tests {
         let id = Uuid::new_v4();
         let model = OfferModelShort {
             id,
+            issuance_factory_id: Uuid::new_v4(),
             collateral_asset_id: vec![0x01, 0x02, 0x03],
             principal_asset_id: vec![0x04, 0x05, 0x06],
             collateral_amount: 1000,

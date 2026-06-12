@@ -4,46 +4,34 @@ use simplex::simplicityhl::elements::hex::ToHex;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
 
-use crate::api::OfferFilters;
+use crate::api::{OfferListQuery, SortDir};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
     ParticipantType, UtxoType,
 };
 
 use super::dto::{
-    OfferDetailsResponse, OfferListItemFull, OfferListItemShort, OfferUtxoDto, ParticipantDto,
+    OfferDetailsResponse, OfferListItemFull, OfferListItemShort, OfferListResponse, OfferUtxoDto,
+    ParticipantDto,
 };
 
-#[tracing::instrument(
-    name = "Fetching full offers info list with filters from DB",
-    skip(db, filters),
-    fields(
-        limit = %filters.limit.unwrap_or(50),
-        offset = %filters.offset.unwrap_or(0),
-        status = ?filters.status,
-        asset = filters.asset
-    )
-)]
-pub async fn fetch_full_info_filtered(
-    db: &PgPool,
-    filters: OfferFilters,
-) -> Result<Vec<OfferListItemFull>, sqlx::Error> {
-    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-        r#"
-            SELECT id, issuance_factory_id, current_status, collateral_asset_id, principal_asset_id, 
-            borrower_nft_asset_id, protocol_fee_keeper_asset_id, 
-            lender_nft_asset_id, collateral_amount, principal_amount, interest_rate, 
-            loan_expiration_time, created_at_height, created_at_txid FROM offers WHERE 1=1 
-        "#,
-    );
-
-    if let Some(status) = filters.status {
-        query_builder.push(" AND current_status = ");
-        query_builder.push_bind(status);
+fn apply_offer_list_filters<'a>(
+    query_builder: &mut QueryBuilder<'a, Postgres>,
+    query: &'a OfferListQuery,
+) {
+    if !query.status.is_empty() {
+        query_builder.push(" AND current_status = ANY(");
+        query_builder.push_bind(query.status.clone());
+        query_builder.push(")");
     }
 
-    if let Some(asset_hex) = filters.asset {
-        if let Ok(bin) = hex::decode(&asset_hex) {
+    if let Some(factory_id) = query.factory_id {
+        query_builder.push(" AND issuance_factory_id = ");
+        query_builder.push_bind(factory_id);
+    }
+
+    if let Some(asset_hex) = &query.asset {
+        if let Ok(bin) = hex::decode(asset_hex) {
             query_builder.push(" AND (collateral_asset_id = ");
             query_builder.push_bind(bin.clone());
             query_builder.push(" OR principal_asset_id = ");
@@ -53,14 +41,51 @@ pub async fn fetch_full_info_filtered(
             tracing::warn!(asset_hex, "Failed to decode asset hex filter");
         }
     }
+}
 
-    query_builder.push(" ORDER BY created_at_height DESC ");
+fn push_offer_list_order_by(query_builder: &mut QueryBuilder<Postgres>, query: &OfferListQuery) {
+    query_builder.push(" ORDER BY ");
+    query_builder.push(query.sort_by.sql_column());
+    query_builder.push(match query.sort_dir {
+        SortDir::Asc => " ASC",
+        SortDir::Desc => " DESC",
+    });
+}
+
+#[tracing::instrument(
+    name = "Fetching full offers info list with filters from DB",
+    skip(db, query),
+    fields(
+        limit = %query.effective_limit(),
+        offset = %query.effective_offset(),
+        status = ?query.status,
+        asset = ?query.asset
+    )
+)]
+pub async fn fetch_full_info_filtered(
+    db: &PgPool,
+    query: OfferListQuery,
+) -> Result<Vec<OfferListItemFull>, sqlx::Error> {
+    let limit = query.effective_limit();
+    let offset = query.effective_offset();
+
+    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+        r#"
+            SELECT id, issuance_factory_id, current_status, collateral_asset_id, principal_asset_id, 
+            borrower_nft_asset_id, protocol_fee_keeper_asset_id, 
+            lender_nft_asset_id, collateral_amount, principal_amount, interest_rate, 
+            loan_expiration_time, created_at_height, created_at_txid FROM offers WHERE 1=1 
+        "#,
+    );
+
+    apply_offer_list_filters(&mut query_builder, &query);
+    push_offer_list_order_by(&mut query_builder, &query);
 
     query_builder.push(" LIMIT ");
-    query_builder.push_bind(filters.limit.unwrap_or(50) as i64);
+    query_builder.push_bind(limit as i64);
 
     query_builder.push(" OFFSET ");
-    query_builder.push_bind(filters.offset.unwrap_or(0) as i64);
+    query_builder.push_bind(offset as i64);
 
     let query = query_builder.build_query_as::<OfferModel>();
     let rows = query.fetch_all(db).await?;
@@ -71,58 +96,71 @@ pub async fn fetch_full_info_filtered(
 }
 
 #[tracing::instrument(
-    name = "Fetching short offers info list with filters from DB",
-    skip(db, filters),
+    name = "Fetching offers list from DB",
+    skip(db, query),
     fields(
-        limit = %filters.limit.unwrap_or(50),
-        offset = %filters.offset.unwrap_or(0),
-        status = ?filters.status,
-        asset = filters.asset
+        limit = %query.effective_limit(),
+        offset = %query.effective_offset(),
+        status = ?query.status,
+        asset = ?query.asset,
+        factory_id = ?query.factory_id,
+        sort_by = ?query.sort_by,
+        sort_dir = ?query.sort_dir,
     )
 )]
-pub async fn fetch_short_info_filtered(
+pub async fn fetch_list(
     db: &PgPool,
-    filters: OfferFilters,
-) -> Result<Vec<OfferListItemShort>, sqlx::Error> {
+    query: OfferListQuery,
+) -> Result<OfferListResponse, sqlx::Error> {
+    let limit = query.effective_limit();
+    let offset = query.effective_offset();
+
+    let mut count_builder: QueryBuilder<Postgres> =
+        QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM offers WHERE 1=1");
+    apply_offer_list_filters(&mut count_builder, &query);
+    let total: i64 = count_builder.build_query_scalar().fetch_one(db).await?;
+
     let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"
-            SELECT id, current_status, collateral_asset_id, principal_asset_id, 
-            collateral_amount, principal_amount, interest_rate, 
-            loan_expiration_time, created_at_height, created_at_txid FROM offers WHERE 1=1 
+            SELECT
+                id,
+                issuance_factory_id,
+                current_status,
+                collateral_asset_id,
+                principal_asset_id,
+                collateral_amount,
+                principal_amount,
+                interest_rate,
+                loan_expiration_time,
+                created_at_height,
+                created_at_txid
+            FROM offers
+            WHERE 1=1
         "#,
     );
 
-    if let Some(status) = filters.status {
-        query_builder.push(" AND current_status = ");
-        query_builder.push_bind(status);
-    }
-
-    if let Some(asset_hex) = filters.asset {
-        if let Ok(bin) = hex::decode(&asset_hex) {
-            query_builder.push(" AND (collateral_asset_id = ");
-            query_builder.push_bind(bin.clone());
-            query_builder.push(" OR principal_asset_id = ");
-            query_builder.push_bind(bin);
-            query_builder.push(")");
-        } else {
-            tracing::warn!(asset_hex, "Failed to decode asset hex filter");
-        }
-    }
-
-    query_builder.push(" ORDER BY created_at_height DESC ");
+    apply_offer_list_filters(&mut query_builder, &query);
+    push_offer_list_order_by(&mut query_builder, &query);
 
     query_builder.push(" LIMIT ");
-    query_builder.push_bind(filters.limit.unwrap_or(50) as i64);
+    query_builder.push_bind(limit as i64);
 
     query_builder.push(" OFFSET ");
-    query_builder.push_bind(filters.offset.unwrap_or(0) as i64);
+    query_builder.push_bind(offset as i64);
 
-    let query = query_builder.build_query_as::<OfferModelShort>();
-    let rows = query.fetch_all(db).await?;
+    let rows = query_builder
+        .build_query_as::<OfferModelShort>()
+        .fetch_all(db)
+        .await?;
 
-    let offers = rows.into_iter().map(OfferListItemShort::from).collect();
+    let items = rows.into_iter().map(OfferListItemShort::from).collect();
 
-    Ok(offers)
+    Ok(OfferListResponse {
+        items,
+        total: total as u64,
+        limit,
+        offset,
+    })
 }
 
 #[tracing::instrument(

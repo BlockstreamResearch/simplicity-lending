@@ -56,8 +56,12 @@ async fn post_json(
 }
 
 fn ids_from_objects(value: &Value) -> Vec<String> {
-    let mut ids: Vec<String> = value
-        .as_array()
+    let items = value
+        .get("items")
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array());
+
+    let mut ids: Vec<String> = items
         .map(|items| {
             items
                 .iter()
@@ -68,6 +72,12 @@ fn ids_from_objects(value: &Value) -> Vec<String> {
         .unwrap_or_default();
     ids.sort();
     ids
+}
+
+fn offer_list_items(value: &Value) -> &Value {
+    value
+        .get("items")
+        .expect("offer list response must include items")
 }
 
 fn uuid_strings_from_array(value: &Value) -> Vec<String> {
@@ -212,15 +222,19 @@ async fn get_offers_returns_all_seeded_offers_with_correct_status() -> anyhow::R
     let http = reqwest::Client::new();
 
     let json = get_json(&http, format!("{base_url}/offers")).await?;
+    let items = offer_list_items(&json);
 
-    assert_eq!(json.as_array().map_or(0, Vec::len), 2);
-    assert_ids_match_unordered(&json, &[pending_offer, active_offer]);
+    assert_eq!(json["total"], 2);
+    assert_eq!(json["limit"], 50);
+    assert_eq!(json["offset"], 0);
+    assert_eq!(items.as_array().map_or(0, Vec::len), 2);
+    assert_ids_match_unordered(items, &[pending_offer, active_offer]);
 
-    // Pins `ORDER BY created_at_height DESC` (active_offer's height > pending's).
-    assert_eq!(json[0]["id"], active_offer.to_string());
-    assert_eq!(json[0]["status"], "active");
-    assert_eq!(json[1]["id"], pending_offer.to_string());
-    assert_eq!(json[1]["status"], "pending");
+    // Pins default `ORDER BY created_at_height DESC` (active_offer's height > pending's).
+    assert_eq!(items[0]["id"], active_offer.to_string());
+    assert_eq!(items[0]["status"], "active");
+    assert_eq!(items[1]["id"], pending_offer.to_string());
+    assert_eq!(items[1]["status"], "pending");
 
     server_handle.abort();
     Ok(())
@@ -417,16 +431,17 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     let factory = factory_model(factory_id, 30, unique_32_bytes_from_uuid(factory_id));
     seed_factory_row(&pool, &factory).await?;
 
-    for (id, status, height, collat, princ) in [
-        (offer_a, OfferStatus::Pending, 40, 0xaa_u8, 0x10_u8),
-        (offer_b, OfferStatus::Active, 60, 0xbb, 0xaa),
-        (offer_c, OfferStatus::Pending, 80, 0xcc, 0xdd),
-        (offer_d, OfferStatus::Pending, 70, 0xaa, 0xee),
+    for (id, status, height, collat, princ, interest_rate) in [
+        (offer_a, OfferStatus::Pending, 40, 0xaa_u8, 0x10_u8, 100),
+        (offer_b, OfferStatus::Active, 60, 0xbb, 0xaa, 300),
+        (offer_c, OfferStatus::Pending, 80, 0xcc, 0xdd, 400),
+        (offer_d, OfferStatus::Pending, 70, 0xaa, 0xee, 200),
     ] {
         let mut offer = offer_model(id, factory_id, height, unique_32_bytes_from_uuid(id));
         offer.current_status = status;
         offer.collateral_asset_id = vec![collat; 32];
         offer.principal_asset_id = vec![princ; 32];
+        offer.interest_rate = interest_rate;
         seed_offer_row(&pool, &offer).await?;
     }
 
@@ -435,23 +450,50 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
 
     // status=pending -> 3 offers, ordered by height DESC: c(80) -> d(70) -> a(40).
     let pending = get_json(&http, format!("{base_url}/offers?status=pending")).await?;
-    assert_eq!(pending.as_array().map_or(0, Vec::len), 3);
-    assert_eq!(pending[0]["id"], offer_c.to_string());
-    assert_eq!(pending[1]["id"], offer_d.to_string());
-    assert_eq!(pending[2]["id"], offer_a.to_string());
+    let pending_items = offer_list_items(&pending);
+    assert_eq!(pending["total"], 3);
+    assert_eq!(pending_items.as_array().map_or(0, Vec::len), 3);
+    assert_eq!(pending_items[0]["id"], offer_c.to_string());
+    assert_eq!(pending_items[1]["id"], offer_d.to_string());
+    assert_eq!(pending_items[2]["id"], offer_a.to_string());
+
+    // Multi-status filter: pending + active -> all four except none (b is active).
+    let multi_status = get_json(&http, format!("{base_url}/offers?status=pending,active")).await?;
+    assert_eq!(multi_status["total"], 4);
+    assert_ids_match_unordered(
+        offer_list_items(&multi_status),
+        &[offer_a, offer_b, offer_c, offer_d],
+    );
 
     // `asset` matches either collateral_asset_id or principal_asset_id:
     // a(collat=aa), b(princ=aa), d(collat=aa).
     let asset_filter = "aa".repeat(32);
     let by_asset = get_json(&http, format!("{base_url}/offers?asset={asset_filter}")).await?;
-    assert_eq!(by_asset.as_array().map_or(0, Vec::len), 3);
-    assert_eq!(by_asset[0]["id"], offer_d.to_string());
-    assert_eq!(by_asset[1]["id"], offer_b.to_string());
-    assert_eq!(by_asset[2]["id"], offer_a.to_string());
+    let by_asset_items = offer_list_items(&by_asset);
+    assert_eq!(by_asset["total"], 3);
+    assert_eq!(by_asset_items.as_array().map_or(0, Vec::len), 3);
+    assert_eq!(by_asset_items[0]["id"], offer_d.to_string());
+    assert_eq!(by_asset_items[1]["id"], offer_b.to_string());
+    assert_eq!(by_asset_items[2]["id"], offer_a.to_string());
 
     let paged = get_json(&http, format!("{base_url}/offers?limit=1&offset=1")).await?;
-    assert_eq!(paged.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(paged[0]["id"], offer_d.to_string());
+    let paged_items = offer_list_items(&paged);
+    assert_eq!(paged["total"], 4);
+    assert_eq!(paged["limit"], 1);
+    assert_eq!(paged["offset"], 1);
+    assert_eq!(paged_items.as_array().map_or(0, Vec::len), 1);
+    assert_eq!(paged_items[0]["id"], offer_d.to_string());
+
+    let sorted = get_json(
+        &http,
+        format!("{base_url}/offers?sort_by=interest_rate&sort_dir=asc&limit=4"),
+    )
+    .await?;
+    let sorted_items = offer_list_items(&sorted);
+    assert_eq!(sorted_items[0]["id"], offer_a.to_string());
+    assert_eq!(sorted_items[1]["id"], offer_d.to_string());
+    assert_eq!(sorted_items[2]["id"], offer_b.to_string());
+    assert_eq!(sorted_items[3]["id"], offer_c.to_string());
 
     let full_pending = get_json(
         &http,
@@ -572,8 +614,8 @@ async fn offers_endpoint_returns_400_on_invalid_status_enum() -> anyhow::Result<
     assert_eq!(
         response.status(),
         StatusCode::BAD_REQUEST,
-        "unknown `status` must be rejected by Query<OfferFilters>; if this \
-         fails the endpoint is silently treating it as `None` -> regression"
+        "unknown `status` must be rejected by Query<OfferListQuery>; if this \
+         fails the endpoint is silently ignoring the filter -> regression"
     );
 
     server_handle.abort();
