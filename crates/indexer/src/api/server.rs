@@ -6,6 +6,7 @@ use tokio::net::TcpListener;
 use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
+use crate::api::borrowers;
 use crate::api::factories;
 use crate::api::offers;
 use crate::api::state::AppState;
@@ -14,6 +15,7 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
     let state = Arc::new(AppState { db: db_pool });
 
     let app = Router::new()
+        .merge(borrowers::routes())
         .merge(factories::routes())
         .merge(offers::routes())
         .with_state(state)

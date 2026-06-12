@@ -179,6 +179,14 @@ The following parameters are available for `GET /offers` and `GET /offers/full`:
 - `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_time` (default: `created_at_height`).
 - `sort_dir`: `asc` or `desc` (default: `desc`).
 
+### Borrowers Endpoints
+
+| Method | Endpoint | Description | Params / Body |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/borrowers/by-script` | Borrower dashboard: overview totals and paginated short offer list | `script_pubkey` (query param, hex); offer list filters: `status`, `factory_id`, `asset`, `limit`, `offset`, `sort_by`, `sort_dir` (same as `GET /offers`) |
+
+Overview aggregates (`collateral_locked`, `borrowings`) are summed per asset across the borrower's open offers (`pending` and `active`). `active_loans` and `pending_offers` are counts by status. The `offers` section returns the same short list shape as `GET /offers`, scoped to offers where the given `script_pubkey` is the latest borrower. Use `GET /offers/{id}` for full offer details.
+
 ### Factories Endpoints
 
 | Method | Endpoint | Description | Params / Body |
@@ -193,7 +201,6 @@ The following parameters are available for `GET /offers` and `GET /offers/full`:
 | `GET` | `/offers` | Get paginated list of offers with short information | `status`, `factory_id`, `asset`, `limit`, `offset`, `sort_by`, `sort_dir` |
 | `GET` | `/offers/full` | Get list of offers with full information | same filters as `/offers` |
 | `GET` | `/offers/by-script` | Find offer IDs by `script_pubkey` | `script_pubkey` (query param) |
-| `GET` | `/offers/by-borrower-pubkey` | Find offer IDs where the given key is the borrower (e.g. pending offers) | `borrower_pubkey` (query param, 32-byte hex) |
 | `POST` | `/offers/batch` | Get detailed information for multiple offers | JSON Body (list of UUIDs in `ids` field) |
 | `GET` | `/offers/{id}` | Get comprehensive details for a single offer | — |
 | `GET` | `/offers/{id}/participants` | Get the latest (current) participants of an offer | — |

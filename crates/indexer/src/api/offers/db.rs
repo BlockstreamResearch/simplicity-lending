@@ -15,7 +15,7 @@ use super::dto::{
     ParticipantDto,
 };
 
-fn apply_offer_list_filters<'a>(
+pub(crate) fn apply_offer_list_filters<'a>(
     query_builder: &mut QueryBuilder<'a, Postgres>,
     query: &'a OfferListQuery,
 ) {
@@ -43,7 +43,10 @@ fn apply_offer_list_filters<'a>(
     }
 }
 
-fn push_offer_list_order_by(query_builder: &mut QueryBuilder<Postgres>, query: &OfferListQuery) {
+pub(crate) fn push_offer_list_order_by(
+    query_builder: &mut QueryBuilder<Postgres>,
+    query: &OfferListQuery,
+) {
     query_builder.push(" ORDER BY ");
     query_builder.push(query.sort_by.sql_column());
     query_builder.push(match query.sort_dir {

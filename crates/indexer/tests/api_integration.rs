@@ -737,3 +737,75 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     server_handle.abort();
     Ok(())
 }
+
+#[tokio::test]
+#[serial]
+async fn borrower_dashboard_returns_overview_and_filtered_offers() -> anyhow::Result<()> {
+    let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
+    let http = reqwest::Client::new();
+
+    let dashboard = get_json(
+        &http,
+        format!("{base_url}/borrowers/by-script?script_pubkey=52ac"),
+    )
+    .await?;
+
+    let overview = &dashboard["overview"];
+    assert_eq!(overview["active_loans"], 1);
+    assert_eq!(overview["pending_offers"], 1);
+    assert_eq!(
+        overview["collateral_locked"].as_array().map_or(0, Vec::len),
+        1
+    );
+    assert_eq!(overview["collateral_locked"][0]["amount"], 2_000);
+    assert_eq!(overview["borrowings"].as_array().map_or(0, Vec::len), 1);
+    assert_eq!(overview["borrowings"][0]["amount"], 1_000);
+
+    let offers = &dashboard["offers"];
+    assert_eq!(offers["total"], 2);
+    assert_eq!(offers["limit"], 50);
+    assert_eq!(offers["offset"], 0);
+    assert_ids_match_unordered(&offers["items"], &[pending_offer, active_offer]);
+    assert!(
+        offers["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .all(|item| {
+                item.get("participants").is_none()
+                    && item["collateral_amount"].as_u64() == Some(1_000)
+                    && item["principal_amount"].as_u64() == Some(500)
+            })
+    );
+
+    let pending_only = get_json(
+        &http,
+        format!("{base_url}/borrowers/by-script?script_pubkey=52ac&status=pending"),
+    )
+    .await?;
+    assert_eq!(pending_only["offers"]["total"], 1);
+    assert_eq!(
+        pending_only["offers"]["items"][0]["id"],
+        pending_offer.to_string()
+    );
+    assert_eq!(pending_only["overview"]["pending_offers"], 1);
+    assert_eq!(pending_only["overview"]["active_loans"], 1);
+
+    let unknown_wallet = get_json(
+        &http,
+        format!("{base_url}/borrowers/by-script?script_pubkey=dead"),
+    )
+    .await?;
+    assert_eq!(unknown_wallet["overview"]["active_loans"], 0);
+    assert_eq!(unknown_wallet["overview"]["pending_offers"], 0);
+    assert_eq!(
+        unknown_wallet["overview"]["collateral_locked"]
+            .as_array()
+            .map_or(0, Vec::len),
+        0
+    );
+    assert_eq!(unknown_wallet["offers"]["total"], 0);
+
+    server_handle.abort();
+    Ok(())
+}
