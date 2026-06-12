@@ -9,6 +9,8 @@ use super::handlers;
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new().nest(
         "/factories",
-        Router::new().route("/by-script", get(handlers::get_by_script)),
+        Router::new()
+            .route("/by-script", get(handlers::get_by_script))
+            .route("/{id}", get(handlers::get_by_id)),
     )
 }

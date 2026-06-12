@@ -181,6 +181,7 @@ The following parameters are available for `/offers` and `/offers/full` endpoint
 | Method | Endpoint | Description | Params / Body |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/factories/by-script` | Get active factories owned by a wallet `script_pubkey`, including current auth and program UTXOs | `script_pubkey` (query param, hex) |
+| `GET` | `/factories/{id}` | Get factory details by UUID, including latest unspent auth/program UTXOs when present | — |
 
 ### Offers Endpoints
 
