@@ -38,7 +38,7 @@ export interface BorrowerAccountCreationResult {
 
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getWalletUtxos, getWollet, signPset } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset } = useWallet()
 
   const createBorrowerAccount = async (): Promise<BorrowerAccountCreationResult> => {
     const receiveAddressString = await getReceiveAddress()
@@ -46,9 +46,9 @@ export function useBorrowerAccount() {
 
     const wollet = await getWollet()
     const policyAsset = lwkNetwork.policyAsset()
-    const walletUtxos = await getWalletUtxos()
+    const blindedWalletUtxos = await getBlindedWalletUtxos()
 
-    const feeUtxo = walletUtxos
+    const feeUtxo = blindedWalletUtxos
       .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
       .filter(utxo => utxo.unblinded().value() > FEE_RESERVE)
       .sort((a, b) => Number(a.unblinded().value() - b.unblinded().value()))[0]

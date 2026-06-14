@@ -15,7 +15,7 @@ export interface WalletContextValue extends WalletState {
   disconnect(): Promise<void>
   syncWallet(): Promise<void>
   signPset(pset: Pset): Promise<Pset>
-  getWalletUtxos(): Promise<WalletTxOut[]>
+  getBlindedWalletUtxos(): Promise<WalletTxOut[]>
   getWollet(): Promise<Wollet>
   getReceiveAddress(): Promise<string | null>
   verifyReceiveAddress(): Promise<string>

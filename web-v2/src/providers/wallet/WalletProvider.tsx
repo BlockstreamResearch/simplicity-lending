@@ -279,7 +279,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     )
   }, [state.walletType])
 
-  const getWalletUtxos = useCallback(async () => {
+  const getBlindedWalletUtxos = useCallback(async () => {
     const session = sessionRef.current
 
     if (!session) {
@@ -308,7 +308,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         verifyReceiveAddress,
         getXOnlyPublicKey,
         getWollet,
-        getWalletUtxos,
+        getBlindedWalletUtxos,
       }}
     >
       {children}

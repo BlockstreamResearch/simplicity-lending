@@ -72,7 +72,7 @@ export interface CreateOfferResult {
 
 export function useCreateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
 
   const createOffer = async (params: CreateOfferParams): Promise<CreateOfferResult> => {
     let stage = 'initializing'
@@ -83,9 +83,13 @@ export function useCreateOffer() {
 
       stage = 'sync wallet and load UTXOs'
       await syncWallet()
-      const walletUtxos = await getWalletUtxos()
-      const factoryAuthUtxo = findWalletUtxo(walletUtxos, params.factoryAuthOutpoint)
-      const collateralUtxo = requireWalletUtxo(walletUtxos, params.collateralOutpoint, 'Collateral')
+      const blindedWalletUtxos = await getBlindedWalletUtxos()
+      const factoryAuthUtxo = findWalletUtxo(blindedWalletUtxos, params.factoryAuthOutpoint)
+      const collateralUtxo = requireWalletUtxo(
+        blindedWalletUtxos,
+        params.collateralOutpoint,
+        'Collateral',
+      )
 
       stage = 'prepare validated params'
       const factoryAssetString = params.factoryAssetId
