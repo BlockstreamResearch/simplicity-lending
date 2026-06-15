@@ -84,7 +84,6 @@ export function useLiquidateOffer() {
       stage = 'sync wallet and verify wallet inputs'
       await syncWallet()
       const blindedWalletUtxos = await getBlindedWalletUtxos()
-      // Lender NFT is an explicit (unblinded) UTXO — not in blindedWalletUtxos; added as ExternalUtxo below.
       const feeUtxo = requireWalletUtxo(blindedWalletUtxos, params.feeOutpoint, 'Fee L-BTC')
       if (!isPolicyAssetUtxo(feeUtxo, lwkNetwork.policyAsset())) {
         throw new Error('Fee outpoint must be a wallet L-BTC UTXO')
