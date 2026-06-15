@@ -150,7 +150,11 @@ export function useClaimPrincipal() {
             true,
           ),
         ])
-        .addExplicitScriptOutput(borrowerNftRecipient.scriptPubkey(), NFT_AMOUNT, borrowerNftAsset)
+        .addPostIssuanceScriptOutput(
+          borrowerNftRecipient.scriptPubkey(),
+          NFT_AMOUNT,
+          borrowerNftAsset,
+        )
         .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
         .finish(wollet)
 

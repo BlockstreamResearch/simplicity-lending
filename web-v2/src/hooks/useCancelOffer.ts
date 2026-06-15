@@ -208,8 +208,8 @@ export function useCancelOffer() {
             true,
           ),
         ])
-        .addExplicitScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
-        .addExplicitScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
+        .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
+        .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
         .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
         .finish(wollet)
 

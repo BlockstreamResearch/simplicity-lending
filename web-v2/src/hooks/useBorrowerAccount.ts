@@ -83,7 +83,7 @@ export function useBorrowerAccount() {
         null,
         null,
       )
-      .addExplicitScriptOutput(Script.newOpReturn(metadata), 0n, policyAsset)
+      .addPostIssuanceScriptOutput(Script.newOpReturn(metadata), 0n, policyAsset)
       .finish(wollet)
 
     const signedPset = await signPset(pset)

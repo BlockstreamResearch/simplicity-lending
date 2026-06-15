@@ -245,8 +245,6 @@ export function buildLendingOfferSpendInfo(
     .finalize(numsKey)
 }
 
-// TODO: Will be used in the offer acceptance,
-// cancellation, repayment, and liquidation flows to construct the appropriate witness values for each branch of the program
 export function buildLendingWitness(params: LendingOfferWitnessParams): SimplicityWitnessValues {
   const pathType = SimplicityType.fromString(
     'Either<Either<(), ()>, Either<Either<(u64, u64), u64>, u64>>',

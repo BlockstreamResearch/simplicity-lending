@@ -173,7 +173,7 @@ export function useLenderVaultClaim() {
             true,
           ),
         ])
-        .addExplicitScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
+        .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
         .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
         .finish(wollet)
 

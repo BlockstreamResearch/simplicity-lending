@@ -254,13 +254,13 @@ export function useRepayOffer() {
             true,
           ),
         ])
-        .addExplicitScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
-        .addExplicitScriptOutput(
+        .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
+        .addPostIssuanceScriptOutput(
           finalizedLenderVaultSpendInfo.scriptPubkey,
           lenderVaultAmount,
           principalAsset,
         )
-        .addExplicitScriptOutput(
+        .addPostIssuanceScriptOutput(
           finalizedProtocolFeeVaultSpendInfo.scriptPubkey,
           totalProtocolFee,
           principalAsset,
