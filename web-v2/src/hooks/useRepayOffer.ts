@@ -75,7 +75,7 @@ export interface RepayOfferResult {
 
 export function useRepayOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
 
   const repayOffer = async (params: RepayOfferParams): Promise<RepayOfferResult> => {
     let stage = 'initializing'
@@ -102,13 +102,13 @@ export function useRepayOffer() {
 
       stage = 'sync wallet and verify fee input'
       await syncWallet()
-      const walletUtxos = await getWalletUtxos()
-      const feeUtxo = requireWalletUtxo(walletUtxos, params.feeOutpoint, 'Fee L-BTC')
+      const blindedWalletUtxos = await getBlindedWalletUtxos()
+      const feeUtxo = requireWalletUtxo(blindedWalletUtxos, params.feeOutpoint, 'Fee L-BTC')
       if (!isPolicyAssetUtxo(feeUtxo, lwkNetwork.policyAsset())) {
         throw new Error('Fee outpoint must be a wallet L-BTC UTXO')
       }
       const principalWalletUtxo = requireWalletUtxo(
-        walletUtxos,
+        blindedWalletUtxos,
         params.principalOutpoint,
         'Principal',
       )
