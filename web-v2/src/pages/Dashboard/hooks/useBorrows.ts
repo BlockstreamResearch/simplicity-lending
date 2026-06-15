@@ -41,7 +41,6 @@ export function useBorrows(): DashboardBorrows {
   const blockHeightQuery = useBlockHeight(DASHBOARD_REFETCH_INTERVAL_MS)
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
-  // TODO: fetch balance from indexer when it provides an endpoint
   const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
 
   const idsRefetch = idsQuery.refetch
@@ -53,6 +52,7 @@ export function useBorrows(): DashboardBorrows {
     void blockHeightRefetch()
   }, [idsRefetch, offersRefetch, blockHeightRefetch])
 
+  // TODO: fetch balance, stats, and aggregated data from indexer when it provides an endpoint
   return useMemo<DashboardBorrows>(() => {
     const offers = offersQuery.data ?? []
     const active = offers.filter(o => o.status === 'active')
