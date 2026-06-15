@@ -29,13 +29,19 @@ export function computeApr(bps: number, loanDurationBlocks: number): number {
   return (bps / BPS_DIVISOR) * (BLOCKS_PER_YEAR / loanDurationBlocks) * 100
 }
 
-export function computeLtv(
-  principal: bigint,
-  principalDecimals: number,
-  collateral: bigint,
-  collateralDecimals: number,
-  collateralUsd: number | null,
-): number | null {
+export function computeLtv({
+  principal,
+  principalDecimals,
+  collateral,
+  collateralDecimals,
+  collateralUsd,
+}: {
+  principal: bigint
+  principalDecimals: number
+  collateral: bigint
+  collateralDecimals: number
+  collateralUsd: number | null
+}): number | null {
   if (collateralUsd === null || collateral <= 0n) return null
   const principalValue = Number(principal) / 10 ** principalDecimals
   const collateralValue = (Number(collateral) / 10 ** collateralDecimals) * collateralUsd

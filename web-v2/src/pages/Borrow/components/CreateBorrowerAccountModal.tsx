@@ -16,8 +16,8 @@ export default function CreateBorrowerAccountModal({
   onOpenChange,
 }: CreateBorrowerAccountModalProps) {
   const { createBorrowerAccount } = useBorrowerAccount()
-  const { mutate, reset, data, error, status } = useMutation<string, Error, () => Promise<string>>({
-    mutationFn: fn => fn(),
+  const { mutate, reset, data, error, status } = useMutation({
+    mutationFn: createBorrowerAccount,
   })
 
   const handleClose = () => {
@@ -26,10 +26,7 @@ export default function CreateBorrowerAccountModal({
   }
 
   const handleCreate = () => {
-    mutate(async () => {
-      const result = await createBorrowerAccount()
-      return result.txid
-    })
+    mutate()
   }
 
   if (status !== 'idle') {
@@ -38,7 +35,7 @@ export default function CreateBorrowerAccountModal({
         isOpen={isOpen}
         eyebrow='New Borrower Account'
         status={status}
-        txid={data}
+        txid={data?.txid ?? null}
         errorMessage={error?.message}
         onClose={handleClose}
       />

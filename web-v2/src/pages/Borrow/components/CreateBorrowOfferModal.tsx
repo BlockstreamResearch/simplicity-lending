@@ -1,7 +1,7 @@
 import { Toast } from '@heroui/react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
@@ -58,13 +58,13 @@ function createBorrowOfferSchema({
       const principalBase = toBigintAmount(data.borrow, principalDecimals)
       if (!collateralBase || !principalBase) return
 
-      const ltv = computeLtv(
-        principalBase,
+      const ltv = computeLtv({
+        principal: principalBase,
         principalDecimals,
-        collateralBase,
+        collateral: collateralBase,
         collateralDecimals,
         collateralUsd,
-      )
+      })
       if (ltv !== null && ltv > MAX_LTV) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -101,9 +101,6 @@ export default function CreateBorrowOfferModal({
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { loadBorrowerAccountState, updateBorrowerAccountState } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()
-  const { mutate, reset, data, error, status } = useMutation<string, Error, () => Promise<string>>({
-    mutationFn: fn => fn(),
-  })
 
   const formContext = useMemo<BorrowOfferContext>(
     () => ({
@@ -132,14 +129,59 @@ export default function CreateBorrowOfferModal({
   const feeBase = toBigintAmount(values.fee, principalAsset.decimals)
   const bps = feeToBps(feeBase, principalBase)
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
-  const apr = computeApr(bps, loanDurationBlocks)
-  const ltv = computeLtv(
-    principalBase,
-    principalAsset.decimals,
+
+  const createBorrowOffer = useCallback(async () => {
+    const collateralUtxo = selectOptimalUtxo(utxos, collateralBase)
+    if (!collateralUtxo) throw new Error('No suitable collateral UTXO found')
+    const refs = loadBorrowerAccountState()
+    const params: CreateOfferParams = {
+      factoryAuthOutpoint: refs.factoryAuthOutpoint,
+      issuanceFactoryOutpoint: refs.issuanceFactoryOutpoint,
+      factoryAssetId: refs.factoryAssetId,
+      collateralOutpoint: collateralUtxo.outpoint,
+      collateralAmount: collateralBase,
+      principalAssetId: NETWORK_CONFIG.principalAsset.id,
+      principalAmount: principalBase,
+      principalInterestRate: bps,
+      loanDurationBlocks,
+      protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
+    }
+    const result = await createOffer(params)
+    updateBorrowerAccountState({
+      factoryAssetId: refs.factoryAssetId,
+      factoryAuthOutpoint: `${result.txid}:0`,
+      issuanceFactoryOutpoint: `${result.txid}:1`,
+    })
+    Toast.toast.success('Offer Created', {
+      description: 'Your loan offer has been created successfully.',
+      actionProps: {
+        children: 'Details',
+        onPress: () => window.open(getTxExplorerUrl(result.txid), '_blank', 'noopener'),
+      },
+    })
+    return result.txid
+  }, [
+    utxos,
     collateralBase,
-    collateralAsset.decimals,
+    principalBase,
+    bps,
+    loanDurationBlocks,
+    loadBorrowerAccountState,
+    updateBorrowerAccountState,
+    createOffer,
+  ])
+
+  const { mutate, reset, data, error, status } = useMutation({
+    mutationFn: createBorrowOffer,
+  })
+  const apr = computeApr(bps, loanDurationBlocks)
+  const ltv = computeLtv({
+    principal: principalBase,
+    principalDecimals: principalAsset.decimals,
+    collateral: collateralBase,
+    collateralDecimals: collateralAsset.decimals,
     collateralUsd,
-  )
+  })
 
   const txSummary = useMemo(
     () => [
@@ -155,38 +197,8 @@ export default function CreateBorrowOfferModal({
     onOpenChange(false)
   }
 
-  const onSubmit = handleSubmit(async () => {
-    const collateralUtxo = selectOptimalUtxo(utxos, collateralBase)
-    if (!collateralUtxo) return
-    mutate(async () => {
-      const refs = loadBorrowerAccountState()
-      const params: CreateOfferParams = {
-        factoryAuthOutpoint: refs.factoryAuthOutpoint,
-        issuanceFactoryOutpoint: refs.issuanceFactoryOutpoint,
-        factoryAssetId: refs.factoryAssetId,
-        collateralOutpoint: collateralUtxo.outpoint,
-        collateralAmount: collateralBase,
-        principalAssetId: NETWORK_CONFIG.principalAsset.id,
-        principalAmount: principalBase,
-        principalInterestRate: bps,
-        loanDurationBlocks,
-        protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
-      }
-      const result = await createOffer(params)
-      updateBorrowerAccountState({
-        factoryAssetId: refs.factoryAssetId,
-        factoryAuthOutpoint: `${result.txid}:0`,
-        issuanceFactoryOutpoint: `${result.txid}:1`,
-      })
-      Toast.toast.success('Offer Created', {
-        description: 'Your loan offer has been created successfully.',
-        actionProps: {
-          children: 'Details',
-          onPress: () => window.open(getTxExplorerUrl(result.txid), '_blank', 'noopener'),
-        },
-      })
-      return result.txid
-    })
+  const onSubmit = handleSubmit(() => {
+    mutate()
   })
 
   if (status !== 'idle') {
