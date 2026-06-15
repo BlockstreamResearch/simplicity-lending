@@ -16,7 +16,7 @@ interface UsePolicyAssetUtxosResult {
 
 export function usePolicyAssetUtxos(enabled: boolean): UsePolicyAssetUtxosResult {
   const { lwkNetwork } = useLwk()
-  const { getWalletUtxos, xOnlyPubkey } = useWallet()
+  const { getBlindedWalletUtxos, xOnlyPubkey } = useWallet()
 
   const { data, isLoading } = useQuery({
     queryKey: ['wallet', 'policy-asset-utxos', xOnlyPubkey],
@@ -24,8 +24,8 @@ export function usePolicyAssetUtxos(enabled: boolean): UsePolicyAssetUtxosResult
     staleTime: 0,
     queryFn: async (): Promise<WalletUtxo[]> => {
       const policyAsset = lwkNetwork.policyAsset()
-      const walletUtxos = await getWalletUtxos()
-      return walletUtxos
+      const blindedWalletUtxos = await getBlindedWalletUtxos()
+      return blindedWalletUtxos
         .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
         .map(utxo => ({ outpoint: utxoToOutpointString(utxo), value: utxo.unblinded().value() }))
     },
