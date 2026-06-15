@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -29,6 +31,33 @@ pub enum OfferStatus {
     Liquidated,
     Cancelled,
     Claimed,
+}
+
+impl FromStr for OfferStatus {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "active" => Ok(Self::Active),
+            "repaid" => Ok(Self::Repaid),
+            "liquidated" => Ok(Self::Liquidated),
+            "cancelled" => Ok(Self::Cancelled),
+            "claimed" => Ok(Self::Claimed),
+            _ => Err("unknown offer status"),
+        }
+    }
+}
+
+impl OfferStatus {
+    pub fn parse_csv(segment: &str) -> Result<Vec<Self>, &'static str> {
+        segment
+            .split(',')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .map(str::parse)
+            .collect()
+    }
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -86,6 +115,7 @@ impl OfferModel {
 #[derive(Debug, sqlx::FromRow)]
 pub struct OfferModelShort {
     pub id: Uuid,
+    pub issuance_factory_id: Uuid,
     pub collateral_asset_id: Vec<u8>,
     pub principal_asset_id: Vec<u8>,
     pub collateral_amount: i64,
@@ -171,5 +201,19 @@ mod tests {
         let model = OfferModel::new(&params, Uuid::new_v4(), 1, txid);
 
         assert_ne!(model.id, Uuid::nil());
+    }
+
+    #[test]
+    fn offer_status_from_str_and_parse_csv() {
+        assert_eq!(
+            "active".parse::<OfferStatus>().unwrap(),
+            OfferStatus::Active
+        );
+        assert!("invalid".parse::<OfferStatus>().is_err());
+
+        assert_eq!(
+            OfferStatus::parse_csv("pending, active").unwrap(),
+            vec![OfferStatus::Pending, OfferStatus::Active],
+        );
     }
 }

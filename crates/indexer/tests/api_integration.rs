@@ -42,22 +42,13 @@ async fn get_json(http: &reqwest::Client, url: String) -> anyhow::Result<Value> 
     response_json(response).await
 }
 
-async fn post_json(
-    http: &reqwest::Client,
-    url: String,
-    body: Value,
-) -> anyhow::Result<reqwest::Response> {
-    Ok(http
-        .post(url)
-        .header("content-type", "application/json")
-        .body(body.to_string())
-        .send()
-        .await?)
-}
-
 fn ids_from_objects(value: &Value) -> Vec<String> {
-    let mut ids: Vec<String> = value
-        .as_array()
+    let items = value
+        .get("items")
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array());
+
+    let mut ids: Vec<String> = items
         .map(|items| {
             items
                 .iter()
@@ -68,6 +59,12 @@ fn ids_from_objects(value: &Value) -> Vec<String> {
         .unwrap_or_default();
     ids.sort();
     ids
+}
+
+fn offer_list_items(value: &Value) -> &Value {
+    value
+        .get("items")
+        .expect("offer list response must include items")
 }
 
 fn uuid_strings_from_array(value: &Value) -> Vec<String> {
@@ -212,101 +209,19 @@ async fn get_offers_returns_all_seeded_offers_with_correct_status() -> anyhow::R
     let http = reqwest::Client::new();
 
     let json = get_json(&http, format!("{base_url}/offers")).await?;
+    let items = offer_list_items(&json);
 
-    assert_eq!(json.as_array().map_or(0, Vec::len), 2);
-    assert_ids_match_unordered(&json, &[pending_offer, active_offer]);
+    assert_eq!(json["total"], 2);
+    assert_eq!(json["limit"], 50);
+    assert_eq!(json["offset"], 0);
+    assert_eq!(items.as_array().map_or(0, Vec::len), 2);
+    assert_ids_match_unordered(items, &[pending_offer, active_offer]);
 
-    // Pins `ORDER BY created_at_height DESC` (active_offer's height > pending's).
-    assert_eq!(json[0]["id"], active_offer.to_string());
-    assert_eq!(json[0]["status"], "active");
-    assert_eq!(json[1]["id"], pending_offer.to_string());
-    assert_eq!(json[1]["status"], "pending");
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
-async fn get_offers_full_returns_borrower_nft_asset_among_other_fields() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
-    let http = reqwest::Client::new();
-
-    let json = get_json(&http, format!("{base_url}/offers/full")).await?;
-
-    assert_eq!(json.as_array().map_or(0, Vec::len), 2);
-    assert_ids_match_unordered(&json, &[pending_offer, active_offer]);
-    assert!(json[0]["borrower_nft_asset"].as_str().is_some());
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
-async fn get_offer_details_returns_offer_with_latest_participant() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, _active_offer) = setup_seeded_api().await?;
-    let http = reqwest::Client::new();
-
-    let json = get_json(&http, format!("{base_url}/offers/{pending_offer}")).await?;
-
-    assert_eq!(json["id"], pending_offer.to_string());
-    assert_eq!(json["status"], "pending");
-    assert_eq!(json["participants"].as_array().map_or(0, Vec::len), 1);
-    assert_eq!(json["participants"][0]["script_pubkey"], "52ac");
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
-async fn post_offers_batch_returns_requested_offers() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
-    let http = reqwest::Client::new();
-
-    let response = post_json(
-        &http,
-        format!("{base_url}/offers/batch"),
-        serde_json::json!({ "ids": [pending_offer, active_offer] }),
-    )
-    .await?
-    .error_for_status()?;
-    let json = response_json(response).await?;
-
-    assert_eq!(json.as_array().map_or(0, Vec::len), 2);
-    assert_ids_match_unordered(&json, &[pending_offer, active_offer]);
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
-async fn post_offers_batch_handles_empty_and_partial_ids() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, _active_offer) = setup_seeded_api().await?;
-    let http = reqwest::Client::new();
-
-    let empty_response = post_json(
-        &http,
-        format!("{base_url}/offers/batch"),
-        serde_json::json!({ "ids": [] }),
-    )
-    .await?
-    .error_for_status()?;
-    let empty = response_json(empty_response).await?;
-    assert_eq!(empty.as_array().map_or(0, Vec::len), 0);
-
-    let partial_response = post_json(
-        &http,
-        format!("{base_url}/offers/batch"),
-        serde_json::json!({ "ids": [pending_offer, Uuid::new_v4()] }),
-    )
-    .await?
-    .error_for_status()?;
-    let partial = response_json(partial_response).await?;
-    assert_eq!(partial.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(partial[0]["id"], pending_offer.to_string());
+    // Pins default `ORDER BY created_at_height DESC` (active_offer's height > pending's).
+    assert_eq!(items[0]["id"], active_offer.to_string());
+    assert_eq!(items[0]["status"], "active");
+    assert_eq!(items[1]["id"], pending_offer.to_string());
+    assert_eq!(items[1]["status"], "pending");
 
     server_handle.abort();
     Ok(())
@@ -341,69 +256,6 @@ async fn get_offers_by_script_returns_only_owners_of_unspent_match() -> anyhow::
 
 #[tokio::test]
 #[serial]
-async fn get_latest_participants_returns_current_snapshot() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, _active_offer) = setup_seeded_api().await?;
-    let http = reqwest::Client::new();
-
-    let json = get_json(
-        &http,
-        format!("{base_url}/offers/{pending_offer}/participants"),
-    )
-    .await?;
-
-    assert_eq!(json.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(json[0]["script_pubkey"], "52ac");
-    assert_eq!(json[0]["participant_type"], "borrower");
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
-async fn get_participants_history_returns_full_movement_history() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, _active_offer) = setup_seeded_api().await?;
-    let http = reqwest::Client::new();
-
-    let json = get_json(
-        &http,
-        format!("{base_url}/offers/{pending_offer}/participants/history"),
-    )
-    .await?;
-
-    assert_eq!(json.as_array().map_or(0, Vec::len), 2);
-    assert_eq!(json[0]["script_pubkey"], "51ac");
-    assert_eq!(
-        json[0]["spent_txid"],
-        "7777777777777777777777777777777777777777777777777777777777777777"
-    );
-    assert_eq!(json[1]["script_pubkey"], "52ac");
-    assert!(json[1]["spent_txid"].is_null());
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
-async fn get_offer_utxos_returns_full_history_ordered_by_height() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, _active_offer) = setup_seeded_api().await?;
-    let http = reqwest::Client::new();
-
-    let json = get_json(&http, format!("{base_url}/offers/{pending_offer}/utxos")).await?;
-
-    assert_eq!(json.as_array().map_or(0, Vec::len), 2);
-    assert_eq!(json[0]["utxo_type"], "pending_offer");
-    assert_eq!(json[0]["spent_at_height"], PENDING_OFFER_HEIGHT + 1);
-    assert_eq!(json[1]["utxo_type"], "active_offer");
-    assert!(json[1]["spent_at_height"].is_null());
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
 async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Result<()> {
     let pool = test_pool().await?;
 
@@ -417,16 +269,17 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     let factory = factory_model(factory_id, 30, unique_32_bytes_from_uuid(factory_id));
     seed_factory_row(&pool, &factory).await?;
 
-    for (id, status, height, collat, princ) in [
-        (offer_a, OfferStatus::Pending, 40, 0xaa_u8, 0x10_u8),
-        (offer_b, OfferStatus::Active, 60, 0xbb, 0xaa),
-        (offer_c, OfferStatus::Pending, 80, 0xcc, 0xdd),
-        (offer_d, OfferStatus::Pending, 70, 0xaa, 0xee),
+    for (id, status, height, collat, princ, interest_rate) in [
+        (offer_a, OfferStatus::Pending, 40, 0xaa_u8, 0x10_u8, 100),
+        (offer_b, OfferStatus::Active, 60, 0xbb, 0xaa, 300),
+        (offer_c, OfferStatus::Pending, 80, 0xcc, 0xdd, 400),
+        (offer_d, OfferStatus::Pending, 70, 0xaa, 0xee, 200),
     ] {
         let mut offer = offer_model(id, factory_id, height, unique_32_bytes_from_uuid(id));
         offer.current_status = status;
         offer.collateral_asset_id = vec![collat; 32];
         offer.principal_asset_id = vec![princ; 32];
+        offer.interest_rate = interest_rate;
         seed_offer_row(&pool, &offer).await?;
     }
 
@@ -435,55 +288,50 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
 
     // status=pending -> 3 offers, ordered by height DESC: c(80) -> d(70) -> a(40).
     let pending = get_json(&http, format!("{base_url}/offers?status=pending")).await?;
-    assert_eq!(pending.as_array().map_or(0, Vec::len), 3);
-    assert_eq!(pending[0]["id"], offer_c.to_string());
-    assert_eq!(pending[1]["id"], offer_d.to_string());
-    assert_eq!(pending[2]["id"], offer_a.to_string());
+    let pending_items = offer_list_items(&pending);
+    assert_eq!(pending["total"], 3);
+    assert_eq!(pending_items.as_array().map_or(0, Vec::len), 3);
+    assert_eq!(pending_items[0]["id"], offer_c.to_string());
+    assert_eq!(pending_items[1]["id"], offer_d.to_string());
+    assert_eq!(pending_items[2]["id"], offer_a.to_string());
+
+    // Multi-status filter: pending + active -> all four except none (b is active).
+    let multi_status = get_json(&http, format!("{base_url}/offers?status=pending,active")).await?;
+    assert_eq!(multi_status["total"], 4);
+    assert_ids_match_unordered(
+        offer_list_items(&multi_status),
+        &[offer_a, offer_b, offer_c, offer_d],
+    );
 
     // `asset` matches either collateral_asset_id or principal_asset_id:
     // a(collat=aa), b(princ=aa), d(collat=aa).
     let asset_filter = "aa".repeat(32);
     let by_asset = get_json(&http, format!("{base_url}/offers?asset={asset_filter}")).await?;
-    assert_eq!(by_asset.as_array().map_or(0, Vec::len), 3);
-    assert_eq!(by_asset[0]["id"], offer_d.to_string());
-    assert_eq!(by_asset[1]["id"], offer_b.to_string());
-    assert_eq!(by_asset[2]["id"], offer_a.to_string());
+    let by_asset_items = offer_list_items(&by_asset);
+    assert_eq!(by_asset["total"], 3);
+    assert_eq!(by_asset_items.as_array().map_or(0, Vec::len), 3);
+    assert_eq!(by_asset_items[0]["id"], offer_d.to_string());
+    assert_eq!(by_asset_items[1]["id"], offer_b.to_string());
+    assert_eq!(by_asset_items[2]["id"], offer_a.to_string());
 
     let paged = get_json(&http, format!("{base_url}/offers?limit=1&offset=1")).await?;
-    assert_eq!(paged.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(paged[0]["id"], offer_d.to_string());
+    let paged_items = offer_list_items(&paged);
+    assert_eq!(paged["total"], 4);
+    assert_eq!(paged["limit"], 1);
+    assert_eq!(paged["offset"], 1);
+    assert_eq!(paged_items.as_array().map_or(0, Vec::len), 1);
+    assert_eq!(paged_items[0]["id"], offer_d.to_string());
 
-    let full_pending = get_json(
+    let sorted = get_json(
         &http,
-        format!("{base_url}/offers/full?status=pending&limit=1"),
+        format!("{base_url}/offers?sort_by=interest_rate&sort_dir=asc&limit=4"),
     )
     .await?;
-    assert_eq!(full_pending.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(full_pending[0]["id"], offer_c.to_string());
-    assert_eq!(full_pending[0]["status"], "pending");
-
-    server_handle.abort();
-    Ok(())
-}
-
-#[tokio::test]
-#[serial]
-async fn history_endpoints_return_404_for_unknown_offer() -> anyhow::Result<()> {
-    let pool = test_pool().await?;
-    let (base_url, server_handle) = start_api(pool).await?;
-    let http = reqwest::Client::new();
-    let unknown_offer_id = Uuid::new_v4();
-
-    for path in [
-        format!("{base_url}/offers/{unknown_offer_id}/participants"),
-        format!("{base_url}/offers/{unknown_offer_id}/participants/history"),
-        format!("{base_url}/offers/{unknown_offer_id}/utxos"),
-    ] {
-        let response = http.get(path).send().await?;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = response_json(response).await?;
-        assert_eq!(body["error"]["code"], "not_found");
-    }
+    let sorted_items = offer_list_items(&sorted);
+    assert_eq!(sorted_items[0]["id"], offer_a.to_string());
+    assert_eq!(sorted_items[1]["id"], offer_d.to_string());
+    assert_eq!(sorted_items[2]["id"], offer_b.to_string());
+    assert_eq!(sorted_items[3]["id"], offer_c.to_string());
 
     server_handle.abort();
     Ok(())
@@ -572,8 +420,8 @@ async fn offers_endpoint_returns_400_on_invalid_status_enum() -> anyhow::Result<
     assert_eq!(
         response.status(),
         StatusCode::BAD_REQUEST,
-        "unknown `status` must be rejected by Query<OfferFilters>; if this \
-         fails the endpoint is silently treating it as `None` -> regression"
+        "unknown `status` must be rejected by Query<OfferListQuery>; if this \
+         fails the endpoint is silently ignoring the filter -> regression"
     );
 
     server_handle.abort();
@@ -597,38 +445,6 @@ async fn offers_endpoint_returns_400_on_non_uuid_path() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-#[serial]
-async fn offers_batch_returns_400_on_malformed_body() -> anyhow::Result<()> {
-    let pool = test_pool().await?;
-    let (base_url, server_handle) = start_api(pool).await?;
-    let http = reqwest::Client::new();
-
-    // Pins: Axum's `Json` extractor splits failure modes:
-    //   syntactically invalid JSON    -> 400
-    //   missing/wrong-typed field     -> 422
-    // Pin both so a future custom rejection layer doesn't change the contract
-    // silently.
-    let garbage = http
-        .post(format!("{base_url}/offers/batch"))
-        .header("content-type", "application/json")
-        .body("{ not json }")
-        .send()
-        .await?;
-    assert_eq!(garbage.status(), StatusCode::BAD_REQUEST);
-
-    let missing_ids = http
-        .post(format!("{base_url}/offers/batch"))
-        .header("content-type", "application/json")
-        .body("{}")
-        .send()
-        .await?;
-    assert_eq!(missing_ids.status(), StatusCode::UNPROCESSABLE_ENTITY);
-
-    server_handle.abort();
-    Ok(())
-}
-
 /// Intent: mirrors `OfferDetailsResponse` flattened into one struct, defined
 /// locally on purpose. Decouples the test from serde renames on the
 /// production DTO.
@@ -636,6 +452,7 @@ async fn offers_batch_returns_400_on_malformed_body() -> anyhow::Result<()> {
 #[allow(dead_code)]
 struct ExpectedOfferDetailsDto {
     id: Uuid,
+    issuance_factory_id: Uuid,
     status: String,
     collateral_asset: String,
     principal_asset: String,
@@ -648,7 +465,16 @@ struct ExpectedOfferDetailsDto {
     borrower_nft_asset: String,
     lender_nft_asset: String,
     protocol_fee_keeper_asset: String,
+    utxos: Vec<ExpectedOfferUtxoDto>,
     participants: Vec<ExpectedParticipantDto>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[allow(dead_code)]
+struct ExpectedOfferUtxoDto {
+    offer_id: Uuid,
+    utxo_type: String,
+    spent_txid: Option<String>,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -687,10 +513,85 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.borrower_nft_asset.len(), 64);
     assert_eq!(dto.lender_nft_asset.len(), 64);
     assert_eq!(dto.protocol_fee_keeper_asset.len(), 64);
+    assert_eq!(dto.utxos.len(), 1);
+    assert_eq!(dto.utxos[0].utxo_type, "active_offer");
+    assert!(dto.utxos[0].spent_txid.is_none());
     assert_eq!(dto.participants.len(), 1);
     assert_eq!(dto.participants[0].script_pubkey, "52ac");
     assert_eq!(dto.participants[0].participant_type, "borrower");
     assert!(dto.participants[0].spent_txid.is_none());
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn borrower_dashboard_returns_overview_and_filtered_offers() -> anyhow::Result<()> {
+    let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
+    let http = reqwest::Client::new();
+
+    let dashboard = get_json(
+        &http,
+        format!("{base_url}/borrowers/by-script?script_pubkey=52ac"),
+    )
+    .await?;
+
+    let overview = &dashboard["overview"];
+    assert_eq!(overview["active_loans"], 1);
+    assert_eq!(overview["pending_offers"], 1);
+    assert_eq!(
+        overview["collateral_locked"].as_array().map_or(0, Vec::len),
+        1
+    );
+    assert_eq!(overview["collateral_locked"][0]["amount"], 2_000);
+    assert_eq!(overview["borrowings"].as_array().map_or(0, Vec::len), 1);
+    assert_eq!(overview["borrowings"][0]["amount"], 1_000);
+
+    let offers = &dashboard["offers"];
+    assert_eq!(offers["total"], 2);
+    assert_eq!(offers["limit"], 50);
+    assert_eq!(offers["offset"], 0);
+    assert_ids_match_unordered(&offers["items"], &[pending_offer, active_offer]);
+    assert!(
+        offers["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .all(|item| {
+                item.get("participants").is_none()
+                    && item["collateral_amount"].as_u64() == Some(1_000)
+                    && item["principal_amount"].as_u64() == Some(500)
+            })
+    );
+
+    let pending_only = get_json(
+        &http,
+        format!("{base_url}/borrowers/by-script?script_pubkey=52ac&status=pending"),
+    )
+    .await?;
+    assert_eq!(pending_only["offers"]["total"], 1);
+    assert_eq!(
+        pending_only["offers"]["items"][0]["id"],
+        pending_offer.to_string()
+    );
+    assert_eq!(pending_only["overview"]["pending_offers"], 1);
+    assert_eq!(pending_only["overview"]["active_loans"], 1);
+
+    let unknown_wallet = get_json(
+        &http,
+        format!("{base_url}/borrowers/by-script?script_pubkey=dead"),
+    )
+    .await?;
+    assert_eq!(unknown_wallet["overview"]["active_loans"], 0);
+    assert_eq!(unknown_wallet["overview"]["pending_offers"], 0);
+    assert_eq!(
+        unknown_wallet["overview"]["collateral_locked"]
+            .as_array()
+            .map_or(0, Vec::len),
+        0
+    );
+    assert_eq!(unknown_wallet["offers"]["total"], 0);
 
     server_handle.abort();
     Ok(())
