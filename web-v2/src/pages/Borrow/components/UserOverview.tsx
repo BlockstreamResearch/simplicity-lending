@@ -42,7 +42,7 @@ export default function UserOverview() {
           return (
             <div
               key={tile.label}
-              className='bg-surface shadow-surface flex flex-col gap-3 rounded-3xl p-6'
+              className='bg-surface-secondary flex flex-col gap-3 rounded-3xl p-6'
             >
               <h3 className='text-muted text-h4'>{tile.label}</h3>
               {isLoading ? (

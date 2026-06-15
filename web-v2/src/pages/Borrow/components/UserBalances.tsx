@@ -18,7 +18,7 @@ export default function UserBalances() {
             key={asset.id}
             asset={asset}
             amount={BigInt(balances[asset.id] ?? 0)}
-            className='bg-surface shadow-surface sm:w-65.5'
+            className='sm:w-65.5'
           />
         ))}
       </div>

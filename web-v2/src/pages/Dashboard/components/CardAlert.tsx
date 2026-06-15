@@ -17,7 +17,7 @@ export default function CardAlert({
 }) {
   const titleColor = variant === 'warning' ? 'text-warning' : 'text-foreground'
   return (
-    <div className='bg-surface shadow-field flex items-center justify-between gap-4 rounded-lg p-4'>
+    <div className='bg-surface shadow-surface flex items-center justify-between gap-4 rounded-lg p-4'>
       <div>
         <p className={`text-sm font-medium ${titleColor}`}>{title}</p>
         <p className='text-muted mt-1 text-sm'>{description}</p>

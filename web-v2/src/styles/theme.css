@@ -3,10 +3,6 @@
   --shadow-focus-ring-field: var(--focus-ring-field);
   --color-field-hover: var(--field-hover);
 
-  --shadow-field: var(--field-shadow);
-  --shadow-surface: var(--surface-shadow);
-  --shadow-overlay: var(--overlay-shadow);
-
   --color-accent-hover: var(--accent-hover);
   --color-default-hover: var(--default-hover);
   --color-success-hover: var(--success-hover);
