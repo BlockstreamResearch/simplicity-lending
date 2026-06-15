@@ -59,12 +59,12 @@ function createBorrowOfferSchema({ collateralDecimals, collateralUsd, utxos }: B
       }
 
       if (utxos.length > 0) {
-        const collateralBase = parseBaseUnits(data.collateral, collateralDecimals)
-        if (!utxos.some(u => u.value >= collateralBase)) {
+        const policyAssetBase = parseBaseUnits(data.collateral, collateralDecimals)
+        if (!utxos.some(u => u.value >= policyAssetBase)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ['collateral'],
-            message: 'No single UTXO large enough for this collateral',
+            message: 'No single Policy Asset UTXO large enough for this transaction',
           })
         }
       }
