@@ -170,7 +170,8 @@ SQLX_OFFLINE=true cargo check
 
 ### Filtering Parameters (Query Params)
 
-The following parameters are available for `GET /offers` and `GET /offers/full`:
+The following parameters are available for `GET /offers` and for the `offers` list inside `GET /borrowers/by-script`:
+
 - `status`: Filter by one or more offer states (`pending`, `active`, `repaid`, `liquidated`, `cancelled`, `claimed`). Use a comma-separated list, e.g. `status=pending,active`.
 - `factory_id`: Filter by issuance factory UUID.
 - `asset`: Hex identifier of the asset (matches either collateral or principal asset).
@@ -179,13 +180,54 @@ The following parameters are available for `GET /offers` and `GET /offers/full`:
 - `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_time` (default: `created_at_height`).
 - `sort_dir`: `asc` or `desc` (default: `desc`).
 
+### Response Shapes
+
+**Short offer** (`OfferListItemShort`) — used in `GET /offers` and `GET /borrowers/by-script` → `offers.items`:
+
+- `id`, `issuance_factory_id`, `status`
+- `collateral_asset`, `principal_asset` (hex)
+- `collateral_amount`, `principal_amount`
+- `interest_rate` (basis points, e.g. 1000 = 10%)
+- `loan_expiration_time` (block height)
+- `created_at_height`, `created_at_txid` (hex)
+
+**Paginated offer list** (`GET /offers`, `GET /borrowers/by-script` → `offers`):
+
+```json
+{
+  "items": [ /* OfferListItemShort */ ],
+  "total": 42,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Offer details** (`GET /offers/{id}`) — full offer fields (short + NFT asset ids) plus:
+
+- `participants`: latest participant UTXO per role (`borrower`, `lender`)
+- `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`)
+
+**Borrower dashboard** (`GET /borrowers/by-script`):
+
+```json
+{
+  "overview": {
+    "collateral_locked": [{ "asset": "…", "amount": 1000 }],
+    "borrowings": [{ "asset": "…", "amount": 500 }],
+    "active_loans": 1,
+    "pending_offers": 2
+  },
+  "offers": { "items": [], "total": 0, "limit": 50, "offset": 0 }
+}
+```
+
+Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`). Counts (`active_loans`, `pending_offers`) are totals by status. The offer list is scoped to offers where the given `script_pubkey` is the latest borrower.
+
 ### Borrowers Endpoints
 
 | Method | Endpoint | Description | Params / Body |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/borrowers/by-script` | Borrower dashboard: overview totals and paginated short offer list | `script_pubkey` (query param, hex); offer list filters: `status`, `factory_id`, `asset`, `limit`, `offset`, `sort_by`, `sort_dir` (same as `GET /offers`) |
-
-Overview aggregates (`collateral_locked`, `borrowings`) are summed per asset across the borrower's open offers (`pending` and `active`). `active_loans` and `pending_offers` are counts by status. The `offers` section returns the same short list shape as `GET /offers`, scoped to offers where the given `script_pubkey` is the latest borrower. Use `GET /offers/{id}` for full offer details.
+| `GET` | `/borrowers/by-script` | Borrower dashboard: overview totals and paginated short offer list | `script_pubkey` (query param, hex); offer list filters (see above) |
 
 ### Factories Endpoints
 
@@ -198,11 +240,6 @@ Overview aggregates (`collateral_locked`, `borrowings`) are summed per asset acr
 
 | Method | Endpoint | Description | Params / Body |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/offers` | Get paginated list of offers with short information | `status`, `factory_id`, `asset`, `limit`, `offset`, `sort_by`, `sort_dir` |
-| `GET` | `/offers/full` | Get list of offers with full information | same filters as `/offers` |
-| `GET` | `/offers/by-script` | Find offer IDs by `script_pubkey` | `script_pubkey` (query param) |
-| `POST` | `/offers/batch` | Get detailed information for multiple offers | JSON Body (list of UUIDs in `ids` field) |
-| `GET` | `/offers/{id}` | Get comprehensive details for a single offer | — |
-| `GET` | `/offers/{id}/participants` | Get the latest (current) participants of an offer | — |
-| `GET` | `/offers/{id}/participants/history` | Get the full history of all participants | — |
-| `GET` | `/offers/{id}/utxos` | Get the history of UTXOs associated with an offer | — |
+| `GET` | `/offers` | Paginated short offer list | offer list filters (see above) |
+| `GET` | `/offers/by-script` | Offer IDs where `script_pubkey` matches an unspent participant UTXO (borrower or lender) | `script_pubkey` (query param, hex) |
+| `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and unspent offer UTXOs | — |
