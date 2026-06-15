@@ -3,6 +3,7 @@ import CancelOfferDemo from './CancelOfferDemo'
 import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
 import CreateOfferDemo from './CreateOfferDemo'
 import LiquidateOfferDemo from './LiquidateOfferDemo'
+import RepayOfferDemo from './RepayOfferDemo'
 import { WalletDemo } from './WalletDemo'
 
 export default function DemoPage() {
@@ -15,6 +16,7 @@ export default function DemoPage() {
       <AcceptOfferDemo />
       <CancelOfferDemo />
       <LiquidateOfferDemo />
+      <RepayOfferDemo />
     </div>
   )
 }
