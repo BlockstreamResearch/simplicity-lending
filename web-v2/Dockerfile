@@ -4,7 +4,7 @@ FROM rust:1.93-bookworm AS lwk-builder
 
 ARG LWK_REF=wasm-0.16-expose-external-utxos
 # ARG LWK_COMMIT=4786e456db6efc05413721f6489899a6426eaa47
-ARG LWK_COMMIT=dd53ac45683061d1b0a681a27df6b7c228f7f0e5
+ARG LWK_COMMIT=8196c69aae93a91f3139dbeda0b05ab6a41e4d28
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git pkg-config libssl-dev ca-certificates clang \

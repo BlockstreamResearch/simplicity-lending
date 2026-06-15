@@ -46,7 +46,7 @@ export interface BorrowerAccountRefs {
 
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getWalletUtxos, getWollet, signPset, xOnlyPubkey } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, xOnlyPubkey } = useWallet()
 
   // TODO: factory refs are persisted in localStorage as a temporary stopgap. Swap the restore/save
   // internals for an indexer lookup once the backend exposes borrower-account state — call sites stay the same.
@@ -78,9 +78,9 @@ export function useBorrowerAccount() {
 
     const wollet = await getWollet()
     const policyAsset = lwkNetwork.policyAsset()
-    const walletUtxos = await getWalletUtxos()
+    const blindedWalletUtxos = await getBlindedWalletUtxos()
 
-    const feeUtxo = walletUtxos
+    const feeUtxo = blindedWalletUtxos
       .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
       .filter(utxo => utxo.unblinded().value() > FEE_RESERVE)
       .sort((a, b) => Number(a.unblinded().value() - b.unblinded().value()))[0]

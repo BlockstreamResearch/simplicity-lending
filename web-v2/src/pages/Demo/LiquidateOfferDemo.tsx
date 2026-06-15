@@ -6,7 +6,7 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { type CancelOfferResult, useCancelOffer } from '@/hooks/useCancelOffer'
+import { type LiquidateOfferResult, useLiquidateOffer } from '@/hooks/useLiquidateOffer'
 import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -21,31 +21,32 @@ const outpointSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}:\d+$/, `${label} must have txid:vout format`)
     .transform(value => value.toLowerCase())
 
-const cancelOfferFormSchema = zod.object({
-  pendingOfferOutpoint: outpointSchema('Pending offer outpoint'),
-  lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
-  borrowerNftOutpoint: outpointSchema('Borrower NFT outpoint'),
-  collateralRecipientAddress: zod
+const txidSchema = (label: string) =>
+  zod
     .string()
     .trim()
-    .min(1, 'Collateral recipient address is required'),
+    .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
+    .transform(value => value.toLowerCase())
+
+const liquidateOfferFormSchema = zod.object({
+  activeOfferOutpoint: outpointSchema('Active offer outpoint'),
+  createOfferTxid: txidSchema('Create-offer txid'),
+  lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
   feeOutpoint: outpointSchema('Fee L-BTC outpoint'),
 })
 
-type CancelOfferForm = zod.input<typeof cancelOfferFormSchema>
-type CancelOfferFormField = Exclude<keyof CancelOfferForm, 'feeOutpoint'>
-type CancelOfferTextFieldProps = Omit<
+type LiquidateOfferForm = zod.input<typeof liquidateOfferFormSchema>
+type LiquidateOfferTextField = Exclude<keyof LiquidateOfferForm, 'feeOutpoint'>
+type LiquidateOfferTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
 > & {
-  name: CancelOfferFormField
+  name: LiquidateOfferTextField
 }
 
-const cancelOfferFormResolver: Resolver<CancelOfferForm> = async values => {
-  const result = cancelOfferFormSchema.safeParse(values)
-  if (result.success) {
-    return { values, errors: {} }
-  }
+const liquidateOfferFormResolver: Resolver<LiquidateOfferForm> = async values => {
+  const result = liquidateOfferFormSchema.safeParse(values)
+  if (result.success) return { values, errors: {} }
 
   return {
     values: {},
@@ -66,7 +67,7 @@ const cancelOfferFormResolver: Resolver<CancelOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: CancelOfferResult | null
+  result: LiquidateOfferResult | null
 }
 
 interface WalletUtxosState {
@@ -74,12 +75,10 @@ interface WalletUtxosState {
   error: string | null
 }
 
-const EMPTY_FORM: CancelOfferForm = {
-  pendingOfferOutpoint: '0d9998a979d7ef048b514d9186e756b869119d234f32824a59f0f2c0d174be34:5',
-  lenderNftOutpoint: '0d9998a979d7ef048b514d9186e756b869119d234f32824a59f0f2c0d174be34:3',
-  borrowerNftOutpoint: '0d9998a979d7ef048b514d9186e756b869119d234f32824a59f0f2c0d174be34:2',
-  collateralRecipientAddress:
-    'tlq1qq2xvpcvfup5j8zscjq05u2wxxjcyewk7979f3mmz5l7uw5pqmx6xf5xy50hsn6vhkm5euwt72x878eq6zxx2z58hd7zrsg9qn',
+const EMPTY_FORM: LiquidateOfferForm = {
+  activeOfferOutpoint: '',
+  createOfferTxid: '',
+  lenderNftOutpoint: '',
   feeOutpoint: '',
 }
 
@@ -89,14 +88,14 @@ const INITIAL_STATE: BroadcastState = {
   result: null,
 }
 
-export default function CancelOfferDemo() {
+export default function LiquidateOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
-  const { cancelOffer } = useCancelOffer()
-  const { control, handleSubmit } = useForm<CancelOfferForm>({
+  const { liquidateOffer } = useLiquidateOffer()
+  const { control, handleSubmit } = useForm<LiquidateOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
-    resolver: cancelOfferFormResolver,
+    resolver: liquidateOfferFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
   const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
@@ -109,7 +108,6 @@ export default function CancelOfferDemo() {
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const feeUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
-
     return blindedWalletUtxos
       .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
       .map(formatCollateralUtxoOption)
@@ -117,7 +115,6 @@ export default function CancelOfferDemo() {
 
   const refreshWalletUtxos = useCallback(async () => {
     setBlindedWalletUtxosState({ busy: true, error: null })
-
     try {
       await syncWallet()
       setBlindedWalletUtxos(await getBlindedWalletUtxos())
@@ -152,20 +149,14 @@ export default function CancelOfferDemo() {
     }
   }, [connectionStatus, getBlindedWalletUtxos])
 
-  const onSubmit = async (formValues: CancelOfferForm) => {
+  const onSubmit = async (formValues: LiquidateOfferForm) => {
     setState({ busy: true, error: null, result: null })
-
     try {
-      const result = cancelOfferFormSchema.safeParse(formValues)
+      const result = liquidateOfferFormSchema.safeParse(formValues)
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-
-      setState({
-        busy: false,
-        error: null,
-        result: await cancelOffer(result.data),
-      })
+      setState({ busy: false, error: null, result: await liquidateOffer(result.data) })
     } catch (err) {
       setState({
         busy: false,
@@ -175,7 +166,7 @@ export default function CancelOfferDemo() {
     }
   }
 
-  const renderTextField = ({ name, ...props }: CancelOfferTextFieldProps) => (
+  const renderTextField = ({ name, ...props }: LiquidateOfferTextFieldProps) => (
     <Controller
       control={control}
       name={name}
@@ -193,37 +184,32 @@ export default function CancelOfferDemo() {
 
   return (
     <div className='rounded border border-gray-300 bg-white p-4'>
-      <div className='font-bold'>Cancel Offer Demo</div>
+      <div className='font-bold'>Liquidate Offer Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-        Loads the exact three cancellation inputs by outpoint, reconstructs the Lending and
-        ScriptAuth covenants, burns both offer NFTs, and returns the unlocked collateral to the
-        supplied address.
+        Spends the active Lending covenant after loan expiration. Burns the Lender NFT and returns
+        the unlocked collateral to the connected wallet. Transaction locktime is set automatically
+        from the offer metadata.
       </p>
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({
-          name: 'pendingOfferOutpoint',
-          label: 'Pending offer Lending outpoint',
-          placeholder: 'create-offer-txid:5',
-          description: 'CreateOfferDemo places the Lending covenant at vout 5',
+          name: 'activeOfferOutpoint',
+          label: 'Active offer Lending outpoint',
+          placeholder: 'accept-offer-txid:0',
+          description: 'AcceptOfferDemo places the active Lending covenant at vout 0',
+        })}
+        {renderTextField({
+          name: 'createOfferTxid',
+          label: 'Create-offer txid',
+          placeholder: '64 hex chars',
+          description:
+            'Original create-offer txid — used to recover offer parameters from the OP_RETURN metadata and borrower NFT asset id (vout 2)',
         })}
         {renderTextField({
           name: 'lenderNftOutpoint',
-          label: 'Lender NFT ScriptAuth outpoint',
-          placeholder: 'create-offer-txid:3',
-          description: 'CreateOfferDemo places the Lender NFT at vout 3',
-        })}
-        {renderTextField({
-          name: 'borrowerNftOutpoint',
-          label: 'Borrower NFT outpoint',
-          placeholder: 'create-offer-txid:2',
-          description: 'CreateOfferDemo places the wallet-owned Borrower NFT at vout 2',
-        })}
-        {renderTextField({
-          name: 'collateralRecipientAddress',
-          label: 'Collateral recipient address',
-          placeholder: 'Unconfidential Liquid address',
-          description: 'Collateral is returned as an explicit output to preserve covenant ordering',
+          label: 'Lender NFT outpoint',
+          placeholder: 'accept-offer-txid:2 or current location',
+          description: 'Wallet-owned Lender NFT UTXO received during offer acceptance',
         })}
         <Controller
           control={control}
@@ -263,17 +249,17 @@ export default function CancelOfferDemo() {
         <UiButton
           isDisabled={connectionStatus !== 'ready'}
           isPending={state.busy}
-          loadingText='Cancelling offer...'
+          loadingText='Liquidating...'
           onPress={() => void handleSubmit(onSubmit)()}
         >
-          Cancel Offer
+          Liquidate Offer
         </UiButton>
       </div>
 
-      {state.error ? <p className='mt-3 text-xs text-red-500'>Cancel: {state.error}</p> : null}
+      {state.error ? <p className='mt-3 text-xs text-red-500'>Liquidate: {state.error}</p> : null}
 
       <TxResult
-        title='Offer Cancelled'
+        title='Offer Liquidated'
         txid={state.result?.txid ?? null}
         confirmations={confirmations}
         detail={state.result?.summary}
