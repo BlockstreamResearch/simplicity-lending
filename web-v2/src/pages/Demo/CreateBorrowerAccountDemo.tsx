@@ -1,9 +1,9 @@
 import { useState } from 'react'
 
 import { type BorrowerAccountCreationResult, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useTxStatus } from '@/hooks/useTxStatus'
 import { useWallet } from '@/providers/wallet/useWallet'
 
-import { useTxConfirmations } from './helpers'
 import { TxResult } from './TxResult'
 
 interface BroadcastState<TResult> {
@@ -22,8 +22,8 @@ export default function CreateBorrowerAccountDemo() {
     useState<BroadcastState<BorrowerAccountCreationResult>>(INITIAL_STATE)
   const [removeState, setRemoveState] = useState<BroadcastState<null>>(INITIAL_STATE)
 
-  const createConfirmations = useTxConfirmations(createState.result?.txid ?? null)
-  const removeConfirmations = useTxConfirmations(null)
+  const createTxStatus = useTxStatus(createState.result?.txid ?? null)
+  const removeTxStatus = useTxStatus(null)
 
   const handleCreate = async () => {
     setCreateState({ busy: true, error: null, result: null })
@@ -96,16 +96,12 @@ export default function CreateBorrowerAccountDemo() {
             <TxResult
               title='Borrower Account Created'
               txid={createState.result.txid}
-              confirmations={createConfirmations}
+              txStatus={createTxStatus}
               detail={createState.result}
             />
           )}
           {removeState.result !== undefined && removeState.error && (
-            <TxResult
-              title='Borrower Account Removed'
-              txid={null}
-              confirmations={removeConfirmations}
-            />
+            <TxResult title='Borrower Account Removed' txid={null} txStatus={removeTxStatus} />
           )}
         </div>
       </div>

@@ -41,6 +41,7 @@ export function useBorrows(): DashboardBorrows {
   const blockHeightQuery = useBlockHeight(DASHBOARD_REFETCH_INTERVAL_MS)
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
+  // TODO: fetch balance from indexer when it provides an endpoint
   const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
 
   const idsRefetch = idsQuery.refetch

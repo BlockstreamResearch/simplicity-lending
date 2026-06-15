@@ -1,9 +1,10 @@
+import { useMutation } from '@tanstack/react-query'
+
 import CircleDashedIcon from '@/components/icons/CircleDashedIcon'
 import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
-import { useTransaction } from '@/hooks/useTransaction'
 
 interface CreateBorrowerAccountModalProps {
   isOpen: boolean
@@ -15,28 +16,30 @@ export default function CreateBorrowerAccountModal({
   onOpenChange,
 }: CreateBorrowerAccountModalProps) {
   const { createBorrowerAccount } = useBorrowerAccount()
-  const { phase, txid, error, execute, resetTx } = useTransaction()
+  const { mutate, reset, data, error, status } = useMutation<string, Error, () => Promise<string>>({
+    mutationFn: fn => fn(),
+  })
 
   const handleClose = () => {
-    resetTx()
+    reset()
     onOpenChange(false)
   }
 
   const handleCreate = () => {
-    execute(async () => {
+    mutate(async () => {
       const result = await createBorrowerAccount()
       return result.txid
     })
   }
 
-  if (phase !== 'idle') {
+  if (status !== 'idle') {
     return (
       <TransactionModal
         isOpen={isOpen}
         eyebrow='New Borrower Account'
-        phase={phase}
-        txid={txid}
-        errorMessage={error}
+        status={status}
+        txid={data}
+        errorMessage={error?.message}
         onClose={handleClose}
       />
     )

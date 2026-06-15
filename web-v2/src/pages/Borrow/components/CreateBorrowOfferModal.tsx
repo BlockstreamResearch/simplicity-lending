@@ -1,5 +1,6 @@
 import { Toast } from '@heroui/react'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
@@ -13,21 +14,24 @@ import { UiModal } from '@/components/ui/UiModal'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { usePolicyAssetUtxos, type WalletUtxo } from '@/hooks/usePolicyAssetUtxos'
-import { useTransaction } from '@/hooks/useTransaction'
+import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { type CreateOfferParams, useCreateOffer } from '@/hooks/useCreateOffer'
+import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { DECIMAL_AMOUNT_RE, parseBaseUnits } from '@/utils/format'
+import { toBigintAmount } from '@/utils/bigint'
+import { DECIMAL_AMOUNT_RE } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
+import { selectOptimalUtxo } from '@/utils/utxo'
 
-import { MAX_LTV, selectSmallestUtxo, TERM_OPTIONS } from '../helpers'
-import { useCreateBorrowOffer } from '../hooks/useCreateBorrowOffer'
+import { MAX_LTV, TERM_OPTIONS } from '../helpers'
 import BalanceCard from './BalanceCard'
 import LoanInfo from './LoanInfo'
 
 interface BorrowOfferContext {
   collateralDecimals: number
+  principalDecimals: number
   collateralUsd: number | null
-  utxos: WalletUtxo[]
+  utxos: PolicyAssetUtxo[]
 }
 
 const positiveAmount = z
@@ -36,7 +40,12 @@ const positiveAmount = z
   .regex(DECIMAL_AMOUNT_RE, 'Enter a valid amount')
   .refine(v => Number(v) > 0, 'Enter a positive amount')
 
-function createBorrowOfferSchema({ collateralDecimals, collateralUsd, utxos }: BorrowOfferContext) {
+function createBorrowOfferSchema({
+  collateralDecimals,
+  principalDecimals,
+  collateralUsd,
+  utxos,
+}: BorrowOfferContext) {
   return z
     .object({
       collateral: positiveAmount,
@@ -45,11 +54,17 @@ function createBorrowOfferSchema({ collateralDecimals, collateralUsd, utxos }: B
       termDays: z.number().int().positive(),
     })
     .superRefine((data, ctx) => {
-      const collateral = Number(data.collateral)
-      const borrow = Number(data.borrow)
-      if (!collateral || !borrow) return
+      const collateralBase = toBigintAmount(data.collateral, collateralDecimals)
+      const principalBase = toBigintAmount(data.borrow, principalDecimals)
+      if (!collateralBase || !principalBase) return
 
-      const ltv = computeLtv(borrow, collateral, collateralUsd)
+      const ltv = computeLtv(
+        principalBase,
+        principalDecimals,
+        collateralBase,
+        collateralDecimals,
+        collateralUsd,
+      )
       if (ltv !== null && ltv > MAX_LTV) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -58,15 +73,12 @@ function createBorrowOfferSchema({ collateralDecimals, collateralUsd, utxos }: B
         })
       }
 
-      if (utxos.length > 0) {
-        const policyAssetBase = parseBaseUnits(data.collateral, collateralDecimals)
-        if (!utxos.some(u => u.value >= policyAssetBase)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['collateral'],
-            message: 'No single Policy Asset UTXO large enough for this transaction',
-          })
-        }
+      if (utxos.length > 0 && !utxos.some(u => u.value >= collateralBase)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['collateral'],
+          message: 'No single Policy Asset UTXO large enough for this transaction',
+        })
       }
     })
 }
@@ -87,33 +99,47 @@ export default function CreateBorrowOfferModal({
   // TODO: implement price feed
   const collateralUsd = null
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
-  const { submit } = useCreateBorrowOffer()
-  const { phase, txid, error, execute, resetTx } = useTransaction()
+  const { loadBorrowerAccountState, updateBorrowerAccountState } = useBorrowerAccount()
+  const { createOffer } = useCreateOffer()
+  const { mutate, reset, data, error, status } = useMutation<string, Error, () => Promise<string>>({
+    mutationFn: fn => fn(),
+  })
 
   const formContext = useMemo<BorrowOfferContext>(
     () => ({
       collateralDecimals: collateralAsset.decimals,
+      principalDecimals: principalAsset.decimals,
       collateralUsd,
       utxos: isLoadingUtxos ? [] : utxos,
     }),
-    [collateralAsset.decimals, collateralUsd, utxos, isLoadingUtxos],
+    [collateralAsset.decimals, principalAsset.decimals, collateralUsd, utxos, isLoadingUtxos],
   )
 
   const resolver = useMemo(() => zodResolver(createBorrowOfferSchema(formContext)), [formContext])
 
-  const { control, handleSubmit, reset } = useForm<CreateBorrowOfferValues>({
+  const {
+    control,
+    handleSubmit,
+    reset: resetForm,
+  } = useForm<CreateBorrowOfferValues>({
     resolver,
     defaultValues: { collateral: '', borrow: '', fee: '', termDays: undefined },
   })
 
   const values = useWatch({ control })
-  const collateralBase = parseBaseUnits(values.collateral, collateralAsset.decimals)
-  const principalBase = parseBaseUnits(values.borrow, principalAsset.decimals)
-  const feeBase = parseBaseUnits(values.fee, principalAsset.decimals)
+  const collateralBase = toBigintAmount(values.collateral, collateralAsset.decimals)
+  const principalBase = toBigintAmount(values.borrow, principalAsset.decimals)
+  const feeBase = toBigintAmount(values.fee, principalAsset.decimals)
   const bps = feeToBps(feeBase, principalBase)
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
   const apr = computeApr(bps, loanDurationBlocks)
-  const ltv = computeLtv(Number(values.borrow), Number(values.collateral), collateralUsd)
+  const ltv = computeLtv(
+    principalBase,
+    principalAsset.decimals,
+    collateralBase,
+    collateralAsset.decimals,
+    collateralUsd,
+  )
 
   const txSummary = useMemo(
     () => [
@@ -124,21 +150,33 @@ export default function CreateBorrowOfferModal({
   )
 
   const handleClose = () => {
-    resetTx()
     reset()
+    resetForm()
     onOpenChange(false)
   }
 
   const onSubmit = handleSubmit(async () => {
-    const collateralUtxo = selectSmallestUtxo(utxos, collateralBase)
+    const collateralUtxo = selectOptimalUtxo(utxos, collateralBase)
     if (!collateralUtxo) return
-    await execute(async () => {
-      const result = await submit({
+    mutate(async () => {
+      const refs = loadBorrowerAccountState()
+      const params: CreateOfferParams = {
+        factoryAuthOutpoint: refs.factoryAuthOutpoint,
+        issuanceFactoryOutpoint: refs.issuanceFactoryOutpoint,
+        factoryAssetId: refs.factoryAssetId,
         collateralOutpoint: collateralUtxo.outpoint,
         collateralAmount: collateralBase,
+        principalAssetId: NETWORK_CONFIG.principalAsset.id,
         principalAmount: principalBase,
         principalInterestRate: bps,
         loanDurationBlocks,
+        protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
+      }
+      const result = await createOffer(params)
+      updateBorrowerAccountState({
+        factoryAssetId: refs.factoryAssetId,
+        factoryAuthOutpoint: `${result.txid}:0`,
+        issuanceFactoryOutpoint: `${result.txid}:1`,
       })
       Toast.toast.success('Offer Created', {
         description: 'Your loan offer has been created successfully.',
@@ -151,15 +189,15 @@ export default function CreateBorrowOfferModal({
     })
   })
 
-  if (phase !== 'idle') {
+  if (status !== 'idle') {
     return (
       <TransactionModal
         isOpen={isOpen}
         eyebrow='New Offer'
-        phase={phase}
+        status={status}
         summary={txSummary}
-        txid={txid}
-        errorMessage={error}
+        txid={data}
+        errorMessage={error?.message}
         onClose={handleClose}
       />
     )
@@ -196,7 +234,7 @@ export default function CreateBorrowOfferModal({
           name='collateral'
           render={({ field, fieldState }) => (
             <UiTextField
-              label={<UiFieldLabel>Collateral</UiFieldLabel>}
+              label={<UiFieldLabel required>Collateral</UiFieldLabel>}
               placeholder='0.00'
               value={field.value}
               onChange={field.onChange}
@@ -211,7 +249,7 @@ export default function CreateBorrowOfferModal({
           name='borrow'
           render={({ field, fieldState }) => (
             <UiTextField
-              label={<UiFieldLabel>Borrow</UiFieldLabel>}
+              label={<UiFieldLabel required>Borrow</UiFieldLabel>}
               placeholder='0.00'
               value={field.value}
               onChange={field.onChange}
@@ -228,7 +266,7 @@ export default function CreateBorrowOfferModal({
               name='fee'
               render={({ field, fieldState }) => (
                 <UiTextField
-                  label={<UiFieldLabel>Fee</UiFieldLabel>}
+                  label={<UiFieldLabel required>Fee</UiFieldLabel>}
                   placeholder='0.00'
                   value={field.value}
                   onChange={field.onChange}
@@ -245,7 +283,7 @@ export default function CreateBorrowOfferModal({
               name='termDays'
               render={({ field, fieldState }) => (
                 <UiSelect
-                  label={<UiFieldLabel>Duration/Term</UiFieldLabel>}
+                  label={<UiFieldLabel required>Duration/Term</UiFieldLabel>}
                   placeholder='Select one'
                   options={TERM_OPTIONS}
                   selectedKey={field.value ?? null}

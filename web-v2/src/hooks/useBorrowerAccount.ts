@@ -38,7 +38,7 @@ export interface BorrowerAccountCreationResult {
   metadataOpReturnHex: string
 }
 
-export interface BorrowerAccountRefs {
+export interface BorrowerAccountState {
   factoryAssetId: string
   factoryAuthOutpoint: string
   issuanceFactoryOutpoint: string
@@ -48,9 +48,7 @@ export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, xOnlyPubkey } = useWallet()
 
-  // TODO: factory refs are persisted in localStorage as a temporary stopgap. Swap the restore/save
-  // internals for an indexer lookup once the backend exposes borrower-account state — call sites stay the same.
-  const restore = useCallback((): BorrowerAccountRefs => {
+  const loadBorrowerAccountState = useCallback((): BorrowerAccountState => {
     const account = xOnlyPubkey ? getBorrowerAccount(xOnlyPubkey) : null
     if (!account) throw new Error('No borrower account found. Create one first.')
     if (!account.factoryAuthOutpoint) {
@@ -63,9 +61,9 @@ export function useBorrowerAccount() {
     }
   }, [xOnlyPubkey])
 
-  const save = useCallback(
-    (refs: BorrowerAccountRefs): void => {
-      if (xOnlyPubkey) saveBorrowerAccount(xOnlyPubkey, refs)
+  const updateBorrowerAccountState = useCallback(
+    (state: BorrowerAccountState): void => {
+      if (xOnlyPubkey) saveBorrowerAccount(xOnlyPubkey, state)
     },
     [xOnlyPubkey],
   )
@@ -132,7 +130,7 @@ export function useBorrowerAccount() {
       metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
     }
 
-    save({
+    updateBorrowerAccountState({
       factoryAssetId: result.issuedAssetId,
       factoryAuthOutpoint: result.factoryAuthOutpoint,
       issuanceFactoryOutpoint: result.issuanceFactoryOutpoint,
@@ -147,7 +145,13 @@ export function useBorrowerAccount() {
     )
   }
 
-  return { createBorrowerAccount, restore, save, hasAccount, removeBorrowerAccount }
+  return {
+    createBorrowerAccount,
+    loadBorrowerAccountState,
+    updateBorrowerAccountState,
+    hasAccount,
+    removeBorrowerAccount,
+  }
 }
 
 function emptyContractHash(): ContractHash {

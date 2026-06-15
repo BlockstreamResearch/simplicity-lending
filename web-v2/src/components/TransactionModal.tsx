@@ -1,4 +1,5 @@
 import { Spinner } from '@heroui/react'
+import type { MutationStatus } from '@tanstack/react-query'
 import { type ReactNode, useMemo } from 'react'
 
 import { getTxExplorerUrl } from '@/api/esplora/utils'
@@ -6,8 +7,7 @@ import CheckIcon from '@/components/icons/CheckIcon'
 import CircleExclamationIcon from '@/components/icons/CircleExclamationIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
-import type { TransactionPhase } from '@/hooks/useTransaction'
-import { useTxConfirmations } from '@/hooks/useTxConfirmations'
+import { useTxStatus } from '@/hooks/useTxStatus'
 import { truncateAddress } from '@/utils/format'
 
 export interface TransactionSummaryRow {
@@ -15,33 +15,32 @@ export interface TransactionSummaryRow {
   value: ReactNode
 }
 
-type ActiveTransactionPhase = Exclude<TransactionPhase, 'idle'>
-
 interface TransactionModalProps {
   isOpen: boolean
   eyebrow: string
-  phase: ActiveTransactionPhase
+  status: MutationStatus
   summary?: TransactionSummaryRow[]
   txid?: string | null
   errorMessage?: string | null
   onClose: () => void
 }
 
-const TITLE: Record<ActiveTransactionPhase, string> = {
-  processing: 'Processing Transaction…',
+const TITLE: Record<MutationStatus, string> = {
+  idle: 'Transaction not started',
+  pending: 'Processing Transaction…',
   success: 'Transaction Complete',
   error: 'Transaction Failed',
 }
 
-function StatusIcon({ phase }: { phase: ActiveTransactionPhase }) {
-  if (phase === 'success') {
+function StatusIcon({ status }: { status: MutationStatus }) {
+  if (status === 'success') {
     return (
       <span className='bg-success/15 text-success flex size-10 items-center justify-center rounded-full'>
         <CheckIcon className='size-5' />
       </span>
     )
   }
-  if (phase === 'error') {
+  if (status === 'error') {
     return (
       <span className='bg-danger/15 text-danger flex size-10 items-center justify-center rounded-full'>
         <CircleExclamationIcon className='size-5' />
@@ -58,14 +57,14 @@ function StatusIcon({ phase }: { phase: ActiveTransactionPhase }) {
 export default function TransactionModal({
   isOpen,
   eyebrow,
-  phase,
+  status,
   summary = [],
   txid,
   errorMessage,
   onClose,
 }: TransactionModalProps) {
-  const txConfirmations = useTxConfirmations({ txid })
-  const isProcessing = phase === 'processing'
+  const txStatus = useTxStatus(txid)
+  const isProcessing = status === 'pending'
 
   const rows = useMemo<TransactionSummaryRow[]>(
     () => [
@@ -86,13 +85,18 @@ export default function TransactionModal({
               ),
             },
             {
-              label: 'Confirmations',
-              value: txConfirmations === null ? 'Pending…' : String(txConfirmations.confirmations),
+              label: 'Status',
+              value:
+                txStatus === 'finalized'
+                  ? 'Finalized'
+                  : txStatus === 'confirmed'
+                    ? 'Confirmed'
+                    : 'Pending…',
             },
           ]
         : []),
     ],
-    [summary, txid, txConfirmations],
+    [summary, txid, txStatus],
   )
 
   return (
@@ -106,16 +110,16 @@ export default function TransactionModal({
       size='md'
       title={
         <span className='flex items-center gap-3'>
-          <StatusIcon phase={phase} />
+          <StatusIcon status={status} />
           <span className='flex flex-col'>
             <span className='text-sm font-normal'>{eyebrow}</span>
-            <span>{TITLE[phase]}</span>
+            <span>{TITLE[status]}</span>
           </span>
         </span>
       }
       footer={
         <UiButton className='w-full' variant='primary' isDisabled={isProcessing} onPress={onClose}>
-          {phase === 'success' ? 'Done' : 'Close'}
+          {status === 'success' ? 'Done' : 'Close'}
         </UiButton>
       }
     >
@@ -135,7 +139,7 @@ export default function TransactionModal({
             ))}
           </div>
         )}
-        {phase === 'error' && errorMessage && (
+        {status === 'error' && errorMessage && (
           <p className='text-danger text-sm wrap-break-word'>{errorMessage}</p>
         )}
       </div>

@@ -4,13 +4,13 @@ import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
-export interface WalletUtxo {
+export interface PolicyAssetUtxo {
   outpoint: string
   value: bigint
 }
 
 interface UsePolicyAssetUtxosResult {
-  utxos: WalletUtxo[]
+  utxos: PolicyAssetUtxo[]
   isLoading: boolean
 }
 
@@ -22,13 +22,11 @@ export function usePolicyAssetUtxos(enabled: boolean): UsePolicyAssetUtxosResult
     queryKey: ['wallet', 'policy-asset-utxos', xOnlyPubkey],
     enabled,
     staleTime: 0,
-    queryFn: async (): Promise<WalletUtxo[]> => {
-      const policyAsset = lwkNetwork.policyAsset()
-      const blindedWalletUtxos = await getBlindedWalletUtxos()
-      return blindedWalletUtxos
-        .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
-        .map(utxo => ({ outpoint: utxoToOutpointString(utxo), value: utxo.unblinded().value() }))
-    },
+    queryFn: () => getBlindedWalletUtxos(),
+    select: utxos =>
+      utxos
+        .filter(utxo => isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))
+        .map(utxo => ({ outpoint: utxoToOutpointString(utxo), value: utxo.unblinded().value() })),
   })
 
   return { utxos: data ?? [], isLoading: enabled && isLoading }

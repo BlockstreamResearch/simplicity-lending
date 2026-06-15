@@ -41,7 +41,7 @@ export default function YourBorrows() {
           ))}
         </div>
       ) : offers.length === 0 ? (
-        <div className='border-muted flex h-14 items-center rounded border border-dashed px-4 opacity-50'>
+        <div className='bg-surface border-muted flex h-14 items-center rounded border border-dashed px-4 opacity-50'>
           <span className='text-foreground text-sm font-medium'>No borrow offers yet.</span>
         </div>
       ) : (
