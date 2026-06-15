@@ -47,6 +47,7 @@ const DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY = 30_000
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 
 // 10% of the total fee goes to the protocol, matching PROTOCOL_FEE_PERCENTAGE in Rust.
+// Check crates/contracts/src/programs/lending/offer.rs)
 const PROTOCOL_FEE_BPS = 1_000n
 const BASIS_POINTS = 10_000n
 
