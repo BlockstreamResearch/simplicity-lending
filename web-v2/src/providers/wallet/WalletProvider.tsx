@@ -286,6 +286,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       throw new Error('WalletProvider: not connected')
     }
 
+    // LWK returns blinded UTXOs, which are spendable by LWK
     return session.wollet.utxos()
   }, [])
 
