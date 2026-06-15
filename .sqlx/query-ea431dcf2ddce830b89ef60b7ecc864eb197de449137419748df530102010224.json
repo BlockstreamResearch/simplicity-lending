@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT \n            id,\n            issuance_factory_id,\n            current_status AS \"current_status: OfferStatus\",\n            collateral_asset_id,\n            principal_asset_id,\n            borrower_nft_asset_id,\n            lender_nft_asset_id,\n            protocol_fee_keeper_asset_id,\n            collateral_amount,\n            principal_amount,\n            interest_rate,\n            loan_expiration_time,\n            created_at_height,\n            created_at_txid\n        FROM offers\n        WHERE id = $1\n        ",
+  "query": "\n        SELECT\n            id,\n            issuance_factory_id,\n            current_status AS \"current_status: OfferStatus\",\n            collateral_asset_id,\n            principal_asset_id,\n            borrower_nft_asset_id,\n            lender_nft_asset_id,\n            protocol_fee_keeper_asset_id,\n            collateral_amount,\n            principal_amount,\n            interest_rate,\n            loan_expiration_time,\n            created_at_height,\n            created_at_txid\n        FROM offers\n        WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -110,5 +110,5 @@
       false
     ]
   },
-  "hash": "8962bb9a4888251286bb3e9c5f47dbc6052d188d8bffeaadc5a8fe8f10e8bf54"
+  "hash": "ea431dcf2ddce830b89ef60b7ecc864eb197de449137419748df530102010224"
 }
