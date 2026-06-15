@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { useCallback, useMemo } from 'react'
 
 export type TransactionPhase = 'idle' | 'processing' | 'success' | 'error'
 
@@ -11,29 +12,31 @@ export interface TransactionState {
 }
 
 export function useTransaction(): TransactionState {
-  const [phase, setPhase] = useState<TransactionPhase>('idle')
-  const [txid, setTxid] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { mutateAsync, reset, data, error, isPending, isSuccess, isError } = useMutation<
+    string,
+    Error,
+    () => Promise<string>
+  >({
+    mutationFn: fn => fn(),
+  })
 
-  const execute = useCallback(async (fn: () => Promise<string>) => {
-    setPhase('processing')
-    setError(null)
-    setTxid(null)
-    try {
-      const id = await fn()
-      setTxid(id)
-      setPhase('success')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      setPhase('error')
-    }
-  }, [])
+  const phase: TransactionPhase = useMemo(() => {
+    if (isPending) return 'processing'
+    if (isError) return 'error'
+    if (isSuccess) return 'success'
+    return 'idle'
+  }, [isPending, isError, isSuccess])
 
-  const resetTx = useCallback(() => {
-    setPhase('idle')
-    setTxid(null)
-    setError(null)
-  }, [])
+  const execute = useCallback(
+    async (fn: () => Promise<string>) => {
+      try {
+        await mutateAsync(fn)
+      } catch {
+        return
+      }
+    },
+    [mutateAsync],
+  )
 
-  return { phase, txid, error, execute, resetTx }
+  return { phase, txid: data ?? null, error: error?.message ?? null, execute, resetTx: reset }
 }

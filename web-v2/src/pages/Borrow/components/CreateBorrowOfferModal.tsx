@@ -1,3 +1,5 @@
+import { Toast } from '@heroui/react'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
@@ -13,13 +15,11 @@ import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { usePolicyAssetUtxos, type WalletUtxo } from '@/hooks/usePolicyAssetUtxos'
 import { useTransaction } from '@/hooks/useTransaction'
-import { useNotifications } from '@/providers/notifications/NotificationsContext'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { parseBaseUnits } from '@/utils/format'
+import { DECIMAL_AMOUNT_RE, parseBaseUnits } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
-import { createZodResolver } from '@/utils/zod'
 
-import { MAX_LTV, pickCollateralUtxo, TERM_OPTIONS } from '../helpers'
+import { MAX_LTV, selectSmallestUtxo, TERM_OPTIONS } from '../helpers'
 import { useCreateBorrowOffer } from '../hooks/useCreateBorrowOffer'
 import BalanceCard from './BalanceCard'
 import LoanInfo from './LoanInfo'
@@ -33,6 +33,7 @@ interface BorrowOfferContext {
 const positiveAmount = z
   .string()
   .trim()
+  .regex(DECIMAL_AMOUNT_RE, 'Enter a valid amount')
   .refine(v => Number(v) > 0, 'Enter a positive amount')
 
 function createBorrowOfferSchema({ collateralDecimals, collateralUsd, utxos }: BorrowOfferContext) {
@@ -72,10 +73,6 @@ function createBorrowOfferSchema({ collateralDecimals, collateralUsd, utxos }: B
 
 type CreateBorrowOfferValues = z.infer<ReturnType<typeof createBorrowOfferSchema>>
 
-const createBorrowOfferResolver = createZodResolver<CreateBorrowOfferValues, BorrowOfferContext>(
-  createBorrowOfferSchema,
-)
-
 interface CreateBorrowOfferModalProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
@@ -91,7 +88,6 @@ export default function CreateBorrowOfferModal({
   const collateralUsd = null
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { submit } = useCreateBorrowOffer()
-  const { notify } = useNotifications()
   const { phase, txid, error, execute, resetTx } = useTransaction()
 
   const formContext = useMemo<BorrowOfferContext>(
@@ -103,9 +99,10 @@ export default function CreateBorrowOfferModal({
     [collateralAsset.decimals, collateralUsd, utxos, isLoadingUtxos],
   )
 
-  const { control, handleSubmit, reset } = useForm<CreateBorrowOfferValues, BorrowOfferContext>({
-    resolver: createBorrowOfferResolver,
-    context: formContext,
+  const resolver = useMemo(() => zodResolver(createBorrowOfferSchema(formContext)), [formContext])
+
+  const { control, handleSubmit, reset } = useForm<CreateBorrowOfferValues>({
+    resolver,
     defaultValues: { collateral: '', borrow: '', fee: '', termDays: undefined },
   })
 
@@ -118,6 +115,14 @@ export default function CreateBorrowOfferModal({
   const apr = computeApr(bps, loanDurationBlocks)
   const ltv = computeLtv(Number(values.borrow), Number(values.collateral), collateralUsd)
 
+  const txSummary = useMemo(
+    () => [
+      { label: 'Borrow', value: `${values.borrow || '0'} ${principalAsset.symbol}` },
+      { label: 'Collateral', value: `${values.collateral || '0'} ${collateralAsset.symbol}` },
+    ],
+    [values.borrow, values.collateral, principalAsset.symbol, collateralAsset.symbol],
+  )
+
   const handleClose = () => {
     resetTx()
     reset()
@@ -125,7 +130,7 @@ export default function CreateBorrowOfferModal({
   }
 
   const onSubmit = handleSubmit(async () => {
-    const collateralUtxo = pickCollateralUtxo(utxos, collateralBase)
+    const collateralUtxo = selectSmallestUtxo(utxos, collateralBase)
     if (!collateralUtxo) return
     await execute(async () => {
       const result = await submit({
@@ -135,12 +140,10 @@ export default function CreateBorrowOfferModal({
         principalInterestRate: bps,
         loanDurationBlocks,
       })
-      notify({
-        variant: 'success',
-        title: 'Offer Created',
+      Toast.toast.success('Offer Created', {
         description: 'Your loan offer has been created successfully.',
-        action: {
-          label: 'Details',
+        actionProps: {
+          children: 'Details',
           onPress: () => window.open(getTxExplorerUrl(result.txid), '_blank', 'noopener'),
         },
       })
@@ -154,10 +157,7 @@ export default function CreateBorrowOfferModal({
         isOpen={isOpen}
         eyebrow='New Offer'
         phase={phase}
-        summary={[
-          { label: 'Borrow', value: `${values.borrow || '0'} ${principalAsset.symbol}` },
-          { label: 'Collateral', value: `${values.collateral || '0'} ${collateralAsset.symbol}` },
-        ]}
+        summary={txSummary}
         txid={txid}
         errorMessage={error}
         onClose={handleClose}

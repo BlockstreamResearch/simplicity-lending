@@ -60,6 +60,14 @@ export function useBorrows(): DashboardBorrows {
       const termLeft = getOfferTermLeft(o, currentBlockHeight)
       return termLeft > 0 && termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS
     })
+    const totalPrincipal = active.reduce((acc, o) => acc + Number(o.principal_amount), 0)
+    const averageApr =
+      totalPrincipal > 0
+        ? active.reduce((acc, o) => {
+            const principal = Number(o.principal_amount)
+            return acc + principal * o.interest_rate
+          }, 0) / totalPrincipal
+        : 0
     return {
       balance,
       stats: {
@@ -68,9 +76,7 @@ export function useBorrows(): DashboardBorrows {
         activeLoans: active.length,
         pendingOffers: pending.length,
         toRepay: nearExpiryOffers.length,
-        averageApr: active.length
-          ? active.reduce((acc, o) => acc + o.interest_rate, 0) / active.length
-          : 0,
+        averageApr,
       },
       offers,
       currentBlockHeight,

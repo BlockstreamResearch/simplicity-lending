@@ -5,16 +5,16 @@ import CoinsIcon from '@/components/icons/CoinsIcon'
 import PlusIcon from '@/components/icons/PlusIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useBorrows } from '@/pages/Dashboard/hooks/useBorrows'
 
-import { useBorrowerAccountRefs } from '../hooks/useBorrowerAccountRefs'
 import BorrowOffersTable from './BorrowOffersTable'
 import CreateBorrowerAccountModal from './CreateBorrowerAccountModal'
 import CreateBorrowOfferModal from './CreateBorrowOfferModal'
 
 export default function YourBorrows() {
   const { offers, currentBlockHeight, isLoading } = useBorrows()
-  const { hasAccount } = useBorrowerAccountRefs()
+  const { hasAccount } = useBorrowerAccount()
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false)
 

@@ -229,7 +229,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (autoResumedRef.current || !savedSession || state.connectionStatus !== 'disconnected') return
     autoResumedRef.current = true
-    resumeSession().catch(() => disconnect().catch(console.warn))
+    setState(s => ({ ...s, reconnecting: true }))
+    resumeSession()
+      .catch(() => disconnect().catch(console.warn))
+      .finally(() => setState(s => ({ ...s, reconnecting: false })))
   }, [savedSession, state.connectionStatus, resumeSession, disconnect])
 
   const sync = useCallback(async () => {

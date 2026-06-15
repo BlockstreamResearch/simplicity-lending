@@ -19,12 +19,12 @@ function readAll(): Record<string, StoredBorrowerAccount> {
   }
 }
 
-export function getBorrowerAccount(pubkey: string): StoredBorrowerAccount | null {
-  return readAll()[pubkey] ?? null
+export function getBorrowerAccount(walletKey: string): StoredBorrowerAccount | null {
+  return readAll()[walletKey] ?? null
 }
 
-export function saveBorrowerAccount(pubkey: string, account: StoredBorrowerAccount): void {
+export function saveBorrowerAccount(walletKey: string, account: StoredBorrowerAccount): void {
   const all = readAll()
-  all[pubkey] = account
+  all[walletKey] = account
   localStorage.setItem(STORAGE_KEY, JSON.stringify(all))
 }

@@ -8,5 +8,5 @@ export function useWallet(): WalletContextValue {
   if (ctx === WALLET_CONTEXT_UNINITIALIZED) {
     throw new Error('useWallet() must be used within <WalletProvider />')
   }
-  return { ...ctx }
+  return ctx
 }

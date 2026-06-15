@@ -4,7 +4,15 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
 
 export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
-  const { connectionStatus, receiveAddress, connect } = useWallet()
+  const { connectionStatus, receiveAddress, connect, reconnecting } = useWallet()
+
+  if (reconnecting) {
+    return (
+      <UiButton variant='secondary' isDisabled>
+        Reconnecting…
+      </UiButton>
+    )
+  }
 
   if (connectionStatus === 'ready' && receiveAddress) {
     return <UiButton variant='secondary'>{truncateAddress(receiveAddress)}</UiButton>

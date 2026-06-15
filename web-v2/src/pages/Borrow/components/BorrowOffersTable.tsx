@@ -1,8 +1,8 @@
 import { Table } from '@heroui/react'
 
+import type { OfferShort } from '@/api/indexer/schemas'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import type { ConfigAsset } from '@/constants/network-config'
-import type { OfferShort } from '@/api/indexer/schemas'
 import { formatAmount, formatTermLeft } from '@/utils/format'
 import { bpsToPercent, calcInterest, getOfferDisplayStatus, getOfferTermLeft } from '@/utils/offers'
 

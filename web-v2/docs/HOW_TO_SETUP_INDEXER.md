@@ -56,4 +56,4 @@ From repo root:
 docker compose up -d
 ```
 
-After this, the frontend should be available at http://localhost:8080
+After this, the indexer should be available at http://localhost:8080

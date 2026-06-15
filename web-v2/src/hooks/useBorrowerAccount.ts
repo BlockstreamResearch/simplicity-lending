@@ -7,9 +7,11 @@ import {
   TxBuilder,
   XOnlyPublicKey,
 } from 'lwk_web'
+import { useCallback } from 'react'
 
 import { broadcastTx } from '@/api/esplora/methods'
 import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { getBorrowerAccount, saveBorrowerAccount } from '@/pages/Borrow/borrowerAccountStorage'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
@@ -18,7 +20,7 @@ import { bytesToHex } from '@/utils/hex'
 import { sha256 } from '@/utils/sha256'
 import { toUint8, toUint64 } from '@/utils/uint'
 
-const FEE_RESERVE = 10_000n
+const FEE_RESERVE = 250n
 const ISSUING_UTXOS_COUNT = 2
 const REISSUANCE_FLAGS = 0n
 const ISSUANCE_AMOUNT = 2n
@@ -36,9 +38,39 @@ export interface BorrowerAccountCreationResult {
   metadataOpReturnHex: string
 }
 
+export interface BorrowerAccountRefs {
+  factoryAssetId: string
+  factoryAuthOutpoint: string
+  issuanceFactoryOutpoint: string
+}
+
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getWalletUtxos, getWollet, signPset } = useWallet()
+  const { getReceiveAddress, getWalletUtxos, getWollet, signPset, xOnlyPubkey } = useWallet()
+
+  // TODO: factory refs are persisted in localStorage as a temporary stopgap. Swap the restore/save
+  // internals for an indexer lookup once the backend exposes borrower-account state — call sites stay the same.
+  const restore = useCallback((): BorrowerAccountRefs => {
+    const account = xOnlyPubkey ? getBorrowerAccount(xOnlyPubkey) : null
+    if (!account) throw new Error('No borrower account found. Create one first.')
+    if (!account.factoryAuthOutpoint) {
+      throw new Error('Borrower account is outdated. Please re-create it.')
+    }
+    return {
+      factoryAssetId: account.factoryAssetId,
+      factoryAuthOutpoint: account.factoryAuthOutpoint,
+      issuanceFactoryOutpoint: account.issuanceFactoryOutpoint,
+    }
+  }, [xOnlyPubkey])
+
+  const save = useCallback(
+    (refs: BorrowerAccountRefs): void => {
+      if (xOnlyPubkey) saveBorrowerAccount(xOnlyPubkey, refs)
+    },
+    [xOnlyPubkey],
+  )
+
+  const hasAccount = Boolean(xOnlyPubkey && getBorrowerAccount(xOnlyPubkey)?.factoryAuthOutpoint)
 
   const createBorrowerAccount = async (): Promise<BorrowerAccountCreationResult> => {
     const receiveAddressString = await getReceiveAddress()
@@ -100,6 +132,12 @@ export function useBorrowerAccount() {
       metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
     }
 
+    save({
+      factoryAssetId: result.issuedAssetId,
+      factoryAuthOutpoint: result.factoryAuthOutpoint,
+      issuanceFactoryOutpoint: result.issuanceFactoryOutpoint,
+    })
+
     return result
   }
 
@@ -109,7 +147,7 @@ export function useBorrowerAccount() {
     )
   }
 
-  return { createBorrowerAccount, removeBorrowerAccount }
+  return { createBorrowerAccount, restore, save, hasAccount, removeBorrowerAccount }
 }
 
 function emptyContractHash(): ContractHash {

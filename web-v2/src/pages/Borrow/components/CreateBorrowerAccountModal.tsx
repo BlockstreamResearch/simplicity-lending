@@ -4,9 +4,6 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useTransaction } from '@/hooks/useTransaction'
-import { useWallet } from '@/providers/wallet/useWallet'
-
-import { saveBorrowerAccount } from '../borrowerAccountStorage'
 
 interface CreateBorrowerAccountModalProps {
   isOpen: boolean
@@ -18,7 +15,6 @@ export default function CreateBorrowerAccountModal({
   onOpenChange,
 }: CreateBorrowerAccountModalProps) {
   const { createBorrowerAccount } = useBorrowerAccount()
-  const { xOnlyPubkey } = useWallet()
   const { phase, txid, error, execute, resetTx } = useTransaction()
 
   const handleClose = () => {
@@ -29,13 +25,6 @@ export default function CreateBorrowerAccountModal({
   const handleCreate = () => {
     execute(async () => {
       const result = await createBorrowerAccount()
-      if (xOnlyPubkey) {
-        saveBorrowerAccount(xOnlyPubkey, {
-          factoryAssetId: result.issuedAssetId,
-          factoryAuthOutpoint: result.factoryAuthOutpoint,
-          issuanceFactoryOutpoint: result.issuanceFactoryOutpoint,
-        })
-      }
       return result.txid
     })
   }

@@ -46,6 +46,7 @@ export interface WalletState {
   scriptPubkey: string | null
   xOnlyPubkey: string | null
   syncing: boolean
+  reconnecting: boolean
   usbDeviceDetected: boolean
   /** Last error message. Persists even after isError is cleared. */
   error: string | null
@@ -62,6 +63,7 @@ export const INITIAL_WALLET_STATE: WalletState = {
   scriptPubkey: null,
   xOnlyPubkey: null,
   syncing: false,
+  reconnecting: false,
   usbDeviceDetected: false,
   error: null,
   isError: false,

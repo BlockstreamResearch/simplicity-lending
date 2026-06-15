@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 
 import { fetchLatestBlockHeight, fetchTxStatus } from '@/api/esplora/methods'
+
+const REQUIRED_CONFIRMATIONS = 2
 
 export interface ConfirmedTx {
   txid: string
@@ -15,45 +17,27 @@ export function useTxConfirmations({
   txid?: string | null
   pollIntervalMs?: number
 }): ConfirmedTx | null {
-  const [confirmedTx, setConfirmedTx] = useState<ConfirmedTx | null>(null)
+  const { data } = useQuery({
+    queryKey: ['tx-confirmations', txid],
+    enabled: Boolean(txid),
+    refetchInterval: query => (query.state.data?.phase === 'confirmed' ? false : pollIntervalMs),
+    queryFn: async (): Promise<ConfirmedTx> => {
+      const status = await fetchTxStatus(txid as string)
 
-  useEffect(() => {
-    if (!txid) return
-
-    let cancelled = false
-    let intervalId: ReturnType<typeof setInterval> | null = null
-
-    const poll = async () => {
-      try {
-        const status = await fetchTxStatus(txid)
-        if (cancelled) return
-
-        if (!status.confirmed) {
-          setConfirmedTx(prev =>
-            prev?.phase === 'processing' ? prev : { txid, phase: 'processing', confirmations: 0 },
-          )
-          return
-        }
-
-        const tip = await fetchLatestBlockHeight()
-        if (cancelled) return
-
-        const confirmations = status.block_height !== undefined ? tip - status.block_height + 1 : 1
-        setConfirmedTx({ txid, phase: 'confirmed', confirmations })
-        if (intervalId) clearInterval(intervalId)
-      } catch {
-        // tx not yet broadcast or network error — keep polling
+      if (!status.confirmed || status.block_height === undefined) {
+        return { txid: txid as string, phase: 'processing', confirmations: 0 }
       }
-    }
 
-    void poll()
-    intervalId = setInterval(() => void poll(), pollIntervalMs)
+      const tip = await fetchLatestBlockHeight()
+      const confirmations = tip - status.block_height + 1
 
-    return () => {
-      cancelled = true
-      if (intervalId) clearInterval(intervalId)
-    }
-  }, [txid, pollIntervalMs])
+      return {
+        txid: txid as string,
+        phase: confirmations >= REQUIRED_CONFIRMATIONS ? 'confirmed' : 'processing',
+        confirmations,
+      }
+    },
+  })
 
-  return confirmedTx?.txid === txid ? confirmedTx : null
+  return data?.txid === txid ? (data ?? null) : null
 }

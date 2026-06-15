@@ -1,15 +1,12 @@
 import { useCallback } from 'react'
 
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import {
   type CreateOfferParams,
   type CreateOfferResult,
   useCreateOffer,
 } from '@/hooks/useCreateOffer'
-import { useWallet } from '@/providers/wallet/useWallet'
-
-import { saveBorrowerAccount } from '../borrowerAccountStorage'
-import { useBorrowerAccountRefs } from './useBorrowerAccountRefs'
 
 export interface CreateBorrowOfferInput {
   collateralOutpoint: string
@@ -25,12 +22,11 @@ export interface CreateBorrowOffer {
 
 export function useCreateBorrowOffer(): CreateBorrowOffer {
   const { createOffer } = useCreateOffer()
-  const { resolve } = useBorrowerAccountRefs()
-  const { xOnlyPubkey } = useWallet()
+  const { restore, save } = useBorrowerAccount()
 
   const submit = useCallback(
     async (input: CreateBorrowOfferInput): Promise<CreateOfferResult> => {
-      const refs = resolve()
+      const refs = restore()
       const params: CreateOfferParams = {
         factoryAuthOutpoint: refs.factoryAuthOutpoint,
         issuanceFactoryOutpoint: refs.issuanceFactoryOutpoint,
@@ -44,16 +40,14 @@ export function useCreateBorrowOffer(): CreateBorrowOffer {
         protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
       }
       const result = await createOffer(params)
-      if (xOnlyPubkey) {
-        saveBorrowerAccount(xOnlyPubkey, {
-          factoryAssetId: refs.factoryAssetId,
-          factoryAuthOutpoint: result.factoryAuthOutpoint,
-          issuanceFactoryOutpoint: result.issuanceFactoryOutpoint,
-        })
-      }
+      save({
+        factoryAssetId: refs.factoryAssetId,
+        factoryAuthOutpoint: result.factoryAuthOutpoint,
+        issuanceFactoryOutpoint: result.issuanceFactoryOutpoint,
+      })
       return result
     },
-    [resolve, createOffer, xOnlyPubkey],
+    [restore, save, createOffer],
   )
 
   return { submit }

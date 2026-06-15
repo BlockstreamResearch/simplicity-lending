@@ -1,5 +1,5 @@
 import { Spinner } from '@heroui/react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useMemo } from 'react'
 
 import { getTxExplorerUrl } from '@/api/esplora/utils'
 import CheckIcon from '@/components/icons/CheckIcon'
@@ -15,24 +15,25 @@ export interface TransactionSummaryRow {
   value: ReactNode
 }
 
+type ActiveTransactionPhase = Exclude<TransactionPhase, 'idle'>
+
 interface TransactionModalProps {
   isOpen: boolean
   eyebrow: string
-  phase: TransactionPhase
+  phase: ActiveTransactionPhase
   summary?: TransactionSummaryRow[]
   txid?: string | null
   errorMessage?: string | null
   onClose: () => void
 }
 
-const TITLE: Record<TransactionPhase, string> = {
-  idle: '',
+const TITLE: Record<ActiveTransactionPhase, string> = {
   processing: 'Processing Transaction…',
   success: 'Transaction Complete',
   error: 'Transaction Failed',
 }
 
-function StatusIcon({ phase }: { phase: TransactionPhase }) {
+function StatusIcon({ phase }: { phase: ActiveTransactionPhase }) {
   if (phase === 'success') {
     return (
       <span className='bg-success/15 text-success flex size-10 items-center justify-center rounded-full'>
@@ -66,30 +67,33 @@ export default function TransactionModal({
   const txConfirmations = useTxConfirmations({ txid })
   const isProcessing = phase === 'processing'
 
-  const rows: TransactionSummaryRow[] = [
-    ...summary,
-    ...(txid
-      ? [
-          {
-            label: 'Transaction ID',
-            value: (
-              <a
-                className='text-accent underline'
-                href={getTxExplorerUrl(txid)}
-                target='_blank'
-                rel='noopener noreferrer'
-              >
-                {truncateAddress(txid)}
-              </a>
-            ),
-          },
-          {
-            label: 'Confirmations',
-            value: txConfirmations === null ? 'Pending…' : String(txConfirmations.confirmations),
-          },
-        ]
-      : []),
-  ]
+  const rows = useMemo<TransactionSummaryRow[]>(
+    () => [
+      ...summary,
+      ...(txid
+        ? [
+            {
+              label: 'Transaction ID',
+              value: (
+                <a
+                  className='text-accent underline'
+                  href={getTxExplorerUrl(txid)}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                >
+                  {truncateAddress(txid)}
+                </a>
+              ),
+            },
+            {
+              label: 'Confirmations',
+              value: txConfirmations === null ? 'Pending…' : String(txConfirmations.confirmations),
+            },
+          ]
+        : []),
+    ],
+    [summary, txid, txConfirmations],
+  )
 
   return (
     <UiModal

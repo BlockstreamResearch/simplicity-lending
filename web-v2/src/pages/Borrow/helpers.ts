@@ -9,7 +9,7 @@ export const TERM_OPTIONS = [
   { id: 90, label: '90 days' },
 ]
 
-export function pickCollateralUtxo(utxos: WalletUtxo[], amount: bigint): WalletUtxo | null {
+export function selectSmallestUtxo(utxos: WalletUtxo[], amount: bigint): WalletUtxo | null {
   return (
     utxos
       .filter(utxo => utxo.value >= amount)
