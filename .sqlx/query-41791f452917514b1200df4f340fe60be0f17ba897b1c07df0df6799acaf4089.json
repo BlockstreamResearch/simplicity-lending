@@ -1,0 +1,116 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            factory.id,\n            factory.factory_asset_id,\n            factory.program_script_pubkey,\n            factory.current_status AS \"current_status: FactoryStatus\",\n            factory.issuing_utxos_count,\n            factory.reissuance_flags,\n            factory.created_at_height,\n            factory.created_at_txid,\n            factory_auth.txid AS auth_txid,\n            factory_auth.vout AS auth_vout,\n            factory_auth.script_pubkey AS auth_script_pubkey,\n            factory_auth.created_at_height AS auth_created_at_height,\n            factory_program_utxo.txid AS program_txid,\n            factory_program_utxo.vout AS program_vout,\n            factory_program_utxo.created_at_height AS program_created_at_height\n        FROM factories AS factory\n        LEFT JOIN LATERAL (\n            SELECT\n                txid,\n                vout,\n                script_pubkey,\n                created_at_height\n            FROM factory_auths\n            WHERE factory_id = factory.id\n              AND spent_txid IS NULL\n            ORDER BY created_at_height DESC\n            LIMIT 1\n        ) AS factory_auth ON true\n        LEFT JOIN factory_utxos AS factory_program_utxo\n            ON factory_program_utxo.factory_id = factory.id\n           AND factory_program_utxo.spent_txid IS NULL\n        WHERE factory.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "factory_asset_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "program_script_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "current_status: FactoryStatus",
+        "type_info": {
+          "Custom": {
+            "name": "factory_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "removed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "issuing_utxos_count",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 5,
+        "name": "reissuance_flags",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at_txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 8,
+        "name": "auth_txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 9,
+        "name": "auth_vout",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "auth_script_pubkey",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 11,
+        "name": "auth_created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "program_txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 13,
+        "name": "program_vout",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 14,
+        "name": "program_created_at_height",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "41791f452917514b1200df4f340fe60be0f17ba897b1c07df0df6799acaf4089"
+}
