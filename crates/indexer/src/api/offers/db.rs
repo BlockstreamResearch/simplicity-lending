@@ -2,6 +2,7 @@ use simplex::simplicityhl::elements::hex::ToHex;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
 
+use crate::api::utils::parse_filter_hex;
 use crate::api::{OfferListQuery, SortDir};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
@@ -28,15 +29,27 @@ pub(crate) fn apply_offer_list_filters<'a>(
         query_builder.push_bind(factory_id);
     }
 
-    if let Some(asset_hex) = &query.asset {
-        if let Ok(bin) = hex::decode(asset_hex) {
-            query_builder.push(" AND (collateral_asset_id = ");
-            query_builder.push_bind(bin.clone());
-            query_builder.push(" OR principal_asset_id = ");
+    if let Some(collateral_asset_hex) = &query.collateral_asset {
+        if let Some(bin) = parse_filter_hex(collateral_asset_hex) {
+            query_builder.push(" AND collateral_asset_id = ");
             query_builder.push_bind(bin);
-            query_builder.push(")");
         } else {
-            tracing::warn!(asset_hex, "Failed to decode asset hex filter");
+            tracing::warn!(
+                collateral_asset_hex,
+                "Failed to decode collateral_asset hex filter"
+            );
+        }
+    }
+
+    if let Some(principal_asset_hex) = &query.principal_asset {
+        if let Some(bin) = parse_filter_hex(principal_asset_hex) {
+            query_builder.push(" AND principal_asset_id = ");
+            query_builder.push_bind(bin);
+        } else {
+            tracing::warn!(
+                principal_asset_hex,
+                "Failed to decode principal_asset hex filter"
+            );
         }
     }
 }
@@ -60,7 +73,8 @@ pub(crate) fn push_offer_list_order_by(
         limit = %query.effective_limit(),
         offset = %query.effective_offset(),
         status = ?query.status,
-        asset = ?query.asset,
+        collateral_asset = ?query.collateral_asset,
+        principal_asset = ?query.principal_asset,
         factory_id = ?query.factory_id,
         sort_by = ?query.sort_by,
         sort_dir = ?query.sort_dir,

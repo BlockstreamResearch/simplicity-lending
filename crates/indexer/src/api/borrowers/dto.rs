@@ -13,7 +13,7 @@ pub struct BorrowerDashboardQuery {
 #[derive(Serialize)]
 pub struct AssetAmount {
     pub asset: String,
-    pub amount: u64,
+    pub amount: String,
 }
 
 #[derive(Serialize)]
