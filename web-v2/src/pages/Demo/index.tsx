@@ -1,5 +1,6 @@
 import AcceptOfferDemo from './AcceptOfferDemo'
 import CancelOfferDemo from './CancelOfferDemo'
+import ClaimPrincipalDemo from './ClaimPrincipalDemo'
 import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
 import CreateOfferDemo from './CreateOfferDemo'
 import LiquidateOfferDemo from './LiquidateOfferDemo'
@@ -14,6 +15,7 @@ export default function DemoPage() {
       <CreateBorrowerAccountDemo />
       <CreateOfferDemo />
       <AcceptOfferDemo />
+      <ClaimPrincipalDemo />
       <CancelOfferDemo />
       <LiquidateOfferDemo />
       <RepayOfferDemo />
