@@ -178,7 +178,7 @@ The following parameters are available for `GET /offers` and for the `offers` li
 - `principal_asset`: Hex identifier of the principal asset (same byte order as in API responses). Filters by `principal_asset_id` when set alone. When both `collateral_asset` and `principal_asset` are set, offers must match the asset pair (collateral **and** principal).
 - `limit`: Maximum number of records to return (default: 50, max: 100).
 - `offset`: Pagination offset (default: 0).
-- `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_time` (default: `created_at_height`).
+- `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_height` (default: `created_at_height`).
 - `sort_dir`: `asc` or `desc` (default: `desc`).
 
 ### Response Shapes
@@ -189,7 +189,7 @@ The following parameters are available for `GET /offers` and for the `offers` li
 - `collateral_asset`, `principal_asset` (hex)
 - `collateral_amount`, `principal_amount`
 - `interest_rate` (basis points, e.g. 1000 = 10%)
-- `loan_expiration_time` (block height)
+- `loan_expiration_height` (block height)
 - `created_at_height`, `created_at_txid` (hex)
 
 **Paginated offer list** (`GET /offers`, `GET /borrowers/by-script` → `offers`):

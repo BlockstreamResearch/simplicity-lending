@@ -495,7 +495,7 @@ struct ExpectedOfferDetailsDto {
     collateral_amount: u64,
     principal_amount: u64,
     interest_rate: u32,
-    loan_expiration_time: u32,
+    loan_expiration_height: u32,
     created_at_height: u64,
     created_at_txid: String,
     borrower_nft_asset: String,
@@ -541,7 +541,7 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.collateral_amount, 1_000);
     assert_eq!(dto.principal_amount, 500);
     assert_eq!(dto.interest_rate, 120);
-    assert_eq!(dto.loan_expiration_time, 1_234_567);
+    assert_eq!(dto.loan_expiration_height, 1_234_567);
     assert_eq!(dto.created_at_height, PENDING_OFFER_HEIGHT as u64);
     // 32-byte seeded values serialize as 64-char hex strings.
     assert_eq!(dto.collateral_asset.len(), 64);

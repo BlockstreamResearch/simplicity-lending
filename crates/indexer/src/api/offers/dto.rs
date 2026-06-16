@@ -19,7 +19,7 @@ pub struct OfferListItemShort {
     pub collateral_amount: u64,
     pub principal_amount: u64,
     pub interest_rate: u32,
-    pub loan_expiration_time: u32,
+    pub loan_expiration_height: u32,
     pub created_at_height: u64,
     pub created_at_txid: String,
 }
@@ -43,7 +43,7 @@ impl From<OfferModelShort> for OfferListItemShort {
             collateral_amount: value.collateral_amount as u64,
             principal_amount: value.principal_amount as u64,
             interest_rate: value.interest_rate as u32,
-            loan_expiration_time: value.loan_expiration_time as u32,
+            loan_expiration_height: value.loan_expiration_time as u32,
             created_at_height: value.created_at_height as u64,
             created_at_txid: format_hex(value.created_at_txid),
         }
@@ -72,7 +72,7 @@ impl From<OfferModel> for OfferListItemFull {
                 collateral_amount: value.collateral_amount as u64,
                 principal_amount: value.principal_amount as u64,
                 interest_rate: value.interest_rate as u32,
-                loan_expiration_time: value.loan_expiration_time as u32,
+                loan_expiration_height: value.loan_expiration_time as u32,
                 created_at_height: value.created_at_height as u64,
                 created_at_txid: format_hex(value.created_at_txid),
             },
@@ -178,7 +178,7 @@ mod tests {
         assert_eq!(dto.collateral_amount, 1000);
         assert_eq!(dto.principal_amount, 500);
         assert_eq!(dto.interest_rate, 250);
-        assert_eq!(dto.loan_expiration_time, 123);
+        assert_eq!(dto.loan_expiration_height, 123);
         assert_eq!(dto.created_at_height, 456);
         assert_eq!(dto.created_at_txid, "ccbbaa");
     }
