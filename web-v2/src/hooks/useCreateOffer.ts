@@ -279,7 +279,7 @@ export function useCreateOffer() {
         new OutPoint(params.collateralOutpoint),
       )
 
-      stage = 'TxBuilder.addExplicitScriptOutput metadata OP_RETURN'
+      stage = 'TxBuilder.addPostIssuanceScriptOutput metadata OP_RETURN'
       const pendingOfferMetadataPayload = await encodePendingOfferMetadata({
         principalAssetId,
         principalAmount: offerParameters.principalAmount,
@@ -288,14 +288,14 @@ export function useCreateOffer() {
       })
       const pendingOfferMetadataScript = Script.newOpReturn(pendingOfferMetadataPayload)
 
-      txBuilder = txBuilder.addExplicitScriptOutput(
+      txBuilder = txBuilder.addPostIssuanceScriptOutput(
         pendingOfferMetadataScript,
         0n,
         AssetId.fromString(policyAssetString),
       )
 
-      stage = 'TxBuilder.addExplicitScriptOutput Lending covenant collateral'
-      txBuilder = txBuilder.addExplicitScriptOutput(
+      stage = 'TxBuilder.addPostIssuanceScriptOutput Lending covenant collateral'
+      txBuilder = txBuilder.addPostIssuanceScriptOutput(
         lendingScript,
         offerParameters.collateralAmount,
         AssetId.fromString(policyAssetString),

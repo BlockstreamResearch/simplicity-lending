@@ -1,4 +1,4 @@
-import { type Pset, Wollet, type XOnlyPublicKey } from 'lwk_web'
+import { type Pset, type Wollet, WolletBuilder, type XOnlyPublicKey } from 'lwk_web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -167,7 +167,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         const descriptor = await connector.getDescriptor(walletType)
-        const wollet = new Wollet(lwkNetwork, descriptor)
+        const wollet = new WolletBuilder(lwkNetwork, descriptor).utxoOnly(true).build()
         const esploraClient = createEsploraClient(lwkNetwork)
 
         sessionRef.current = { connector, descriptor, wollet, esploraClient }

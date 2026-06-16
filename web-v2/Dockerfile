@@ -2,16 +2,15 @@
 # FROM rust:1.90-bookworm AS lwk-builder
 FROM rust:1.93-bookworm AS lwk-builder
 
-ARG LWK_REF=wasm-0.16-expose-external-utxos
-# ARG LWK_COMMIT=4786e456db6efc05413721f6489899a6426eaa47
-ARG LWK_COMMIT=8196c69aae93a91f3139dbeda0b05ab6a41e4d28
+ARG LWK_REF=lending-missing-functionality
+ARG LWK_COMMIT=105ee9bb00781bb6a8712ce9c7cb33cdddfaede6
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git pkg-config libssl-dev ca-certificates clang \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup target add wasm32-unknown-unknown
 RUN cargo install wasm-pack --locked
-# RUN git clone --filter=blob:none --branch "${LWK_REF}" https://github.com/Blockstream/lwk.git /tmp/lwk
+# RUN git clone --filter=blob:none --branch "${LWK_REF}" https://github.com/Blockstream/lwk.git /tmp/lwk \
 RUN git clone --filter=blob:none --branch "${LWK_REF}" https://github.com/lilbonekit/lwk.git /tmp/lwk \
     && git -C /tmp/lwk checkout --detach "${LWK_COMMIT}" \
     && test "$(git -C /tmp/lwk rev-parse HEAD)" = "${LWK_COMMIT}"

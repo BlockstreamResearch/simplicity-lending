@@ -182,7 +182,7 @@ export function useLiquidateOffer() {
             true,
           ),
         ])
-        .addExplicitScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
+        .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
         .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
         .setFallbackLocktimeHeight(metadata.loanExpirationTime)
         .setInputSequence(new OutPoint(params.activeOfferOutpoint), MAX_SEQUENCE_NON_RBF)

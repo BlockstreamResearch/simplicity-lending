@@ -246,17 +246,17 @@ export function useAcceptOffer() {
             true,
           ),
         ])
-        .addExplicitScriptOutput(
+        .addPostIssuanceScriptOutput(
           activeLendingSpendInfo.scriptPubkey,
           collateralAmount,
           collateralAsset,
         )
-        .addExplicitScriptOutput(
+        .addPostIssuanceScriptOutput(
           principalOutputSpendInfo.scriptPubkey,
           metadata.principalAmount,
           principalAsset,
         )
-        .addExplicitScriptOutput(lenderNftRecipient.scriptPubkey(), NFT_AMOUNT, lenderNftAsset)
+        .addPostIssuanceScriptOutput(lenderNftRecipient.scriptPubkey(), NFT_AMOUNT, lenderNftAsset)
 
       if (principalChangeAmount > 0n) {
         txBuilder = txBuilder.addPostIssuanceRecipient(

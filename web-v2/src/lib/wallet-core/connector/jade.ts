@@ -30,6 +30,9 @@ export class JadeConnector implements WalletConnector {
     // HACK: The TS bindings declare this as a sync constructor, but wasm-bindgen
     // generates an async constructor under the hood that returns a Promise.
     // `await new this.lwk.Jade(...)` is intentional — not a mistake.
+    // HACK 2: Bindings state that no parameters are accepted,
+    // but the underlying constructor actually requires a Network parameter
+    // @ts-expect-error Expected 0 arguments, but got 2.ts(2554)
     this.jade = await new Jade(this.lwkNetwork, true)
   }
 
