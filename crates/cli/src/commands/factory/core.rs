@@ -1,12 +1,13 @@
 use clap::Subcommand;
 
 use simplex::provider::ProviderTrait;
-use simplex::simplicityhl::elements::{Txid, hex::ToHex};
+use simplex::simplicityhl::elements::{OutPoint, Txid, hex::ToHex};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{
+    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
+};
 
 use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
-use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::utils::get_random_seed;
 
 use crate::cli::CliContext;
@@ -33,6 +34,9 @@ pub enum FactoryCommand {
         /// Txid of the factory creation transaction
         #[arg(long = "creation-txid")]
         creation_txid: Txid,
+        /// Program UTXO outpoint in txid:vout format
+        #[arg(long = "program-utxo")]
+        program_utxo: OutPoint,
     },
 }
 
@@ -46,7 +50,10 @@ impl Factory {
                 reissuance_flags,
             } => Factory::create(context, *issuing_utxos_count, *reissuance_flags),
 
-            FactoryCommand::Remove { creation_txid } => Factory::remove(context, *creation_txid),
+            FactoryCommand::Remove {
+                creation_txid,
+                program_utxo,
+            } => Factory::remove(context, *creation_txid, *program_utxo),
         }
     }
 
@@ -103,18 +110,29 @@ impl Factory {
         Ok(())
     }
 
-    fn remove(context: CliContext, creation_txid: Txid) -> Result<(), FactoryCommandError> {
+    fn remove(
+        context: CliContext,
+        creation_txid: Txid,
+        program_outpoint: OutPoint,
+    ) -> Result<(), FactoryCommandError> {
         let creation_tx = context.esplora_provider.fetch_transaction(&creation_txid)?;
 
         let (issuance_factory, factory_asset_id) =
             IssuanceFactory::try_from_tx(&creation_tx, context.get_network())?;
 
-        let program_utxo = context
+        let program_tx = context
             .esplora_provider
-            .fetch_scripthash_utxos(&issuance_factory.get_script_pubkey())?
-            .into_iter()
-            .next()
+            .fetch_transaction(&program_outpoint.txid)?;
+        let program_txout = program_tx
+            .output
+            .get(program_outpoint.vout as usize)
+            .cloned()
             .ok_or(FactoryCommandError::FactoryProgramUtxoNotFound)?;
+        let program_utxo = UTXO {
+            outpoint: program_outpoint,
+            txout: program_txout,
+            secrets: None,
+        };
 
         let auth_nft_utxo = context
             .signer
