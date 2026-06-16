@@ -283,7 +283,7 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
         seed_offer_row(&pool, &offer).await?;
     }
 
-    let (base_url, server_handle) = start_api(pool).await?;
+    let (base_url, server_handle) = start_api(pool.clone()).await?;
     let http = reqwest::Client::new();
 
     // status=pending -> 3 offers, ordered by height DESC: c(80) -> d(70) -> a(40).
@@ -303,16 +303,31 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
         &[offer_a, offer_b, offer_c, offer_d],
     );
 
-    // `asset` matches either collateral_asset_id or principal_asset_id:
-    // a(collat=aa), b(princ=aa), d(collat=aa).
-    let asset_filter = "aa".repeat(32);
-    let by_asset = get_json(&http, format!("{base_url}/offers?asset={asset_filter}")).await?;
-    let by_asset_items = offer_list_items(&by_asset);
-    assert_eq!(by_asset["total"], 3);
-    assert_eq!(by_asset_items.as_array().map_or(0, Vec::len), 3);
-    assert_eq!(by_asset_items[0]["id"], offer_d.to_string());
-    assert_eq!(by_asset_items[1]["id"], offer_b.to_string());
-    assert_eq!(by_asset_items[2]["id"], offer_a.to_string());
+    // Asset pair filter: a(collat=aa, princ=10) is the only match.
+    let collateral_aa = "aa".repeat(32);
+    let principal_10 = "10".repeat(32);
+    let by_pair = get_json(
+        &http,
+        format!(
+            "{base_url}/offers?collateral_asset={collateral_aa}&principal_asset={principal_10}"
+        ),
+    )
+    .await?;
+    let by_pair_items = offer_list_items(&by_pair);
+    assert_eq!(by_pair["total"], 1);
+    assert_eq!(by_pair_items.as_array().map_or(0, Vec::len), 1);
+    assert_eq!(by_pair_items[0]["id"], offer_a.to_string());
+
+    // collateral_asset alone: a and d (collat=aa), ordered by height DESC.
+    let by_collateral = get_json(
+        &http,
+        format!("{base_url}/offers?collateral_asset={collateral_aa}"),
+    )
+    .await?;
+    let by_collateral_items = offer_list_items(&by_collateral);
+    assert_eq!(by_collateral["total"], 2);
+    assert_eq!(by_collateral_items[0]["id"], offer_d.to_string());
+    assert_eq!(by_collateral_items[1]["id"], offer_a.to_string());
 
     let paged = get_json(&http, format!("{base_url}/offers?limit=1&offset=1")).await?;
     let paged_items = offer_list_items(&paged);
@@ -332,6 +347,27 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     assert_eq!(sorted_items[1]["id"], offer_d.to_string());
     assert_eq!(sorted_items[2]["id"], offer_b.to_string());
     assert_eq!(sorted_items[3]["id"], offer_c.to_string());
+
+    // Filter using API display hex (format_hex byte order), non-uniform asset id bytes.
+    let offer_e = Uuid::new_v4();
+    let varied_collateral: Vec<u8> = (1_u8..=32).collect();
+    let mut offer_e_model =
+        offer_model(offer_e, factory_id, 90, unique_32_bytes_from_uuid(offer_e));
+    offer_e_model.collateral_asset_id = varied_collateral.clone();
+    offer_e_model.principal_asset_id = vec![0xee; 32];
+    seed_offer_row(&pool, &offer_e_model).await?;
+
+    let varied_collateral_hex = lending_indexer::api::utils::format_hex(varied_collateral);
+    let by_display_hex = get_json(
+        &http,
+        format!("{base_url}/offers?collateral_asset={varied_collateral_hex}"),
+    )
+    .await?;
+    assert_eq!(by_display_hex["total"], 1);
+    assert_eq!(
+        offer_list_items(&by_display_hex)[0]["id"],
+        offer_e.to_string()
+    );
 
     server_handle.abort();
     Ok(())

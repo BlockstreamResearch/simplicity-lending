@@ -47,7 +47,8 @@ const MAX_OFFER_LIST_LIMIT: u64 = 100;
 pub struct OfferListQuery {
     #[serde(default, deserialize_with = "deserialize_offer_statuses")]
     pub status: Vec<OfferStatus>,
-    pub asset: Option<String>,
+    pub collateral_asset: Option<String>,
+    pub principal_asset: Option<String>,
     pub factory_id: Option<Uuid>,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
