@@ -174,10 +174,11 @@ The following parameters are available for `GET /offers` and for the `offers` li
 
 - `status`: Filter by one or more offer states (`pending`, `active`, `repaid`, `liquidated`, `cancelled`, `claimed`). Use a comma-separated list, e.g. `status=pending,active`.
 - `factory_id`: Filter by issuance factory UUID.
-- `asset`: Hex identifier of the asset (matches either collateral or principal asset).
+- `collateral_asset`: Hex identifier of the collateral asset (same byte order as in API responses). Filters by `collateral_asset_id` when set alone.
+- `principal_asset`: Hex identifier of the principal asset (same byte order as in API responses). Filters by `principal_asset_id` when set alone. When both `collateral_asset` and `principal_asset` are set, offers must match the asset pair (collateral **and** principal).
 - `limit`: Maximum number of records to return (default: 50, max: 100).
 - `offset`: Pagination offset (default: 0).
-- `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_time` (default: `created_at_height`).
+- `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_height` (default: `created_at_height`).
 - `sort_dir`: `asc` or `desc` (default: `desc`).
 
 ### Response Shapes
@@ -186,9 +187,9 @@ The following parameters are available for `GET /offers` and for the `offers` li
 
 - `id`, `issuance_factory_id`, `status`
 - `collateral_asset`, `principal_asset` (hex)
-- `collateral_amount`, `principal_amount`
+- `collateral_amount`, `principal_amount` (decimal strings, satoshi)
 - `interest_rate` (basis points, e.g. 1000 = 10%)
-- `loan_expiration_time` (block height)
+- `loan_expiration_height` (block height)
 - `created_at_height`, `created_at_txid` (hex)
 
 **Paginated offer list** (`GET /offers`, `GET /borrowers/by-script` → `offers`):
@@ -212,8 +213,8 @@ The following parameters are available for `GET /offers` and for the `offers` li
 ```json
 {
   "overview": {
-    "collateral_locked": [{ "asset": "…", "amount": 1000 }],
-    "borrowings": [{ "asset": "…", "amount": 500 }],
+    "collateral_locked": [{ "asset": "…", "amount": "1000" }],
+    "borrowings": [{ "asset": "…", "amount": "500" }],
     "active_loans": 1,
     "pending_offers": 2
   },
@@ -221,7 +222,7 @@ The following parameters are available for `GET /offers` and for the `offers` li
 }
 ```
 
-Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`). Counts (`active_loans`, `pending_offers`) are totals by status. The offer list is scoped to offers where the given `script_pubkey` is the latest borrower.
+Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`); each `amount` is a decimal satoshi string. Counts (`active_loans`, `pending_offers`) are totals by status. The offer list is scoped to offers where the given `script_pubkey` is the latest borrower.
 
 ### Borrowers Endpoints
 

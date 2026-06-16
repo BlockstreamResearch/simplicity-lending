@@ -25,7 +25,7 @@ pub enum OfferSortBy {
     CollateralAmount,
     PrincipalAmount,
     InterestRate,
-    LoanExpirationTime,
+    LoanExpirationHeight,
 }
 
 impl OfferSortBy {
@@ -35,7 +35,7 @@ impl OfferSortBy {
             Self::CollateralAmount => "collateral_amount",
             Self::PrincipalAmount => "principal_amount",
             Self::InterestRate => "interest_rate",
-            Self::LoanExpirationTime => "loan_expiration_time",
+            Self::LoanExpirationHeight => "loan_expiration_time",
         }
     }
 }
@@ -47,7 +47,8 @@ const MAX_OFFER_LIST_LIMIT: u64 = 100;
 pub struct OfferListQuery {
     #[serde(default, deserialize_with = "deserialize_offer_statuses")]
     pub status: Vec<OfferStatus>,
-    pub asset: Option<String>,
+    pub collateral_asset: Option<String>,
+    pub principal_asset: Option<String>,
     pub factory_id: Option<Uuid>,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
@@ -111,5 +112,15 @@ mod tests {
             let parsed: OfferListQuery = serde_urlencoded::from_str(query).expect(query);
             assert_eq!(parsed.status, expected, "query: {query}");
         }
+    }
+
+    #[test]
+    fn offer_list_query_parses_sort_by_loan_expiration_height() {
+        let parsed: OfferListQuery =
+            serde_urlencoded::from_str("sort_by=loan_expiration_height").expect("parse sort_by");
+        assert!(matches!(
+            parsed.sort_by,
+            super::OfferSortBy::LoanExpirationHeight
+        ));
     }
 }
