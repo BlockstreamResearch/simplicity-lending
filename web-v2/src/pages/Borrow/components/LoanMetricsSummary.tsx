@@ -2,12 +2,12 @@ import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
 
 import { MAX_LTV } from '../helpers'
 
-interface LoanInfoProps {
+interface LoanMetricsSummaryProps {
   apr: number
   ltv: number | null
 }
 
-export default function LoanInfo({ apr, ltv }: LoanInfoProps) {
+export default function LoanMetricsSummary({ apr, ltv }: LoanMetricsSummaryProps) {
   const exceedsMaxLtv = ltv !== null && ltv > MAX_LTV
 
   return (

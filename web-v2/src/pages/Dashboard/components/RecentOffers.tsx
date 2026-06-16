@@ -5,10 +5,10 @@ import { useState } from 'react'
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffers } from '@/api/indexer/hooks'
 import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
+import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 
 import { DASHBOARD_REFETCH_INTERVAL_MS, TABLE_PAGE_SIZE } from '../constants'
-import { OffersTable } from './OffersTable'
 
 export function RecentOffers() {
   const [page, setPage] = useState(1)

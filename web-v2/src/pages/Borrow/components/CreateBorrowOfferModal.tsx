@@ -15,7 +15,7 @@ import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
-import { type CreateOfferParams, useCreateOffer } from '@/hooks/useCreateOffer'
+import { useCreateOffer } from '@/hooks/useCreateOffer'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { toBigintAmount } from '@/utils/bigint'
@@ -25,7 +25,7 @@ import { selectOptimalUtxo } from '@/utils/utxo'
 
 import { MAX_LTV, TERM_OPTIONS } from '../helpers'
 import BalanceCard from './BalanceCard'
-import LoanInfo from './LoanInfo'
+import LoanMetricsSummary from './LoanMetricsSummary'
 
 interface BorrowOfferContext {
   collateralDecimals: number
@@ -134,7 +134,7 @@ export default function CreateBorrowOfferModal({
     const collateralUtxo = selectOptimalUtxo(utxos, collateralBase)
     if (!collateralUtxo) throw new Error('No suitable collateral UTXO found')
     const refs = loadBorrowerAccountState()
-    const params: CreateOfferParams = {
+    const result = await createOffer({
       factoryAuthOutpoint: refs.factoryAuthOutpoint,
       issuanceFactoryOutpoint: refs.issuanceFactoryOutpoint,
       factoryAssetId: refs.factoryAssetId,
@@ -145,8 +145,7 @@ export default function CreateBorrowOfferModal({
       principalInterestRate: bps,
       loanDurationBlocks,
       protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
-    }
-    const result = await createOffer(params)
+    })
     updateBorrowerAccountState({
       factoryAssetId: refs.factoryAssetId,
       factoryAuthOutpoint: `${result.txid}:0`,
@@ -235,7 +234,7 @@ export default function CreateBorrowOfferModal({
         </div>
       }
     >
-      <div className='flex flex-col gap-8'>
+      <div className='flex flex-col gap-6'>
         <BalanceCard
           asset={collateralAsset}
           amount={BigInt(balances[collateralAsset.id] ?? 0)}
@@ -307,7 +306,7 @@ export default function CreateBorrowOfferModal({
           </div>
         </div>
 
-        <LoanInfo apr={apr} ltv={ltv} />
+        <LoanMetricsSummary apr={apr} ltv={ltv} />
       </div>
     </UiModal>
   )

@@ -25,10 +25,6 @@ export default function CreateBorrowerAccountModal({
     onOpenChange(false)
   }
 
-  const handleCreate = () => {
-    mutate()
-  }
-
   if (status !== 'idle') {
     return (
       <TransactionModal
@@ -61,7 +57,7 @@ export default function CreateBorrowerAccountModal({
           <UiButton variant='secondary' onPress={handleClose}>
             Cancel
           </UiButton>
-          <UiButton variant='primary' onPress={handleCreate}>
+          <UiButton variant='primary' onPress={() => mutate()}>
             Create
           </UiButton>
         </>

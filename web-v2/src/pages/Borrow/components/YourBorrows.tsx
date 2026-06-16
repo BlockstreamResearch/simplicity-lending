@@ -3,12 +3,11 @@ import { useState } from 'react'
 
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import PlusIcon from '@/components/icons/PlusIcon'
+import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
-import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useBorrows } from '@/pages/Dashboard/hooks/useBorrows'
 
-import BorrowOffersTable from './BorrowOffersTable'
 import CreateBorrowerAccountModal from './CreateBorrowerAccountModal'
 import CreateBorrowOfferModal from './CreateBorrowOfferModal'
 
@@ -17,8 +16,6 @@ export default function YourBorrows() {
   const { hasAccount } = useBorrowerAccount()
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false)
-
-  const { collateralAsset, principalAsset } = NETWORK_CONFIG
 
   const handleCreateOffer = () => {
     if (hasAccount) setIsOfferModalOpen(true)
@@ -45,12 +42,7 @@ export default function YourBorrows() {
           <span className='text-foreground text-sm font-medium'>No borrow offers yet.</span>
         </div>
       ) : (
-        <BorrowOffersTable
-          offers={offers}
-          currentBlockHeight={currentBlockHeight}
-          collateralAsset={collateralAsset}
-          principalAsset={principalAsset}
-        />
+        <OffersTable offers={offers} currentBlockHeight={currentBlockHeight} />
       )}
 
       <UiButton variant='primary' className='self-start' onPress={handleCreateOffer}>
