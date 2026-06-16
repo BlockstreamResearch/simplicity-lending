@@ -50,7 +50,9 @@ pub struct OfferListQuery {
     pub collateral_asset: Option<String>,
     pub principal_asset: Option<String>,
     pub factory_id: Option<Uuid>,
+    #[serde(default, deserialize_with = "deserialize_optional_u64")]
     pub limit: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_optional_u64")]
     pub offset: Option<u64>,
     #[serde(default)]
     pub sort_by: OfferSortBy,
@@ -78,8 +80,21 @@ where
     OfferStatus::parse_csv(&segment).map_err(D::Error::custom)
 }
 
+/// Query params are always strings; `#[serde(flatten)]` does not coerce them to integers.
+fn deserialize_optional_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    value
+        .map(|s| s.parse().map_err(D::Error::custom))
+        .transpose()
+}
+
 #[cfg(test)]
 mod tests {
+    use serde::Deserialize;
+
     use super::{OfferListQuery, OfferStatus};
 
     #[test]
@@ -112,6 +127,35 @@ mod tests {
             let parsed: OfferListQuery = serde_urlencoded::from_str(query).expect(query);
             assert_eq!(parsed.status, expected, "query: {query}");
         }
+    }
+
+    #[test]
+    fn offer_list_query_parses_pagination_from_query_string() {
+        let parsed: OfferListQuery =
+            serde_urlencoded::from_str("limit=10&offset=5").expect("parse pagination");
+        assert_eq!(parsed.limit, Some(10));
+        assert_eq!(parsed.offset, Some(5));
+    }
+
+    #[test]
+    fn offer_list_query_parses_pagination_when_flattened() {
+        #[derive(Deserialize)]
+        struct FlattenedQuery {
+            script_pubkey: String,
+            #[serde(flatten)]
+            filters: OfferListQuery,
+        }
+
+        let parsed: FlattenedQuery = serde_urlencoded::from_str(
+            "script_pubkey=0014d0c4a3ef09e887b6e99e397e518fe3e41a118ca1&limit=10",
+        )
+        .expect("parse flattened pagination");
+
+        assert_eq!(
+            parsed.script_pubkey,
+            "0014d0c4a3ef09e887b6e99e397e518fe3e41a118ca1"
+        );
+        assert_eq!(parsed.filters.limit, Some(10));
     }
 
     #[test]
