@@ -187,7 +187,7 @@ The following parameters are available for `GET /offers` and for the `offers` li
 
 - `id`, `issuance_factory_id`, `status`
 - `collateral_asset`, `principal_asset` (hex)
-- `collateral_amount`, `principal_amount`
+- `collateral_amount`, `principal_amount` (decimal strings, satoshi)
 - `interest_rate` (basis points, e.g. 1000 = 10%)
 - `loan_expiration_height` (block height)
 - `created_at_height`, `created_at_txid` (hex)
@@ -213,8 +213,8 @@ The following parameters are available for `GET /offers` and for the `offers` li
 ```json
 {
   "overview": {
-    "collateral_locked": [{ "asset": "…", "amount": 1000 }],
-    "borrowings": [{ "asset": "…", "amount": 500 }],
+    "collateral_locked": [{ "asset": "…", "amount": "1000" }],
+    "borrowings": [{ "asset": "…", "amount": "500" }],
     "active_loans": 1,
     "pending_offers": 2
   },
@@ -222,7 +222,7 @@ The following parameters are available for `GET /offers` and for the `offers` li
 }
 ```
 
-Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`). Counts (`active_loans`, `pending_offers`) are totals by status. The offer list is scoped to offers where the given `script_pubkey` is the latest borrower.
+Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`); each `amount` is a decimal satoshi string. Counts (`active_loans`, `pending_offers`) are totals by status. The offer list is scoped to offers where the given `script_pubkey` is the latest borrower.
 
 ### Borrowers Endpoints
 

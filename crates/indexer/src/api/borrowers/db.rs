@@ -3,7 +3,7 @@ use sqlx::{PgPool, Postgres, QueryBuilder};
 use crate::api::OfferListQuery;
 use crate::api::offers::db::{apply_offer_list_filters, push_offer_list_order_by};
 use crate::api::offers::dto::{OfferListItemShort, OfferListResponse};
-use crate::api::utils::format_hex;
+use crate::api::utils::{format_hex, format_satoshis};
 use crate::models::{OfferModelShort, OfferStatus, ParticipantType};
 
 use super::dto::{AssetAmount, BorrowerDashboardResponse, BorrowerOverview};
@@ -46,7 +46,7 @@ fn asset_amounts_from_rows(rows: Vec<AssetSumRow>) -> Vec<AssetAmount> {
     rows.into_iter()
         .map(|row| AssetAmount {
             asset: format_hex(row.asset_id),
-            amount: row.amount as u64,
+            amount: format_satoshis(row.amount),
         })
         .collect()
 }

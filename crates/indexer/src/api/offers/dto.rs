@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
 
-use crate::api::utils::format_hex;
+use crate::api::utils::{format_hex, format_satoshis};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
     ParticipantType, UtxoType,
@@ -16,8 +16,8 @@ pub struct OfferListItemShort {
     pub status: OfferStatus,
     pub collateral_asset: String,
     pub principal_asset: String,
-    pub collateral_amount: u64,
-    pub principal_amount: u64,
+    pub collateral_amount: String,
+    pub principal_amount: String,
     pub interest_rate: u32,
     pub loan_expiration_height: u32,
     pub created_at_height: u64,
@@ -40,8 +40,8 @@ impl From<OfferModelShort> for OfferListItemShort {
             status: value.current_status,
             collateral_asset: format_hex(value.collateral_asset_id),
             principal_asset: format_hex(value.principal_asset_id),
-            collateral_amount: value.collateral_amount as u64,
-            principal_amount: value.principal_amount as u64,
+            collateral_amount: format_satoshis(value.collateral_amount),
+            principal_amount: format_satoshis(value.principal_amount),
             interest_rate: value.interest_rate as u32,
             loan_expiration_height: value.loan_expiration_time as u32,
             created_at_height: value.created_at_height as u64,
@@ -69,8 +69,8 @@ impl From<OfferModel> for OfferListItemFull {
                 status: value.current_status,
                 collateral_asset: format_hex(value.collateral_asset_id),
                 principal_asset: format_hex(value.principal_asset_id),
-                collateral_amount: value.collateral_amount as u64,
-                principal_amount: value.principal_amount as u64,
+                collateral_amount: format_satoshis(value.collateral_amount),
+                principal_amount: format_satoshis(value.principal_amount),
                 interest_rate: value.interest_rate as u32,
                 loan_expiration_height: value.loan_expiration_time as u32,
                 created_at_height: value.created_at_height as u64,
@@ -175,8 +175,8 @@ mod tests {
         assert_eq!(dto.status, OfferStatus::Active);
         assert_eq!(dto.collateral_asset, "030201");
         assert_eq!(dto.principal_asset, "060504");
-        assert_eq!(dto.collateral_amount, 1000);
-        assert_eq!(dto.principal_amount, 500);
+        assert_eq!(dto.collateral_amount, "1000");
+        assert_eq!(dto.principal_amount, "500");
         assert_eq!(dto.interest_rate, 250);
         assert_eq!(dto.loan_expiration_height, 123);
         assert_eq!(dto.created_at_height, 456);

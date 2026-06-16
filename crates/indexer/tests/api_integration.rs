@@ -492,8 +492,8 @@ struct ExpectedOfferDetailsDto {
     status: String,
     collateral_asset: String,
     principal_asset: String,
-    collateral_amount: u64,
-    principal_amount: u64,
+    collateral_amount: String,
+    principal_amount: String,
     interest_rate: u32,
     loan_expiration_height: u32,
     created_at_height: u64,
@@ -538,8 +538,8 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
 
     assert_eq!(dto.id, pending_offer);
     assert_eq!(dto.status, "pending");
-    assert_eq!(dto.collateral_amount, 1_000);
-    assert_eq!(dto.principal_amount, 500);
+    assert_eq!(dto.collateral_amount, "1000");
+    assert_eq!(dto.principal_amount, "500");
     assert_eq!(dto.interest_rate, 120);
     assert_eq!(dto.loan_expiration_height, 1_234_567);
     assert_eq!(dto.created_at_height, PENDING_OFFER_HEIGHT as u64);
@@ -580,9 +580,9 @@ async fn borrower_dashboard_returns_overview_and_filtered_offers() -> anyhow::Re
         overview["collateral_locked"].as_array().map_or(0, Vec::len),
         1
     );
-    assert_eq!(overview["collateral_locked"][0]["amount"], 2_000);
+    assert_eq!(overview["collateral_locked"][0]["amount"], "2000");
     assert_eq!(overview["borrowings"].as_array().map_or(0, Vec::len), 1);
-    assert_eq!(overview["borrowings"][0]["amount"], 1_000);
+    assert_eq!(overview["borrowings"][0]["amount"], "1000");
 
     let offers = &dashboard["offers"];
     assert_eq!(offers["total"], 2);
@@ -596,8 +596,8 @@ async fn borrower_dashboard_returns_overview_and_filtered_offers() -> anyhow::Re
             .flatten()
             .all(|item| {
                 item.get("participants").is_none()
-                    && item["collateral_amount"].as_u64() == Some(1_000)
-                    && item["principal_amount"].as_u64() == Some(500)
+                    && item["collateral_amount"].as_str() == Some("1000")
+                    && item["principal_amount"].as_str() == Some("500")
             })
     );
 
