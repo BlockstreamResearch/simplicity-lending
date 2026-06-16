@@ -6,14 +6,12 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type RepayOfferResult, useRepayOffer } from '@/hooks/useRepayOffer'
-import { useTxStatus } from '@/hooks/useTxStatus'
-import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { type ClaimPrincipalResult, useClaimPrincipal } from '@/hooks/useClaimPrincipal'
+import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
-import { formatCollateralUtxoOption } from './helpers'
+import { formatCollateralUtxoOption, useTxConfirmations } from './helpers'
 import { TxResult } from './TxResult'
 
 const outpointSchema = (label: string) =>
@@ -23,25 +21,25 @@ const outpointSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}:\d+$/, `${label} must have txid:vout format`)
     .transform(value => value.toLowerCase())
 
-const repayOfferFormSchema = zod.object({
-  activeOfferOutpoint: outpointSchema('Active offer outpoint'),
-  borrowerNftOutpoint: outpointSchema('Borrower NFT outpoint'),
-  collateralRecipientAddress: zod.string().trim().optional(),
+const claimPrincipalFormSchema = zod.object({
   principalOutpoint: outpointSchema('Principal outpoint'),
+  borrowerNftOutpoint: outpointSchema('Borrower NFT outpoint'),
   feeOutpoint: outpointSchema('Fee L-BTC outpoint'),
+  borrowerNftRecipientAddress: zod.string().trim().optional(),
+  principalRecipientAddress: zod.string().trim().optional(),
 })
 
-type RepayOfferForm = zod.input<typeof repayOfferFormSchema>
-type RepayOfferTextField = Exclude<keyof RepayOfferForm, 'principalOutpoint' | 'feeOutpoint'>
-type RepayOfferTextFieldProps = Omit<
+type ClaimPrincipalForm = zod.input<typeof claimPrincipalFormSchema>
+type ClaimPrincipalTextField = Exclude<keyof ClaimPrincipalForm, 'feeOutpoint'>
+type ClaimPrincipalTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
 > & {
-  name: RepayOfferTextField
+  name: ClaimPrincipalTextField
 }
 
-const repayOfferFormResolver: Resolver<RepayOfferForm> = async values => {
-  const result = repayOfferFormSchema.safeParse(values)
+const claimPrincipalFormResolver: Resolver<ClaimPrincipalForm> = async values => {
+  const result = claimPrincipalFormSchema.safeParse(values)
   if (result.success) return { values, errors: {} }
 
   return {
@@ -63,7 +61,7 @@ const repayOfferFormResolver: Resolver<RepayOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: RepayOfferResult | null
+  result: ClaimPrincipalResult | null
 }
 
 interface WalletUtxosState {
@@ -71,12 +69,12 @@ interface WalletUtxosState {
   error: string | null
 }
 
-const EMPTY_FORM: RepayOfferForm = {
-  activeOfferOutpoint: '',
-  borrowerNftOutpoint: '',
-  collateralRecipientAddress: '',
+const EMPTY_FORM: ClaimPrincipalForm = {
   principalOutpoint: '',
+  borrowerNftOutpoint: '',
   feeOutpoint: '',
+  borrowerNftRecipientAddress: '',
+  principalRecipientAddress: '',
 }
 
 const INITIAL_STATE: BroadcastState = {
@@ -85,56 +83,39 @@ const INITIAL_STATE: BroadcastState = {
   result: null,
 }
 
-export default function RepayOfferDemo() {
+export default function ClaimPrincipalDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
-  const { repayOffer } = useRepayOffer()
-  const { control, handleSubmit } = useForm<RepayOfferForm>({
+  const { claimPrincipal } = useClaimPrincipal()
+  const { control, handleSubmit } = useForm<ClaimPrincipalForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
-    resolver: repayOfferFormResolver,
+    resolver: claimPrincipalFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
-  const [walletUtxos, setWalletUtxos] = useState<WalletTxOut[]>([])
-  const [walletUtxosState, setWalletUtxosState] = useState<WalletUtxosState>({
+  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
+  const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,
   })
-  const txStatus = useTxStatus(state.result?.txid ?? null)
+  const confirmations = useTxConfirmations(state.result?.txid ?? null)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
-  const principalAsset = NETWORK_CONFIG.principalAsset
-  const principalUtxoOptions = useMemo(() => {
-    if (connectionStatus !== 'ready') return []
-    return walletUtxos
-      .filter(utxo => utxo.unblinded().asset().toString() === principalAsset.id)
-      .map(utxo => {
-        const outpoint = utxoToOutpointString(utxo)
-        const unblinded = utxo.unblinded()
-        const height = utxo.height()
-        const status = height === undefined ? 'mempool' : `height ${height}`
-        return {
-          id: outpoint,
-          label: `${outpoint} | ${unblinded.value().toString()} units | asset ${unblinded.asset().toString()} | ${status}`,
-        }
-      })
-  }, [connectionStatus, principalAsset.id, walletUtxos])
   const feeUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
-    return walletUtxos
+    return blindedWalletUtxos
       .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
       .map(formatCollateralUtxoOption)
-  }, [connectionStatus, policyAssetId, walletUtxos])
+  }, [connectionStatus, policyAssetId, blindedWalletUtxos])
 
   const refreshWalletUtxos = useCallback(async () => {
-    setWalletUtxosState({ busy: true, error: null })
-
+    setBlindedWalletUtxosState({ busy: true, error: null })
     try {
       await syncWallet()
-      setWalletUtxos(await getBlindedWalletUtxos())
-      setWalletUtxosState({ busy: false, error: null })
+      setBlindedWalletUtxos(await getBlindedWalletUtxos())
+      setBlindedWalletUtxosState({ busy: false, error: null })
     } catch (err) {
-      setWalletUtxosState({
+      setBlindedWalletUtxosState({
         busy: false,
         error: err instanceof Error ? err.message : String(err),
       })
@@ -147,11 +128,11 @@ export default function RepayOfferDemo() {
     let cancelled = false
     getBlindedWalletUtxos()
       .then(utxos => {
-        if (!cancelled) setWalletUtxos(utxos)
+        if (!cancelled) setBlindedWalletUtxos(utxos)
       })
       .catch(err => {
         if (!cancelled) {
-          setWalletUtxosState({
+          setBlindedWalletUtxosState({
             busy: false,
             error: err instanceof Error ? err.message : String(err),
           })
@@ -163,20 +144,14 @@ export default function RepayOfferDemo() {
     }
   }, [connectionStatus, getBlindedWalletUtxos])
 
-  const onSubmit = async (formValues: RepayOfferForm) => {
+  const onSubmit = async (formValues: ClaimPrincipalForm) => {
     setState({ busy: true, error: null, result: null })
-
     try {
-      const result = repayOfferFormSchema.safeParse(formValues)
+      const result = claimPrincipalFormSchema.safeParse(formValues)
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-
-      setState({
-        busy: false,
-        error: null,
-        result: await repayOffer(result.data),
-      })
+      setState({ busy: false, error: null, result: await claimPrincipal(result.data) })
     } catch (err) {
       setState({
         busy: false,
@@ -186,7 +161,7 @@ export default function RepayOfferDemo() {
     }
   }
 
-  const renderTextField = ({ name, ...props }: RepayOfferTextFieldProps) => (
+  const renderTextField = ({ name, ...props }: ClaimPrincipalTextFieldProps) => (
     <Controller
       control={control}
       name={name}
@@ -204,54 +179,40 @@ export default function RepayOfferDemo() {
 
   return (
     <div className='rounded border border-gray-300 bg-white p-4'>
-      <div className='font-bold'>Repay Offer Demo</div>
+      <div className='font-bold'>Claim Principal Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-        Full repayment: spends the active Lending covenant and the Borrower NFT, burns the NFT,
-        creates the finalized lender and protocol-fee vaults, and returns the unlocked collateral to
-        the specified address. Run ClaimPrincipalDemo first — repayment burns the Borrower NFT, so
-        the principal must be claimed beforehand.
+        Spends the borrower principal UTXO locked in an AssetAuth covenant by presenting the
+        Borrower NFT as proof of ownership. The NFT is passed through to the recipient (not burned),
+        and the unlocked principal is sent to the specified address. Must be executed before full
+        repayment, which burns the Borrower NFT.
       </p>
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({
-          name: 'activeOfferOutpoint',
-          label: 'Active offer Lending outpoint',
-          placeholder: 'accept-offer-txid:0',
-          description: 'AcceptOfferDemo places the active Lending covenant at vout 0',
+          name: 'principalOutpoint',
+          label: 'Borrower principal AssetAuth outpoint',
+          placeholder: 'accept-offer-txid:1',
+          description: 'AcceptOfferDemo places the borrower principal AssetAuth covenant at vout 1',
         })}
         {renderTextField({
           name: 'borrowerNftOutpoint',
           label: 'Borrower NFT outpoint',
-          placeholder: 'claim-principal-txid:0',
+          placeholder: 'create-offer-txid:2',
           description:
-            'ClaimPrincipalDemo outputs the Borrower NFT at vout 0 — use that outpoint here; repayment burns it',
+            'Wallet-owned Borrower NFT UTXO — originally create-offer-txid:2; authorises the AssetAuth unlock',
         })}
         {renderTextField({
-          name: 'collateralRecipientAddress',
-          label: 'Collateral recipient address (optional)',
+          name: 'borrowerNftRecipientAddress',
+          label: 'Borrower NFT recipient address (optional)',
           placeholder: 'Leave blank to use wallet receive address',
-          description: 'Where the unlocked collateral is sent after full repayment',
+          description: 'Where the Borrower NFT is sent after unlocking — keep it for repayment',
         })}
-        <Controller
-          control={control}
-          name='principalOutpoint'
-          render={({ field, fieldState }) => (
-            <UiSelect
-              label='Principal asset outpoint'
-              placeholder='Select wallet principal UTXO'
-              options={principalUtxoOptions}
-              selectedKey={field.value || null}
-              errorMessage={fieldState.error?.message}
-              onSelectionChange={key => field.onChange(key ? String(key) : '')}
-              description={
-                `Filtered by ${principalAsset.symbol} asset: ${principalAsset.id}. ` +
-                (principalUtxoOptions.length
-                  ? `${principalUtxoOptions.length} matching wallet UTXO(s); must cover total amount to repay (principal + interest)`
-                  : 'No matching wallet UTXOs loaded')
-              }
-            />
-          )}
-        />
+        {renderTextField({
+          name: 'principalRecipientAddress',
+          label: 'Principal recipient address (optional)',
+          placeholder: 'Leave blank to use wallet receive address',
+          description: 'Where the unlocked principal amount is sent',
+        })}
         <Controller
           control={control}
           name='feeOutpoint'
@@ -273,36 +234,36 @@ export default function RepayOfferDemo() {
         />
       </div>
 
-      {walletUtxosState.error ? (
-        <p className='mt-2 text-xs text-red-500'>Wallet UTXOs: {walletUtxosState.error}</p>
+      {blindedWalletUtxosState.error ? (
+        <p className='mt-2 text-xs text-red-500'>Wallet UTXOs: {blindedWalletUtxosState.error}</p>
       ) : null}
 
       <div className='mt-4 flex flex-wrap gap-2'>
         <UiButton
           variant='outline'
-          isDisabled={connectionStatus !== 'ready' || syncing || walletUtxosState.busy}
-          isPending={syncing || walletUtxosState.busy}
+          isDisabled={connectionStatus !== 'ready' || syncing || blindedWalletUtxosState.busy}
+          isPending={syncing || blindedWalletUtxosState.busy}
           loadingText='Refreshing...'
           onPress={refreshWalletUtxos}
         >
-          Refresh Wallet UTXOs
+          Refresh L-BTC UTXOs
         </UiButton>
         <UiButton
           isDisabled={connectionStatus !== 'ready'}
           isPending={state.busy}
-          loadingText='Repaying offer...'
+          loadingText='Claiming principal...'
           onPress={() => void handleSubmit(onSubmit)()}
         >
-          Repay Offer
+          Claim Principal
         </UiButton>
       </div>
 
-      {state.error ? <p className='mt-3 text-xs text-red-500'>Repay: {state.error}</p> : null}
+      {state.error ? <p className='mt-3 text-xs text-red-500'>Claim: {state.error}</p> : null}
 
       <TxResult
-        title='Offer Repaid'
+        title='Principal Claimed'
         txid={state.result?.txid ?? null}
-        txStatus={txStatus}
+        confirmations={confirmations}
         detail={state.result?.summary}
       />
     </div>
