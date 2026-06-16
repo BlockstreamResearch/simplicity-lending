@@ -16,10 +16,10 @@ interface UsePolicyAssetUtxosResult {
 
 export function usePolicyAssetUtxos(enabled: boolean): UsePolicyAssetUtxosResult {
   const { lwkNetwork } = useLwk()
-  const { getBlindedWalletUtxos, xOnlyPubkey } = useWallet()
+  const { getBlindedWalletUtxos, scriptPubkey } = useWallet()
 
   const { data, isLoading } = useQuery({
-    queryKey: ['wallet', 'policy-asset-utxos', xOnlyPubkey],
+    queryKey: ['wallet', 'policy-asset-utxos', scriptPubkey],
     enabled,
     staleTime: 0,
     queryFn: () => getBlindedWalletUtxos(),

@@ -14,7 +14,7 @@ interface OffersTableProps {
   collateralAsset?: ConfigAsset
   principalAsset?: ConfigAsset
   page?: number
-  hasNextPage?: boolean
+  pageCount?: number
   onPageChange?: (page: number) => void
 }
 
@@ -24,7 +24,7 @@ export default function OffersTable({
   collateralAsset = NETWORK_CONFIG.collateralAsset,
   principalAsset = NETWORK_CONFIG.principalAsset,
   page,
-  hasNextPage,
+  pageCount,
   onPageChange,
 }: OffersTableProps) {
   return (
@@ -66,13 +66,9 @@ export default function OffersTable({
           </Table.Body>
         </Table.Content>
       </Table.ScrollContainer>
-      {page !== undefined && onPageChange !== undefined && (
+      {page !== undefined && pageCount !== undefined && onPageChange !== undefined && (
         <Table.Footer className='pr-2 pl-4'>
-          <UiPagination
-            currentPage={page}
-            hasNextPage={hasNextPage ?? false}
-            onPageChange={onPageChange}
-          />
+          <UiPagination currentPage={page} onPageChange={onPageChange} pageCount={pageCount} />
         </Table.Footer>
       )}
     </Table>

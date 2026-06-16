@@ -1,4 +1,4 @@
-import type { Pset, Wollet, WolletDescriptor, XOnlyPublicKey } from 'lwk_web'
+import type { Pset, Wollet, WolletDescriptor } from 'lwk_web'
 
 import type { ConnectionStatus, WalletType } from '../types'
 
@@ -10,6 +10,5 @@ export interface WalletConnector {
   signPset(pset: Pset): Promise<Pset>
   isConnected: boolean
   getConnectionStatus(): Promise<ConnectionStatus>
-  getXOnlyPublicKey?(): Promise<XOnlyPublicKey>
   getVerifiedReceiveAddress?(variant: WalletType, wollet: Wollet): Promise<string>
 }

@@ -1,4 +1,5 @@
-import type { OfferShort, OfferStatus } from '@/api/indexer/schemas'
+import type { AssetAmount, OfferShort, OfferStatus } from '@/api/indexer/schemas'
+import { normalizeHex } from './hex'
 
 export type OfferDisplayStatus = OfferStatus | 'expired'
 
@@ -59,4 +60,8 @@ export function getOfferDisplayStatus(
   return offer.status === 'pending' && getOfferTermLeft(offer, currentBlockHeight) <= 0
     ? 'expired'
     : offer.status
+}
+
+export function findAssetAmount(amounts: AssetAmount[], assetId: string): bigint {
+  return amounts.find(a => normalizeHex(a.asset) === normalizeHex(assetId))?.amount ?? 0n
 }

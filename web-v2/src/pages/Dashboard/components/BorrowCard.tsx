@@ -6,25 +6,22 @@ import CoinsIcon from '@/components/icons/CoinsIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
+import { useBorrows } from '@/hooks/useBorrows'
 import { ErrorHandler } from '@/utils/errorHandler'
 import { formatAmount, truncateAddress } from '@/utils/format'
 
-import { useBorrows } from '../hooks/useBorrows'
 import { AssetAmount } from './AssetAmount'
 import CardAlert from './CardAlert'
 import { DataRow } from './DataRow'
 
 export function BorrowCard() {
   const navigate = useNavigate()
-  const { balance, stats, nearExpiryOffers, isLoading, error, unsupported, refetch } = useBorrows()
+  const { balance, stats, nearExpiryOffers, isLoading, error, refetch } = useBorrows()
   const alertOffer = nearExpiryOffers[0]
 
   useEffect(() => {
     if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your borrows.')
   }, [error, refetch])
-
-  // This wallet can't expose a borrower key → nothing to show.
-  if (unsupported) return null
 
   return (
     <section className='bg-surface-secondary flex flex-1 flex-col gap-4 rounded-2xl p-4 sm:p-6'>

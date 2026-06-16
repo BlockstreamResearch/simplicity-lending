@@ -1,11 +1,4 @@
-import type {
-  EsploraClient,
-  Pset,
-  WalletTxOut,
-  Wollet,
-  WolletDescriptor,
-  XOnlyPublicKey,
-} from 'lwk_web'
+import type { EsploraClient, Pset, WalletTxOut, Wollet, WolletDescriptor } from 'lwk_web'
 
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
@@ -20,7 +13,6 @@ export interface WalletContextValue extends WalletState {
   getWollet(): Promise<Wollet>
   getReceiveAddress(): Promise<string | null>
   verifyReceiveAddress(): Promise<string>
-  getXOnlyPublicKey(): Promise<XOnlyPublicKey | null>
 }
 
 export interface WalletSession {
@@ -44,7 +36,6 @@ export interface WalletState {
   // Resolved once on connect; null until ready.
   receiveAddress: string | null
   scriptPubkey: string | null
-  xOnlyPubkey: string | null
   syncing: boolean
   reconnecting: boolean
   usbDeviceDetected: boolean
@@ -61,7 +52,6 @@ export const INITIAL_WALLET_STATE: WalletState = {
   balances: {},
   receiveAddress: null,
   scriptPubkey: null,
-  xOnlyPubkey: null,
   syncing: false,
   reconnecting: false,
   usbDeviceDetected: false,

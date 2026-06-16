@@ -1,19 +1,37 @@
 import { Skeleton } from '@heroui/react'
 import { useState } from 'react'
 
+import type { OfferShort } from '@/api/indexer/schemas'
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import PlusIcon from '@/components/icons/PlusIcon'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
-import { useBorrows } from '@/pages/Dashboard/hooks/useBorrows'
+import { BORROW_PAGE_SIZE } from '@/pages/Dashboard/constants'
 
 import CreateBorrowerAccountModal from './CreateBorrowerAccountModal'
 import CreateBorrowOfferModal from './CreateBorrowOfferModal'
 
-export default function YourBorrows() {
-  const { offers, currentBlockHeight, isLoading } = useBorrows()
+interface YourBorrowsProps {
+  offers: OfferShort[]
+  totalOffers: number
+  page: number
+  setPage: (page: number) => void
+  currentBlockHeight: number
+  isLoading: boolean
+}
+
+export default function YourBorrows({
+  offers,
+  totalOffers,
+  page,
+  setPage,
+  currentBlockHeight,
+  isLoading,
+}: YourBorrowsProps) {
   const { hasAccount } = useBorrowerAccount()
+
+  const pageCount = Math.ceil(totalOffers / BORROW_PAGE_SIZE)
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false)
 
@@ -42,7 +60,13 @@ export default function YourBorrows() {
           <span className='text-foreground text-sm font-medium'>No borrow offers yet.</span>
         </div>
       ) : (
-        <OffersTable offers={offers} currentBlockHeight={currentBlockHeight} />
+        <OffersTable
+          offers={offers}
+          currentBlockHeight={currentBlockHeight}
+          page={page}
+          pageCount={pageCount}
+          onPageChange={setPage}
+        />
       )}
 
       <UiButton variant='primary' className='self-start' onPress={handleCreateOffer}>

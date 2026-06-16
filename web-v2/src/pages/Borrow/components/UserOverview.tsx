@@ -1,7 +1,7 @@
 import { Skeleton } from '@heroui/react'
 
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
-import { useBorrows } from '@/pages/Dashboard/hooks/useBorrows'
+import type { BorrowStats } from '@/hooks/useBorrows'
 import { formatAmount } from '@/utils/format'
 import { bpsToPercent } from '@/utils/offers'
 
@@ -11,8 +11,12 @@ interface OverviewTile {
   asset?: ConfigAsset
 }
 
-export default function UserOverview() {
-  const { stats, isLoading } = useBorrows()
+interface UserOverviewProps {
+  stats: BorrowStats
+  isLoading: boolean
+}
+
+export default function UserOverview({ stats, isLoading }: UserOverviewProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
 
   const tiles: OverviewTile[] = [

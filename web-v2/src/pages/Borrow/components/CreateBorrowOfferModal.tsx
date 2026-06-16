@@ -99,7 +99,7 @@ export default function CreateBorrowOfferModal({
   // TODO: implement price feed
   const collateralUsd = null
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
-  const { loadBorrowerAccountState, updateBorrowerAccountState } = useBorrowerAccount()
+  const { factoryState, refetchFactory } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()
 
   const formContext = useMemo<BorrowOfferContext>(
@@ -131,13 +131,13 @@ export default function CreateBorrowOfferModal({
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
 
   const createBorrowOffer = useCallback(async () => {
+    if (!factoryState) throw new Error('No active factory found. Create a borrower account first.')
     const collateralUtxo = selectOptimalUtxo(utxos, collateralBase)
     if (!collateralUtxo) throw new Error('No suitable collateral UTXO found')
-    const refs = loadBorrowerAccountState()
     const result = await createOffer({
-      factoryAuthOutpoint: refs.factoryAuthOutpoint,
-      issuanceFactoryOutpoint: refs.issuanceFactoryOutpoint,
-      factoryAssetId: refs.factoryAssetId,
+      factoryAuthOutpoint: factoryState.factoryAuthOutpoint,
+      issuanceFactoryOutpoint: factoryState.issuanceFactoryOutpoint,
+      factoryAssetId: factoryState.factoryAssetId,
       collateralOutpoint: collateralUtxo.outpoint,
       collateralAmount: collateralBase,
       principalAssetId: NETWORK_CONFIG.principalAsset.id,
@@ -146,11 +146,7 @@ export default function CreateBorrowOfferModal({
       loanDurationBlocks,
       protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
     })
-    updateBorrowerAccountState({
-      factoryAssetId: refs.factoryAssetId,
-      factoryAuthOutpoint: `${result.txid}:0`,
-      issuanceFactoryOutpoint: `${result.txid}:1`,
-    })
+    refetchFactory()
     Toast.toast.success('Offer Created', {
       description: 'Your loan offer has been created successfully.',
       actionProps: {
@@ -160,13 +156,13 @@ export default function CreateBorrowOfferModal({
     })
     return result.txid
   }, [
+    factoryState,
     utxos,
     collateralBase,
     principalBase,
     bps,
     loanDurationBlocks,
-    loadBorrowerAccountState,
-    updateBorrowerAccountState,
+    refetchFactory,
     createOffer,
   ])
 
