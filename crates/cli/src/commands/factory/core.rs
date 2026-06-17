@@ -128,6 +128,9 @@ impl Factory {
             .get(program_outpoint.vout as usize)
             .cloned()
             .ok_or(FactoryCommandError::FactoryProgramUtxoNotFound)?;
+        if program_txout.asset.explicit() != Some(factory_asset_id) {
+            return Err(FactoryCommandError::FactoryProgramUtxoNotFound);
+        }
         let program_utxo = UTXO {
             outpoint: program_outpoint,
             txout: program_txout,
