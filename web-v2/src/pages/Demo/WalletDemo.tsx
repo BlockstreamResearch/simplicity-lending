@@ -32,6 +32,7 @@ export function WalletDemo() {
     balances,
     usbDeviceDetected,
     connect,
+    disconnect,
     getReceiveAddress,
     verifyReceiveAddress,
     connectorId,
@@ -41,6 +42,7 @@ export function WalletDemo() {
   const [sendAddress, setSendAddress] = useState('')
   const [sendAmount, setSendAmount] = useState('')
   const [verifyingAddress, setVerifyingAddress] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
   const [receiveAddress, setReceiveAddress] = useState<string | null>(null)
 
   useEffect(() => {
@@ -57,6 +59,15 @@ export function WalletDemo() {
   }, [connectionStatus, getReceiveAddress])
 
   const phase = resolvePhase(connectionStatus, usbDeviceDetected, syncing)
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true)
+    try {
+      await disconnect()
+    } finally {
+      setDisconnecting(false)
+    }
+  }
 
   const handleVerifyAddress = async () => {
     setVerifyingAddress(true)
@@ -144,6 +155,16 @@ export function WalletDemo() {
 
       {phase === 'ready' && (
         <div className='space-y-4'>
+          <div className='flex justify-end'>
+            <button
+              className='rounded bg-accent-soft-hover px-3 py-1 text-xs disabled:opacity-50'
+              disabled={disconnecting}
+              onClick={handleDisconnect}
+            >
+              {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+            </button>
+          </div>
+
           <div className='space-y-1'>
             <p className='text-sm font-medium'>Receive address</p>
             <code className='break-all text-xs'>{receiveAddress}</code>

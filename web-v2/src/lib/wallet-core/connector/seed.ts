@@ -30,7 +30,7 @@ export class SeedConnector implements WalletConnector {
     this._id = crypto.randomUUID()
   }
 
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     if (this.signer) {
       this.signer.free()
       this.signer = null
