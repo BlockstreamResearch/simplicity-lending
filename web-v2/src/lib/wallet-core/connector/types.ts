@@ -5,7 +5,7 @@ import type { ConnectionStatus, WalletType } from '../types'
 export interface WalletConnector {
   readonly id: string | null
   connect(): Promise<void>
-  disconnect(): void
+  disconnect(): Promise<void>
   getDescriptor(variant: WalletType): Promise<WolletDescriptor>
   signPset(pset: Pset): Promise<Pset>
   isConnected: boolean

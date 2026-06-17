@@ -27,19 +27,21 @@ export class JadeConnector implements WalletConnector {
 
   async connect(): Promise<void> {
     if (this.jade !== null) return
-    // HACK: The TS bindings declare this as a sync constructor, but wasm-bindgen
-    // generates an async constructor under the hood that returns a Promise.
-    // `await new this.lwk.Jade(...)` is intentional — not a mistake.
-    // HACK 2: Bindings state that no parameters are accepted,
-    // but the underlying constructor actually requires a Network parameter
-    // @ts-expect-error Expected 0 arguments, but got 2.ts(2554)
-    this.jade = await new Jade(this.lwkNetwork, true)
+    this.jade = await Jade.fromSerial(this.lwkNetwork, true)
   }
 
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     if (this.jade) {
-      this.jade.free()
-      this.jade = null
+      try {
+        // Releases the WebSerial port's reader/writer locks and closes it, so the
+        // next connect() can reopen the port without needing a page reload.
+        await this.jade.disconnect()
+      } catch {
+        // Port may already be gone (e.g. device unplugged) — still free the wasm object.
+      } finally {
+        this.jade.free()
+        this.jade = null
+      }
     }
     this._id = null
   }
