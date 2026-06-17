@@ -1,4 +1,5 @@
 use serde::Serialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
@@ -9,22 +10,28 @@ use crate::models::{
     ParticipantType, UtxoType,
 };
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct OfferListItemShort {
     pub id: Uuid,
     pub issuance_factory_id: Uuid,
     pub status: OfferStatus,
     pub collateral_asset: String,
     pub principal_asset: String,
+    /// Collateral amount in satoshis (decimal string).
+    #[schema(example = "1000")]
     pub collateral_amount: String,
+    /// Principal amount in satoshis (decimal string).
+    #[schema(example = "500")]
     pub principal_amount: String,
+    /// Interest rate in basis points.
+    #[schema(example = 120)]
     pub interest_rate: u32,
     pub loan_expiration_height: u32,
     pub created_at_height: u64,
     pub created_at_txid: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct OfferListResponse {
     pub items: Vec<OfferListItemShort>,
     pub total: u64,
@@ -83,7 +90,7 @@ impl From<OfferModel> for OfferListItemFull {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ParticipantDto {
     pub offer_id: Uuid,
     pub participant_type: ParticipantType,
@@ -110,7 +117,7 @@ impl From<OfferParticipantModel> for ParticipantDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct OfferUtxoDto {
     pub offer_id: Uuid,
     pub txid: String,

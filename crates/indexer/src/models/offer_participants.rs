@@ -1,7 +1,18 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, sqlx::Type, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    PartialOrd,
+    Eq,
+    sqlx::Type,
+    Serialize,
+    Deserialize,
+    utoipa::ToSchema,
+)]
 #[sqlx(type_name = "participant_type", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum ParticipantType {

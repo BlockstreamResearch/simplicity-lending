@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::api::OfferListQuery;
 use crate::api::offers::dto::OfferListResponse;
@@ -10,13 +11,15 @@ pub struct BorrowerDashboardQuery {
     pub filters: OfferListQuery,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct AssetAmount {
     pub asset: String,
+    /// Amount in satoshis (decimal string).
+    #[schema(example = "1000")]
     pub amount: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct BorrowerOverview {
     pub collateral_locked: Vec<AssetAmount>,
     pub borrowings: Vec<AssetAmount>,
@@ -24,7 +27,7 @@ pub struct BorrowerOverview {
     pub pending_offers: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct BorrowerDashboardResponse {
     pub overview: BorrowerOverview,
     pub offers: OfferListResponse,

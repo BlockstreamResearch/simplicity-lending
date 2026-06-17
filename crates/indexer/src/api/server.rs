@@ -3,12 +3,17 @@ use std::sync::Arc;
 use axum::Router;
 use sqlx::PgPool;
 use tokio::net::TcpListener;
+
 use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
+
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::api::borrowers;
 use crate::api::factories;
 use crate::api::offers;
+use crate::api::openapi::ApiDoc;
 use crate::api::state::AppState;
 
 pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
@@ -18,6 +23,7 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
         .merge(borrowers::routes())
         .merge(factories::routes())
         .merge(offers::routes())
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .with_state(state)
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {

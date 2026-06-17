@@ -21,7 +21,9 @@ pub struct ActiveUtxo {
     pub data: UtxoData,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize, utoipa::ToSchema,
+)]
 #[sqlx(type_name = "offer_status", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum OfferStatus {

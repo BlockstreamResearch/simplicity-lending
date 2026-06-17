@@ -1,15 +1,20 @@
 use serde::Deserialize;
 use serde::de::Error;
+
+use utoipa::{IntoParams, ToSchema};
+
 use uuid::Uuid;
 
 use crate::models::OfferStatus;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
 pub struct ScriptQuery {
+    #[param(example = "00144f883a4bb668547b534ae815bc32628893b6f435")]
     pub script_pubkey: String,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Deserialize, Default, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SortDir {
     #[default]
@@ -17,7 +22,7 @@ pub enum SortDir {
     Asc,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Deserialize, Default, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum OfferSortBy {
     #[default]

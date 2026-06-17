@@ -168,6 +168,15 @@ SQLX_OFFLINE=true cargo check
 
 ## API Reference
 
+### OpenAPI / Swagger
+
+When the API server is running:
+
+- **Swagger UI:** `http://localhost:8000/swagger-ui/`
+- **OpenAPI JSON:** `http://localhost:8000/api-docs/openapi.json`
+
+The spec is generated at build time from handler annotations (`utoipa`) and matches the current DTO shapes.
+
 ### Filtering Parameters (Query Params)
 
 The following parameters are available for `GET /offers` and for the `offers` list inside `GET /borrowers/by-script`:

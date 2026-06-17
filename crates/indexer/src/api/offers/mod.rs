@@ -1,6 +1,6 @@
 pub(crate) mod db;
 pub(crate) mod dto;
-mod handlers;
+pub(crate) mod handlers;
 mod routes;
 
 pub use routes::routes;

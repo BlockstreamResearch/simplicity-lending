@@ -20,7 +20,9 @@ impl FactoryIdentity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize, utoipa::ToSchema,
+)]
 #[sqlx(type_name = "factory_status", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum FactoryStatus {

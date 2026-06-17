@@ -1,4 +1,5 @@
 use serde::Serialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
@@ -6,14 +7,14 @@ use simplex::simplicityhl::elements::hex::ToHex;
 use crate::api::utils::format_hex;
 use crate::models::FactoryStatus;
 
-#[derive(Serialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, PartialEq, Eq, Debug, ToSchema)]
 pub struct FactoryProgramUtxoDto {
     pub txid: String,
     pub vout: u32,
     pub created_at_height: u64,
 }
 
-#[derive(Serialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, PartialEq, Eq, Debug, ToSchema)]
 pub struct FactoryAuthUtxoDto {
     pub txid: String,
     pub vout: u32,
@@ -21,7 +22,7 @@ pub struct FactoryAuthUtxoDto {
     pub created_at_height: u64,
 }
 
-#[derive(Serialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, PartialEq, Eq, Debug, ToSchema)]
 pub struct FactoryDetailsResponse {
     pub id: Uuid,
     pub factory_asset_id: String,
