@@ -7,13 +7,10 @@ use tokio::net::TcpListener;
 use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
-
 use crate::api::borrowers;
 use crate::api::factories;
 use crate::api::offers;
-use crate::api::openapi::ApiDoc;
+use crate::api::openapi;
 use crate::api::state::AppState;
 
 pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
@@ -22,8 +19,12 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
     let app = Router::new()
         .merge(borrowers::routes())
         .merge(factories::routes())
-        .merge(offers::routes())
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .merge(offers::routes());
+
+    #[cfg(feature = "swagger-ui")]
+    let app = app.merge(openapi::swagger_routes());
+
+    let app = app
         .with_state(state)
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &axum::http::Request<_>| {

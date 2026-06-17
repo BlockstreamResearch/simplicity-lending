@@ -6,10 +6,9 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::api::error::ErrorResponse;
-use crate::api::openapi_params::OfferListParams;
-use crate::api::openapi_schemas::OfferDetailsResponseSchema;
+use crate::api::openapi::{ErrorResponse, OfferDetailsResponseSchema};
 use crate::api::params::ScriptQuery;
+use crate::api::utils::parse_script_pubkey;
 use crate::api::{ApiError, AppState, OfferListQuery};
 
 use super::dto::{OfferDetailsResponse, OfferListResponse};
@@ -18,7 +17,7 @@ use super::dto::{OfferDetailsResponse, OfferListResponse};
     get,
     path = "/offers",
     tag = "offers",
-    params(OfferListParams),
+    params(OfferListQuery),
     responses(
         (status = 200, description = "Paginated short offer list", body = OfferListResponse),
         (status = 400, description = "Invalid query parameters", body = ErrorResponse),
@@ -74,8 +73,7 @@ pub async fn get_ids_by_script(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ScriptQuery>,
 ) -> Result<Json<Vec<Uuid>>, ApiError> {
-    let script_bytes = hex::decode(&query.script_pubkey)
-        .map_err(|_| ApiError::BadRequest("Invalid script_pubkey hex".to_string()))?;
+    let script_bytes = parse_script_pubkey(&query.script_pubkey)?;
 
     let ids = super::db::fetch_ids_by_script(&state.db, &script_bytes).await?;
 

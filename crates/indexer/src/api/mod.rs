@@ -3,8 +3,6 @@ mod error;
 mod factories;
 mod offers;
 mod openapi;
-mod openapi_params;
-mod openapi_schemas;
 mod params;
 pub mod server;
 mod state;

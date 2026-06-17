@@ -1,8 +1,10 @@
 use utoipa::OpenApi;
 
+#[cfg(feature = "swagger-ui")]
+use utoipa_swagger_ui::SwaggerUi;
+
 use crate::api::borrowers::dto::{AssetAmount, BorrowerDashboardResponse, BorrowerOverview};
 use crate::api::borrowers::handlers as borrower_handlers;
-use crate::api::error::{ErrorBody, ErrorResponse};
 use crate::api::factories::dto::{
     FactoryAuthUtxoDto, FactoryDetailsResponse, FactoryProgramUtxoDto,
 };
@@ -11,16 +13,17 @@ use crate::api::offers::dto::{
     OfferListItemShort, OfferListResponse, OfferUtxoDto, ParticipantDto,
 };
 use crate::api::offers::handlers as offer_handlers;
-use crate::api::openapi_schemas::OfferDetailsResponseSchema;
-use crate::api::params::{OfferSortBy, SortDir};
+use crate::api::params::{BorrowerDashboardQuery, OfferFilters, OfferSortBy, SortDir};
 
 use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
+
+use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
 
 #[derive(OpenApi)]
 #[openapi(
     info(
         title = "Simplicity Lending Indexer",
-        version = "0.1.0",
+        version = env!("CARGO_PKG_VERSION"),
         description = "REST API for the Simplicity Lending protocol indexer."
     ),
     paths(
@@ -33,6 +36,7 @@ use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
     ),
     components(schemas(
         AssetAmount,
+        BorrowerDashboardQuery,
         BorrowerDashboardResponse,
         BorrowerOverview,
         ErrorBody,
@@ -42,6 +46,7 @@ use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
         FactoryProgramUtxoDto,
         FactoryStatus,
         OfferDetailsResponseSchema,
+        OfferFilters,
         OfferListItemShort,
         OfferListResponse,
         OfferSortBy,
@@ -60,11 +65,15 @@ use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
 )]
 pub struct ApiDoc;
 
+#[cfg(feature = "swagger-ui")]
+pub fn swagger_routes() -> SwaggerUi {
+    SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi())
+}
+
 #[cfg(test)]
 mod tests {
-    use utoipa::OpenApi;
-
     use super::ApiDoc;
+    use utoipa::OpenApi;
 
     #[test]
     fn openapi_spec_contains_all_endpoints() {
@@ -77,6 +86,12 @@ mod tests {
         assert!(paths.contains_key("/borrowers/by-script"));
         assert!(paths.contains_key("/factories/by-script"));
         assert!(paths.contains_key("/factories/{id}"));
+    }
+
+    #[test]
+    fn openapi_spec_uses_crate_version() {
+        let spec = ApiDoc::openapi();
+        assert_eq!(spec.info.version, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

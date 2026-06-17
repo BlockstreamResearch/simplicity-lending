@@ -12,4 +12,4 @@ esplora:
 indexer:
   protocol_fee_keeper_asset_id: "38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5"
   interval: 10000
-  last_indexed_height: 2448492
+  last_indexed_height: 2489050

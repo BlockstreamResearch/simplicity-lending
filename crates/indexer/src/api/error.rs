@@ -3,22 +3,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-
-use serde::Serialize;
 use serde_json::json;
-
-use utoipa::ToSchema;
-
-#[derive(Serialize, ToSchema)]
-pub struct ErrorBody {
-    pub code: String,
-    pub message: String,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct ErrorResponse {
-    pub error: ErrorBody,
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {

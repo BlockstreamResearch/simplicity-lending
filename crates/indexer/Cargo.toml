@@ -37,7 +37,11 @@ smplx-std = { workspace = true }
 lending-contracts = { path = "../contracts" }
 
 utoipa = { version = "5", features = ["uuid", "axum_extras"] }
-utoipa-swagger-ui = { version = "9", features = ["axum"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"], optional = true }
+
+[features]
+default = ["swagger-ui"]
+swagger-ui = ["dep:utoipa-swagger-ui"]
 
 [dependencies.sqlx]
 version = "0.8"

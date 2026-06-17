@@ -6,8 +6,9 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::api::error::ErrorResponse;
+use crate::api::openapi::ErrorResponse;
 use crate::api::params::ScriptQuery;
+use crate::api::utils::parse_script_pubkey;
 use crate::api::{ApiError, AppState};
 
 use super::dto::FactoryDetailsResponse;
@@ -28,8 +29,7 @@ pub async fn get_by_script(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ScriptQuery>,
 ) -> Result<Json<Vec<FactoryDetailsResponse>>, ApiError> {
-    let script_bytes = hex::decode(&query.script_pubkey)
-        .map_err(|_| ApiError::BadRequest("Invalid script_pubkey hex".to_string()))?;
+    let script_bytes = parse_script_pubkey(&query.script_pubkey)?;
 
     let factories = super::db::fetch_by_script(&state.db, &script_bytes).await?;
 

@@ -1,11 +1,22 @@
 #![allow(dead_code)]
 
+use serde::Serialize;
 use utoipa::ToSchema;
-
 use uuid::Uuid;
 
 use crate::api::offers::dto::{OfferUtxoDto, ParticipantDto};
 use crate::models::OfferStatus;
+
+#[derive(Serialize, ToSchema)]
+pub struct ErrorBody {
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ErrorResponse {
+    pub error: ErrorBody,
+}
 
 /// Flat OpenAPI schema for `OfferDetailsResponse` (`#[serde(flatten)]` is not supported by utoipa).
 #[derive(ToSchema)]

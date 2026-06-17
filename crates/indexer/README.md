@@ -177,6 +177,12 @@ When the API server is running:
 
 The spec is generated at build time from handler annotations (`utoipa`) and matches the current DTO shapes.
 
+Swagger UI is enabled by default (`swagger-ui` feature). Build without it for production-only deployments:
+
+```bash
+cargo build -p lending-indexer --no-default-features
+```
+
 ### Filtering Parameters (Query Params)
 
 The following parameters are available for `GET /offers` and for the `offers` list inside `GET /borrowers/by-script`:

@@ -528,6 +528,28 @@ struct ExpectedParticipantDto {
 
 #[tokio::test]
 #[serial]
+async fn openapi_json_endpoint_returns_spec() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let response = http
+        .get(format!("{base_url}/api-docs/openapi.json"))
+        .send()
+        .await?
+        .error_for_status()?;
+    let json = response_json(response).await?;
+
+    assert_eq!(json["info"]["title"], "Simplicity Lending Indexer");
+    assert_eq!(json["info"]["version"], env!("CARGO_PKG_VERSION"));
+    assert!(json["paths"]["/offers"].is_object());
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
 async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     let (base_url, server_handle, pending_offer, _active) = setup_seeded_api().await?;
     let http = reqwest::Client::new();

@@ -1,15 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use utoipa::ToSchema;
 
-use crate::api::OfferListQuery;
 use crate::api::offers::dto::OfferListResponse;
-
-#[derive(Deserialize)]
-pub struct BorrowerDashboardQuery {
-    pub script_pubkey: String,
-    #[serde(flatten)]
-    pub filters: OfferListQuery,
-}
 
 #[derive(Serialize, ToSchema)]
 pub struct AssetAmount {

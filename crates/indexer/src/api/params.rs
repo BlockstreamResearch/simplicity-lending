@@ -48,16 +48,25 @@ impl OfferSortBy {
 const DEFAULT_OFFER_LIST_LIMIT: u64 = 50;
 const MAX_OFFER_LIST_LIMIT: u64 = 100;
 
-#[derive(Deserialize, Debug, Default)]
-pub struct OfferListQuery {
+/// Shared offer-list filter query parameters.
+#[derive(Deserialize, Debug, Default, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct OfferFilters {
+    /// Comma-separated offer states, e.g. `pending,active`.
     #[serde(default, deserialize_with = "deserialize_offer_statuses")]
+    #[param(example = "pending,active")]
     pub status: Vec<OfferStatus>,
+    /// Collateral asset hex (same byte order as API responses).
     pub collateral_asset: Option<String>,
+    /// Principal asset hex (same byte order as API responses).
     pub principal_asset: Option<String>,
     pub factory_id: Option<Uuid>,
+    /// Maximum records to return (default 50, max 100).
     #[serde(default, deserialize_with = "deserialize_optional_u64")]
+    #[param(minimum = 0, maximum = 100, example = 50)]
     pub limit: Option<u64>,
     #[serde(default, deserialize_with = "deserialize_optional_u64")]
+    #[param(minimum = 0, example = 0)]
     pub offset: Option<u64>,
     #[serde(default)]
     pub sort_by: OfferSortBy,
@@ -65,7 +74,9 @@ pub struct OfferListQuery {
     pub sort_dir: SortDir,
 }
 
-impl OfferListQuery {
+pub type OfferListQuery = OfferFilters;
+
+impl OfferFilters {
     pub fn effective_limit(&self) -> u64 {
         self.limit
             .unwrap_or(DEFAULT_OFFER_LIST_LIMIT)
@@ -75,6 +86,18 @@ impl OfferListQuery {
     pub fn effective_offset(&self) -> u64 {
         self.offset.unwrap_or(0)
     }
+}
+
+/// Borrower dashboard query: wallet script plus offer-list filters (flat query string).
+#[derive(Deserialize, Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct BorrowerDashboardQuery {
+    /// Wallet script pubkey hex.
+    #[param(example = "00144f883a4bb668547b534ae815bc32628893b6f435")]
+    pub script_pubkey: String,
+    #[serde(flatten)]
+    #[param(inline)]
+    pub filters: OfferFilters,
 }
 
 fn deserialize_offer_statuses<'de, D>(deserializer: D) -> Result<Vec<OfferStatus>, D::Error>
@@ -98,9 +121,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use serde::Deserialize;
-
-    use super::{OfferListQuery, OfferStatus};
+    use super::{BorrowerDashboardQuery, OfferListQuery, OfferStatus};
 
     #[test]
     fn offer_list_query_caps_limit() {
@@ -143,18 +164,11 @@ mod tests {
     }
 
     #[test]
-    fn offer_list_query_parses_pagination_when_flattened() {
-        #[derive(Deserialize)]
-        struct FlattenedQuery {
-            script_pubkey: String,
-            #[serde(flatten)]
-            filters: OfferListQuery,
-        }
-
-        let parsed: FlattenedQuery = serde_urlencoded::from_str(
+    fn borrower_dashboard_query_parses_flat_pagination() {
+        let parsed: BorrowerDashboardQuery = serde_urlencoded::from_str(
             "script_pubkey=0014d0c4a3ef09e887b6e99e397e518fe3e41a118ca1&limit=10",
         )
-        .expect("parse flattened pagination");
+        .expect("parse borrower dashboard query");
 
         assert_eq!(
             parsed.script_pubkey,
