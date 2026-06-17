@@ -383,9 +383,9 @@ impl OffersTracker {
             return false;
         }
 
-        !tx.output[1].is_null_data()
-            && tx.output[2].is_null_data()
-            && tx.output[3].is_null_data()
-            && tx.output[4].is_null_data()
+        tx.output[0].is_null_data()
+            && !tx.output[1].is_null_data()
+            && !tx.output[2].is_null_data()
+            && !tx.output[3].is_null_data()
     }
 }
