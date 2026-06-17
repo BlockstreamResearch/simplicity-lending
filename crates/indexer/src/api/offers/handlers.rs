@@ -6,7 +6,7 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::api::openapi::{ErrorResponse, OfferDetailsResponseSchema};
+use crate::api::openapi::{ErrorResponse, OfferDetailsResponseSchema, OfferListParams};
 use crate::api::params::ScriptQuery;
 use crate::api::utils::parse_script_pubkey;
 use crate::api::{ApiError, AppState, OfferListQuery};
@@ -17,7 +17,7 @@ use super::dto::{OfferDetailsResponse, OfferListResponse};
     get,
     path = "/offers",
     tag = "offers",
-    params(OfferListQuery),
+    params(OfferListParams),
     responses(
         (status = 200, description = "Paginated short offer list", body = OfferListResponse),
         (status = 400, description = "Invalid query parameters", body = ErrorResponse),

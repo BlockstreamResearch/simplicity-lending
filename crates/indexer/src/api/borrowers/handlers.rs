@@ -5,7 +5,7 @@ use axum::{
     extract::{Query, State},
 };
 
-use crate::api::openapi::ErrorResponse;
+use crate::api::openapi::{BorrowerDashboardParams, ErrorResponse};
 use crate::api::utils::parse_script_pubkey;
 use crate::api::{ApiError, AppState, BorrowerDashboardQuery};
 
@@ -15,7 +15,7 @@ use super::dto::BorrowerDashboardResponse;
     get,
     path = "/borrowers/by-script",
     tag = "borrowers",
-    params(BorrowerDashboardQuery),
+    params(BorrowerDashboardParams),
     responses(
         (status = 200, description = "Borrower overview and paginated offer list", body = BorrowerDashboardResponse),
         (status = 400, description = "Invalid script_pubkey hex", body = ErrorResponse),

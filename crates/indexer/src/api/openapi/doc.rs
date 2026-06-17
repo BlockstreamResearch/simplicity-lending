@@ -13,8 +13,7 @@ use crate::api::offers::dto::{
     OfferListItemShort, OfferListResponse, OfferUtxoDto, ParticipantDto,
 };
 use crate::api::offers::handlers as offer_handlers;
-use crate::api::params::{BorrowerDashboardQuery, OfferFilters, OfferSortBy, SortDir};
-
+use crate::api::params::{OfferSortBy, SortDir};
 use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
 
 use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
@@ -36,7 +35,6 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
     ),
     components(schemas(
         AssetAmount,
-        BorrowerDashboardQuery,
         BorrowerDashboardResponse,
         BorrowerOverview,
         ErrorBody,
@@ -46,7 +44,6 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         FactoryProgramUtxoDto,
         FactoryStatus,
         OfferDetailsResponseSchema,
-        OfferFilters,
         OfferListItemShort,
         OfferListResponse,
         OfferSortBy,
@@ -99,5 +96,23 @@ mod tests {
         let json = serde_json::to_string(&ApiDoc::openapi()).expect("serialize openapi");
         assert!(json.contains("Simplicity Lending Indexer"));
         assert!(json.contains("collateral_amount"));
+    }
+
+    #[test]
+    fn borrower_by_script_has_flat_query_params() {
+        let spec = ApiDoc::openapi();
+        let path = spec
+            .paths
+            .paths
+            .get("/borrowers/by-script")
+            .expect("borrowers path");
+        let get = path.get.as_ref().expect("GET operation");
+        let params = get.parameters.as_ref().expect("query parameters");
+
+        let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+
+        assert!(names.contains(&"script_pubkey".to_string()));
+        assert!(names.contains(&"status".to_string()));
+        assert!(!names.iter().any(|n| n == "filters"));
     }
 }
