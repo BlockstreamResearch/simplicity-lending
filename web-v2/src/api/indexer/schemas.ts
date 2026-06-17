@@ -111,11 +111,11 @@ export const borrowerOverviewSchema = z.object({
 })
 export type BorrowerOverview = z.infer<typeof borrowerOverviewSchema>
 
-export const borrowerDataSchema = z.object({
+export const borrowerByScriptSchema = z.object({
   overview: borrowerOverviewSchema,
   offers: offerListResponseSchema,
 })
-export type BorrowerData = z.infer<typeof borrowerDataSchema>
+export type BorrowerByScript = z.infer<typeof borrowerByScriptSchema>
 
 export const factoryStatusSchema = z.enum(['active', 'removed'])
 export type FactoryStatus = z.infer<typeof factoryStatusSchema>

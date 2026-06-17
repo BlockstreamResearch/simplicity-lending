@@ -16,7 +16,7 @@ import {
   type ListOffersParams,
 } from './methods'
 import { borrowerQueryKeys, factoryQueryKeys, offersQueryKeys } from './queryKeys'
-import type { BorrowerData, FactoryDetails, OfferDetails, OfferListResponse } from './schemas'
+import type { BorrowerByScript, FactoryDetails, OfferDetails, OfferListResponse } from './schemas'
 
 export interface ExtraQueryOptions<T = unknown> {
   refetchInterval?: number
@@ -62,8 +62,8 @@ export function useOfferIdsByScript(
 export function useBorrowersByScript(
   scriptPubkeyHex: string,
   params: ListOffersParams = {},
-  options: ExtraQueryOptions<BorrowerData> = {},
-): UseQueryResult<BorrowerData> {
+  options: ExtraQueryOptions<BorrowerByScript> = {},
+): UseQueryResult<BorrowerByScript> {
   return useQuery({
     queryKey: borrowerQueryKeys.byScript(scriptPubkeyHex, params),
     queryFn: ({ signal }) => fetchBorrowersByScript(scriptPubkeyHex, params, { signal }),

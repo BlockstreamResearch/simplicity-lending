@@ -3,8 +3,8 @@ import { normalizeHex } from '@/utils/hex'
 
 import { requestJson, type RequestParams } from '../client'
 import {
-  type BorrowerData,
-  borrowerDataSchema,
+  type BorrowerByScript,
+  borrowerByScriptSchema,
   type FactoryDetails,
   factoryDetailsSchema,
   factoryListSchema,
@@ -87,12 +87,12 @@ export async function fetchBorrowersByScript(
   scriptPubkeyHex: string,
   params: ListOffersParams = {},
   options: RequestParams = {},
-): Promise<BorrowerData> {
+): Promise<BorrowerByScript> {
   const url = buildSearchUrl('/borrowers/by-script', {
     script_pubkey: normalizeHex(scriptPubkeyHex),
     ...toQueryParams(params),
   })
-  return requestJson(url, borrowerDataSchema, { signal: options.signal })
+  return requestJson(url, borrowerByScriptSchema, { signal: options.signal })
 }
 
 export async function fetchFactoriesByScript(
