@@ -7,7 +7,6 @@ import { offersQueryKeys } from '@/api/indexer/queryKeys'
 import type { OfferDetails } from '@/api/indexer/schemas'
 import { STALE_TIME_MS } from '@/api/staleTime'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { DASHBOARD_REFETCH_INTERVAL_MS } from '@/pages/Dashboard/constants'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { calcInterest } from '@/utils/offers'
 
@@ -27,19 +26,20 @@ export interface UseSupplyResult {
   refetch: () => void
 }
 
-export function useSupply(): UseSupplyResult {
+export function useSupply({
+  pollIntervalMs = 30_000,
+}: { pollIntervalMs?: number } = {}): UseSupplyResult {
   const { isReady, balances, scriptPubkey } = useWallet()
   const queryClient = useQueryClient()
 
-  const poll = { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS }
-  const idsQuery = useOfferIdsByScript(scriptPubkey ?? '', poll)
+  const idsQuery = useOfferIdsByScript(scriptPubkey ?? '', { refetchInterval: pollIntervalMs })
 
   const offerQueries = useQueries({
     queries: (idsQuery.data ?? []).map(id => ({
       queryKey: offersQueryKeys.detail(id),
       queryFn: ({ signal }: { signal: AbortSignal }) => fetchOffer(id, { signal }),
       staleTime: STALE_TIME_MS.realtime,
-      refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS,
+      refetchInterval: pollIntervalMs,
     })),
   })
 
