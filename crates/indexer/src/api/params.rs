@@ -84,14 +84,6 @@ impl OfferFilters {
     }
 }
 
-/// Borrower dashboard query: wallet script plus offer-list filters (flat query string).
-#[derive(Deserialize, Debug)]
-pub struct BorrowerDashboardQuery {
-    pub script_pubkey: String,
-    #[serde(flatten)]
-    pub filters: OfferFilters,
-}
-
 fn deserialize_offer_statuses<'de, D>(deserializer: D) -> Result<Vec<OfferStatus>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -113,7 +105,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{BorrowerDashboardQuery, OfferListQuery, OfferStatus};
+    use super::{OfferListQuery, OfferStatus};
 
     #[test]
     fn offer_list_query_caps_limit() {
@@ -153,20 +145,6 @@ mod tests {
             serde_urlencoded::from_str("limit=10&offset=5").expect("parse pagination");
         assert_eq!(parsed.limit, Some(10));
         assert_eq!(parsed.offset, Some(5));
-    }
-
-    #[test]
-    fn borrower_dashboard_query_parses_flat_pagination() {
-        let parsed: BorrowerDashboardQuery = serde_urlencoded::from_str(
-            "script_pubkey=0014d0c4a3ef09e887b6e99e397e518fe3e41a118ca1&limit=10",
-        )
-        .expect("parse borrower dashboard query");
-
-        assert_eq!(
-            parsed.script_pubkey,
-            "0014d0c4a3ef09e887b6e99e397e518fe3e41a118ca1"
-        );
-        assert_eq!(parsed.filters.limit, Some(10));
     }
 
     #[test]

@@ -7,9 +7,10 @@ use axum::{
 
 use crate::api::openapi::{BorrowerDashboardParams, ErrorResponse};
 use crate::api::utils::parse_script_pubkey;
-use crate::api::{ApiError, AppState, BorrowerDashboardQuery};
+use crate::api::{ApiError, AppState};
 
 use super::dto::BorrowerDashboardResponse;
+use super::params::BorrowerDashboardQuery;
 
 #[utoipa::path(
     get,
