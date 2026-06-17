@@ -123,7 +123,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       connectingRef.current = true
 
       const isJade = !env.VITE_DEBUG_MNEMONIC
-      setState(s => ({ ...s, syncing: true, error: null, isError: false, isJade }))
+      setState(s => ({ ...s, syncing: true, error: null, isError: false }))
 
       let connector: WalletConnector | null = null
 

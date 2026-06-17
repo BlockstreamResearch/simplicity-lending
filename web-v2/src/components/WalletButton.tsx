@@ -24,69 +24,67 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
     }
   }
 
-  const renderButton = (() => {
-    if (reconnecting) {
-      return (
-        <UiButton variant='secondary' isDisabled>
-          Reconnecting…
-        </UiButton>
-      )
-    }
-
-    if (connectionStatus === 'locked') {
-      return (
-        <UiButton variant='secondary' isDisabled>
-          Enter PIN on device
-        </UiButton>
-      )
-    }
-
-    if (syncing && connectionStatus !== 'ready') {
-      return (
-        <UiButton variant='secondary' isDisabled isPending loadingText='Connecting…'>
-          Connecting…
-        </UiButton>
-      )
-    }
-
-    if (connectionStatus === 'ready' && receiveAddress) {
-      return (
-        <Dropdown.Root isOpen={isMenuOpen} onOpenChange={setIsMenuOpen}>
-          <Dropdown.Trigger className={buttonVariants({ variant: 'secondary' })}>
-            {truncateAddress(receiveAddress)}
-          </Dropdown.Trigger>
-          <Dropdown.Popover placement='bottom end' className='p-4'>
-            <div>
-              <UiButton
-                variant='danger'
-                fullWidth
-                className='rounded-lg'
-                isPending={disconnecting}
-                loadingText='Disconnecting…'
-                onPress={handleDisconnect}
-              >
-                Disconnect
-              </UiButton>
-            </div>
-          </Dropdown.Popover>
-        </Dropdown.Root>
-      )
-    }
-
-    return (
-      <UiButton
-        variant='primary'
-        isDisabled={isDisabled}
-        onPress={() => connect(DEFAULT_WALLET_TYPE)}
-      >
-        Connect Wallet
-      </UiButton>
-    )
-  })()
-
   return (
     <>
-      {renderButton}
+      {(() => {
+        if (reconnecting) {
+          return (
+            <UiButton variant='secondary' isDisabled>
+              Reconnecting…
+            </UiButton>
+          )
+        }
+
+        if (connectionStatus === 'locked') {
+          return (
+            <UiButton variant='secondary' isDisabled>
+              Enter PIN on device
+            </UiButton>
+          )
+        }
+
+        if (syncing && connectionStatus !== 'ready') {
+          return (
+            <UiButton variant='secondary' isDisabled isPending loadingText='Connecting…'>
+              Connecting…
+            </UiButton>
+          )
+        }
+
+        if (connectionStatus === 'ready' && receiveAddress) {
+          return (
+            <Dropdown.Root isOpen={isMenuOpen} onOpenChange={setIsMenuOpen}>
+              <Dropdown.Trigger className={buttonVariants({ variant: 'secondary' })}>
+                {truncateAddress(receiveAddress)}
+              </Dropdown.Trigger>
+              <Dropdown.Popover placement='bottom end' className='p-4'>
+                <div>
+                  <UiButton
+                    variant='danger'
+                    fullWidth
+                    className='rounded-lg'
+                    isPending={disconnecting}
+                    loadingText='Disconnecting…'
+                    onPress={handleDisconnect}
+                  >
+                    Disconnect
+                  </UiButton>
+                </div>
+              </Dropdown.Popover>
+            </Dropdown.Root>
+          )
+        }
+
+        return (
+          <UiButton
+            variant='primary'
+            isDisabled={isDisabled}
+            onPress={() => connect(DEFAULT_WALLET_TYPE)}
+          >
+            Connect Wallet
+          </UiButton>
+        )
+      })()}
       <JadeUnlockModal />
     </>
   )

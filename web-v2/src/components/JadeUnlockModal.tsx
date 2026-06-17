@@ -7,23 +7,23 @@ import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 export function JadeUnlockModal() {
-  const { connectionStatus, isJade, walletType, error, isError, connect } = useWallet()
+  const { connectionStatus, walletType, error, isError, connect } = useWallet()
   const [prevConnectionStatus, setPrevConnectionStatus] = useState(connectionStatus)
-  const [awaitingPin, setAwaitingPin] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
 
   if (connectionStatus !== prevConnectionStatus) {
     setPrevConnectionStatus(connectionStatus)
-    if (connectionStatus === 'locked' && isJade) setAwaitingPin(true)
-    else if (connectionStatus === 'ready') setAwaitingPin(false)
+    if (connectionStatus === 'locked') setIsOpen(true)
+    else if (connectionStatus === 'ready') setIsOpen(false)
   }
 
   // Stay open across a retry — only swap the inner content — instead of closing and
   // reopening, which played the modal's exit/enter transition back to back and read as
   // a flicker/reload.
-  const failed = awaitingPin && isError && connectionStatus !== 'locked' && !retrying
+  const failed = isOpen && isError && connectionStatus !== 'locked' && !retrying
 
-  const handleDismiss = () => setAwaitingPin(false)
+  const handleDismiss = () => setIsOpen(false)
 
   const handleRetry = () => {
     setRetrying(true)
@@ -34,7 +34,7 @@ export function JadeUnlockModal() {
 
   return (
     <UiModal
-      isOpen={awaitingPin}
+      isOpen={isOpen}
       onOpenChange={() => {}}
       isDismissable={false}
       showCloseButton={false}

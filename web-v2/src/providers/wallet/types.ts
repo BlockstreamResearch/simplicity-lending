@@ -32,8 +32,6 @@ export interface WalletState {
   connectionStatus: ConnectionStatus
   connectorId: string | null
   walletType: WalletType | null
-  /** Whether the active/connecting connector is a real Jade device (vs. the debug seed signer). */
-  isJade: boolean
   balances: Record<string, string>
   // Resolved once on connect; null until ready.
   receiveAddress: string | null
@@ -51,7 +49,6 @@ export const INITIAL_WALLET_STATE: WalletState = {
   connectionStatus: 'disconnected',
   connectorId: null,
   walletType: null,
-  isJade: false,
   balances: {},
   receiveAddress: null,
   scriptPubkey: null,
