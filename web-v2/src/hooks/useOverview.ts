@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 
 import { useOffers } from '@/api/indexer/hooks'
-import { DASHBOARD_REFETCH_INTERVAL_MS } from '@/pages/Dashboard/constants'
 
 export interface DashboardOverview {
   totalCollateral: bigint
@@ -11,10 +10,10 @@ export interface DashboardOverview {
 }
 // TODO: Stats should be computed server-side via a dedicated /stats endpoint (tracked in indexer README).
 // Current approach fetches up to 100 active offers and aggregates client-side — rewrite this hook once the endpoint exists.
-export function useOverview() {
+export function useOverview({ pollIntervalMs = 30_000 }: { pollIntervalMs?: number } = {}) {
   const offersQuery = useOffers(
     { status: 'active', limit: 100 },
-    { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS },
+    { refetchInterval: pollIntervalMs },
   )
 
   const overview = useMemo<DashboardOverview>(() => {

@@ -9,7 +9,7 @@ export const offersQueryKeys = {
       'offers',
       'list',
       params.status,
-      params.factory_id,
+      params.factoryId,
       params.asset,
       params.limit,
       params.offset,
@@ -22,10 +22,10 @@ export const offersQueryKeys = {
 } as const
 
 export const borrowerQueryKeys = {
-  dashboard: (scriptPubkeyHex: string, params: ListOffersParams = {}) =>
+  byScript: (scriptPubkeyHex: string, params: ListOffersParams = {}) =>
     [
       'borrower',
-      'dashboard',
+      'by-script',
       normalizeHex(scriptPubkeyHex),
       params.limit,
       params.offset,

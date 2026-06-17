@@ -1,4 +1,5 @@
 import type { AssetAmount, OfferShort, OfferStatus } from '@/api/indexer/schemas'
+
 import { normalizeHex } from './hex'
 
 export type OfferDisplayStatus = OfferStatus | 'expired'

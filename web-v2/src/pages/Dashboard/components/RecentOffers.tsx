@@ -8,22 +8,22 @@ import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 
-import { DASHBOARD_REFETCH_INTERVAL_MS, TABLE_PAGE_SIZE } from '../constants'
+import { DASHBOARD_REFETCH_INTERVAL_MS, DASHBOARD_TABLE_PAGE_SIZE } from '../constants'
 
 export function RecentOffers() {
   const [page, setPage] = useState(1)
-  const offset = (page - 1) * TABLE_PAGE_SIZE
+  const offset = (page - 1) * DASHBOARD_TABLE_PAGE_SIZE
 
   const offersQuery = useOffers(
-    { limit: TABLE_PAGE_SIZE, offset },
-    { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS, placeholderData: keepPreviousData },
+    { limit: DASHBOARD_TABLE_PAGE_SIZE, offset },
+    { placeholderData: keepPreviousData },
   )
   const blockHeightQuery = useBlockHeight(DASHBOARD_REFETCH_INTERVAL_MS)
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
   const offers = offersQuery.data?.items ?? []
   const total = offersQuery.data?.total ?? 0
-  const pageCount = Math.ceil(total / TABLE_PAGE_SIZE)
+  const pageCount = Math.ceil(total / DASHBOARD_TABLE_PAGE_SIZE)
 
   const isLoading = offersQuery.isLoading || blockHeightQuery.isLoading
   const isFetching = offersQuery.isFetching || blockHeightQuery.isFetching

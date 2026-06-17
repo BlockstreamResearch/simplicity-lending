@@ -6,6 +6,8 @@ import { useOverview } from '@/hooks/useOverview'
 import { formatAmount } from '@/utils/format'
 import { bpsToPercent } from '@/utils/offers'
 
+import { DASHBOARD_REFETCH_INTERVAL_MS } from '../constants'
+
 interface OverviewStat {
   label: string
   value: string
@@ -13,7 +15,7 @@ interface OverviewStat {
 }
 
 export default function OverviewStats() {
-  const { overview, isLoading } = useOverview()
+  const { overview, isLoading } = useOverview({ pollIntervalMs: DASHBOARD_REFETCH_INTERVAL_MS })
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
 
   const stats = useMemo<OverviewStat[]>(

@@ -7,8 +7,8 @@ import {
 
 import { STALE_TIME_MS } from '../staleTime'
 import {
-  fetchBorrowerDashboard,
-  fetchFactories,
+  fetchBorrowersByScript,
+  fetchFactoriesByScript,
   fetchFactory,
   fetchOffer,
   fetchOfferIdsByScript,
@@ -16,7 +16,7 @@ import {
   type ListOffersParams,
 } from './methods'
 import { borrowerQueryKeys, factoryQueryKeys, offersQueryKeys } from './queryKeys'
-import type { BorrowerDashboard, FactoryDetails, OfferDetails, OfferListResponse } from './schemas'
+import type { BorrowerData, FactoryDetails, OfferDetails, OfferListResponse } from './schemas'
 
 export interface ExtraQueryOptions<T = unknown> {
   refetchInterval?: number
@@ -59,14 +59,14 @@ export function useOfferIdsByScript(
   })
 }
 
-export function useBorrowerDashboard(
+export function useBorrowersByScript(
   scriptPubkeyHex: string,
   params: ListOffersParams = {},
-  options: ExtraQueryOptions<BorrowerDashboard> = {},
-): UseQueryResult<BorrowerDashboard> {
+  options: ExtraQueryOptions<BorrowerData> = {},
+): UseQueryResult<BorrowerData> {
   return useQuery({
-    queryKey: borrowerQueryKeys.dashboard(scriptPubkeyHex, params),
-    queryFn: ({ signal }) => fetchBorrowerDashboard(scriptPubkeyHex, params, { signal }),
+    queryKey: borrowerQueryKeys.byScript(scriptPubkeyHex, params),
+    queryFn: ({ signal }) => fetchBorrowersByScript(scriptPubkeyHex, params, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
     refetchInterval: options.refetchInterval,
     enabled: !!scriptPubkeyHex,
@@ -79,7 +79,7 @@ export function useFactories(
 ): UseQueryResult<FactoryDetails[]> {
   return useQuery({
     queryKey: factoryQueryKeys.byScript(scriptPubkeyHex),
-    queryFn: ({ signal }) => fetchFactories(scriptPubkeyHex, { signal }),
+    queryFn: ({ signal }) => fetchFactoriesByScript(scriptPubkeyHex, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
     refetchInterval: options.refetchInterval,
     enabled: !!scriptPubkeyHex,

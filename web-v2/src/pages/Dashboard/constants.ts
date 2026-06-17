@@ -1,5 +1,2 @@
 export const DASHBOARD_REFETCH_INTERVAL_MS = 30_000
-
-export const TABLE_PAGE_SIZE = 10
-
-export const BORROW_PAGE_SIZE = 10
+export const DASHBOARD_TABLE_PAGE_SIZE = 10

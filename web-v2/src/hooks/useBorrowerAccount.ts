@@ -14,7 +14,6 @@ import { broadcastTx } from '@/api/esplora/methods'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
-import { prepareFactory } from '@/utils/factory'
 import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -23,6 +22,21 @@ import { UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { bytesToHex } from '@/utils/hex'
 import { sha256 } from '@/utils/sha256'
 import { toUint8, toUint64 } from '@/utils/uint'
+
+export interface FactoryState {
+  factoryAssetId: string
+  factoryAuthOutpoint: string
+  issuanceFactoryOutpoint: string
+}
+
+function prepareFactory(factory: FactoryDetails): FactoryState | null {
+  if (!factory.auth_utxo || !factory.program_utxo) return null
+  return {
+    factoryAssetId: factory.factory_asset_id,
+    factoryAuthOutpoint: `${factory.auth_utxo.txid}:${factory.auth_utxo.vout}`,
+    issuanceFactoryOutpoint: `${factory.program_utxo.txid}:${factory.program_utxo.vout}`,
+  }
+}
 
 const FEE_RESERVE = 250n
 const ISSUING_UTXOS_COUNT = 2

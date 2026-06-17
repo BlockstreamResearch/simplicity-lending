@@ -2,13 +2,18 @@ import { Skeleton } from '@heroui/react'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { useBlockHeight } from '@/api/esplora/hooks'
+import { useBorrowersByScript } from '@/api/indexer/hooks'
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/offers'
 import { RoutePath } from '@/constants/routes'
-import { useBorrows } from '@/hooks/useBorrows'
+import { useBorrowerStats } from '@/hooks/useBorrowerStats'
+import { useWallet } from '@/providers/wallet/useWallet'
 import { ErrorHandler } from '@/utils/errorHandler'
 import { formatAmount, truncateAddress } from '@/utils/format'
+import { getOfferTermLeft } from '@/utils/offers'
 
 import { AssetAmount } from './AssetAmount'
 import CardAlert from './CardAlert'
@@ -16,7 +21,18 @@ import { DataRow } from './DataRow'
 
 export function BorrowCard() {
   const navigate = useNavigate()
-  const { balance, stats, nearExpiryOffers, isLoading, error, refetch } = useBorrows()
+  const { balances, scriptPubkey } = useWallet()
+  const { stats, isLoading, error, refetch } = useBorrowerStats()
+  const offersQuery = useBorrowersByScript(scriptPubkey ?? '', { status: 'active', limit: 50 })
+  const blockHeightQuery = useBlockHeight()
+
+  const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
+  const currentBlockHeight = blockHeightQuery.data ?? 0
+  const activeOffers = offersQuery.data?.offers.items ?? []
+  const nearExpiryOffers = activeOffers.filter(o => {
+    const termLeft = getOfferTermLeft(o, currentBlockHeight)
+    return termLeft > 0 && termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS
+  })
   const alertOffer = nearExpiryOffers[0]
 
   useEffect(() => {

@@ -3,8 +3,8 @@ import { normalizeHex } from '@/utils/hex'
 
 import { requestJson, type RequestParams } from '../client'
 import {
-  type BorrowerDashboard,
-  borrowerDashboardSchema,
+  type BorrowerData,
+  borrowerDataSchema,
   type FactoryDetails,
   factoryDetailsSchema,
   factoryListSchema,
@@ -35,7 +35,7 @@ export type SortField =
 
 export interface ListOffersParams {
   status?: OfferStatus | OfferStatus[]
-  factory_id?: string
+  factoryId?: string
   asset?: string
   limit?: number
   offset?: number
@@ -48,10 +48,10 @@ function toQueryParams(params: ListOffersParams): Record<string, string> {
   if (params.status) {
     q.status = Array.isArray(params.status) ? params.status.join(',') : params.status
   }
-  if (params.factory_id) q.factory_id = params.factory_id
+  if (params.factoryId) q.factory_id = params.factoryId
   if (params.asset) q.asset = params.asset
-  // if (params.limit !== undefined) q.limit = String(params.limit)
-  // if (params.offset !== undefined) q.offset = String(params.offset)
+  if (params.limit !== undefined) q.limit = String(params.limit)
+  if (params.offset !== undefined) q.offset = String(params.offset)
   if (params.sortBy) q.sort_by = params.sortBy
   if (params.sortDir) q.sort_dir = params.sortDir
   return q
@@ -83,19 +83,19 @@ export async function fetchOfferIdsByScript(
   return requestJson(url, offerIdListSchema, { signal: options.signal })
 }
 
-export async function fetchBorrowerDashboard(
+export async function fetchBorrowersByScript(
   scriptPubkeyHex: string,
   params: ListOffersParams = {},
   options: RequestParams = {},
-): Promise<BorrowerDashboard> {
+): Promise<BorrowerData> {
   const url = buildSearchUrl('/borrowers/by-script', {
     script_pubkey: normalizeHex(scriptPubkeyHex),
     ...toQueryParams(params),
   })
-  return requestJson(url, borrowerDashboardSchema, { signal: options.signal })
+  return requestJson(url, borrowerDataSchema, { signal: options.signal })
 }
 
-export async function fetchFactories(
+export async function fetchFactoriesByScript(
   scriptPubkeyHex: string,
   options: RequestParams = {},
 ): Promise<FactoryDetails[]> {
