@@ -2,10 +2,9 @@ import { Skeleton } from '@heroui/react'
 import { useMemo } from 'react'
 
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
+import { useOverview } from '@/hooks/useOverview'
 import { formatAmount } from '@/utils/format'
 import { bpsToPercent } from '@/utils/offers'
-
-import { useOverview } from '../hooks/useOverview'
 
 interface OverviewStat {
   label: string

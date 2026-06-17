@@ -7,11 +7,12 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type LenderVaultClaimResult, useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
+import { useTxStatus } from '@/hooks/useTxStatus'
 import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
-import { formatCollateralUtxoOption, useTxConfirmations } from './helpers'
+import { formatCollateralUtxoOption } from './helpers'
 import { TxResult } from './TxResult'
 
 const outpointSchema = (label: string) =>
@@ -96,7 +97,7 @@ export default function LenderVaultClaimDemo() {
     busy: false,
     error: null,
   })
-  const confirmations = useTxConfirmations(state.result?.txid ?? null)
+  const txStatus = useTxStatus(state.result?.txid ?? null)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const feeUtxoOptions = useMemo(() => {
@@ -256,7 +257,7 @@ export default function LenderVaultClaimDemo() {
       <TxResult
         title='Lender Vault Claimed'
         txid={state.result?.txid ?? null}
-        confirmations={confirmations}
+        txStatus={txStatus}
         detail={state.result?.summary}
       />
     </div>

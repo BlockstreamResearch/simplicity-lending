@@ -4,15 +4,37 @@ import type { ListOffersParams } from './methods'
 
 export const offersQueryKeys = {
   all: ['offers'] as const,
-  list: ({ status, asset, limit, offset, sortBy, sortDir }: ListOffersParams) =>
-    ['offers', 'list', status, asset, limit, offset, sortBy, sortDir] as const,
+  list: (params: ListOffersParams) =>
+    [
+      'offers',
+      'list',
+      params.status,
+      params.factoryId,
+      params.asset,
+      params.limit,
+      params.offset,
+      params.sortBy,
+      params.sortDir,
+    ] as const,
   detail: (offerId: string) => ['offers', 'detail', offerId] as const,
-  batch: (ids: string[]) => ['offers', 'batch', [...ids].sort()] as const,
-  utxos: (offerId: string) => ['offers', 'utxos', offerId] as const,
-  participants: (offerId: string) => ['offers', 'participants', offerId] as const,
-  participantsHistory: (offerId: string) => ['offers', 'participants-history', offerId] as const,
   byScript: (scriptPubkeyHex: string) =>
     ['offers', 'by-script', normalizeHex(scriptPubkeyHex)] as const,
-  byBorrower: (borrowerPubkeyHex: string) =>
-    ['offers', 'by-borrower', normalizeHex(borrowerPubkeyHex)] as const,
+} as const
+
+export const borrowerQueryKeys = {
+  byScript: (scriptPubkeyHex: string, params: ListOffersParams = {}) =>
+    [
+      'borrower',
+      'by-script',
+      normalizeHex(scriptPubkeyHex),
+      params.limit,
+      params.offset,
+      params.status,
+    ] as const,
+} as const
+
+export const factoryQueryKeys = {
+  byScript: (scriptPubkeyHex: string) =>
+    ['factories', 'by-script', normalizeHex(scriptPubkeyHex)] as const,
+  detail: (factoryId: string) => ['factories', 'detail', factoryId] as const,
 } as const

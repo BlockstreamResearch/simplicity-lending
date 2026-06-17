@@ -1,23 +1,19 @@
-import { z } from 'zod'
-
 import { env } from '@/constants/env'
 import { normalizeHex } from '@/utils/hex'
 
 import { requestJson, type RequestParams } from '../client'
 import {
+  type BorrowerByScript,
+  borrowerByScriptSchema,
+  type FactoryDetails,
+  factoryDetailsSchema,
+  factoryListSchema,
   type OfferDetails,
-  offerDetailsListSchema,
   offerDetailsSchema,
-  type OfferFull,
-  offerFullListSchema,
   offerIdListSchema,
-  type OfferParticipant,
-  offerParticipantListSchema,
-  type OfferShort,
-  offerShortListSchema,
+  type OfferListResponse,
+  offerListResponseSchema,
   type OfferStatus,
-  type OfferUtxo,
-  offerUtxoListSchema,
 } from './schemas'
 
 function buildOfferUrl(offerId: string, suffix = ''): string {
@@ -29,18 +25,6 @@ function buildSearchUrl(path: string, params: Record<string, string>): string {
   return query ? `${env.VITE_API_URL}${path}?${query}` : `${env.VITE_API_URL}${path}`
 }
 
-function postBatch<Schema extends z.ZodTypeAny>(
-  schema: Schema,
-  ids: string[],
-  options: RequestParams,
-): Promise<z.output<Schema>> {
-  return requestJson(`${env.VITE_API_URL}/offers/batch`, schema, {
-    method: 'POST',
-    data: { ids },
-    signal: options.signal,
-  })
-}
-
 export type SortDir = 'asc' | 'desc'
 
 export type SortField =
@@ -50,7 +34,8 @@ export type SortField =
   | 'loan_expiration_time'
 
 export interface ListOffersParams {
-  status?: OfferStatus
+  status?: OfferStatus | OfferStatus[]
+  factoryId?: string
   asset?: string
   limit?: number
   offset?: number
@@ -59,30 +44,24 @@ export interface ListOffersParams {
 }
 
 function toQueryParams(params: ListOffersParams): Record<string, string> {
-  const queryParams: Record<string, string> = {}
-  if (params.status) queryParams.status = params.status
-  if (params.asset) queryParams.asset = params.asset
-  if (params.limit !== undefined) queryParams.limit = String(params.limit)
-  if (params.offset !== undefined) queryParams.offset = String(params.offset)
-  if (params.sortBy) queryParams.sort_by = params.sortBy
-  if (params.sortDir) queryParams.sort_dir = params.sortDir
-  return queryParams
+  const q: Record<string, string> = {}
+  if (params.status) {
+    q.status = Array.isArray(params.status) ? params.status.join(',') : params.status
+  }
+  if (params.factoryId) q.factory_id = params.factoryId
+  if (params.asset) q.asset = params.asset
+  if (params.limit !== undefined) q.limit = String(params.limit)
+  if (params.offset !== undefined) q.offset = String(params.offset)
+  if (params.sortBy) q.sort_by = params.sortBy
+  if (params.sortDir) q.sort_dir = params.sortDir
+  return q
 }
 
 export async function fetchOffers(
   params: ListOffersParams = {},
   options: RequestParams = {},
-): Promise<OfferShort[]> {
-  return requestJson(buildSearchUrl('/offers', toQueryParams(params)), offerShortListSchema, {
-    signal: options.signal,
-  })
-}
-
-export async function fetchOffersFull(
-  params: ListOffersParams = {},
-  options: RequestParams = {},
-): Promise<OfferFull[]> {
-  return requestJson(buildSearchUrl('/offers/full', toQueryParams(params)), offerFullListSchema, {
+): Promise<OfferListResponse> {
+  return requestJson(buildSearchUrl('/offers', toQueryParams(params)), offerListResponseSchema, {
     signal: options.signal,
   })
 }
@@ -92,40 +71,6 @@ export async function fetchOffer(
   options: RequestParams = {},
 ): Promise<OfferDetails> {
   return requestJson(buildOfferUrl(offerId), offerDetailsSchema, { signal: options.signal })
-}
-
-export async function fetchOfferUtxos(
-  offerId: string,
-  options: RequestParams = {},
-): Promise<OfferUtxo[]> {
-  return requestJson(buildOfferUrl(offerId, '/utxos'), offerUtxoListSchema, {
-    signal: options.signal,
-  })
-}
-
-export async function fetchOfferParticipants(
-  offerId: string,
-  options: RequestParams = {},
-): Promise<OfferParticipant[]> {
-  return requestJson(buildOfferUrl(offerId, '/participants'), offerParticipantListSchema, {
-    signal: options.signal,
-  })
-}
-
-export async function fetchOfferParticipantsHistory(
-  offerId: string,
-  options: RequestParams = {},
-): Promise<OfferParticipant[]> {
-  return requestJson(buildOfferUrl(offerId, '/participants/history'), offerParticipantListSchema, {
-    signal: options.signal,
-  })
-}
-
-export async function fetchOffersBatch(
-  ids: string[],
-  options: RequestParams = {},
-): Promise<OfferDetails[]> {
-  return postBatch(offerDetailsListSchema, ids, options)
 }
 
 export async function fetchOfferIdsByScript(
@@ -138,12 +83,35 @@ export async function fetchOfferIdsByScript(
   return requestJson(url, offerIdListSchema, { signal: options.signal })
 }
 
-export async function fetchOfferIdsByBorrowerPubkey(
-  borrowerPubkeyHex: string,
+export async function fetchBorrowersByScript(
+  scriptPubkeyHex: string,
+  params: ListOffersParams = {},
   options: RequestParams = {},
-): Promise<string[]> {
-  const url = buildSearchUrl('/offers/by-borrower-pubkey', {
-    borrower_pubkey: normalizeHex(borrowerPubkeyHex),
+): Promise<BorrowerByScript> {
+  const url = buildSearchUrl('/borrowers/by-script', {
+    script_pubkey: normalizeHex(scriptPubkeyHex),
+    ...toQueryParams(params),
   })
-  return requestJson(url, offerIdListSchema, { signal: options.signal })
+  return requestJson(url, borrowerByScriptSchema, { signal: options.signal })
+}
+
+export async function fetchFactoriesByScript(
+  scriptPubkeyHex: string,
+  options: RequestParams = {},
+): Promise<FactoryDetails[]> {
+  const url = buildSearchUrl('/factories/by-script', {
+    script_pubkey: normalizeHex(scriptPubkeyHex),
+  })
+  return requestJson(url, factoryListSchema, { signal: options.signal })
+}
+
+export async function fetchFactory(
+  factoryId: string,
+  options: RequestParams = {},
+): Promise<FactoryDetails> {
+  return requestJson(
+    `${env.VITE_API_URL}/factories/${encodeURIComponent(factoryId)}`,
+    factoryDetailsSchema,
+    { signal: options.signal },
+  )
 }

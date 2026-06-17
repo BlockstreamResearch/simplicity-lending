@@ -16,11 +16,11 @@ cargo --version
 git clone https://github.com/BlockstreamResearch/smplx.git
 cd smplx
 
-git checkout v0.0.6
+git checkout v0.0.5
 
 cargo install --path crates/cli
 
-simplex --version # Simplex 0.0.6
+simplex --version # Simplex 0.0.5
 ```
 
 ## Checkout the `dev` branch
@@ -56,4 +56,4 @@ From repo root:
 docker compose up -d
 ```
 
-After this, the frontend should be available at http://localhost:8080
+After this, the indexer should be available at http://localhost:80

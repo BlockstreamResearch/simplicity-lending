@@ -8,12 +8,13 @@ import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type CreateOfferResult, useCreateOffer } from '@/hooks/useCreateOffer'
+import { useTxStatus } from '@/hooks/useTxStatus'
 import { isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { isHexStringOfByteLength, normalizeHex } from '@/utils/hex'
 
-import { formatCollateralUtxoOption, useTxConfirmations } from './helpers'
+import { formatCollateralUtxoOption } from './helpers'
 import { TxResult } from './TxResult'
 
 const integerStringSchema = (label: string) =>
@@ -138,7 +139,7 @@ export default function CreateOfferDemo() {
     busy: false,
     error: null,
   })
-  const confirmations = useTxConfirmations(state.txid)
+  const txStatus = useTxStatus(state.txid)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const collateralUtxoOptions = useMemo(() => {
@@ -323,7 +324,7 @@ export default function CreateOfferDemo() {
       <TxResult
         title='Offer Created'
         txid={state.txid}
-        confirmations={confirmations}
+        txStatus={txStatus}
         detail={state.summary ?? undefined}
       />
     </div>

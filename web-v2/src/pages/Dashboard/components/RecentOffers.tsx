@@ -5,29 +5,29 @@ import { useState } from 'react'
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffers } from '@/api/indexer/hooks'
 import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
+import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 
-import { DASHBOARD_REFETCH_INTERVAL_MS, TABLE_PAGE_SIZE } from '../constants'
-import { OffersTable } from './OffersTable'
+import { DASHBOARD_TABLE_PAGE_SIZE } from '../constants'
 
 export function RecentOffers() {
   const [page, setPage] = useState(1)
-  const offset = (page - 1) * TABLE_PAGE_SIZE
+  const offset = (page - 1) * DASHBOARD_TABLE_PAGE_SIZE
 
   const offersQuery = useOffers(
-    { limit: TABLE_PAGE_SIZE + 1, offset },
-    { refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS, placeholderData: keepPreviousData },
+    { limit: DASHBOARD_TABLE_PAGE_SIZE, offset },
+    { placeholderData: keepPreviousData },
   )
-  const blockHeightQuery = useBlockHeight(DASHBOARD_REFETCH_INTERVAL_MS)
+  const blockHeightQuery = useBlockHeight()
   const currentBlockHeight = blockHeightQuery.data ?? 0
 
-  const rawOffers = offersQuery.data ?? []
-  const hasNextPage = rawOffers.length > TABLE_PAGE_SIZE
-  const offers = rawOffers.slice(0, TABLE_PAGE_SIZE)
+  const offers = offersQuery.data?.items ?? []
+  const total = offersQuery.data?.total ?? 0
+  const pageCount = Math.ceil(total / DASHBOARD_TABLE_PAGE_SIZE)
 
   const isLoading = offersQuery.isLoading || blockHeightQuery.isLoading
   const isFetching = offersQuery.isFetching || blockHeightQuery.isFetching
-  const error = (offersQuery.error ?? blockHeightQuery.error) as Error | null
+  const error = offersQuery.error ?? blockHeightQuery.error
 
   const handleRetry = () => {
     void offersQuery.refetch()
@@ -69,7 +69,7 @@ export function RecentOffers() {
           offers={offers}
           currentBlockHeight={currentBlockHeight}
           page={page}
-          hasNextPage={hasNextPage}
+          pageCount={pageCount}
           onPageChange={setPage}
         />
       )}

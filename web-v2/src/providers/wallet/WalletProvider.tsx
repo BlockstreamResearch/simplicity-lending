@@ -1,4 +1,4 @@
-import { type Pset, type Wollet, WolletBuilder, type XOnlyPublicKey } from 'lwk_web'
+import { type Pset, type Wollet, WolletBuilder } from 'lwk_web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -184,7 +184,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const address = wollet.address(0).address()
         const receiveAddress = address.toString()
         const scriptPubkey = address.scriptPubkey().toString()
-        const xOnlyPubkey = (await connector.getXOnlyPublicKey?.())?.toString() ?? null
 
         setState(s => ({
           ...s,
@@ -195,7 +194,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           balances,
           receiveAddress,
           scriptPubkey,
-          xOnlyPubkey,
         }))
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)
@@ -229,7 +227,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (autoResumedRef.current || !savedSession || state.connectionStatus !== 'disconnected') return
     autoResumedRef.current = true
-    resumeSession().catch(() => disconnect().catch(console.warn))
+    setState(s => ({ ...s, reconnecting: true }))
+    resumeSession()
+      .catch(() => disconnect().catch(console.warn))
+      .finally(() => setState(s => ({ ...s, reconnecting: false })))
   }, [savedSession, state.connectionStatus, resumeSession, disconnect])
 
   const sync = useCallback(async () => {
@@ -260,12 +261,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     async (): Promise<string | null> => state.receiveAddress,
     [state.receiveAddress],
   )
-
-  const getXOnlyPublicKey = useCallback(async (): Promise<XOnlyPublicKey | null> => {
-    const session = sessionRef.current
-    if (!session) throw new Error('WalletProvider: not connected')
-    return session.connector.getXOnlyPublicKey?.() ?? null
-  }, [])
 
   const verifyReceiveAddress = useCallback(async (): Promise<string> => {
     const session = sessionRef.current
@@ -301,13 +296,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     <WalletContext.Provider
       value={{
         ...state,
+        isReady: state.connectionStatus === 'ready',
         connect,
         disconnect,
         syncWallet: sync,
         signPset,
         getReceiveAddress,
         verifyReceiveAddress,
-        getXOnlyPublicKey,
         getWollet,
         getBlindedWalletUtxos,
       }}

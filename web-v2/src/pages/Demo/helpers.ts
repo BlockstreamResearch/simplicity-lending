@@ -1,8 +1,5 @@
-// Helpers for ScriptAuth demo flows, including input selection and local storage management for demo state.
 import type { AssetId, WalletTxOut } from 'lwk_web'
-import { useEffect, useState } from 'react'
 
-import { fetchTxConfirmations } from '@/api/esplora/methods'
 import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 
 export interface DemoScriptAuthInputSelection {
@@ -56,55 +53,6 @@ export interface SavedScriptAuthState {
 export function latestScriptAuthState() {
   const states = getScriptAuthStates()
   return states[states.length - 1] ?? null
-}
-
-export function useTxConfirmations(txid: string | null): number | null {
-  const [confirmedTx, setConfirmedTx] = useState<{
-    confirmations: number
-    txid: string
-  } | null>(null)
-
-  useEffect(() => {
-    if (!txid) {
-      return
-    }
-
-    let cancelled = false
-    let intervalId: ReturnType<typeof setInterval> | null = null
-
-    const poll = async () => {
-      try {
-        const nextConfirmations = await fetchTxConfirmations(txid)
-
-        if (cancelled) {
-          return
-        }
-
-        if (nextConfirmations !== null && nextConfirmations >= 1) {
-          setConfirmedTx({ confirmations: nextConfirmations, txid })
-          if (intervalId) {
-            clearInterval(intervalId)
-          }
-        }
-      } catch (err) {
-        console.warn(err)
-      }
-    }
-
-    poll()
-    intervalId = setInterval(() => {
-      poll()
-    }, 15_000)
-
-    return () => {
-      cancelled = true
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
-    }
-  }, [txid])
-
-  return confirmedTx?.txid === txid ? confirmedTx.confirmations : null
 }
 
 const SCRIPT_AUTH_STORAGE_KEY = 'script-auth-covenants'

@@ -19,6 +19,7 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@heroui/react": "^3.0.4",
+    "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.100.10",
     "axios": "^1.7.0",
     "lwk_web": "file:../lwk_wasm/pkg_web",

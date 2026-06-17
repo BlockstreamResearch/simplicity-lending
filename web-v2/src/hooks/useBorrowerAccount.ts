@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Address,
   assetIdFromIssuance,
@@ -7,8 +8,12 @@ import {
   TxBuilder,
   XOnlyPublicKey,
 } from 'lwk_web'
+import { useCallback, useMemo } from 'react'
 
 import { broadcastTx } from '@/api/esplora/methods'
+import { useFactories } from '@/api/indexer/hooks'
+import { factoryQueryKeys } from '@/api/indexer/queryKeys'
+import type { FactoryDetails } from '@/api/indexer/schemas'
 import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -18,7 +23,22 @@ import { bytesToHex } from '@/utils/hex'
 import { sha256 } from '@/utils/sha256'
 import { toUint8, toUint64 } from '@/utils/uint'
 
-const FEE_RESERVE = 10_000n
+export interface FactoryState {
+  factoryAssetId: string
+  factoryAuthOutpoint: string
+  issuanceFactoryOutpoint: string
+}
+
+function prepareFactory(factory: FactoryDetails): FactoryState | null {
+  if (!factory.auth_utxo || !factory.program_utxo) return null
+  return {
+    factoryAssetId: factory.factory_asset_id,
+    factoryAuthOutpoint: `${factory.auth_utxo.txid}:${factory.auth_utxo.vout}`,
+    issuanceFactoryOutpoint: `${factory.program_utxo.txid}:${factory.program_utxo.vout}`,
+  }
+}
+
+const FEE_RESERVE = 250n
 const ISSUING_UTXOS_COUNT = 2
 const REISSUANCE_FLAGS = 0n
 const ISSUANCE_AMOUNT = 2n
@@ -38,7 +58,22 @@ export interface BorrowerAccountCreationResult {
 
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, scriptPubkey } =
+    useWallet()
+  const queryClient = useQueryClient()
+  const factoriesQuery = useFactories(scriptPubkey || '')
+  const activeFactory = factoriesQuery.data?.[0] ?? null
+  const hasAccount = !!activeFactory
+
+  const factoryState = useMemo(
+    () => (activeFactory ? prepareFactory(activeFactory) : null),
+    [activeFactory],
+  )
+
+  const refetchFactory = useCallback((): void => {
+    if (!scriptPubkey) return
+    void queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey) })
+  }, [scriptPubkey, queryClient])
 
   const createBorrowerAccount = async (): Promise<BorrowerAccountCreationResult> => {
     const receiveAddressString = await getReceiveAddress()
@@ -100,6 +135,36 @@ export function useBorrowerAccount() {
       metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
     }
 
+    // Optimistic update: indexer lag means the factory won't appear in API for several seconds
+    queryClient.setQueryData<FactoryDetails[]>(
+      factoryQueryKeys.byScript(scriptPubkey ?? ''),
+      old => [
+        ...(old ?? []),
+        {
+          id: result.txid,
+          factory_asset_id: result.issuedAssetId,
+          program_script_pubkey: result.factoryAddress,
+          status: 'active',
+          issuing_utxos_count: ISSUING_UTXOS_COUNT,
+          reissuance_flags: REISSUANCE_FLAGS,
+          created_at_height: 0,
+          created_at_txid: result.txid,
+          auth_utxo: {
+            txid: result.txid,
+            vout: 0,
+            script_pubkey: scriptPubkey ?? '',
+            created_at_height: 0,
+          },
+          program_utxo: {
+            txid: result.txid,
+            vout: 1,
+            created_at_height: 0,
+          },
+        },
+      ],
+    )
+    void queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey ?? '') })
+
     return result
   }
 
@@ -109,7 +174,13 @@ export function useBorrowerAccount() {
     )
   }
 
-  return { createBorrowerAccount, removeBorrowerAccount }
+  return {
+    createBorrowerAccount,
+    factoryState,
+    refetchFactory,
+    hasAccount,
+    removeBorrowerAccount,
+  }
 }
 
 function emptyContractHash(): ContractHash {

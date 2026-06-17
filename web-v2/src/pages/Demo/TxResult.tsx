@@ -1,14 +1,15 @@
 import { getTxExplorerUrl } from '@/api/esplora/utils'
+import type { TxStatus } from '@/hooks/useTxStatus'
 
 export function TxResult({
   title,
   txid,
-  confirmations,
+  txStatus,
   detail,
 }: {
   title: string
   txid: string | null
-  confirmations: number | null
+  txStatus: TxStatus | null
   detail?: object
 }) {
   if (!txid) return null
@@ -25,7 +26,12 @@ export function TxResult({
         {txid}
       </a>
       <div className='mt-1 text-xs text-gray-600'>
-        Confirmations: {confirmations === null ? 'waiting…' : confirmations}
+        Status:{' '}
+        {txStatus === 'finalized'
+          ? 'Finalized'
+          : txStatus === 'confirmed'
+            ? 'Confirmed'
+            : 'Pending…'}
       </div>
       {detail && (
         <pre className='mt-2 overflow-x-auto rounded bg-gray-100 p-2 text-xs'>
