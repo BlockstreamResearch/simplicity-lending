@@ -44,7 +44,7 @@ export const offerShortSchema = z.object({
   collateral_amount: u64AsBigint,
   principal_amount: u64AsBigint,
   interest_rate: finiteNumber.default(0),
-  loan_expiration_time: finiteNumber.default(0),
+  loan_expiration_height: finiteNumber.default(0),
   created_at_height: blockHeightSchema,
   created_at_txid: z.string(),
 })

@@ -51,7 +51,7 @@ export function computeLtv({
 }
 
 export function getOfferTermLeft(offer: OfferShort, currentBlockHeight: number): number {
-  return offer.loan_expiration_time - currentBlockHeight
+  return offer.loan_expiration_height - currentBlockHeight
 }
 
 export function getOfferDisplayStatus(
