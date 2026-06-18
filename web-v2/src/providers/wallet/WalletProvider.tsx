@@ -29,14 +29,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const sessionRef = useRef<WalletSession | null>(null)
   const connectingRef = useRef(false)
   // Invalidates stale connect() attempts and prevents duplicate disconnect handling.
-  const connectAttemptRef = useRef(0)
+  const connectionChangeCounterRef = useRef(0)
 
   const [state, setState] = useState<WalletState>(INITIAL_WALLET_STATE)
   const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
 
   const disconnect = useCallback(
     async (error?: string) => {
-      connectAttemptRef.current++
+      connectionChangeCounterRef.current++
       const session = sessionRef.current
       sessionRef.current = null
       // Reset UI immediately. Connector teardown runs in background and may hang if the device
@@ -129,7 +129,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     async (variant: WalletType) => {
       if (sessionRef.current !== null || connectingRef.current) return
       connectingRef.current = true
-      const attempt = ++connectAttemptRef.current
+      const attempt = ++connectionChangeCounterRef.current
 
       const isJade = !env.VITE_DEBUG_MNEMONIC
       setState(s => ({ ...s, syncing: true, error: null, isError: false }))
@@ -148,7 +148,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setState(s => ({ ...s, usbDeviceDetected: isJade }))
         const connectionStatus = await connector.getConnectionStatus()
 
-        if (attempt !== connectAttemptRef.current) {
+        if (attempt !== connectionChangeCounterRef.current) {
           connector.disconnect().catch(console.warn)
           return
         }
@@ -165,7 +165,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         const descriptor = await connector.getDescriptor(walletType)
 
-        if (attempt !== connectAttemptRef.current) {
+        if (attempt !== connectionChangeCounterRef.current) {
           connector.disconnect().catch(console.warn)
           return
         }
@@ -183,7 +183,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setSavedSession(saved)
 
         const balances = await syncBalances(wollet, esploraClient)
-        if (attempt !== connectAttemptRef.current) return
+        if (attempt !== connectionChangeCounterRef.current) return
 
         const address = wollet.address(0).address()
         const receiveAddress = address.toString()
@@ -200,7 +200,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           scriptPubkey,
         }))
       } catch (err) {
-        if (attempt !== connectAttemptRef.current) {
+        if (attempt !== connectionChangeCounterRef.current) {
           connector?.disconnect().catch(console.warn)
           return
         }
