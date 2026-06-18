@@ -7,7 +7,7 @@ import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 export function JadeUnlockModal() {
-  const { connectionStatus, walletType, error, isError, connect } = useWallet()
+  const { connectionStatus, walletType, error, isError, connect, usbDeviceDetected } = useWallet()
   const [prevConnectionStatus, setPrevConnectionStatus] = useState(connectionStatus)
   const [isOpen, setIsOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
@@ -21,6 +21,7 @@ export function JadeUnlockModal() {
   // Stay open across a retry — only swap the inner content — instead of closing and
   // reopening, which played the modal's exit/enter transition back to back and read as
   // a flicker/reload.
+  if (isOpen && !usbDeviceDetected) setIsOpen(false)
   const failed = isOpen && isError && connectionStatus !== 'locked' && !retrying
 
   const handleDismiss = () => setIsOpen(false)

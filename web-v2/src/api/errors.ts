@@ -35,3 +35,10 @@ export class ApiAbortError extends ApiError {
     this.name = 'ApiAbortError'
   }
 }
+
+export class BroadcastError extends ApiError {
+  constructor(message: string, options: { status?: number; body?: string; cause?: unknown } = {}) {
+    super(message, options)
+    this.name = 'BroadcastError'
+  }
+}

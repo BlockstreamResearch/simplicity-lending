@@ -1,6 +1,7 @@
 import { Mnemonic, type Network, type Pset, Signer, type WolletDescriptor } from 'lwk_web'
 
 import type { ConnectionStatus, WalletType } from '../types'
+import { SeedMissingError, SeedNotConnectedError } from './errors'
 import type { WalletConnector } from './types'
 
 /**
@@ -20,7 +21,7 @@ export class SeedConnector implements WalletConnector {
     private readonly lwkNetwork: Network,
     private readonly mnemonicStr: string,
   ) {
-    if (!mnemonicStr) throw new Error('SeedConnector: VITE_DEBUG_MNEMONIC is not set')
+    if (!mnemonicStr) throw new SeedMissingError('VITE_DEBUG_MNEMONIC is not set')
   }
 
   async connect(): Promise<void> {
@@ -46,14 +47,14 @@ export class SeedConnector implements WalletConnector {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _variant: WalletType,
   ): Promise<WolletDescriptor> {
-    if (!this.signer) throw new Error('SeedConnector: not connected')
+    if (!this.signer) throw new SeedNotConnectedError()
     // Signer only exposes wpkhSlip77Descriptor (native segwit + SLIP77 blinding).
     // The variant param is accepted for interface compatibility but ignored here.
     return this.signer.wpkhSlip77Descriptor()
   }
 
   async signPset(pset: Pset): Promise<Pset> {
-    if (!this.signer) throw new Error('SeedConnector: not connected')
+    if (!this.signer) throw new SeedNotConnectedError()
     // Signer.sign() is synchronous — wrap for interface compatibility.
     return this.signer.sign(pset)
   }
