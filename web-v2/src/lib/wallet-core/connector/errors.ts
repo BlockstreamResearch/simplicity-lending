@@ -33,6 +33,13 @@ export class JadeDisconnectedError extends Error {
   }
 }
 
+export class JadeNetworkMismatchError extends Error {
+  constructor() {
+    super('Jade is unlocked for a different network. Disconnect and reconnect the device to switch')
+    this.name = 'JadeNetworkMismatchError'
+  }
+}
+
 export class JadeConnectionLockedError extends Error {
   constructor() {
     super('Jade is already connected elsewhere — close other tabs, windows, or apps using it')
@@ -81,6 +88,8 @@ export function mapJadeRpcError(error: unknown): Error {
     if (error.message === 'Wrong Pin') return new JadeUnlockFailedError()
     if (error.message === 'Jade not initialized') return new JadeNotConnectedError()
     if (error.message.includes('User declined to sign')) return new JadeSignDeclinedError()
+    if (error.message.includes('Network type inconsistent with prior usage'))
+      return new JadeNetworkMismatchError()
 
     // `JsValue(...)` means the Jade serial connection was lost.
     if (error.message.startsWith('JsValue(')) return new JadeDisconnectedError()
