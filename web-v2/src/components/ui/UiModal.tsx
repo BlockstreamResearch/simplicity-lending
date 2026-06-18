@@ -40,7 +40,7 @@ export function UiModal({
               </Modal.Header>
             ) : null}
             <Modal.Body className='mt-6 px-1 pb-1'>{children}</Modal.Body>
-            {footer ? <Modal.Footer className='mt-6'>{footer}</Modal.Footer> : null}
+            {footer ? <Modal.Footer className='mt-6 px-1 pb-1'>{footer}</Modal.Footer> : null}
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>

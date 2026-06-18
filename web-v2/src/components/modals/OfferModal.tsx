@@ -12,7 +12,7 @@ import { UiModal } from '@/components/ui/UiModal'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
-import { bpsToPercent, calcInterest, formatOfferTermLeft } from '@/utils/offers'
+import { calcInterest, computeApr, formatOfferTermLeft } from '@/utils/offers'
 
 type Counterparty = 'borrower' | 'lender'
 
@@ -79,6 +79,7 @@ export default function OfferModal({
   }
 
   const interest = calcInterest(offer.principal_amount, offer.interest_rate)
+  const loanDurationBlocks = offer.loan_expiration_height - offer.created_at_height
   const counterpartyParticipant = fullOffer?.participants.find(
     p => p.participant_type === counterparty,
   )
@@ -98,7 +99,7 @@ export default function OfferModal({
       label: 'Expected Earning',
       value: `${formatAmount(interest, principalAsset.decimals)} ${principalAsset.symbol}`,
     },
-    { label: 'APR', value: bpsToPercent(offer.interest_rate) },
+    { label: 'APR', value: `${computeApr(offer.interest_rate, loanDurationBlocks).toFixed(2)}%` },
     { label: 'LTV & Risk Level', value: '–' },
     {
       label: counterpartyLabel,
