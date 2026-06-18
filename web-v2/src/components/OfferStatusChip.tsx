@@ -15,6 +15,7 @@ const OFFER_STATUS_CHIP_CONFIG: Record<OfferDisplayStatus, { color: ChipColor; l
   claimed: { color: 'default', label: 'Claimed' },
   unknown: { color: 'default', label: 'Unknown' },
   expired: { color: 'default', label: 'Expired' },
+  claim: { color: 'accent', label: 'Claim' },
 }
 
 export function OfferStatusChip({ status }: { status: OfferDisplayStatus }) {

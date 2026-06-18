@@ -6,7 +6,7 @@ import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
-import { useSupply } from '@/hooks/useSupply'
+import { useLenderStats } from '@/hooks/useLenderStats'
 import { ErrorHandler } from '@/utils/errorHandler'
 import { formatAmount, truncateAddress } from '@/utils/format'
 
@@ -16,7 +16,7 @@ import { DataRow } from './DataRow'
 
 export function SupplyCard() {
   const navigate = useNavigate()
-  const { balance, stats, claimableOffers, isLoading, error, refetch } = useSupply()
+  const { balance, stats, claimableOffers, isLoading, error, refetch } = useLenderStats()
   const alertOffer = claimableOffers[0]
 
   useEffect(() => {

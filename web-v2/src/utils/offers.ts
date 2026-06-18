@@ -1,8 +1,10 @@
-import type { AssetAmount, OfferShort, OfferStatus } from '@/api/indexer/schemas'
+import type { AssetAmount, OfferDetails, OfferShort, OfferStatus } from '@/api/indexer/schemas'
 
+import { formatTermLeft } from './format'
 import { normalizeHex } from './hex'
+import { resolveVaultOutpoint } from './offerOutpoints'
 
-export type OfferDisplayStatus = OfferStatus | 'expired'
+export type OfferDisplayStatus = OfferStatus | 'expired' | 'claim'
 
 const BPS_DIVISOR = 10_000
 const AVERAGE_BLOCK_TIME_SECONDS = 60
@@ -54,13 +56,25 @@ export function getOfferTermLeft(offer: OfferShort, currentBlockHeight: number):
   return offer.loan_expiration_height - currentBlockHeight
 }
 
+export function formatOfferTermLeft(offer: OfferShort, currentBlockHeight: number | null): string {
+  if (!currentBlockHeight) return '–'
+  return formatTermLeft(getOfferTermLeft(offer, currentBlockHeight))
+}
+
 export function getOfferDisplayStatus(
-  offer: OfferShort,
+  offer: OfferShort | OfferDetails,
   currentBlockHeight: number,
 ): OfferDisplayStatus {
-  return offer.status === 'pending' && getOfferTermLeft(offer, currentBlockHeight) <= 0
-    ? 'expired'
-    : offer.status
+  if (
+    (offer.status === 'pending' || offer.status === 'active') &&
+    getOfferTermLeft(offer, currentBlockHeight) <= 0
+  ) {
+    return 'expired'
+  }
+  if (offer.status === 'repaid' && 'utxos' in offer && resolveVaultOutpoint(offer)) {
+    return 'claim'
+  }
+  return offer.status
 }
 
 export function findAssetAmount(amounts: AssetAmount[], assetId: string): bigint {

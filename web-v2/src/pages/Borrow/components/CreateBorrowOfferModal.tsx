@@ -6,6 +6,7 @@ import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
 import { getTxExplorerUrl } from '@/api/esplora/utils'
+import BalanceCard from '@/components/BalanceCard'
 import PlusIcon from '@/components/icons/PlusIcon'
 import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
@@ -24,7 +25,6 @@ import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
 import { selectOptimalUtxo } from '@/utils/utxo'
 
 import { MAX_LTV, TERM_OPTIONS } from '../helpers'
-import BalanceCard from './BalanceCard'
 import LoanMetricsSummary from './LoanMetricsSummary'
 
 interface BorrowOfferContext {

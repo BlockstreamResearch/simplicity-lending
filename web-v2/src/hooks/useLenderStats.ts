@@ -10,25 +10,27 @@ import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { calcInterest } from '@/utils/offers'
 
-export interface SupplyStats {
+export interface LenderStats {
   suppliedLoans: bigint
   interestOutstanding: bigint
   activeLoans: number
   repaidToClaim: number
 }
 
-export interface UseSupplyResult {
+export interface UseLenderStatsResult {
   balance: bigint
-  stats: SupplyStats
+  stats: LenderStats
+  offers: OfferDetails[]
   claimableOffers: OfferDetails[]
   isLoading: boolean
   error: Error | null
   refetch: () => void
 }
 
-export function useSupply({
+// TODO: refactor once the backend adds /lenders/by-script endpoint
+export function useLenderStats({
   pollIntervalMs = 30_000,
-}: { pollIntervalMs?: number } = {}): UseSupplyResult {
+}: { pollIntervalMs?: number } = {}): UseLenderStatsResult {
   const { isReady, balances, scriptPubkey } = useWallet()
   const queryClient = useQueryClient()
 
@@ -49,7 +51,13 @@ export function useSupply({
   }, [idsQuery, queryClient])
 
   const balance = BigInt(balances[NETWORK_CONFIG.principalAsset.id] ?? 0)
-  const offers = offerQueries.flatMap(q => (q.data ? [q.data] : []))
+  const offers = offerQueries.flatMap(q =>
+    q.data?.participants.some(
+      p => p.participant_type === 'lender' && p.script_pubkey === scriptPubkey,
+    )
+      ? [q.data]
+      : [],
+  )
   const active = offers.filter(o => o.status === 'active')
   const claimableOffers = offers.filter(o => o.status === 'repaid')
 
@@ -64,6 +72,7 @@ export function useSupply({
       activeLoans: active.length,
       repaidToClaim: claimableOffers.length,
     },
+    offers,
     claimableOffers,
     isLoading: isReady && (idsQuery.isLoading || offerQueries.some(q => q.isLoading)),
     error: idsQuery.error ?? offerQueries.find(q => q.error)?.error ?? null,

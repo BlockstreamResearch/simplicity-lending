@@ -26,6 +26,7 @@ export type ParticipantType = z.infer<typeof participantTypeSchema>
 
 export const offerUtxoTypeSchema = z.enum([
   'pending_offer',
+  'active_offer',
   'pre_lock',
   'lending',
   'cancellation',

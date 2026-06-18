@@ -42,3 +42,12 @@ export function assertWalletUtxoAssetAndMinimumAmount(
 export function isPolicyAssetUtxo(utxo: WalletTxOut, policyAsset: AssetId | string): boolean {
   return utxo.unblinded().asset().toString() === policyAsset.toString()
 }
+
+export function selectFeeUtxo(
+  walletUtxos: WalletTxOut[],
+  policyAsset: AssetId | string,
+): WalletTxOut {
+  const feeUtxo = walletUtxos.find(utxo => isPolicyAssetUtxo(utxo, policyAsset))
+  if (!feeUtxo) throw new Error('No policy asset UTXO available for fees')
+  return feeUtxo
+}
