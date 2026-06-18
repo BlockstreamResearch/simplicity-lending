@@ -35,7 +35,9 @@ export class JadeDisconnectedError extends Error {
 
 export class JadeNetworkMismatchError extends Error {
   constructor() {
-    super('Jade is unlocked for a different network. Disconnect and reconnect the device to switch')
+    super(
+      'Jade is unlocked for a different network. Connect with the matching network, or reset the device to switch',
+    )
     this.name = 'JadeNetworkMismatchError'
   }
 }
