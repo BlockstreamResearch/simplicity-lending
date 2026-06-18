@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 const envSchema = z.object({
-  VITE_API_URL: z.string().url().default('http://localhost:80'),
+  VITE_API_URL: z.string().url().default('http://localhost:8000'),
   DEV: z.boolean().default(false),
   PROD: z.boolean().default(false),
   VITE_ESPLORA_BASE_URL: z.string().url().default('https://blockstream.info/liquid'),
