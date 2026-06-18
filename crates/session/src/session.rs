@@ -1,65 +1,29 @@
-use simplex::provider::SimplicityNetwork;
+use simplex::provider::{EsploraProvider, SimplicityNetwork};
+use simplex::signer::Signer;
 
-#[derive(Debug, Clone)]
-pub struct Session<P, S> {
-    provider: P,
-    signer: S,
-    network: SimplicityNetwork,
+pub struct Session {
+    provider: EsploraProvider,
+    signer: Signer,
 }
 
-impl<P, S> Session<P, S> {
-    pub fn new(provider: P, signer: S, network: SimplicityNetwork) -> Self {
-        Self {
-            provider,
-            signer,
-            network,
-        }
+impl Session {
+    pub fn new(provider: EsploraProvider, signer: Signer) -> Self {
+        Self { provider, signer }
     }
 
-    pub fn provider(&self) -> &P {
+    pub fn provider(&self) -> &EsploraProvider {
         &self.provider
     }
 
-    pub fn signer(&self) -> &S {
+    pub fn signer(&self) -> &Signer {
         &self.signer
     }
 
-    pub fn network(&self) -> &SimplicityNetwork {
-        &self.network
+    pub fn network(&self) -> SimplicityNetwork {
+        self.provider.network
     }
 
-    pub fn into_parts(self) -> (P, S, SimplicityNetwork) {
-        (self.provider, self.signer, self.network)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Session;
-    use simplex::provider::SimplicityNetwork;
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    struct DummyProvider;
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    struct DummySigner;
-
-    #[test]
-    fn stores_dependencies() {
-        let session = Session::new(DummyProvider, DummySigner, SimplicityNetwork::LiquidTestnet);
-
-        assert_eq!(*session.provider(), DummyProvider);
-        assert_eq!(*session.signer(), DummySigner);
-        assert_eq!(*session.network(), SimplicityNetwork::LiquidTestnet);
-    }
-
-    #[test]
-    fn can_destructure_session() {
-        let session = Session::new(DummyProvider, DummySigner, SimplicityNetwork::LiquidTestnet);
-        let (provider, signer, network) = session.into_parts();
-
-        assert_eq!(provider, DummyProvider);
-        assert_eq!(signer, DummySigner);
-        assert_eq!(network, SimplicityNetwork::LiquidTestnet);
+    pub fn into_parts(self) -> (EsploraProvider, Signer) {
+        (self.provider, self.signer)
     }
 }
