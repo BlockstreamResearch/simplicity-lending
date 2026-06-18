@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
 import { useSessionStorage } from '@/hooks/useSessionStorage'
+import { JadeBusyError, JadeDisconnectedError } from '@/lib/wallet-core/connector/errors'
 import { JadeConnector } from '@/lib/wallet-core/connector/jade'
 import { SeedConnector } from '@/lib/wallet-core/connector/seed'
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
@@ -10,6 +11,7 @@ import { DEFAULT_WALLET_TYPE, type WalletType } from '@/lib/wallet-core/types'
 import { syncBalances } from '@/lib/wallet-core/wallet/sync'
 import { createEsploraClient } from '@/lwk'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { ErrorHandler } from '@/utils/errorHandler'
 
 import {
   INITIAL_WALLET_STATE,
@@ -26,17 +28,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const sessionRef = useRef<WalletSession | null>(null)
   const connectingRef = useRef(false)
+  // Invalidates stale connect() attempts and prevents duplicate disconnect handling.
+  const connectionChangeCounterRef = useRef(0)
 
   const [state, setState] = useState<WalletState>(INITIAL_WALLET_STATE)
   const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
 
   const disconnect = useCallback(
     async (error?: string) => {
+      connectionChangeCounterRef.current++
       const session = sessionRef.current
-      if (session) {
-        await session.connector.disconnect()
-        sessionRef.current = null
-      }
+      sessionRef.current = null
+      // Reset UI immediately. Connector teardown runs in background and may hang if the device
+      // was unplugged mid-session.
+      session?.connector.disconnect().catch(console.warn)
       setSavedSession(null)
       setState(s => ({
         ...INITIAL_WALLET_STATE,
@@ -57,10 +62,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setState(s => ({ ...s, usbDeviceDetected: true, error: null, isError: false }))
     }
     const handleDisconnect = () => {
-      if (sessionRef.current) {
-        disconnect('Device disconnected')
-      } else {
-        setState(s => ({ ...s, usbDeviceDetected: false }))
+      setState(s => ({ ...s, usbDeviceDetected: false }))
+      // Covers disconnects during the PIN/unlock flow as well.
+      // (waiting on the device's PIN entry) and hasn't set sessionRef.current yet.
+      if (sessionRef.current || connectingRef.current) {
+        const err = new JadeDisconnectedError()
+        ErrorHandler.process(err)
+        disconnect(err.message).catch(console.warn)
       }
     }
 
@@ -92,9 +100,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           setState(s => (s.connectionStatus === status ? s : { ...s, connectionStatus: status }))
         })
         .catch((err: unknown) => {
-          // TODO: Move to a more robust error handling strategy
-          if (err instanceof Error && err.message === 'jade:busy') return
-          disconnect('Device disconnected').catch(console.warn)
+          if (err instanceof JadeBusyError) return
+          ErrorHandler.process(err)
+          disconnect(new JadeDisconnectedError().message).catch(console.warn)
         })
     }, 3_000)
 
@@ -121,12 +129,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     async (variant: WalletType) => {
       if (sessionRef.current !== null || connectingRef.current) return
       connectingRef.current = true
+      const attempt = ++connectionChangeCounterRef.current
 
       const isJade = !env.VITE_DEBUG_MNEMONIC
       setState(s => ({ ...s, syncing: true, error: null, isError: false }))
 
       let connector: WalletConnector | null = null
-
       try {
         const walletType: WalletType = isJade ? variant : DEFAULT_WALLET_TYPE
 
@@ -135,7 +143,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           : new SeedConnector(lwkNetwork, env.VITE_DEBUG_MNEMONIC)
 
         await connector.connect()
+        // The native 'connect' event only fires for a device that was already paired and
+        // got replugged — a fresh pick-and-connect never triggers it.
+        setState(s => ({ ...s, usbDeviceDetected: isJade }))
         const connectionStatus = await connector.getConnectionStatus()
+
+        if (attempt !== connectionChangeCounterRef.current) {
+          connector.disconnect().catch(console.warn)
+          return
+        }
 
         // Show 'locked' in the UI before getDescriptor() blocks waiting for Jade PIN.
         if (connectionStatus === 'locked') {
@@ -148,6 +164,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         const descriptor = await connector.getDescriptor(walletType)
+
+        if (attempt !== connectionChangeCounterRef.current) {
+          connector.disconnect().catch(console.warn)
+          return
+        }
+
         const wollet = new WolletBuilder(lwkNetwork, descriptor).utxoOnly(true).build()
         const esploraClient = createEsploraClient(lwkNetwork)
 
@@ -161,6 +183,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setSavedSession(saved)
 
         const balances = await syncBalances(wollet, esploraClient)
+        if (attempt !== connectionChangeCounterRef.current) return
 
         const address = wollet.address(0).address()
         const receiveAddress = address.toString()
@@ -177,8 +200,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           scriptPubkey,
         }))
       } catch (err) {
+        if (attempt !== connectionChangeCounterRef.current) {
+          connector?.disconnect().catch(console.warn)
+          return
+        }
+        ErrorHandler.process(err)
         const error = err instanceof Error ? err.message : String(err)
-        await connector?.disconnect()
+        // Not awaited — same hang risk as in disconnect(): update state immediately
+        // instead of gating it behind the connector's own teardown.
+        connector?.disconnect().catch(console.warn)
         sessionRef.current = null
         setState(s => ({
           ...INITIAL_WALLET_STATE,
@@ -218,6 +248,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const balances = await syncBalances(session.wollet, session.esploraClient)
       setState(s => ({ ...s, syncing: false, balances }))
     } catch (err) {
+      ErrorHandler.process(err)
       const error = err instanceof Error ? err.message : String(err)
       setState(s => ({ ...s, syncing: false, error, isError: true }))
     }

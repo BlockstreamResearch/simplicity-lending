@@ -1,7 +1,12 @@
 import { toast } from '@heroui/react'
 
-import { ApiAbortError, ApiError, ApiTimeoutError, ApiValidationError } from '@/api/errors'
-
+import {
+  ApiAbortError,
+  ApiError,
+  ApiTimeoutError,
+  ApiValidationError,
+  BroadcastError,
+} from '@/api/errors'
 // For debugging
 export function wrapErrorWithContext(error: unknown, context: string): Error {
   const message = error instanceof Error ? error.message : String(error)
@@ -47,6 +52,9 @@ export class ErrorHandler {
     }
     if (error instanceof ApiValidationError) {
       return 'Server returned unexpected data. Please try again later.'
+    }
+    if (error instanceof BroadcastError) {
+      return error.message
     }
     if (error instanceof ApiError) {
       return ErrorHandler.getApiErrorMessage(error)

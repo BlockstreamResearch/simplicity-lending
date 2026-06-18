@@ -9,6 +9,7 @@ import {
 
 import type { ConnectionStatus, JadeVersionInfo, WalletType } from '../types'
 import { DEFAULT_WALLET_TYPE } from '../types'
+import { JadeBusyError, JadeNotConnectedError, mapJadeRpcError, toJadeConnectError } from './errors'
 import type { WalletConnector } from './types'
 
 /**
@@ -27,7 +28,11 @@ export class JadeConnector implements WalletConnector {
 
   async connect(): Promise<void> {
     if (this.jade !== null) return
-    this.jade = await Jade.fromSerial(this.lwkNetwork, true)
+    try {
+      this.jade = await Jade.fromSerial(this.lwkNetwork, true)
+    } catch (error) {
+      throw toJadeConnectError(error)
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -51,37 +56,47 @@ export class JadeConnector implements WalletConnector {
   }
 
   async getVersionInfo(): Promise<JadeVersionInfo> {
-    if (!this.jade) throw new Error('JadeConnector: not connected')
-    const raw = await this.jade.getVersion()
-    const info = {
-      state: raw.JADE_STATE as JadeVersionInfo['state'],
-      efuseMac: raw.EFUSEMAC as string,
-      version: raw.JADE_VERSION as string,
+    if (!this.jade) throw new JadeNotConnectedError()
+    try {
+      const raw = await this.jade.getVersion()
+      const info = {
+        state: raw.JADE_STATE as JadeVersionInfo['state'],
+        efuseMac: raw.EFUSEMAC as string,
+        version: raw.JADE_VERSION as string,
+      }
+      this._id ??= info.efuseMac
+      return info
+    } catch (error) {
+      throw mapJadeRpcError(error)
     }
-    this._id ??= info.efuseMac
-    return info
   }
 
   async getConnectionStatus(): Promise<ConnectionStatus> {
     // HACK: Mutex polling and sign() share the same WebSerial port. If sign() is in
     // progress (waiting for user button press), skip the poll to avoid CBOR
     // frame corruption that would silently kill the signing request.
-    if (this.busy) throw new Error('jade:busy')
+    if (this.busy) throw new JadeBusyError()
     const info = await this.getVersionInfo()
     return info.state === 'READY' ? 'ready' : 'locked'
   }
 
   async getDescriptor(variant: WalletType): Promise<WolletDescriptor> {
-    if (!this.jade) throw new Error('JadeConnector: not connected')
-    // wpkh = elwpkh native segwit; shWpkh = nested segwit (sh-wpkh).
-    return variant === DEFAULT_WALLET_TYPE ? this.jade.wpkh() : this.jade.shWpkh()
+    if (!this.jade) throw new JadeNotConnectedError()
+    try {
+      // wpkh = elwpkh native segwit; shWpkh = nested segwit (sh-wpkh).
+      return variant === DEFAULT_WALLET_TYPE ? await this.jade.wpkh() : await this.jade.shWpkh()
+    } catch (error) {
+      throw mapJadeRpcError(error)
+    }
   }
 
   async signPset(pset: Pset): Promise<Pset> {
-    if (!this.jade) throw new Error('JadeConnector: not connected')
+    if (!this.jade) throw new JadeNotConnectedError()
     this.busy = true
     try {
       return await this.jade.sign(pset)
+    } catch (error) {
+      throw mapJadeRpcError(error)
     } finally {
       this.busy = false
     }
@@ -95,12 +110,16 @@ export class JadeConnector implements WalletConnector {
    * against the software-derived address to detect substitution attacks.
    */
   async getVerifiedReceiveAddress(variant: WalletType, wollet: Wollet): Promise<string> {
-    if (!this.jade) throw new Error('JadeConnector: not connected')
+    if (!this.jade) throw new JadeNotConnectedError()
     const addrResult = wollet.address()
     const index = addrResult.index()
     const path = wollet.addressFullPath(index)
     const singlesig = Singlesig.from(variant)
-    return await this.jade.getReceiveAddressSingle(singlesig, path)
+    try {
+      return await this.jade.getReceiveAddressSingle(singlesig, path)
+    } catch (error) {
+      throw mapJadeRpcError(error)
+    }
   }
 
   get isConnected(): boolean {

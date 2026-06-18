@@ -2,7 +2,7 @@ import { env } from '@/constants/env'
 import { isHexString } from '@/utils/hex'
 
 import { requestBytes, requestJson, type RequestParams, requestText } from '../client'
-import { ApiError } from '../errors'
+import { ApiError, BroadcastError } from '../errors'
 import {
   type AddressInfo,
   addressInfoSchema,
@@ -69,17 +69,54 @@ export async function fetchTxOutspends(
   })
 }
 
+// https://github.com/ElementsProject/elements/blob/elements-23.3.1/src/validation.cpp
+// https://github.com/ElementsProject/elements/blob/elements-23.3.1/src/policy/policy.cpp
+const BROADCAST_ERROR_PATTERNS: [RegExp, string][] = [
+  [
+    /min relay fee not met|insufficient fee/i,
+    'Network fee is too low. Please increase the fee and try again.',
+  ],
+  [
+    /missingorspent/i,
+    'One of the inputs has already been spent. Please refresh your balance and try again.',
+  ],
+  [/txn-mempool-conflict|txn-already-in-mempool/i, 'This transaction was already submitted.'],
+  [/dust/i, 'One of the outputs is below the minimum allowed amount.'],
+  [/non-final|non-bip68-final/i, 'Transaction is not yet final. Please wait and try again.'],
+]
+
+function parseBroadcastErrorMessage(body: string | undefined): string {
+  const trimmedBody = body?.trim()
+  if (trimmedBody) {
+    for (const [pattern, message] of BROADCAST_ERROR_PATTERNS) {
+      if (pattern.test(trimmedBody)) return message
+    }
+  }
+  return trimmedBody || 'Failed to broadcast transaction.'
+}
+
 export async function broadcastTx(txHex: string, options: RequestParams = {}): Promise<string> {
   const trimmedHex = txHex.trim()
   if (!isHexString(trimmedHex)) {
     throw new ApiError('broadcastTx: txHex must be a non-empty hex string with even length')
   }
-  return requestText(buildEsploraUrl('/tx'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    data: trimmedHex,
-    signal: options.signal,
-  })
+  try {
+    return await requestText(buildEsploraUrl('/tx'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      data: trimmedHex,
+      signal: options.signal,
+    })
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new BroadcastError(parseBroadcastErrorMessage(error.body), {
+        status: error.status,
+        body: error.body,
+        cause: error,
+      })
+    }
+    throw error
+  }
 }
 
 export async function fetchLatestBlockHash(options: RequestParams = {}): Promise<string> {
