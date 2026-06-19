@@ -60,7 +60,7 @@ export interface RepayOfferParams {
   activeOfferOutpoint: string
   borrowerNftOutpoint: string
   principalOutpoint: string
-  feeOutpoint: string
+  feeOutpoints: string[]
   collateralRecipientAddress?: string
 }
 
@@ -86,10 +86,10 @@ export function useRepayOffer() {
       const activeOfferOutpoint = new OutPoint(params.activeOfferOutpoint)
       const borrowerNftOutpoint = new OutPoint(params.borrowerNftOutpoint)
       const principalOutpoint = new OutPoint(params.principalOutpoint)
-      const feeOutpoint = new OutPoint(params.feeOutpoint)
+      const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
       assertDistinctOutpoints(
-        [activeOfferOutpoint, borrowerNftOutpoint, principalOutpoint, feeOutpoint],
-        'Repayment inputs must use four distinct outpoints',
+        [activeOfferOutpoint, borrowerNftOutpoint, principalOutpoint, ...feeOutpoints],
+        'Repayment inputs must use distinct outpoints',
       )
 
       stage = 'load wallet context'
@@ -104,9 +104,11 @@ export function useRepayOffer() {
       stage = 'sync wallet and verify fee input'
       await syncWallet()
       const blindedWalletUtxos = await getBlindedWalletUtxos()
-      const feeUtxo = requireWalletUtxo(blindedWalletUtxos, params.feeOutpoint, 'Fee L-BTC')
-      if (!isPolicyAssetUtxo(feeUtxo, lwkNetwork.policyAsset())) {
-        throw new Error('Fee outpoint must be a wallet L-BTC UTXO')
+      const feeUtxos = params.feeOutpoints.map(o =>
+        requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      )
+      if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
+        throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
       }
       const principalWalletUtxo = requireWalletUtxo(
         blindedWalletUtxos,
@@ -122,10 +124,10 @@ export function useRepayOffer() {
 
       stage = 'trace back to pending offer transaction for metadata'
       const pendingOfferOutpoint = activeOfferTx.inputs[0].outpoint()
-      const [pendingOfferTx, principalTx, feeTx, feeRate] = await Promise.all([
+      const [pendingOfferTx, principalTx, feeTxs, feeRate] = await Promise.all([
         fetchTransaction(pendingOfferOutpoint),
         fetchTransaction(principalOutpoint),
-        fetchTransaction(feeOutpoint),
+        Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
         fetchFeeRateSatPerKvb(),
       ])
 
@@ -142,7 +144,9 @@ export function useRepayOffer() {
       )
       const lenderNftTxOut = requireTxOut(activeOfferTx, 2, 'Lender NFT reference')
       const principalTxOut = requireTxOut(principalTx, principalOutpoint.vout(), 'Principal')
-      const feeTxOut = requireTxOut(feeTx, feeOutpoint.vout(), 'Fee L-BTC')
+      const feeTxOuts = feeTxs.map((tx, index) =>
+        requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      )
 
       const collateralAsset = requireExplicitAsset(activeOfferTxOut, 'Active offer')
       const collateralAmount = requireExplicitAmount(activeOfferTxOut, 'Active offer')
@@ -229,7 +233,7 @@ export function useRepayOffer() {
 
       stage = 'build repayment PSET'
       const burnScript = Script.newOpReturn(BURN_PAYLOAD)
-      const walletInputOutpointStrings = [params.principalOutpoint, params.feeOutpoint]
+      const walletInputOutpointStrings = [params.principalOutpoint, ...params.feeOutpoints]
       const inputOrderStrings = [
         params.borrowerNftOutpoint,
         params.activeOfferOutpoint,
@@ -282,7 +286,7 @@ export function useRepayOffer() {
       stage = 'sign wallet inputs'
       const txWithWalletWitnesses = wollet.finalize(await signPset(pset)).extractTx()
 
-      const prevouts = [borrowerNftTxOut, activeOfferTxOut, principalTxOut, feeTxOut]
+      const prevouts = [borrowerNftTxOut, activeOfferTxOut, principalTxOut, ...feeTxOuts]
 
       stage = 'finalize Lending covenant input'
       const finalizedTx = lendingProgram.finalizeTransactionWithSpendInfo(
@@ -306,7 +310,7 @@ export function useRepayOffer() {
             '0 Borrower NFT': params.borrowerNftOutpoint,
             '1 Active offer Lending': params.activeOfferOutpoint,
             '2 Principal wallet UTXO': params.principalOutpoint,
-            '3 Fee L-BTC': params.feeOutpoint,
+            '3+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
           },
           outputs: {
             '0 Borrower NFT burn': bytesToHex(burnScript.bytes()),

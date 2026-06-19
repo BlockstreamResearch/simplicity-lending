@@ -54,7 +54,7 @@ export interface AcceptOfferParams {
   lenderNftOutpoint: string
   borrowerNftReferenceOutpoint: string
   principalOutpoint: string
-  feeOutpoint: string
+  feeOutpoints: string[]
   lenderNftRecipientAddress?: string
 }
 
@@ -82,14 +82,14 @@ export function useAcceptOffer() {
       const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
       const borrowerNftReferenceOutpoint = new OutPoint(params.borrowerNftReferenceOutpoint)
       const principalOutpoint = new OutPoint(params.principalOutpoint)
-      const feeOutpoint = new OutPoint(params.feeOutpoint)
+      const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
       assertDistinctOutpoints(
         [
           pendingOfferOutpoint,
           lenderNftOutpoint,
           borrowerNftReferenceOutpoint,
           principalOutpoint,
-          feeOutpoint,
+          ...feeOutpoints,
         ],
         'Acceptance outpoints must be distinct',
       )
@@ -111,17 +111,19 @@ export function useAcceptOffer() {
         params.principalOutpoint,
         'Principal',
       )
-      const feeUtxo = requireWalletUtxo(blindedWalletUtxos, params.feeOutpoint, 'Fee L-BTC')
-      if (!isPolicyAssetUtxo(feeUtxo, lwkNetwork.policyAsset())) {
-        throw new Error('Fee outpoint must be a wallet L-BTC UTXO')
+      const feeUtxos = params.feeOutpoints.map(o =>
+        requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      )
+      if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
+        throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
       }
 
       stage = 'load covenant and reference transactions'
-      const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTx, feeRate] = await Promise.all([
+      const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTxs, feeRate] = await Promise.all([
         fetchTransaction(pendingOfferOutpoint),
         fetchTransaction(lenderNftOutpoint),
         fetchTransaction(borrowerNftReferenceOutpoint),
-        fetchTransaction(feeOutpoint),
+        Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
         fetchFeeRateSatPerKvb(),
       ])
       const pendingOfferTxOut = requireTxOut(
@@ -135,7 +137,9 @@ export function useAcceptOffer() {
         borrowerNftReferenceOutpoint.vout(),
         'Borrower NFT reference',
       )
-      const feeTxOut = requireTxOut(feeTx, feeOutpoint.vout(), 'Fee L-BTC')
+      const feeTxOuts = feeTxs.map((tx, index) =>
+        requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      )
 
       const collateralAsset = requireExplicitAsset(pendingOfferTxOut, 'Pending offer')
       const collateralAmount = requireExplicitAmount(pendingOfferTxOut, 'Pending offer')
@@ -158,7 +162,7 @@ export function useAcceptOffer() {
       const principalInputAmount = principalUtxo.unblinded().value()
       const principalChangeAmount = principalInputAmount - metadata.principalAmount
       assertDistinctOutpoints(
-        [pendingOfferOutpoint, lenderNftOutpoint, principalOutpoint, feeOutpoint],
+        [pendingOfferOutpoint, lenderNftOutpoint, principalOutpoint, ...feeOutpoints],
         'Acceptance inputs must use distinct outpoints',
       )
 
@@ -223,7 +227,7 @@ export function useAcceptOffer() {
       )
 
       stage = 'build acceptance PSET'
-      const walletInputOutpointStrings = [params.principalOutpoint, params.feeOutpoint]
+      const walletInputOutpointStrings = [params.principalOutpoint, ...params.feeOutpoints]
       const inputOrderStrings = [
         params.pendingOfferOutpoint,
         params.lenderNftOutpoint,
@@ -386,7 +390,7 @@ export function useAcceptOffer() {
       stage = 'sign wallet inputs'
       const txWithWalletWitnesses = wollet.finalize(await signPset(pset)).extractTx()
 
-      const prevouts = [pendingOfferTxOut, lenderNftTxOut, principalTxOut, feeTxOut]
+      const prevouts = [pendingOfferTxOut, lenderNftTxOut, principalTxOut, ...feeTxOuts]
 
       stage = 'finalize Lending covenant input'
       const txWithLendingWitness = lendingProgram.finalizeTransactionWithSpendInfo(
@@ -403,7 +407,7 @@ export function useAcceptOffer() {
         requireTxOut(pendingOfferTx, pendingOfferOutpoint.vout(), 'Pending offer'),
         requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT'),
         requireTxOut(principalTransaction, principalOutpoint.vout(), 'Principal input'),
-        requireTxOut(feeTx, feeOutpoint.vout(), 'Fee L-BTC'),
+        ...feeTxs.map((tx, index) => requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC')),
       ]
 
       stage = 'finalize Lender NFT ScriptAuth input'
@@ -428,7 +432,7 @@ export function useAcceptOffer() {
             '0 Pending offer Lending': params.pendingOfferOutpoint,
             '1 Lender NFT ScriptAuth': params.lenderNftOutpoint,
             '2 Principal wallet UTXO': params.principalOutpoint,
-            '3 Fee L-BTC': params.feeOutpoint,
+            '3+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
             'Reference Borrower NFT': params.borrowerNftReferenceOutpoint,
           },
           outputs: {

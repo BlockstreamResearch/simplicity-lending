@@ -45,7 +45,7 @@ const LENDER_NFT_BURN_OUTPUT_INDEX = 0
 export interface LenderVaultClaimParams {
   lenderVaultOutpoint: string
   lenderNftOutpoint: string
-  feeOutpoint: string
+  feeOutpoints: string[]
   principalRecipientAddress?: string
 }
 
@@ -73,10 +73,10 @@ export function useLenderVaultClaim() {
       stage = 'parse input outpoints'
       const lenderVaultOutpoint = new OutPoint(params.lenderVaultOutpoint)
       const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
-      const feeOutpoint = new OutPoint(params.feeOutpoint)
+      const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
       assertDistinctOutpoints(
-        [lenderVaultOutpoint, lenderNftOutpoint, feeOutpoint],
-        'Lender vault claim inputs must use three distinct outpoints',
+        [lenderVaultOutpoint, lenderNftOutpoint, ...feeOutpoints],
+        'Lender vault claim inputs must use distinct outpoints',
       )
 
       stage = 'load wallet context'
@@ -90,16 +90,18 @@ export function useLenderVaultClaim() {
       stage = 'sync wallet and verify fee input'
       await syncWallet()
       const blindedWalletUtxos = await getBlindedWalletUtxos()
-      const feeUtxo = requireWalletUtxo(blindedWalletUtxos, params.feeOutpoint, 'Fee L-BTC')
-      if (!isPolicyAssetUtxo(feeUtxo, lwkNetwork.policyAsset())) {
-        throw new Error('Fee outpoint must be a wallet L-BTC UTXO')
+      const feeUtxos = params.feeOutpoints.map(o =>
+        requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      )
+      if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
+        throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
       }
 
       stage = 'load lender vault, NFT and fee transactions'
-      const [lenderVaultTx, lenderNftTx, feeTx, feeRate] = await Promise.all([
+      const [lenderVaultTx, lenderNftTx, feeTxs, feeRate] = await Promise.all([
         fetchTransaction(lenderVaultOutpoint),
         fetchTransaction(lenderNftOutpoint),
-        fetchTransaction(feeOutpoint),
+        Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
         fetchFeeRateSatPerKvb(),
       ])
 
@@ -117,7 +119,9 @@ export function useLenderVaultClaim() {
         'Lender vault',
       )
       const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
-      const feeTxOut = requireTxOut(feeTx, feeOutpoint.vout(), 'Fee L-BTC')
+      const feeTxOuts = feeTxs.map((tx, index) =>
+        requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      )
       const borrowerNftPreRepayTxOut = requireTxOut(
         borrowerNftPreRepayTx,
         borrowerNftPreRepayOutpoint.vout(),
@@ -154,12 +158,12 @@ export function useLenderVaultClaim() {
       const inputOrderStrings = [
         params.lenderVaultOutpoint,
         params.lenderNftOutpoint,
-        params.feeOutpoint,
+        ...params.feeOutpoints,
       ]
 
       const pset = new TxBuilder(lwkNetwork)
         .feeRate(feeRate)
-        .setWalletUtxos([new OutPoint(params.feeOutpoint)])
+        .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
         .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
         .addExternalUtxos([
           new ExternalUtxo(
@@ -184,7 +188,7 @@ export function useLenderVaultClaim() {
       stage = 'sign wallet inputs'
       const txWithWalletWitnesses = wollet.finalize(await signPset(pset)).extractTx()
 
-      const prevouts = [lenderVaultTxOut, lenderNftTxOut, feeTxOut]
+      const prevouts = [lenderVaultTxOut, lenderNftTxOut, ...feeTxOuts]
 
       stage = 'finalize AssetAuthVault covenant input'
       const finalizedTx = lenderVaultProgram.finalizeTransactionWithSpendInfo(
@@ -211,7 +215,7 @@ export function useLenderVaultClaim() {
           inputs: {
             '0 Finalized lender vault AssetAuthVault': params.lenderVaultOutpoint,
             '1 Lender NFT (wallet)': params.lenderNftOutpoint,
-            '2 Fee L-BTC': params.feeOutpoint,
+            '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
           },
           outputs: {
             '0 Lender NFT burn': bytesToHex(burnScript.bytes()),

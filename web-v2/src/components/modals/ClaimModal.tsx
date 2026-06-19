@@ -8,7 +8,7 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
-import { selectFeeUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { selectFeeUtxos, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
@@ -38,12 +38,12 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
 
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
-    const feeUtxo = selectFeeUtxo(blindedWalletUtxos, lwkNetwork.policyAsset())
+    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset())
 
     return claimLenderVault({
       lenderVaultOutpoint: vaultOutpoint,
       lenderNftOutpoint,
-      feeOutpoint: utxoToOutpointString(feeUtxo),
+      feeOutpoints: feeUtxos.map(utxoToOutpointString),
     })
   }
 

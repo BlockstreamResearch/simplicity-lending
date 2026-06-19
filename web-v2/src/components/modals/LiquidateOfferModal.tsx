@@ -8,7 +8,7 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useLiquidateOffer } from '@/hooks/useLiquidateOffer'
-import { selectFeeUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { selectFeeUtxos, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
@@ -42,13 +42,13 @@ export default function LiquidateOfferModal({
 
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
-    const feeUtxo = selectFeeUtxo(blindedWalletUtxos, lwkNetwork.policyAsset())
+    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset())
 
     return liquidateOffer({
       activeOfferOutpoint,
       createOfferTxid: offer.created_at_txid,
       lenderNftOutpoint,
-      feeOutpoint: utxoToOutpointString(feeUtxo),
+      feeOutpoints: feeUtxos.map(utxoToOutpointString),
     })
   }
 

@@ -49,7 +49,7 @@ export interface LiquidateOfferParams {
   activeOfferOutpoint: string
   createOfferTxid: string
   lenderNftOutpoint: string
-  feeOutpoint: string
+  feeOutpoints: string[]
 }
 
 export interface LiquidateOfferResult {
@@ -73,10 +73,10 @@ export function useLiquidateOffer() {
       stage = 'parse input outpoints'
       const activeOfferOutpoint = new OutPoint(params.activeOfferOutpoint)
       const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
-      const feeOutpoint = new OutPoint(params.feeOutpoint)
+      const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
       assertDistinctOutpoints(
-        [activeOfferOutpoint, lenderNftOutpoint, feeOutpoint],
-        'Liquidation inputs must use three distinct outpoints',
+        [activeOfferOutpoint, lenderNftOutpoint, ...feeOutpoints],
+        'Liquidation inputs must use distinct outpoints',
       )
 
       stage = 'load wallet context'
@@ -91,21 +91,23 @@ export function useLiquidateOffer() {
       stage = 'sync wallet and verify wallet inputs'
       await syncWallet()
       const blindedWalletUtxos = await getBlindedWalletUtxos()
-      const feeUtxo = requireWalletUtxo(blindedWalletUtxos, params.feeOutpoint, 'Fee L-BTC')
-      if (!isPolicyAssetUtxo(feeUtxo, lwkNetwork.policyAsset())) {
-        throw new Error('Fee outpoint must be a wallet L-BTC UTXO')
+      const feeUtxos = params.feeOutpoints.map(o =>
+        requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      )
+      if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
+        throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
       }
 
       stage = 'load input transactions'
       // TODO: Handle with indexer
       // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction)
       const borrowerNftReferenceOutpoint = new OutPoint(`${params.createOfferTxid}:2`)
-      const [activeOfferTx, createOfferTx, borrowerNftTx, lenderNftTx, feeTx] = await Promise.all([
+      const [activeOfferTx, createOfferTx, borrowerNftTx, lenderNftTx, feeTxs] = await Promise.all([
         fetchTransaction(activeOfferOutpoint),
         fetchTransaction(new OutPoint(`${params.createOfferTxid}:0`)),
         fetchTransaction(borrowerNftReferenceOutpoint),
         fetchTransaction(lenderNftOutpoint),
-        fetchTransaction(feeOutpoint),
+        Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
       ])
       const activeOfferTxOut = requireTxOut(
         activeOfferTx,
@@ -118,7 +120,9 @@ export function useLiquidateOffer() {
         'Borrower NFT reference',
       )
       const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
-      const feeTxOut = requireTxOut(feeTx, feeOutpoint.vout(), 'Fee L-BTC')
+      const feeTxOuts = feeTxs.map((tx, index) =>
+        requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      )
 
       const collateralAsset = requireExplicitAsset(activeOfferTxOut, 'Active offer')
       const collateralAmount = requireExplicitAmount(activeOfferTxOut, 'Active offer')
@@ -167,11 +171,11 @@ export function useLiquidateOffer() {
 
       const pset = new TxBuilder(lwkNetwork)
         .feeRate(feeRate)
-        .setWalletUtxos([new OutPoint(params.feeOutpoint)])
+        .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
         .setInputOrder([
           new OutPoint(params.activeOfferOutpoint),
           new OutPoint(params.lenderNftOutpoint),
-          new OutPoint(params.feeOutpoint),
+          ...params.feeOutpoints.map(o => new OutPoint(o)),
         ])
         .addExternalUtxos([
           new ExternalUtxo(
@@ -198,7 +202,7 @@ export function useLiquidateOffer() {
       stage = 'sign wallet inputs'
       const txWithWalletWitnesses = wollet.finalize(await signPset(pset)).extractTx()
 
-      const prevouts = [activeOfferTxOut, lenderNftTxOut, feeTxOut]
+      const prevouts = [activeOfferTxOut, lenderNftTxOut, ...feeTxOuts]
 
       stage = 'finalize active Lending covenant input'
       const finalizedTx = lendingProgram.finalizeTransactionWithSpendInfo(
@@ -221,7 +225,7 @@ export function useLiquidateOffer() {
           inputs: {
             '0 Active offer Lending': params.activeOfferOutpoint,
             '1 Lender NFT (wallet)': params.lenderNftOutpoint,
-            '2 Fee L-BTC': params.feeOutpoint,
+            '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
             'Create-offer tx (metadata)': params.createOfferTxid,
           },
           outputs: {

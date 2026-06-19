@@ -1,5 +1,7 @@
 import type { AssetId, WalletTxOut } from 'lwk_web'
 
+import { selectByLargestFirst } from '@/utils/utxo'
+
 // ExternalUtxo max-weight-to-satisfy for an explicit-address UTXO spent with a plain
 // p2wpkh/p2tr signature (no Simplicity covenant) — e.g. NFT references like FactoryAuth,
 // Borrower NFT, or a pre-acceptance Lender NFT. Measured from several real broadcast txs
@@ -49,11 +51,19 @@ export function isPolicyAssetUtxo(utxo: WalletTxOut, policyAsset: AssetId | stri
   return utxo.unblinded().asset().toString() === policyAsset.toString()
 }
 
-export function selectFeeUtxo(
+// Generous ceiling for fee-UTXO selection — real fees in this protocol are tens to a few
+// hundred sats after the weight-constant fixes; this just needs to comfortably cover them
+// before TxBuilder computes the exact fee and returns change.
+const FEE_BUDGET_SATS = 1000n
+
+export function selectFeeUtxos(
   walletUtxos: WalletTxOut[],
   policyAsset: AssetId | string,
-): WalletTxOut {
-  const feeUtxo = walletUtxos.find(utxo => isPolicyAssetUtxo(utxo, policyAsset))
-  if (!feeUtxo) throw new Error('No policy asset UTXO available for fees')
-  return feeUtxo
+): WalletTxOut[] {
+  const candidates = walletUtxos
+    .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
+    .map(utxo => ({ value: utxo.unblinded().value(), utxo }))
+  const selected = selectByLargestFirst(candidates, FEE_BUDGET_SATS)
+  if (!selected) throw new Error('Insufficient L-BTC balance to cover fees')
+  return selected.map(item => item.utxo)
 }

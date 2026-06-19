@@ -4,7 +4,6 @@ import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
 import { UiButton } from '@/components/ui/UiButton'
-import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type LenderVaultClaimResult, useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
 import { useTxStatus } from '@/hooks/useTxStatus'
@@ -22,15 +21,22 @@ const outpointSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}:\d+$/, `${label} must have txid:vout format`)
     .transform(value => value.toLowerCase())
 
+const outpointListSchema = (label: string) =>
+  zod
+    .string()
+    .trim()
+    .transform(value => value.split(/[\s,]+/).filter(Boolean))
+    .pipe(zod.array(outpointSchema(label)).min(1, `${label}: at least one outpoint required`))
+
 const lenderVaultClaimFormSchema = zod.object({
   lenderVaultOutpoint: outpointSchema('Lender vault outpoint'),
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
-  feeOutpoint: outpointSchema('Fee L-BTC outpoint'),
+  feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
   principalRecipientAddress: zod.string().trim().optional(),
 })
 
 type LenderVaultClaimForm = zod.input<typeof lenderVaultClaimFormSchema>
-type LenderVaultClaimTextField = Exclude<keyof LenderVaultClaimForm, 'feeOutpoint'>
+type LenderVaultClaimTextField = keyof LenderVaultClaimForm
 type LenderVaultClaimTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
@@ -72,7 +78,7 @@ interface WalletUtxosState {
 const EMPTY_FORM: LenderVaultClaimForm = {
   lenderVaultOutpoint: '',
   lenderNftOutpoint: '',
-  feeOutpoint: '',
+  feeOutpoints: '',
   principalRecipientAddress: '',
 }
 
@@ -207,25 +213,14 @@ export default function LenderVaultClaimDemo() {
           placeholder: 'Leave blank to use wallet receive address',
           description: 'Where the unlocked principal + interest amount is sent',
         })}
-        <Controller
-          control={control}
-          name='feeOutpoint'
-          render={({ field, fieldState }) => (
-            <UiSelect
-              label='Fee L-BTC outpoint'
-              placeholder='Select wallet L-BTC UTXO'
-              options={feeUtxoOptions}
-              selectedKey={field.value || null}
-              errorMessage={fieldState.error?.message}
-              onSelectionChange={key => field.onChange(key ? String(key) : '')}
-              description={
-                feeUtxoOptions.length
-                  ? `${feeUtxoOptions.length} wallet L-BTC UTXO(s)`
-                  : 'No wallet L-BTC UTXOs loaded'
-              }
-            />
-          )}
-        />
+        {renderTextField({
+          name: 'feeOutpoints',
+          label: 'Fee L-BTC outpoint(s)',
+          placeholder: 'txid:vout, txid:vout, ...',
+          description: feeUtxoOptions.length
+            ? `Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
+            : 'No wallet L-BTC UTXOs loaded',
+        })}
       </div>
 
       {blindedWalletUtxosState.error ? (

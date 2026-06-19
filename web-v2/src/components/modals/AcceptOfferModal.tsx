@@ -8,7 +8,7 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
-import { selectFeeUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { selectFeeUtxos, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
@@ -50,7 +50,7 @@ export default function AcceptOfferModal({
     )
     if (!principalUtxo) throw new Error(`Insufficient ${principalAsset.symbol} balance`)
 
-    const feeUtxo = selectFeeUtxo(blindedWalletUtxos, lwkNetwork.policyAsset())
+    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset())
     const nftOutpoints = resolveCreateOfferNftOutpoints(fullOffer)
     if (!nftOutpoints) throw new Error('Offer NFT participants not found')
 
@@ -59,7 +59,7 @@ export default function AcceptOfferModal({
       lenderNftOutpoint: nftOutpoints.lenderNft,
       borrowerNftReferenceOutpoint: nftOutpoints.borrowerNft,
       principalOutpoint: principalUtxo.outpoint,
-      feeOutpoint: utxoToOutpointString(feeUtxo),
+      feeOutpoints: feeUtxos.map(utxoToOutpointString),
     })
   }
 

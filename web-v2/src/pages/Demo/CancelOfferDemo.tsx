@@ -4,7 +4,6 @@ import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
 import { UiButton } from '@/components/ui/UiButton'
-import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type CancelOfferResult, useCancelOffer } from '@/hooks/useCancelOffer'
 import { useTxStatus } from '@/hooks/useTxStatus'
@@ -22,6 +21,13 @@ const outpointSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}:\d+$/, `${label} must have txid:vout format`)
     .transform(value => value.toLowerCase())
 
+const outpointListSchema = (label: string) =>
+  zod
+    .string()
+    .trim()
+    .transform(value => value.split(/[\s,]+/).filter(Boolean))
+    .pipe(zod.array(outpointSchema(label)).min(1, `${label}: at least one outpoint required`))
+
 const cancelOfferFormSchema = zod.object({
   pendingOfferOutpoint: outpointSchema('Pending offer outpoint'),
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
@@ -30,11 +36,11 @@ const cancelOfferFormSchema = zod.object({
     .string()
     .trim()
     .min(1, 'Collateral recipient address is required'),
-  feeOutpoint: outpointSchema('Fee L-BTC outpoint'),
+  feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
 })
 
 type CancelOfferForm = zod.input<typeof cancelOfferFormSchema>
-type CancelOfferFormField = Exclude<keyof CancelOfferForm, 'feeOutpoint'>
+type CancelOfferFormField = keyof CancelOfferForm
 type CancelOfferTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
@@ -81,7 +87,7 @@ const EMPTY_FORM: CancelOfferForm = {
   borrowerNftOutpoint: '0d9998a979d7ef048b514d9186e756b869119d234f32824a59f0f2c0d174be34:2',
   collateralRecipientAddress:
     'tlq1qq2xvpcvfup5j8zscjq05u2wxxjcyewk7979f3mmz5l7uw5pqmx6xf5xy50hsn6vhkm5euwt72x878eq6zxx2z58hd7zrsg9qn',
-  feeOutpoint: '',
+  feeOutpoints: '',
 }
 
 const INITIAL_STATE: BroadcastState = {
@@ -226,25 +232,14 @@ export default function CancelOfferDemo() {
           placeholder: 'Unconfidential Liquid address',
           description: 'Collateral is returned as an explicit output to preserve covenant ordering',
         })}
-        <Controller
-          control={control}
-          name='feeOutpoint'
-          render={({ field, fieldState }) => (
-            <UiSelect
-              label='Fee L-BTC outpoint'
-              placeholder='Select wallet L-BTC UTXO'
-              options={feeUtxoOptions}
-              selectedKey={field.value || null}
-              errorMessage={fieldState.error?.message}
-              onSelectionChange={key => field.onChange(key ? String(key) : '')}
-              description={
-                feeUtxoOptions.length
-                  ? `${feeUtxoOptions.length} wallet L-BTC UTXO(s)`
-                  : 'No wallet L-BTC UTXOs loaded'
-              }
-            />
-          )}
-        />
+        {renderTextField({
+          name: 'feeOutpoints',
+          label: 'Fee L-BTC outpoint(s)',
+          placeholder: 'txid:vout, txid:vout, ...',
+          description: feeUtxoOptions.length
+            ? `Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
+            : 'No wallet L-BTC UTXOs loaded',
+        })}
       </div>
 
       {blindedWalletUtxosState.error ? (

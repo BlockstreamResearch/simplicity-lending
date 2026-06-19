@@ -43,7 +43,7 @@ const BORROWER_NFT_OUTPUT_INDEX = 0
 export interface ClaimPrincipalParams {
   principalOutpoint: string
   borrowerNftOutpoint: string
-  feeOutpoint: string
+  feeOutpoints: string[]
   borrowerNftRecipientAddress?: string
   principalRecipientAddress?: string
 }
@@ -70,10 +70,10 @@ export function useClaimPrincipal() {
       stage = 'parse input outpoints'
       const principalOutpoint = new OutPoint(params.principalOutpoint)
       const borrowerNftOutpoint = new OutPoint(params.borrowerNftOutpoint)
-      const feeOutpoint = new OutPoint(params.feeOutpoint)
+      const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
       assertDistinctOutpoints(
-        [principalOutpoint, borrowerNftOutpoint, feeOutpoint],
-        'Claim principal inputs must use three distinct outpoints',
+        [principalOutpoint, borrowerNftOutpoint, ...feeOutpoints],
+        'Claim principal inputs must use distinct outpoints',
       )
 
       stage = 'load wallet context'
@@ -91,16 +91,18 @@ export function useClaimPrincipal() {
       stage = 'sync wallet and verify fee input'
       await syncWallet()
       const blindedWalletUtxos = await getBlindedWalletUtxos()
-      const feeUtxo = requireWalletUtxo(blindedWalletUtxos, params.feeOutpoint, 'Fee L-BTC')
-      if (!isPolicyAssetUtxo(feeUtxo, lwkNetwork.policyAsset())) {
-        throw new Error('Fee outpoint must be a wallet L-BTC UTXO')
+      const feeUtxos = params.feeOutpoints.map(o =>
+        requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      )
+      if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
+        throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
       }
 
       stage = 'load input transactions'
-      const [principalTx, borrowerNftTx, feeTx, feeRate] = await Promise.all([
+      const [principalTx, borrowerNftTx, feeTxs, feeRate] = await Promise.all([
         fetchTransaction(principalOutpoint),
         fetchTransaction(borrowerNftOutpoint),
-        fetchTransaction(feeOutpoint),
+        Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
         fetchFeeRateSatPerKvb(),
       ])
 
@@ -110,7 +112,9 @@ export function useClaimPrincipal() {
         borrowerNftOutpoint.vout(),
         'Borrower NFT',
       )
-      const feeTxOut = requireTxOut(feeTx, feeOutpoint.vout(), 'Fee L-BTC')
+      const feeTxOuts = feeTxs.map((tx, index) =>
+        requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      )
 
       const principalAsset = requireExplicitAsset(principalTxOut, 'Principal')
       const principalAmount = requireExplicitAmount(principalTxOut, 'Principal')
@@ -135,12 +139,12 @@ export function useClaimPrincipal() {
       const inputOrderStrings = [
         params.principalOutpoint,
         params.borrowerNftOutpoint,
-        params.feeOutpoint,
+        ...params.feeOutpoints,
       ]
 
       const pset = new TxBuilder(lwkNetwork)
         .feeRate(feeRate)
-        .setWalletUtxos([new OutPoint(params.feeOutpoint)])
+        .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
         .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
         .addExternalUtxos([
           new ExternalUtxo(
@@ -169,7 +173,7 @@ export function useClaimPrincipal() {
       stage = 'sign wallet inputs'
       const txWithWalletWitnesses = wollet.finalize(await signPset(pset)).extractTx()
 
-      const prevouts = [principalTxOut, borrowerNftTxOut, feeTxOut]
+      const prevouts = [principalTxOut, borrowerNftTxOut, ...feeTxOuts]
 
       stage = 'finalize AssetAuth covenant input'
       const finalizedTx = assetAuthProgram.finalizeTransactionWithSpendInfo(
@@ -195,7 +199,7 @@ export function useClaimPrincipal() {
           inputs: {
             '0 Principal AssetAuth': params.principalOutpoint,
             '1 Borrower NFT (wallet)': params.borrowerNftOutpoint,
-            '2 Fee L-BTC': params.feeOutpoint,
+            '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
           },
           outputs: {
             '0 Borrower NFT to recipient': borrowerNftRecipient.toString(),

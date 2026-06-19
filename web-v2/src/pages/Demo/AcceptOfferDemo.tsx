@@ -23,16 +23,23 @@ const outpointSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}:\d+$/, `${label} must have txid:vout format`)
     .transform(value => value.toLowerCase())
 
+const outpointListSchema = (label: string) =>
+  zod
+    .string()
+    .trim()
+    .transform(value => value.split(/[\s,]+/).filter(Boolean))
+    .pipe(zod.array(outpointSchema(label)).min(1, `${label}: at least one outpoint required`))
+
 const acceptOfferFormSchema = zod.object({
   pendingOfferOutpoint: outpointSchema('Pending offer outpoint'),
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
   borrowerNftReferenceOutpoint: outpointSchema('Borrower NFT reference outpoint'),
   principalOutpoint: outpointSchema('Principal outpoint'),
-  feeOutpoint: outpointSchema('Fee L-BTC outpoint'),
+  feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
 })
 
 type AcceptOfferForm = zod.input<typeof acceptOfferFormSchema>
-type AcceptOfferTextField = Exclude<keyof AcceptOfferForm, 'principalOutpoint' | 'feeOutpoint'>
+type AcceptOfferTextField = Exclude<keyof AcceptOfferForm, 'principalOutpoint'>
 type AcceptOfferTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
@@ -77,7 +84,7 @@ const EMPTY_FORM: AcceptOfferForm = {
   borrowerNftReferenceOutpoint:
     '9e4dc019c8402a361adbd40ed0266054c1750410fc9d9715acf1072822fe51e3:2',
   principalOutpoint: '',
-  feeOutpoint: '',
+  feeOutpoints: '',
 }
 
 const INITIAL_STATE: BroadcastState = {
@@ -253,25 +260,14 @@ export default function AcceptOfferDemo() {
             />
           )}
         />
-        <Controller
-          control={control}
-          name='feeOutpoint'
-          render={({ field, fieldState }) => (
-            <UiSelect
-              label='Fee L-BTC outpoint'
-              placeholder='Select wallet L-BTC UTXO'
-              options={feeUtxoOptions}
-              selectedKey={field.value || null}
-              errorMessage={fieldState.error?.message}
-              onSelectionChange={key => field.onChange(key ? String(key) : '')}
-              description={
-                feeUtxoOptions.length
-                  ? `${feeUtxoOptions.length} wallet L-BTC UTXO(s)`
-                  : 'No wallet L-BTC UTXOs loaded'
-              }
-            />
-          )}
-        />
+        {renderTextField({
+          name: 'feeOutpoints',
+          label: 'Fee L-BTC outpoint(s)',
+          placeholder: 'txid:vout, txid:vout, ...',
+          description: feeUtxoOptions.length
+            ? `Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
+            : 'No wallet L-BTC UTXOs loaded',
+        })}
       </div>
 
       {blindedWalletUtxosState.error ? (
