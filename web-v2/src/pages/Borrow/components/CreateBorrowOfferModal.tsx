@@ -21,7 +21,7 @@ import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAsse
 import { FEE_BUDGET_SATS } from '@/lwk/utxo'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { toBigintAmount } from '@/utils/bigint'
-import { DECIMAL_AMOUNT_RE } from '@/utils/format'
+import { DECIMAL_AMOUNT_RE, formatAmount } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
 import { selectByLargestFirst } from '@/utils/utxo'
 
@@ -31,9 +31,13 @@ import LoanMetricsSummary from './LoanMetricsSummary'
 interface BorrowOfferContext {
   collateralDecimals: number
   principalDecimals: number
+  principalSymbol: string
   collateralUsd: number | null
   utxos: PolicyAssetUtxo[]
 }
+
+const BPS_DIVISOR = 10_000n
+const MAX_INTEREST_RATE_BPS = 65_535
 
 const positiveAmount = z
   .string()
@@ -44,6 +48,7 @@ const positiveAmount = z
 function createBorrowOfferSchema({
   collateralDecimals,
   principalDecimals,
+  principalSymbol,
   collateralUsd,
   utxos,
 }: BorrowOfferContext) {
@@ -57,7 +62,21 @@ function createBorrowOfferSchema({
     .superRefine((data, ctx) => {
       const collateralBase = toBigintAmount(data.collateral, collateralDecimals)
       const principalBase = toBigintAmount(data.borrow, principalDecimals)
+      const feeBase = toBigintAmount(data.fee, principalDecimals)
       if (!collateralBase || !principalBase) return
+
+      const feeBps = feeToBps(feeBase, principalBase)
+      if (feeBps > MAX_INTEREST_RATE_BPS) {
+        const maxFeeBase = (principalBase * BigInt(MAX_INTEREST_RATE_BPS + 1) - 1n) / BPS_DIVISOR
+        const maxFee = `${formatAmount(maxFeeBase, principalDecimals)} ${principalSymbol}`
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['fee'],
+          message:
+            `Fee is too high. Max fee for this borrow amount is ${maxFee} ` +
+            `(${(MAX_INTEREST_RATE_BPS / 100).toFixed(2)}%).`,
+        })
+      }
 
       const ltv = computeLtv({
         principal: principalBase,
@@ -108,10 +127,18 @@ export default function CreateBorrowOfferModal({
     () => ({
       collateralDecimals: collateralAsset.decimals,
       principalDecimals: principalAsset.decimals,
+      principalSymbol: principalAsset.symbol,
       collateralUsd,
       utxos: isLoadingUtxos ? [] : utxos,
     }),
-    [collateralAsset.decimals, principalAsset.decimals, collateralUsd, utxos, isLoadingUtxos],
+    [
+      collateralAsset.decimals,
+      principalAsset.decimals,
+      principalAsset.symbol,
+      collateralUsd,
+      utxos,
+      isLoadingUtxos,
+    ],
   )
 
   const resolver = useMemo(() => zodResolver(createBorrowOfferSchema(formContext)), [formContext])

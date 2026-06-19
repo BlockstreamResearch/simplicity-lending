@@ -48,6 +48,7 @@ const ISSUING_UTXOS_COUNT = 2
 const REISSUANCE_FLAGS = 0n
 const REISSUANCE_TOKEN_AMOUNT = 0n
 const NFT_AMOUNT = 1n
+const MAX_PRINCIPAL_INTEREST_RATE_BPS = 65_535
 
 export interface CreateOfferParams {
   factoryAuthOutpoint: string
@@ -179,6 +180,12 @@ export function useCreateOffer() {
     const borrowerNftAssetString = borrowerNftAsset.toString()
     const lenderNftAssetString = lenderNftAsset.toString()
     const loanDurationBlocks = params.loanDurationBlocks
+    if (params.principalInterestRate > MAX_PRINCIPAL_INTEREST_RATE_BPS) {
+      throw new Error(
+        `Interest rate is too high. Max is ${MAX_PRINCIPAL_INTEREST_RATE_BPS.toString()} bps ` +
+          `(${(MAX_PRINCIPAL_INTEREST_RATE_BPS / 100).toFixed(2)}%).`,
+      )
+    }
     const offerParameters = {
       collateralAmount: toUint64(params.collateralAmount, 'collateralAmount'),
       principalAmount: toUint64(params.principalAmount, 'principalAmount'),
