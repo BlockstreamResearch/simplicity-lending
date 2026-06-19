@@ -54,7 +54,7 @@ export interface CreateOfferParams {
   factoryAuthOutpoint: string
   issuanceFactoryOutpoint: string
   factoryAssetId: string
-  collateralOutpoint: string
+  collateralOutpoints: string[]
   collateralAmount: bigint
   principalAssetId: string
   principalAmount: bigint
@@ -89,10 +89,14 @@ export function useCreateOffer() {
       stage = 'sync wallet and load UTXOs'
       await syncWallet()
       const blindedWalletUtxos = await getBlindedWalletUtxos()
-      const collateralUtxo = requireWalletUtxo(
-        blindedWalletUtxos,
-        params.collateralOutpoint,
-        'Collateral',
+      if (params.collateralOutpoints.length === 0) {
+        throw new Error('At least one collateral UTXO is required')
+      }
+      if (new Set(params.collateralOutpoints).size !== params.collateralOutpoints.length) {
+        throw new Error('Collateral UTXO list contains duplicates')
+      }
+      const collateralUtxos = params.collateralOutpoints.map(outpoint =>
+        requireWalletUtxo(blindedWalletUtxos, outpoint, 'Collateral'),
       )
 
       stage = 'prepare validated params'
@@ -101,23 +105,33 @@ export function useCreateOffer() {
       const protocolFeeKeeperAssetString = params.protocolFeeKeeperAssetId
       const policyAssetString = lwkNetwork.policyAsset().toString()
 
-      assertWalletUtxoAssetAndMinimumAmount(
-        collateralUtxo,
-        policyAssetString,
-        params.collateralAmount,
-        'Collateral',
-      )
+      let collateralInputAmount = 0n
+      for (const collateralUtxo of collateralUtxos) {
+        assertWalletUtxoAssetAndMinimumAmount(collateralUtxo, policyAssetString, 1n, 'Collateral')
+        collateralInputAmount += collateralUtxo.unblinded().value()
+      }
+      if (collateralInputAmount < params.collateralAmount) {
+        throw new Error('Collateral UTXO amount is lower than required collateral amount')
+      }
+      if (collateralInputAmount === params.collateralAmount) {
+        throw new Error('Collateral input total must exceed collateral amount to leave fees')
+      }
 
       const factoryAuthOutpoint = new OutPoint(params.factoryAuthOutpoint)
       const issuanceFactoryOutpoint = new OutPoint(params.issuanceFactoryOutpoint)
-      const collateralOutpoint = new OutPoint(params.collateralOutpoint)
+      const lenderNftIssuanceOutpointString = params.collateralOutpoints[0]
+      if (!lenderNftIssuanceOutpointString) {
+        throw new Error('At least one collateral UTXO is required')
+      }
+      const collateralOutpoints = params.collateralOutpoints.map(outpoint => new OutPoint(outpoint))
+      const lenderNftIssuanceOutpoint = new OutPoint(lenderNftIssuanceOutpointString)
 
       stage = 'load transaction context'
-      const [factoryAuthTx, issuanceFactoryTx, collateralTx, currentBlockHeight, feeRate] =
+      const [factoryAuthTx, issuanceFactoryTx, collateralTxs, currentBlockHeight, feeRate] =
         await Promise.all([
           fetchTransaction(factoryAuthOutpoint),
           fetchTransaction(issuanceFactoryOutpoint),
-          fetchTransaction(collateralOutpoint),
+          Promise.all(collateralOutpoints.map(outpoint => fetchTransaction(outpoint))),
           fetchLatestBlockHeight(),
           fetchFeeRateSatPerKvb(),
         ])
@@ -131,7 +145,11 @@ export function useCreateOffer() {
         issuanceFactoryOutpoint.vout(),
         'IssuanceFactory',
       )
-      const collateralTxOut = requireTxOut(collateralTx, collateralOutpoint.vout(), 'Collateral')
+      const collateralTxOuts = collateralTxs.map((tx, index) => {
+        const outpoint = collateralOutpoints[index]
+        if (!outpoint) throw new Error('Missing collateral outpoint for fetched transaction')
+        return requireTxOut(tx, outpoint.vout(), 'Collateral')
+      })
 
       if (requireExplicitAsset(factoryAuthTxOut, 'FactoryAuth').toString() !== factoryAssetString) {
         throw new Error('FactoryAuth UTXO has unexpected asset')
@@ -171,7 +189,7 @@ export function useCreateOffer() {
         ContractHash.fromBytes(new Uint8Array(32)),
       )
       const lenderNftAsset = assetIdFromIssuance(
-        collateralOutpoint,
+        lenderNftIssuanceOutpoint,
         ContractHash.fromBytes(new Uint8Array(32)),
       )
       const borrowerNftAssetString = borrowerNftAsset.toString()
@@ -233,11 +251,13 @@ export function useCreateOffer() {
       txBuilder = txBuilder.feeRate(feeRate)
 
       stage = 'TxBuilder.setInputOrder'
-      txBuilder = txBuilder.setInputOrder([
-        new OutPoint(params.factoryAuthOutpoint),
-        new OutPoint(params.issuanceFactoryOutpoint),
-        new OutPoint(params.collateralOutpoint),
-      ])
+      txBuilder = txBuilder
+        .setWalletUtxos(params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)))
+        .setInputOrder([
+          new OutPoint(params.factoryAuthOutpoint),
+          new OutPoint(params.issuanceFactoryOutpoint),
+          ...params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)),
+        ])
 
       const externalUtxos = [factoryAuthExternalUtxo, issuanceFactoryExternalUtxo]
 
@@ -273,7 +293,7 @@ export function useCreateOffer() {
         REISSUANCE_TOKEN_AMOUNT,
         null,
         null,
-        new OutPoint(params.collateralOutpoint),
+        new OutPoint(lenderNftIssuanceOutpointString),
       )
 
       stage = 'TxBuilder.addPostIssuanceScriptOutput metadata OP_RETURN'
@@ -312,7 +332,7 @@ export function useCreateOffer() {
       const finalizedTx = issuanceFactoryProgram.finalizeTransactionWithSpendInfo(
         txWithWalletWitnesses,
         buildCovenantSpendInfo(issuanceFactoryProgram),
-        [factoryAuthTxOut, issuanceFactoryTxOut, collateralTxOut],
+        [factoryAuthTxOut, issuanceFactoryTxOut, ...collateralTxOuts],
         1,
         buildIssuanceFactoryWitness({
           branch: 'IssueAssets',
@@ -332,7 +352,8 @@ export function useCreateOffer() {
           inputs: {
             '0 FactoryAuth': params.factoryAuthOutpoint,
             '1 IssuanceFactory covenant': params.issuanceFactoryOutpoint,
-            '2 Collateral LBTC': params.collateralOutpoint,
+            '2+ Collateral LBTC': params.collateralOutpoints.join(', '),
+            lenderNftIssuanceOutpoint: lenderNftIssuanceOutpointString,
           },
           outputs: {
             '0 FactoryAuth back to user': receiveAddressExplicitString,

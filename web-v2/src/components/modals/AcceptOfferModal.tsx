@@ -8,13 +8,12 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
-import { selectFeeUtxos, utxoToOutpointString } from '@/lwk/utxo'
+import { selectAssetUtxos, selectFeeUtxos, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { resolveCreateOfferNftOutpoints, resolvePendingOutpoint } from '@/utils/offerOutpoints'
 import { bpsToPercent, calcInterest } from '@/utils/offers'
-import { selectOptimalUtxo } from '@/utils/utxo'
 
 interface AcceptOfferModalProps {
   isOpen: boolean
@@ -42,23 +41,23 @@ export default function AcceptOfferModal({
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
 
-    const principalUtxo = selectOptimalUtxo(
-      blindedWalletUtxos
-        .filter(u => u.unblinded().asset().toString() === principalAsset.id)
-        .map(u => ({ outpoint: utxoToOutpointString(u), value: u.unblinded().value() })),
+    const principalUtxos = selectAssetUtxos(
+      blindedWalletUtxos,
+      principalAsset.id,
       offer.principal_amount,
+      principalAsset.symbol,
     )
-    if (!principalUtxo) throw new Error(`Insufficient ${principalAsset.symbol} balance`)
 
     const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset())
     const nftOutpoints = resolveCreateOfferNftOutpoints(fullOffer)
     if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+    const { lenderNft, borrowerNft } = nftOutpoints
 
     return acceptOffer({
       pendingOfferOutpoint,
-      lenderNftOutpoint: nftOutpoints.lenderNft,
-      borrowerNftReferenceOutpoint: nftOutpoints.borrowerNft,
-      principalOutpoint: principalUtxo.outpoint,
+      lenderNftOutpoint: lenderNft,
+      borrowerNftReferenceOutpoint: borrowerNft,
+      principalOutpoints: principalUtxos.map(utxoToOutpointString),
       feeOutpoints: feeUtxos.map(utxoToOutpointString),
     })
   }

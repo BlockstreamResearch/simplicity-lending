@@ -21,6 +21,10 @@ export function findWalletUtxo(
   return walletUtxos.find(utxo => utxoToOutpointString(utxo) === normalizedOutpoint)
 }
 
+export function isConfirmedWalletUtxo(utxo: WalletTxOut): boolean {
+  return utxo.height() !== undefined
+}
+
 export function requireWalletUtxo(
   walletUtxos: WalletTxOut[],
   outpoint: string,
@@ -28,6 +32,7 @@ export function requireWalletUtxo(
 ): WalletTxOut {
   const utxo = findWalletUtxo(walletUtxos, outpoint)
   if (!utxo) throw new Error(`${label} wallet UTXO not found`)
+  if (!isConfirmedWalletUtxo(utxo)) throw new Error(`${label} wallet UTXO is not confirmed yet`)
   return utxo
 }
 
@@ -47,6 +52,23 @@ export function assertWalletUtxoAssetAndMinimumAmount(
   }
 }
 
+export function selectAssetUtxos(
+  walletUtxos: WalletTxOut[],
+  assetId: AssetId | string,
+  amount: bigint,
+  label: string,
+): WalletTxOut[] {
+  const candidates = walletUtxos
+    .filter(
+      utxo =>
+        isConfirmedWalletUtxo(utxo) && utxo.unblinded().asset().toString() === assetId.toString(),
+    )
+    .map(utxo => ({ value: utxo.unblinded().value(), utxo }))
+  const selected = selectByLargestFirst(candidates, amount)
+  if (!selected) throw new Error(`Insufficient confirmed ${label} balance`)
+  return selected.map(item => item.utxo)
+}
+
 export function isPolicyAssetUtxo(utxo: WalletTxOut, policyAsset: AssetId | string): boolean {
   return utxo.unblinded().asset().toString() === policyAsset.toString()
 }
@@ -54,16 +76,16 @@ export function isPolicyAssetUtxo(utxo: WalletTxOut, policyAsset: AssetId | stri
 // Generous ceiling for fee-UTXO selection — real fees in this protocol are tens to a few
 // hundred sats after the weight-constant fixes; this just needs to comfortably cover them
 // before TxBuilder computes the exact fee and returns change.
-const FEE_BUDGET_SATS = 1000n
+export const FEE_BUDGET_SATS = 1000n
 
 export function selectFeeUtxos(
   walletUtxos: WalletTxOut[],
   policyAsset: AssetId | string,
 ): WalletTxOut[] {
   const candidates = walletUtxos
-    .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
+    .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAsset))
     .map(utxo => ({ value: utxo.unblinded().value(), utxo }))
   const selected = selectByLargestFirst(candidates, FEE_BUDGET_SATS)
-  if (!selected) throw new Error('Insufficient L-BTC balance to cover fees')
+  if (!selected) throw new Error('Insufficient confirmed L-BTC balance to cover fees')
   return selected.map(item => item.utxo)
 }

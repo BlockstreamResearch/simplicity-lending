@@ -7,7 +7,7 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type LiquidateOfferResult, useLiquidateOffer } from '@/hooks/useLiquidateOffer'
 import { useTxStatus } from '@/hooks/useTxStatus'
-import { isPolicyAssetUtxo } from '@/lwk/utxo'
+import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -116,7 +116,7 @@ export default function LiquidateOfferDemo() {
   const feeUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
     return blindedWalletUtxos
-      .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
+      .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAssetId))
       .map(formatCollateralUtxoOption)
   }, [connectionStatus, policyAssetId, blindedWalletUtxos])
 

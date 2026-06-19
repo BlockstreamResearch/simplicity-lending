@@ -18,11 +18,12 @@ import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
+import { FEE_BUDGET_SATS } from '@/lwk/utxo'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { toBigintAmount } from '@/utils/bigint'
 import { DECIMAL_AMOUNT_RE } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
-import { selectOptimalUtxo } from '@/utils/utxo'
+import { selectByLargestFirst } from '@/utils/utxo'
 
 import { MAX_LTV, TERM_OPTIONS } from '../helpers'
 import LoanMetricsSummary from './LoanMetricsSummary'
@@ -73,11 +74,12 @@ function createBorrowOfferSchema({
         })
       }
 
-      if (utxos.length > 0 && !utxos.some(u => u.value >= collateralBase)) {
+      const collateralBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
+      if (utxos.length > 0 && collateralBalance < collateralBase + FEE_BUDGET_SATS) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['collateral'],
-          message: 'No single Policy Asset UTXO large enough for this transaction',
+          message: 'Not enough Policy Asset UTXO balance for collateral and fees',
         })
       }
     })
@@ -132,13 +134,13 @@ export default function CreateBorrowOfferModal({
 
   const createBorrowOffer = useCallback(async () => {
     if (!factoryState) throw new Error('No active factory found. Create a borrower account first.')
-    const collateralUtxo = selectOptimalUtxo(utxos, collateralBase)
-    if (!collateralUtxo) throw new Error('No suitable collateral UTXO found')
+    const collateralUtxos = selectByLargestFirst(utxos, collateralBase + FEE_BUDGET_SATS)
+    if (!collateralUtxos) throw new Error('No suitable collateral UTXOs found')
     const result = await createOffer({
       factoryAuthOutpoint: factoryState.factoryAuthOutpoint,
       issuanceFactoryOutpoint: factoryState.issuanceFactoryOutpoint,
       factoryAssetId: factoryState.factoryAssetId,
-      collateralOutpoint: collateralUtxo.outpoint,
+      collateralOutpoints: collateralUtxos.map(utxo => utxo.outpoint),
       collateralAmount: collateralBase,
       principalAssetId: NETWORK_CONFIG.principalAsset.id,
       principalAmount: principalBase,

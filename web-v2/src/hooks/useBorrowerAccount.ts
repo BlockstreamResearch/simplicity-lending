@@ -15,7 +15,7 @@ import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
 import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
-import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
@@ -85,12 +85,14 @@ export function useBorrowerAccount() {
     const blindedWalletUtxos = await getBlindedWalletUtxos()
 
     const feeUtxo = blindedWalletUtxos
-      .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
+      .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAsset))
       .filter(utxo => utxo.unblinded().value() > MIN_BORROWER_ACCOUNT_FEE_UTXO_AMOUNT_SATS)
       .sort((a, b) => Number(a.unblinded().value() - b.unblinded().value()))[0]
 
     if (!feeUtxo) {
-      throw new Error('Need a wallet L-BTC UTXO larger than the borrower account fee reserve')
+      throw new Error(
+        'Need a confirmed wallet L-BTC UTXO larger than the borrower account fee reserve',
+      )
     }
 
     if (FACTORY_AUTH_AMOUNT + ISSUANCE_FACTORY_AMOUNT !== ISSUANCE_AMOUNT) {

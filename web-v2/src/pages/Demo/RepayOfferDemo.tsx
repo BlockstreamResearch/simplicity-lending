@@ -4,12 +4,11 @@ import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
 import { UiButton } from '@/components/ui/UiButton'
-import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type RepayOfferResult, useRepayOffer } from '@/hooks/useRepayOffer'
 import { useTxStatus } from '@/hooks/useTxStatus'
-import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -34,12 +33,12 @@ const repayOfferFormSchema = zod.object({
   activeOfferOutpoint: outpointSchema('Active offer outpoint'),
   borrowerNftOutpoint: outpointSchema('Borrower NFT outpoint'),
   collateralRecipientAddress: zod.string().trim().optional(),
-  principalOutpoint: outpointSchema('Principal outpoint'),
+  principalOutpoints: outpointListSchema('Principal outpoint'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
 })
 
 type RepayOfferForm = zod.input<typeof repayOfferFormSchema>
-type RepayOfferTextField = Exclude<keyof RepayOfferForm, 'principalOutpoint'>
+type RepayOfferTextField = keyof RepayOfferForm
 type RepayOfferTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
@@ -82,7 +81,7 @@ const EMPTY_FORM: RepayOfferForm = {
   activeOfferOutpoint: '',
   borrowerNftOutpoint: '',
   collateralRecipientAddress: '',
-  principalOutpoint: '',
+  principalOutpoints: '',
   feeOutpoints: '',
 }
 
@@ -114,7 +113,11 @@ export default function RepayOfferDemo() {
   const principalUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
     return walletUtxos
-      .filter(utxo => utxo.unblinded().asset().toString() === principalAsset.id)
+      .filter(
+        utxo =>
+          isConfirmedWalletUtxo(utxo) &&
+          utxo.unblinded().asset().toString() === principalAsset.id,
+      )
       .map(utxo => {
         const outpoint = utxoToOutpointString(utxo)
         const unblinded = utxo.unblinded()
@@ -129,7 +132,7 @@ export default function RepayOfferDemo() {
   const feeUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
     return walletUtxos
-      .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
+      .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAssetId))
       .map(formatCollateralUtxoOption)
   }, [connectionStatus, policyAssetId, walletUtxos])
 
@@ -239,26 +242,16 @@ export default function RepayOfferDemo() {
           placeholder: 'Leave blank to use wallet receive address',
           description: 'Where the unlocked collateral is sent after full repayment',
         })}
-        <Controller
-          control={control}
-          name='principalOutpoint'
-          render={({ field, fieldState }) => (
-            <UiSelect
-              label='Principal asset outpoint'
-              placeholder='Select wallet principal UTXO'
-              options={principalUtxoOptions}
-              selectedKey={field.value || null}
-              errorMessage={fieldState.error?.message}
-              onSelectionChange={key => field.onChange(key ? String(key) : '')}
-              description={
-                `Filtered by ${principalAsset.symbol} asset: ${principalAsset.id}. ` +
-                (principalUtxoOptions.length
-                  ? `${principalUtxoOptions.length} matching wallet UTXO(s); must cover total amount to repay (principal + interest)`
-                  : 'No matching wallet UTXOs loaded')
-              }
-            />
-          )}
-        />
+        {renderTextField({
+          name: 'principalOutpoints',
+          label: 'Principal asset outpoint(s)',
+          placeholder: 'txid:vout, txid:vout, ...',
+          description:
+            `Filtered by ${principalAsset.symbol} asset: ${principalAsset.id}. ` +
+            (principalUtxoOptions.length
+              ? `Available: ${principalUtxoOptions.map(o => o.label).join(' | ')}`
+              : 'No matching wallet UTXOs loaded'),
+        })}
         {renderTextField({
           name: 'feeOutpoints',
           label: 'Fee L-BTC outpoint(s)',

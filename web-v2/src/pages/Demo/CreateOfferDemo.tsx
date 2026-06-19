@@ -4,12 +4,11 @@ import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
 import { UiButton } from '@/components/ui/UiButton'
-import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type CreateOfferResult, useCreateOffer } from '@/hooks/useCreateOffer'
 import { useTxStatus } from '@/hooks/useTxStatus'
-import { isPolicyAssetUtxo } from '@/lwk/utxo'
+import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { isHexStringOfByteLength, normalizeHex } from '@/utils/hex'
@@ -39,12 +38,20 @@ const outpointStringSchema = (label: string) =>
     .string()
     .trim()
     .regex(/^[0-9a-fA-F]{64}:\d+$/, `${label} must be formatted as txid:vout`)
+    .transform(value => value.toLowerCase())
+
+const outpointListSchema = (label: string) =>
+  zod
+    .string()
+    .trim()
+    .transform(value => value.split(/[\s,]+/).filter(Boolean))
+    .pipe(zod.array(outpointStringSchema(label)).min(1, `${label}: at least one outpoint required`))
 
 const createOfferFormSchema = zod.object({
   factoryAuthOutpoint: outpointStringSchema('FactoryAuth outpoint'),
   issuanceFactoryOutpoint: outpointStringSchema('IssuanceFactory covenant outpoint'),
   factoryAssetId: assetIdStringSchema('Factory asset id'),
-  collateralOutpoint: outpointStringSchema('Collateral outpoint'),
+  collateralOutpoints: outpointListSchema('Collateral outpoint'),
   collateralAmount: bigintStringSchema('Collateral amount'),
   principalAssetId: assetIdStringSchema('Principal asset id'),
   principalAmount: bigintStringSchema('Principal amount'),
@@ -115,7 +122,7 @@ const EMPTY_FORM: CreateOfferForm = {
   factoryAuthOutpoint: '0d9998a979d7ef048b514d9186e756b869119d234f32824a59f0f2c0d174be34:0',
   issuanceFactoryOutpoint: '0d9998a979d7ef048b514d9186e756b869119d234f32824a59f0f2c0d174be34:1',
   factoryAssetId: 'a61ab9c860e382039cb5df9386319887c1a3e60116f5fcb7ad3497b430806d18',
-  collateralOutpoint: '',
+  collateralOutpoints: '',
   collateralAmount: DEFAULT_COLLATERAL_AMOUNT,
   principalAssetId: NETWORK_CONFIG.principalAsset.id,
   principalAmount: DEFAULT_PRINCIPAL_AMOUNT,
@@ -146,7 +153,7 @@ export default function CreateOfferDemo() {
     if (connectionStatus !== 'ready') return []
 
     return blindedWalletUtxos
-      .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
+      .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAssetId))
       .map(formatCollateralUtxoOption)
   }, [connectionStatus, policyAssetId, blindedWalletUtxos])
 
@@ -226,7 +233,7 @@ export default function CreateOfferDemo() {
       <div className='font-bold'>Create Offer Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
         Builds one offer creation transaction: FactoryAuth input, IssuanceFactory covenant input,
-        and LBTC collateral input. Borrower account UTXOs are entered manually.
+        and one or more LBTC collateral inputs. Borrower account UTXOs are entered manually.
       </p>
 
       <div className='mt-4 flex flex-col gap-3'>
@@ -246,25 +253,14 @@ export default function CreateOfferDemo() {
           label: 'Factory asset id',
           placeholder: '64 hex chars',
         })}
-        <Controller
-          control={control}
-          name='collateralOutpoint'
-          render={({ field, fieldState }) => (
-            <UiSelect
-              label='Collateral LBTC outpoint'
-              placeholder='Select wallet LBTC UTXO'
-              options={collateralUtxoOptions}
-              selectedKey={field.value || null}
-              errorMessage={fieldState.error?.message}
-              onSelectionChange={key => field.onChange(key ? String(key) : '')}
-              description={
-                collateralUtxoOptions.length
-                  ? `${collateralUtxoOptions.length} wallet LBTC UTXO(s)`
-                  : 'No wallet LBTC UTXOs loaded'
-              }
-            />
-          )}
-        />
+        {renderTextField({
+          name: 'collateralOutpoints',
+          label: 'Collateral LBTC outpoint(s)',
+          placeholder: 'txid:vout, txid:vout, ...',
+          description: collateralUtxoOptions.length
+            ? `Available: ${collateralUtxoOptions.map(option => option.label).join(' | ')}`
+            : 'No wallet LBTC UTXOs loaded',
+        })}
 
         {renderTextField({
           name: 'collateralAmount',

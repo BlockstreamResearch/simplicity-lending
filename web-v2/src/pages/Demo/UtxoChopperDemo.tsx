@@ -8,7 +8,7 @@ import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { type ChopUtxoResult, useUtxoChopper } from '@/hooks/useUtxoChopper'
-import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -134,7 +134,7 @@ export default function UtxoChopperDemo() {
   const assetOptions = useMemo(() => {
     const seen = new Set<string>()
     const options = [{ id: 'all', label: 'All assets' }]
-    for (const utxo of blindedWalletUtxos) {
+    for (const utxo of blindedWalletUtxos.filter(isConfirmedWalletUtxo)) {
       const assetId = utxo.unblinded().asset().toString()
       if (seen.has(assetId)) continue
       seen.add(assetId)
@@ -149,6 +149,7 @@ export default function UtxoChopperDemo() {
     if (connectionStatus !== 'ready') return []
     return blindedWalletUtxos
       .filter(utxo => {
+        if (!isConfirmedWalletUtxo(utxo)) return false
         if (assetFilter === 'all') return true
         return utxo.unblinded().asset().toString() === assetFilter
       })
@@ -172,7 +173,7 @@ export default function UtxoChopperDemo() {
   const feeUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
     return blindedWalletUtxos
-      .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
+      .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAssetId))
       .sort((a, b) => {
         const aValue = a.unblinded().value()
         const bValue = b.unblinded().value()
@@ -191,7 +192,7 @@ export default function UtxoChopperDemo() {
     const feeOutpointSet = new Set(watchedFeeOutpoints.split(/[\s,]+/).filter(Boolean))
     const feeInputAmount = blindedWalletUtxos
       .filter(utxo => feeOutpointSet.has(utxoToOutpointString(utxo)))
-      .filter(utxo => isPolicyAssetUtxo(utxo, policyAssetId))
+      .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAssetId))
       .reduce((sum, utxo) => sum + utxo.unblinded().value(), 0n)
 
     if (!fundingUtxo) {
