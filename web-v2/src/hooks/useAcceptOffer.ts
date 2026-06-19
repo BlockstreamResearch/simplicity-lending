@@ -32,10 +32,15 @@ import {
   buildDerivedLendingOfferProgramParams,
   buildLendingOfferSpendInfo,
   buildLendingWitness,
+  LENDING_MAX_WEIGHT_TO_SATISFY,
   loadLendingProgram,
 } from '@/simplicity/lending/program'
 import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
-import { buildScriptAuthWitness, loadScriptAuthProgram } from '@/simplicity/script-auth/program'
+import {
+  buildScriptAuthWitness,
+  loadScriptAuthProgram,
+  SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY,
+} from '@/simplicity/script-auth/program'
 import { buildCovenantSpendInfo } from '@/simplicity/taproot'
 import { wrapErrorWithContext } from '@/utils/errorHandler'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
@@ -43,7 +48,6 @@ import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
 const DEFAULT_FEE_RATE = 100
-const DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY = 30_000
 
 export interface AcceptOfferParams {
   pendingOfferOutpoint: string
@@ -235,14 +239,14 @@ export function useAcceptOffer() {
             pendingOfferVout,
             pendingOfferTx,
             TxOutSecrets.fromExplicit(collateralAsset, collateralAmount),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+            LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance,
             true,
           ),
           new ExternalUtxo(
             lenderNftVout,
             lenderNftTx,
             TxOutSecrets.fromExplicit(lenderNftAsset, NFT_AMOUNT),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+            SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY,
             true,
           ),
         ])

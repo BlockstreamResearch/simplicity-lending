@@ -17,10 +17,18 @@ import {
   requireExplicitAsset,
   requireTxOut,
 } from '@/lwk/transaction'
-import { isPolicyAssetUtxo, requireWalletUtxo } from '@/lwk/utxo'
+import {
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+  isPolicyAssetUtxo,
+  requireWalletUtxo,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { buildAssetAuthWitness, loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
+import {
+  ASSET_AUTH_MAX_WEIGHT_TO_SATISFY,
+  buildAssetAuthWitness,
+  loadAssetAuthProgram,
+} from '@/simplicity/asset-auth/program'
 import { buildCovenantSpendInfo } from '@/simplicity/taproot'
 import { wrapErrorWithContext } from '@/utils/errorHandler'
 import { bytesToHex } from '@/utils/hex'
@@ -28,7 +36,6 @@ import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
 const DEFAULT_FEE_RATE = 100
-const DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY = 30_000
 
 const BORROWER_NFT_INPUT_INDEX = 1
 const BORROWER_NFT_OUTPUT_INDEX = 0
@@ -139,14 +146,14 @@ export function useClaimPrincipal() {
             principalOutpoint.vout(),
             principalTx,
             TxOutSecrets.fromExplicit(principalAsset, principalAmount),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+            ASSET_AUTH_MAX_WEIGHT_TO_SATISFY,
             true,
           ),
           new ExternalUtxo(
             borrowerNftOutpoint.vout(),
             borrowerNftTx,
             TxOutSecrets.fromExplicit(borrowerNftAsset, NFT_AMOUNT),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+            EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
             true,
           ),
         ])

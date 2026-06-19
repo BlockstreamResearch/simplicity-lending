@@ -75,6 +75,22 @@ export type LendingOfferWitnessParams =
   | { branch: 'FullRepayment'; currentDebt: Uint64 }
   | { branch: 'Liquidation'; currentDebt: Uint64 }
 
+export type LendingBranch = LendingOfferWitnessParams['branch']
+
+// ExternalUtxo max-weight-to-satisfy for the Lending covenant input, per branch. Measured
+// from real broadcast txs (program + CMR + control block + witness data bytes), plus a
+// small margin. PartialRepayment isn't exercised by any hook yet, so it borrows the
+// FullRepayment figure as a conservative placeholder until it's measured for real.
+export const LENDING_MAX_WEIGHT_TO_SATISFY: Record<LendingBranch, number> = {
+  OfferAcceptance: 3100,
+  OfferCancellation: 3100,
+  FullRepayment: 3900,
+  Liquidation: 2800,
+
+  // Not tested
+  PartialRepayment: 3900,
+}
+
 export function loadLendingProgram(params: LendingOfferProgramParams): SimplicityProgram {
   return SimplicityProgram.load(sources.lending, buildLendingArguments(params))
 }

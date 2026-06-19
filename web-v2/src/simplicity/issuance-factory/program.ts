@@ -28,6 +28,19 @@ export interface IssuanceFactoryWitnessParams {
   outputIndex: Uint32
 }
 
+export type IssuanceFactoryBranch = IssuanceFactoryWitnessParams['branch']
+
+// ExternalUtxo max-weight-to-satisfy for the IssuanceFactory covenant input, per branch.
+// IssueAssets is measured from a real broadcast tx (3243 bytes, plus margin). RemoveFactory
+// isn't wired up yet (see useBorrowerAccount.ts removeBorrowerAccount), so it keeps the old
+// conservative placeholder until measured for real.
+export const ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY: Record<IssuanceFactoryBranch, number> = {
+  IssueAssets: 3500,
+
+  // Not tested
+  RemoveFactory: 30_000,
+}
+
 export function loadIssuanceFactoryProgram(
   params: IssuanceFactoryProgramParams,
 ): SimplicityProgram {

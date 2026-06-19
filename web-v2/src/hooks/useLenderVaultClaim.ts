@@ -18,10 +18,15 @@ import {
   requireExplicitAsset,
   requireTxOut,
 } from '@/lwk/transaction'
-import { isPolicyAssetUtxo, requireWalletUtxo } from '@/lwk/utxo'
+import {
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+  isPolicyAssetUtxo,
+  requireWalletUtxo,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import {
+  ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY,
   buildAssetAuthVaultWitness,
   loadAssetAuthVaultProgram,
 } from '@/simplicity/asset-auth-vault/program'
@@ -32,8 +37,6 @@ import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
 const DEFAULT_FEE_RATE = 100
-const DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY = 30_000
-const LENDER_NFT_MAX_WEIGHT_TO_SATISFY = 300
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 
 const LENDER_NFT_INPUT_INDEX = 1
@@ -162,14 +165,14 @@ export function useLenderVaultClaim() {
             lenderVaultOutpoint.vout(),
             lenderVaultTx,
             TxOutSecrets.fromExplicit(principalAsset, principalAmount),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+            ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawAll,
             true,
           ),
           new ExternalUtxo(
             lenderNftOutpoint.vout(),
             lenderNftTx,
             TxOutSecrets.fromExplicit(lenderNftAsset, NFT_AMOUNT),
-            LENDER_NFT_MAX_WEIGHT_TO_SATISFY,
+            EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
             true,
           ),
         ])

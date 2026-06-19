@@ -20,7 +20,11 @@ import {
   requireExplicitAsset,
   requireTxOut,
 } from '@/lwk/transaction'
-import { isPolicyAssetUtxo, requireWalletUtxo } from '@/lwk/utxo'
+import {
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+  isPolicyAssetUtxo,
+  requireWalletUtxo,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
@@ -28,6 +32,7 @@ import {
   buildDerivedLendingOfferProgramParams,
   buildLendingOfferSpendInfo,
   buildLendingWitness,
+  LENDING_MAX_WEIGHT_TO_SATISFY,
   loadLendingProgram,
 } from '@/simplicity/lending/program'
 import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
@@ -37,8 +42,6 @@ import { toBytes32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
 const DEFAULT_FEE_RATE = 100
-const DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY = 30_000
-const LENDER_NFT_MAX_WEIGHT_TO_SATISFY = 300
 const MAX_SEQUENCE_NON_RBF = 0xfffffffe
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 
@@ -171,14 +174,14 @@ export function useLiquidateOffer() {
             activeOfferOutpoint.vout(),
             activeOfferTx,
             TxOutSecrets.fromExplicit(collateralAsset, collateralAmount),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+            LENDING_MAX_WEIGHT_TO_SATISFY.Liquidation,
             true,
           ),
           new ExternalUtxo(
             lenderNftOutpoint.vout(),
             lenderNftTx,
             TxOutSecrets.fromExplicit(lenderNftAsset, NFT_AMOUNT),
-            LENDER_NFT_MAX_WEIGHT_TO_SATISFY,
+            EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
             true,
           ),
         ])

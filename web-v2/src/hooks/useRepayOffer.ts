@@ -22,6 +22,7 @@ import {
 } from '@/lwk/transaction'
 import {
   assertWalletUtxoAssetAndMinimumAmount,
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   isPolicyAssetUtxo,
   requireWalletUtxo,
 } from '@/lwk/utxo'
@@ -33,6 +34,7 @@ import {
   buildDerivedLendingOfferProgramParams,
   buildLendingOfferSpendInfo,
   buildLendingWitness,
+  LENDING_MAX_WEIGHT_TO_SATISFY,
   loadLendingProgram,
 } from '@/simplicity/lending/program'
 import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
@@ -43,7 +45,6 @@ import { toBytes32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
 const DEFAULT_FEE_RATE = 100
-const DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY = 30_000
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 
 // 10% of the total fee goes to the protocol, matching PROTOCOL_FEE_PERCENTAGE in Rust.
@@ -243,14 +244,14 @@ export function useRepayOffer() {
             borrowerNftOutpoint.vout(),
             borrowerNftTx,
             TxOutSecrets.fromExplicit(borrowerNftAsset, NFT_AMOUNT),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+            EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
             true,
           ),
           new ExternalUtxo(
             activeOfferOutpoint.vout(),
             activeOfferTx,
             TxOutSecrets.fromExplicit(collateralAsset, collateralAmount),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+            LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment,
             true,
           ),
         ])

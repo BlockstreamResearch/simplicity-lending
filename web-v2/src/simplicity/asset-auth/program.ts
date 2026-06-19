@@ -20,6 +20,10 @@ const WITNESS = {
   OUTPUT_ASSET_INDEX: 'OUTPUT_ASSET_INDEX',
 } as const
 
+// ExternalUtxo max-weight-to-satisfy for the AssetAuth covenant input. Measured from a real
+// broadcast tx (program + CMR + control block + witness data = 706 bytes), plus margin.
+export const ASSET_AUTH_MAX_WEIGHT_TO_SATISFY = 800
+
 export interface AssetAuthProgramParams {
   assetId: Bytes32
   assetAmount: Uint64

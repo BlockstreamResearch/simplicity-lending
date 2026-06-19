@@ -14,16 +14,22 @@ import {
 } from 'lwk_web'
 
 import { broadcastTx, fetchLatestBlockHeight } from '@/api/esplora/methods'
-import { fetchTransaction, requireTxOut } from '@/lwk/transaction'
+import {
+  assertExplicitAmount,
+  fetchTransaction,
+  requireExplicitAsset,
+  requireTxOut,
+} from '@/lwk/transaction'
 import {
   assertWalletUtxoAssetAndMinimumAmount,
-  findWalletUtxo,
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   requireWalletUtxo,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import {
   buildIssuanceFactoryWitness,
+  ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY,
   loadIssuanceFactoryProgram,
 } from '@/simplicity/issuance-factory/program'
 import { encodePendingOfferMetadata } from '@/simplicity/lending/metadata'
@@ -43,7 +49,6 @@ const REISSUANCE_FLAGS = 0n
 const REISSUANCE_TOKEN_AMOUNT = 0n
 const NFT_AMOUNT = 1n
 const DEFAULT_FEE_RATE = 100
-const DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY = 30_000
 
 export interface CreateOfferParams {
   factoryAuthOutpoint: string
@@ -84,7 +89,6 @@ export function useCreateOffer() {
       stage = 'sync wallet and load UTXOs'
       await syncWallet()
       const blindedWalletUtxos = await getBlindedWalletUtxos()
-      const factoryAuthUtxo = findWalletUtxo(blindedWalletUtxos, params.factoryAuthOutpoint)
       const collateralUtxo = requireWalletUtxo(
         blindedWalletUtxos,
         params.collateralOutpoint,
@@ -97,14 +101,6 @@ export function useCreateOffer() {
       const protocolFeeKeeperAssetString = params.protocolFeeKeeperAssetId
       const policyAssetString = lwkNetwork.policyAsset().toString()
 
-      if (factoryAuthUtxo) {
-        assertWalletUtxoAssetAndMinimumAmount(
-          factoryAuthUtxo,
-          factoryAssetString,
-          NFT_AMOUNT,
-          'FactoryAuth',
-        )
-      }
       assertWalletUtxoAssetAndMinimumAmount(
         collateralUtxo,
         policyAssetString,
@@ -136,6 +132,11 @@ export function useCreateOffer() {
       )
       const collateralTxOut = requireTxOut(collateralTx, collateralOutpoint.vout(), 'Collateral')
 
+      if (requireExplicitAsset(factoryAuthTxOut, 'FactoryAuth').toString() !== factoryAssetString) {
+        throw new Error('FactoryAuth UTXO has unexpected asset')
+      }
+      assertExplicitAmount(factoryAuthTxOut, NFT_AMOUNT, 'FactoryAuth')
+
       stage = 'prepare addresses and external UTXOs'
       const receiveAddressExplicitString = Address.parse(receiveAddressString, lwkNetwork)
         .toUnconfidential()
@@ -154,19 +155,16 @@ export function useCreateOffer() {
         issuanceFactoryOutpoint.vout(),
         issuanceFactoryTx,
         TxOutSecrets.fromExplicit(AssetId.fromString(factoryAssetString), NFT_AMOUNT),
-        DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
+        ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY.IssueAssets,
         true,
       )
-      const factoryAuthExternalUtxo = factoryAuthUtxo
-        ? null
-        : new ExternalUtxo(
-            factoryAuthOutpoint.vout(),
-            factoryAuthTx,
-            TxOutSecrets.fromExplicit(AssetId.fromString(factoryAssetString), NFT_AMOUNT),
-            DEFAULT_EXTERNAL_UTXO_MAX_WEIGHT_TO_SATISFY,
-            true,
-          )
-
+      const factoryAuthExternalUtxo = new ExternalUtxo(
+        factoryAuthOutpoint.vout(),
+        factoryAuthTx,
+        TxOutSecrets.fromExplicit(AssetId.fromString(factoryAssetString), NFT_AMOUNT),
+        EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+        true,
+      )
       const borrowerNftAsset = assetIdFromIssuance(
         issuanceFactoryOutpoint,
         ContractHash.fromBytes(new Uint8Array(32)),
@@ -240,9 +238,7 @@ export function useCreateOffer() {
         new OutPoint(params.collateralOutpoint),
       ])
 
-      const externalUtxos = factoryAuthExternalUtxo
-        ? [factoryAuthExternalUtxo, issuanceFactoryExternalUtxo]
-        : [issuanceFactoryExternalUtxo]
+      const externalUtxos = [factoryAuthExternalUtxo, issuanceFactoryExternalUtxo]
 
       stage = 'TxBuilder.addExternalUtxos covenant/explicit inputs'
       txBuilder = txBuilder.addExternalUtxos(externalUtxos)
