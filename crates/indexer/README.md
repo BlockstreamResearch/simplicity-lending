@@ -206,6 +206,8 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 - `interest_rate` (basis points, e.g. 1000 = 10%)
 - `loan_expiration_height` (block height)
 - `created_at_height`, `created_at_txid` (hex)
+- `participants`: latest participant per role (`borrower`, `lender`) — script pubkey only
+- `borrower_principal_utxo`: unspent `borrower_principal` UTXO outpoint (`txid`, `vout`), or omitted when none
 
 **Paginated offer list** (`GET /offers`, `GET /borrowers/offers`, `GET /lenders/offers`):
 

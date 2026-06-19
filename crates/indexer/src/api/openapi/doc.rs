@@ -12,7 +12,8 @@ use crate::api::factories::handlers as factory_handlers;
 use crate::api::lenders::dto::LenderOverview;
 use crate::api::lenders::handlers as lender_handlers;
 use crate::api::offers::dto::{
-    OfferListItemShort, OfferListResponse, OfferUtxoDto, ParticipantDto,
+    OfferListItemShort, OfferListResponse, OfferUtxoDto, OfferUtxoOutpointShort, ParticipantDto,
+    ParticipantShort,
 };
 use crate::api::offers::handlers as offer_handlers;
 use crate::api::params::{OfferSortBy, SortDir};
@@ -54,7 +55,9 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         OfferSortBy,
         OfferStatus,
         OfferUtxoDto,
+        OfferUtxoOutpointShort,
         ParticipantDto,
+        ParticipantShort,
         ParticipantType,
         SortDir,
         UtxoType,

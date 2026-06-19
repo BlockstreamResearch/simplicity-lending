@@ -1,7 +1,9 @@
 use sqlx::{PgPool, Postgres, QueryBuilder};
 
 use crate::api::OfferListQuery;
-use crate::api::offers::db::{apply_offer_list_filters, push_offer_list_order_by};
+use crate::api::offers::db::{
+    apply_offer_list_filters, enrich_offer_list_items, push_offer_list_order_by,
+};
 use crate::api::offers::dto::{OfferListItemShort, OfferListResponse};
 use crate::api::participants::push_latest_participant_offers_scope;
 use crate::api::utils::{format_hex, format_satoshis};
@@ -172,7 +174,9 @@ pub async fn fetch_offer_list(
         .fetch_all(db)
         .await?;
 
-    let items = rows.into_iter().map(OfferListItemShort::from).collect();
+    let mut items: Vec<OfferListItemShort> =
+        rows.into_iter().map(OfferListItemShort::from).collect();
+    enrich_offer_list_items(db, &mut items).await?;
 
     Ok(OfferListResponse {
         items,

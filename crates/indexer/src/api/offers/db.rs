@@ -1,8 +1,9 @@
 use simplex::simplicityhl::elements::hex::ToHex;
 use sqlx::{PgPool, Postgres, QueryBuilder};
+use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::api::utils::parse_filter_hex;
+use crate::api::utils::{format_hex, parse_filter_hex};
 use crate::api::{OfferListQuery, SortDir};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
@@ -11,8 +12,95 @@ use crate::models::{
 
 use super::dto::{
     OfferDetailsResponse, OfferListItemFull, OfferListItemShort, OfferListResponse, OfferUtxoDto,
-    ParticipantDto,
+    OfferUtxoOutpointShort, ParticipantDto, ParticipantShort,
 };
+
+#[derive(sqlx::FromRow)]
+struct ParticipantListRow {
+    offer_id: Uuid,
+    participant_type: ParticipantType,
+    script_pubkey: Vec<u8>,
+}
+
+#[derive(sqlx::FromRow)]
+struct BorrowerPrincipalListRow {
+    offer_id: Uuid,
+    txid: Vec<u8>,
+    vout: i32,
+}
+
+pub(crate) async fn enrich_offer_list_items(
+    db: &PgPool,
+    items: &mut [OfferListItemShort],
+) -> Result<(), sqlx::Error> {
+    if items.is_empty() {
+        return Ok(());
+    }
+
+    let offer_ids: Vec<Uuid> = items.iter().map(|item| item.id).collect();
+
+    let participant_rows = sqlx::query_as::<_, ParticipantListRow>(
+        r#"
+        SELECT DISTINCT ON (offer_id, participant_type)
+            offer_id,
+            participant_type,
+            script_pubkey
+        FROM offer_participants
+        WHERE offer_id = ANY($1)
+        ORDER BY offer_id, participant_type, created_at_height DESC
+        "#,
+    )
+    .bind(&offer_ids)
+    .fetch_all(db)
+    .await?;
+
+    let principal_rows = sqlx::query_as::<_, BorrowerPrincipalListRow>(
+        r#"
+        SELECT offer_id, txid, vout
+        FROM offer_utxos
+        WHERE spent_txid IS NULL
+          AND utxo_type = $1
+          AND offer_id = ANY($2)
+        "#,
+    )
+    .bind(UtxoType::BorrowerPrincipal)
+    .bind(&offer_ids)
+    .fetch_all(db)
+    .await?;
+
+    let mut participants_by_offer: HashMap<Uuid, Vec<ParticipantShort>> = HashMap::new();
+    for row in participant_rows {
+        participants_by_offer
+            .entry(row.offer_id)
+            .or_default()
+            .push(ParticipantShort {
+                participant_type: row.participant_type,
+                script_pubkey: row.script_pubkey.to_hex(),
+            });
+    }
+
+    for participants in participants_by_offer.values_mut() {
+        participants.sort_by_key(|participant| participant.participant_type);
+    }
+
+    let mut principal_by_offer: HashMap<Uuid, OfferUtxoOutpointShort> = HashMap::new();
+    for row in principal_rows {
+        principal_by_offer.insert(
+            row.offer_id,
+            OfferUtxoOutpointShort {
+                txid: format_hex(row.txid),
+                vout: row.vout as u32,
+            },
+        );
+    }
+
+    for item in items.iter_mut() {
+        item.participants = participants_by_offer.remove(&item.id).unwrap_or_default();
+        item.borrower_principal_utxo = principal_by_offer.remove(&item.id);
+    }
+
+    Ok(())
+}
 
 pub(crate) fn apply_offer_list_filters<'a>(
     query_builder: &mut QueryBuilder<'a, Postgres>,
@@ -125,7 +213,9 @@ pub async fn fetch_list(
         .fetch_all(db)
         .await?;
 
-    let items = rows.into_iter().map(OfferListItemShort::from).collect();
+    let mut items: Vec<OfferListItemShort> =
+        rows.into_iter().map(OfferListItemShort::from).collect();
+    enrich_offer_list_items(db, &mut items).await?;
 
     Ok(OfferListResponse {
         items,
