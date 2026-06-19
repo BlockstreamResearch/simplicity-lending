@@ -292,6 +292,26 @@ mod tests {
     }
 
     #[test]
+    fn offer_utxo_dto_from_model_handles_unspent_borrower_principal() {
+        let model = OfferUtxoModel {
+            offer_id: Uuid::new_v4(),
+            txid: vec![0x22],
+            vout: 1,
+            utxo_type: UtxoType::BorrowerPrincipal,
+            created_at_height: 2,
+            spent_txid: None,
+            spent_at_height: None,
+        };
+
+        let dto = OfferUtxoDto::from(model);
+
+        assert_eq!(dto.vout, 1);
+        assert_eq!(dto.utxo_type, UtxoType::BorrowerPrincipal);
+        assert_eq!(dto.spent_txid, None);
+        assert_eq!(dto.spent_at_height, None);
+    }
+
+    #[test]
     fn offer_utxo_dto_from_model_handles_unspent_utxo() {
         let model = OfferUtxoModel {
             offer_id: Uuid::new_v4(),

@@ -96,6 +96,7 @@ fn assert_uuid_values_match_unordered(value: &Value, expected: &[Uuid]) {
 
 /// Canonical offer graph used across most list/detail tests:
 /// - spent pre-lock UTXO (vout 0) + current unspent lending UTXO (vout 2);
+/// - for active offers, unspent borrower principal AssetAuth (vout 1);
 /// - historical borrower participant (vout 1, `51ac`) + current
 ///   unspent borrower participant (vout 3, `52ac`).
 async fn seed_offer_graph(
@@ -134,6 +135,19 @@ async fn seed_offer_graph(
     );
     seed_offer_utxo_row(pool, &pre_lock).await?;
     seed_offer_utxo_row(pool, &lending).await?;
+
+    if status == OfferStatus::Active {
+        let borrower_principal = unspent_offer_utxo(
+            offer_id,
+            OutPoint {
+                txid: outpoint.txid,
+                vout: 1,
+            },
+            UtxoType::BorrowerPrincipal,
+            created_at_height + 2,
+        );
+        seed_offer_utxo_row(pool, &borrower_principal).await?;
+    }
 
     let old_borrower = spent_participant(
         offer_id,
@@ -578,6 +592,29 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.participants[0].script_pubkey, "52ac");
     assert_eq!(dto.participants[0].participant_type, "borrower");
     assert!(dto.participants[0].spent_txid.is_none());
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn active_offer_details_includes_borrower_principal_utxo() -> anyhow::Result<()> {
+    let (base_url, server_handle, _pending, active_offer) = setup_seeded_api().await?;
+    let http = reqwest::Client::new();
+
+    let raw = get_json(&http, format!("{base_url}/offers/{active_offer}")).await?;
+    let dto: ExpectedOfferDetailsDto =
+        serde_json::from_value(raw).expect("response must match full DTO shape");
+
+    assert_eq!(dto.id, active_offer);
+    assert_eq!(dto.status, "active");
+    assert_eq!(dto.utxos.len(), 2);
+
+    let utxo_types: Vec<&str> = dto.utxos.iter().map(|u| u.utxo_type.as_str()).collect();
+    assert!(utxo_types.contains(&"active_offer"));
+    assert!(utxo_types.contains(&"borrower_principal"));
+    assert!(dto.utxos.iter().all(|u| u.spent_txid.is_none()));
 
     server_handle.abort();
     Ok(())

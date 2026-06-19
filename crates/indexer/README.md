@@ -221,7 +221,7 @@ The following parameters are available for `GET /offers` and for the `offers` li
 **Offer details** (`GET /offers/{id}`) — full offer fields (short + NFT asset ids) plus:
 
 - `participants`: latest participant UTXO per role (`borrower`, `lender`)
-- `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`)
+- `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
 
 **Borrower dashboard** (`GET /borrowers/by-script`):
 
