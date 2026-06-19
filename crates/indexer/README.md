@@ -185,7 +185,7 @@ cargo build -p lending-indexer --no-default-features
 
 ### Filtering Parameters (Query Params)
 
-The following parameters are available for `GET /offers` and `GET /borrowers/offers`:
+The following parameters are available for `GET /offers`, `GET /borrowers/offers`, and `GET /lenders/offers`:
 
 - `status`: Filter by one or more offer states (`pending`, `active`, `repaid`, `liquidated`, `cancelled`, `claimed`). Use a comma-separated list, e.g. `status=pending,active`.
 - `factory_id`: Filter by issuance factory UUID.
@@ -198,7 +198,7 @@ The following parameters are available for `GET /offers` and `GET /borrowers/off
 
 ### Response Shapes
 
-**Short offer** (`OfferListItemShort`) — used in `GET /offers` and `GET /borrowers/offers`:
+**Short offer** (`OfferListItemShort`) — used in `GET /offers`, `GET /borrowers/offers`, and `GET /lenders/offers`:
 
 - `id`, `issuance_factory_id`, `status`
 - `collateral_asset`, `principal_asset` (hex)
@@ -207,7 +207,7 @@ The following parameters are available for `GET /offers` and `GET /borrowers/off
 - `loan_expiration_height` (block height)
 - `created_at_height`, `created_at_txid` (hex)
 
-**Paginated offer list** (`GET /offers`, `GET /borrowers/offers`):
+**Paginated offer list** (`GET /offers`, `GET /borrowers/offers`, `GET /lenders/offers`):
 
 ```json
 {
@@ -234,7 +234,20 @@ The following parameters are available for `GET /offers` and `GET /borrowers/off
 }
 ```
 
-Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`); each `amount` is a decimal satoshi string. Counts (`active_loans`, `pending_offers`) are totals by status.
+Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`); each `amount` is a decimal satoshi string. Counts (`active_loans`, `pending_offers`) are totals by status. Overview is not affected by offer-list filters on `GET /borrowers/offers`.
+
+**Lender overview** (`GET /lenders/overview`):
+
+```json
+{
+  "supplied_loans": [{ "asset": "…", "amount": "500" }],
+  "interest_outstanding": [{ "asset": "…", "amount": "6" }],
+  "active_loans": 1,
+  "to_be_claimed": 1
+}
+```
+
+`supplied_loans` and `interest_outstanding` aggregate **active** offers only, grouped by principal asset. Interest uses the full fee formula `principal_amount * interest_rate / 10000` (basis points). `to_be_claimed` counts offers in `repaid` status. Overview is not affected by offer-list filters on `GET /lenders/offers`.
 
 ### Borrowers Endpoints
 
@@ -242,6 +255,13 @@ Overview sums (`collateral_locked`, `borrowings`) are per asset across the borro
 | :--- | :--- | :--- | :--- |
 | `GET` | `/borrowers/overview` | Borrower overview totals | `script_pubkey` (query param, hex) |
 | `GET` | `/borrowers/offers` | Paginated short offer list for the borrower | `script_pubkey` (query param, hex); offer list filters (see above) |
+
+### Lenders Endpoints
+
+| Method | Endpoint | Description | Params / Body |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/lenders/overview` | Lender overview totals | `script_pubkey` (query param, hex) |
+| `GET` | `/lenders/offers` | Paginated short offer list for the lender | `script_pubkey` (query param, hex); offer list filters (see above) |
 
 ### Factories Endpoints
 

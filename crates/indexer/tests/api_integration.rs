@@ -98,7 +98,9 @@ fn assert_uuid_values_match_unordered(value: &Value, expected: &[Uuid]) {
 /// - spent pre-lock UTXO (vout 0) + current unspent lending UTXO (vout 2);
 /// - for active offers, unspent borrower principal AssetAuth (vout 1);
 /// - historical borrower participant (vout 1, `51ac`) + current
-///   unspent borrower participant (vout 3, `52ac`).
+///   unspent borrower participant (vout 3, `52ac`);
+/// - historical lender participant (vout 2, `51ad`) + current
+///   unspent lender participant (vout 4, `53ac` for active/repaid, `50ac` for pending).
 async fn seed_offer_graph(
     pool: &PgPool,
     factory_id: Uuid,
@@ -173,6 +175,35 @@ async fn seed_offer_graph(
     );
     seed_participant_utxo_row(pool, &old_borrower).await?;
     seed_participant_utxo_row(pool, &current_borrower).await?;
+
+    let current_lender_script = match status {
+        OfferStatus::Pending => vec![0x50, 0xac],
+        _ => vec![0x53, 0xac],
+    };
+    let old_lender = spent_participant(
+        offer_id,
+        ParticipantType::Lender,
+        OutPoint {
+            txid: outpoint.txid,
+            vout: 2,
+        },
+        vec![0x51, 0xad],
+        created_at_height,
+        created_at_height + 3,
+        0x88,
+    );
+    let current_lender = unspent_participant(
+        offer_id,
+        ParticipantType::Lender,
+        OutPoint {
+            txid: outpoint.txid,
+            vout: 4,
+        },
+        current_lender_script,
+        created_at_height + 4,
+    );
+    seed_participant_utxo_row(pool, &old_lender).await?;
+    seed_participant_utxo_row(pool, &current_lender).await?;
 
     Ok(())
 }
@@ -588,10 +619,17 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.utxos.len(), 1);
     assert_eq!(dto.utxos[0].utxo_type, "active_offer");
     assert!(dto.utxos[0].spent_txid.is_none());
-    assert_eq!(dto.participants.len(), 1);
-    assert_eq!(dto.participants[0].script_pubkey, "52ac");
-    assert_eq!(dto.participants[0].participant_type, "borrower");
-    assert!(dto.participants[0].spent_txid.is_none());
+    assert_eq!(dto.participants.len(), 2);
+    assert!(
+        dto.participants
+            .iter()
+            .any(|p| p.participant_type == "borrower" && p.script_pubkey == "52ac")
+    );
+    assert!(
+        dto.participants
+            .iter()
+            .any(|p| p.participant_type == "lender" && p.script_pubkey == "50ac")
+    );
 
     server_handle.abort();
     Ok(())
@@ -720,6 +758,145 @@ async fn borrower_overview_is_not_filtered_by_offer_list_params() -> anyhow::Res
     .await?;
     assert_eq!(overview["pending_offers"], 1);
     assert_eq!(overview["active_loans"], 1);
+
+    server_handle.abort();
+    Ok(())
+}
+
+const REPAID_OFFER_HEIGHT: i64 = 44;
+
+async fn setup_seeded_lender_api()
+-> anyhow::Result<(String, tokio::task::JoinHandle<()>, Uuid, Uuid)> {
+    let pool = test_pool().await?;
+
+    let factory_id = Uuid::new_v4();
+    let active_offer = Uuid::new_v4();
+    let repaid_offer = Uuid::new_v4();
+
+    let factory = factory_model(
+        factory_id,
+        FACTORY_CREATION_HEIGHT,
+        unique_32_bytes_from_uuid(factory_id),
+    );
+    seed_factory_row(&pool, &factory).await?;
+
+    seed_offer_graph(
+        &pool,
+        factory_id,
+        active_offer,
+        OfferStatus::Active,
+        ACTIVE_OFFER_HEIGHT,
+    )
+    .await?;
+    seed_offer_graph(
+        &pool,
+        factory_id,
+        repaid_offer,
+        OfferStatus::Repaid,
+        REPAID_OFFER_HEIGHT,
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    Ok((base_url, server_handle, active_offer, repaid_offer))
+}
+
+#[tokio::test]
+#[serial]
+async fn lender_overview_returns_active_and_repaid_totals() -> anyhow::Result<()> {
+    let (base_url, server_handle, _active, _repaid) = setup_seeded_lender_api().await?;
+    let http = reqwest::Client::new();
+
+    let overview = get_json(
+        &http,
+        format!("{base_url}/lenders/overview?script_pubkey=53ac"),
+    )
+    .await?;
+
+    assert_eq!(overview["active_loans"], 1);
+    assert_eq!(overview["to_be_claimed"], 1);
+    assert_eq!(overview["supplied_loans"].as_array().map_or(0, Vec::len), 1);
+    assert_eq!(overview["supplied_loans"][0]["amount"], "500");
+    assert_eq!(
+        overview["interest_outstanding"]
+            .as_array()
+            .map_or(0, Vec::len),
+        1
+    );
+    assert_eq!(overview["interest_outstanding"][0]["amount"], "6");
+
+    let unknown_wallet = get_json(
+        &http,
+        format!("{base_url}/lenders/overview?script_pubkey=dead"),
+    )
+    .await?;
+    assert_eq!(unknown_wallet["active_loans"], 0);
+    assert_eq!(unknown_wallet["to_be_claimed"], 0);
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn lender_offers_excludes_pending_without_matching_lender_script() -> anyhow::Result<()> {
+    let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
+    let http = reqwest::Client::new();
+
+    let offers = get_json(
+        &http,
+        format!("{base_url}/lenders/offers?script_pubkey=53ac"),
+    )
+    .await?;
+
+    assert_eq!(offers["total"], 1);
+    assert_eq!(offers["items"][0]["id"], active_offer.to_string());
+    assert_ne!(offers["items"][0]["id"], pending_offer.to_string());
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn lender_overview_is_not_filtered_by_offer_list_params() -> anyhow::Result<()> {
+    let (base_url, server_handle, _active, _repaid) = setup_seeded_lender_api().await?;
+    let http = reqwest::Client::new();
+
+    let overview = get_json(
+        &http,
+        format!("{base_url}/lenders/overview?script_pubkey=53ac&status=active"),
+    )
+    .await?;
+    assert_eq!(overview["active_loans"], 1);
+    assert_eq!(overview["to_be_claimed"], 1);
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn lender_offers_returns_paginated_list_for_script() -> anyhow::Result<()> {
+    let (base_url, server_handle, active_offer, repaid_offer) = setup_seeded_lender_api().await?;
+    let http = reqwest::Client::new();
+
+    let offers = get_json(
+        &http,
+        format!("{base_url}/lenders/offers?script_pubkey=53ac"),
+    )
+    .await?;
+
+    assert_eq!(offers["total"], 2);
+    assert_ids_match_unordered(&offers["items"], &[active_offer, repaid_offer]);
+
+    let active_only = get_json(
+        &http,
+        format!("{base_url}/lenders/offers?script_pubkey=53ac&status=active"),
+    )
+    .await?;
+    assert_eq!(active_only["total"], 1);
+    assert_eq!(active_only["items"][0]["id"], active_offer.to_string());
 
     server_handle.abort();
     Ok(())

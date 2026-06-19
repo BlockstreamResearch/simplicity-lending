@@ -9,6 +9,8 @@ use crate::api::factories::dto::{
     FactoryAuthUtxoDto, FactoryDetailsResponse, FactoryProgramUtxoDto,
 };
 use crate::api::factories::handlers as factory_handlers;
+use crate::api::lenders::dto::LenderOverview;
+use crate::api::lenders::handlers as lender_handlers;
 use crate::api::offers::dto::{
     OfferListItemShort, OfferListResponse, OfferUtxoDto, ParticipantDto,
 };
@@ -31,6 +33,8 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         offer_handlers::get_details,
         borrower_handlers::get_overview_by_script,
         borrower_handlers::list_offers_by_script,
+        lender_handlers::get_overview_by_script,
+        lender_handlers::list_offers_by_script,
         factory_handlers::get_by_script,
         factory_handlers::get_by_id,
     ),
@@ -43,6 +47,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         FactoryDetailsResponse,
         FactoryProgramUtxoDto,
         FactoryStatus,
+        LenderOverview,
         OfferDetailsResponseSchema,
         OfferListItemShort,
         OfferListResponse,
@@ -57,6 +62,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
     tags(
         (name = "offers", description = "Lending offer queries"),
         (name = "borrowers", description = "Borrower queries"),
+        (name = "lenders", description = "Lender queries"),
         (name = "factories", description = "Issuance factory queries"),
     )
 )]
@@ -82,6 +88,8 @@ mod tests {
         assert!(paths.contains_key("/offers/{id}"));
         assert!(paths.contains_key("/borrowers/overview"));
         assert!(paths.contains_key("/borrowers/offers"));
+        assert!(paths.contains_key("/lenders/overview"));
+        assert!(paths.contains_key("/lenders/offers"));
         assert!(paths.contains_key("/factories/by-script"));
         assert!(paths.contains_key("/factories/{id}"));
     }
