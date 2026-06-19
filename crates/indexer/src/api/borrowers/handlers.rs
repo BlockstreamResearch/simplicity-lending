@@ -17,6 +17,7 @@ use super::params::{BorrowerOffersQuery, BorrowerOverviewQuery};
     get,
     path = "/borrowers/overview",
     tag = "borrowers",
+    operation_id = "get_borrower_overview_by_script",
     params(BorrowerOverviewParams),
     responses(
         (status = 200, description = "Borrower overview totals", body = BorrowerOverview),
@@ -40,6 +41,7 @@ pub async fn get_overview_by_script(
     get,
     path = "/borrowers/offers",
     tag = "borrowers",
+    operation_id = "list_borrower_offers_by_script",
     params(BorrowerOffersParams),
     responses(
         (status = 200, description = "Paginated short offer list for the borrower", body = OfferListResponse),

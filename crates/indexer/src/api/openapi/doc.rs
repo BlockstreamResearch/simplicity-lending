@@ -127,4 +127,35 @@ mod tests {
         assert!(names.contains(&"status".to_string()));
         assert!(!names.iter().any(|n| n == "filters"));
     }
+
+    #[test]
+    fn openapi_operation_ids_are_unique() {
+        let spec = ApiDoc::openapi();
+        let mut seen = std::collections::HashMap::<String, String>::new();
+
+        for (path, item) in &spec.paths.paths {
+            let operations = [
+                ("get", item.get.as_ref()),
+                ("post", item.post.as_ref()),
+                ("put", item.put.as_ref()),
+                ("patch", item.patch.as_ref()),
+                ("delete", item.delete.as_ref()),
+            ];
+
+            for (method, operation) in operations {
+                let Some(operation) = operation else {
+                    continue;
+                };
+
+                let operation_id = operation
+                    .operation_id
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("{method} {path} must declare operation_id"));
+
+                if let Some(previous_path) = seen.insert(operation_id.clone(), path.clone()) {
+                    panic!("duplicate operation_id `{operation_id}` on {path} and {previous_path}");
+                }
+            }
+        }
+    }
 }
