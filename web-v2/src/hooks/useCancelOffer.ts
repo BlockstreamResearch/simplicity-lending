@@ -12,6 +12,7 @@ import {
 
 import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -47,7 +48,6 @@ import { bytesToHex, hexToBytes } from '@/utils/hex'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
-const DEFAULT_FEE_RATE = 100
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 
 export interface CancelOfferParams {
@@ -97,11 +97,12 @@ export function useCancelOffer() {
       }
 
       stage = 'load input transactions'
-      const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTx] = await Promise.all([
+      const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTx, feeRate] = await Promise.all([
         fetchTransaction(pendingOfferOutpoint),
         fetchTransaction(lenderNftOutpoint),
         fetchTransaction(borrowerNftOutpoint),
         fetchTransaction(feeOutpoint),
+        fetchFeeRateSatPerKvb(),
       ])
       const pendingOfferTxOut = requireTxOut(
         pendingOfferTx,
@@ -185,7 +186,7 @@ export function useCancelOffer() {
 
       stage = 'build cancellation PSET with covenant output order'
       const pset = new TxBuilder(lwkNetwork)
-        .feeRate(DEFAULT_FEE_RATE)
+        .feeRate(feeRate)
         .setWalletUtxos([new OutPoint(params.feeOutpoint)])
         .setInputOrder([
           new OutPoint(params.pendingOfferOutpoint),

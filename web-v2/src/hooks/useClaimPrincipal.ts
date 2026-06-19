@@ -8,6 +8,7 @@ import {
 } from 'lwk_web'
 
 import { broadcastTx } from '@/api/esplora/methods'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -35,7 +36,6 @@ import { bytesToHex } from '@/utils/hex'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
-const DEFAULT_FEE_RATE = 100
 
 const BORROWER_NFT_INPUT_INDEX = 1
 const BORROWER_NFT_OUTPUT_INDEX = 0
@@ -97,10 +97,11 @@ export function useClaimPrincipal() {
       }
 
       stage = 'load input transactions'
-      const [principalTx, borrowerNftTx, feeTx] = await Promise.all([
+      const [principalTx, borrowerNftTx, feeTx, feeRate] = await Promise.all([
         fetchTransaction(principalOutpoint),
         fetchTransaction(borrowerNftOutpoint),
         fetchTransaction(feeOutpoint),
+        fetchFeeRateSatPerKvb(),
       ])
 
       const principalTxOut = requireTxOut(principalTx, principalOutpoint.vout(), 'Principal')
@@ -138,7 +139,7 @@ export function useClaimPrincipal() {
       ]
 
       const pset = new TxBuilder(lwkNetwork)
-        .feeRate(DEFAULT_FEE_RATE)
+        .feeRate(feeRate)
         .setWalletUtxos([new OutPoint(params.feeOutpoint)])
         .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
         .addExternalUtxos([

@@ -14,6 +14,7 @@ import { broadcastTx } from '@/api/esplora/methods'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import { isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -38,7 +39,7 @@ function prepareFactory(factory: FactoryDetails): FactoryState | null {
   }
 }
 
-const FEE_RESERVE = 250n
+const MIN_BORROWER_ACCOUNT_FEE_UTXO_AMOUNT_SATS = 250n
 const ISSUING_UTXOS_COUNT = 2
 const REISSUANCE_FLAGS = 0n
 const ISSUANCE_AMOUNT = 2n
@@ -85,16 +86,19 @@ export function useBorrowerAccount() {
 
     const feeUtxo = blindedWalletUtxos
       .filter(utxo => isPolicyAssetUtxo(utxo, policyAsset))
-      .filter(utxo => utxo.unblinded().value() > FEE_RESERVE)
+      .filter(utxo => utxo.unblinded().value() > MIN_BORROWER_ACCOUNT_FEE_UTXO_AMOUNT_SATS)
       .sort((a, b) => Number(a.unblinded().value() - b.unblinded().value()))[0]
 
-    if (!feeUtxo) throw new Error('Need a wallet L-BTC UTXO larger than the fee reserve')
+    if (!feeUtxo) {
+      throw new Error('Need a wallet L-BTC UTXO larger than the borrower account fee reserve')
+    }
 
     if (FACTORY_AUTH_AMOUNT + ISSUANCE_FACTORY_AMOUNT !== ISSUANCE_AMOUNT) {
       throw new Error('Invalid issuance split')
     }
 
     const fundingOutpoint = utxoToOutpointString(feeUtxo)
+    const feeRate = await fetchFeeRateSatPerKvb()
     const receiveAddress = Address.parse(receiveAddressString, lwkNetwork).toUnconfidential()
     const issuanceFactoryProgram = loadIssuanceFactoryProgram({
       issuingUtxosCount: toUint8(ISSUING_UTXOS_COUNT, 'issuingUtxosCount'),
@@ -108,6 +112,7 @@ export function useBorrowerAccount() {
     const metadata = await buildMetadata()
 
     const pset = new TxBuilder(lwkNetwork)
+      .feeRate(feeRate)
       .setWalletUtxos([feeUtxo.outpoint()])
       .issueAssetToRecipients(
         [

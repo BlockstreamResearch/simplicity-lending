@@ -10,6 +10,7 @@ import {
 
 import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -47,7 +48,6 @@ import { bytesToHex, hexToBytes } from '@/utils/hex'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
-const DEFAULT_FEE_RATE = 100
 
 export interface AcceptOfferParams {
   pendingOfferOutpoint: string
@@ -117,11 +117,12 @@ export function useAcceptOffer() {
       }
 
       stage = 'load covenant and reference transactions'
-      const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTx] = await Promise.all([
+      const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTx, feeRate] = await Promise.all([
         fetchTransaction(pendingOfferOutpoint),
         fetchTransaction(lenderNftOutpoint),
         fetchTransaction(borrowerNftReferenceOutpoint),
         fetchTransaction(feeOutpoint),
+        fetchFeeRateSatPerKvb(),
       ])
       const pendingOfferTxOut = requireTxOut(
         pendingOfferTx,
@@ -231,7 +232,7 @@ export function useAcceptOffer() {
       const pendingOfferVout = pendingOfferOutpoint.vout()
       const lenderNftVout = lenderNftOutpoint.vout()
       let txBuilder = new TxBuilder(lwkNetwork)
-        .feeRate(DEFAULT_FEE_RATE)
+        .feeRate(feeRate)
         .setWalletUtxos(walletInputOutpointStrings.map(outpoint => new OutPoint(outpoint)))
         .setInputOrder(inputOrderStrings.map(outpoint => new OutPoint(outpoint)))
         .addExternalUtxos([

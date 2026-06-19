@@ -9,6 +9,7 @@ import {
 } from 'lwk_web'
 
 import { broadcastTx } from '@/api/esplora/methods'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -36,7 +37,6 @@ import { bytesToHex } from '@/utils/hex'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
-const DEFAULT_FEE_RATE = 100
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 
 const LENDER_NFT_INPUT_INDEX = 1
@@ -96,10 +96,11 @@ export function useLenderVaultClaim() {
       }
 
       stage = 'load lender vault, NFT and fee transactions'
-      const [lenderVaultTx, lenderNftTx, feeTx] = await Promise.all([
+      const [lenderVaultTx, lenderNftTx, feeTx, feeRate] = await Promise.all([
         fetchTransaction(lenderVaultOutpoint),
         fetchTransaction(lenderNftOutpoint),
         fetchTransaction(feeOutpoint),
+        fetchFeeRateSatPerKvb(),
       ])
 
       // The lender vault was created by the repay tx. Input 0 of that tx was the Borrower NFT
@@ -157,7 +158,7 @@ export function useLenderVaultClaim() {
       ]
 
       const pset = new TxBuilder(lwkNetwork)
-        .feeRate(DEFAULT_FEE_RATE)
+        .feeRate(feeRate)
         .setWalletUtxos([new OutPoint(params.feeOutpoint)])
         .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
         .addExternalUtxos([

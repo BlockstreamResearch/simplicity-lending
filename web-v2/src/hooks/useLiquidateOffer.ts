@@ -11,6 +11,7 @@ import {
 
 import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -41,7 +42,6 @@ import { bytesToHex } from '@/utils/hex'
 import { toBytes32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
-const DEFAULT_FEE_RATE = 100
 const MAX_SEQUENCE_NON_RBF = 0xfffffffe
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 
@@ -80,7 +80,11 @@ export function useLiquidateOffer() {
       )
 
       stage = 'load wallet context'
-      const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
+      const [receiveAddressString, wollet, feeRate] = await Promise.all([
+        getReceiveAddress(),
+        getWollet(),
+        fetchFeeRateSatPerKvb(),
+      ])
       if (!receiveAddressString) throw new Error('Missing receive address')
       const collateralRecipient = Address.parse(receiveAddressString, lwkNetwork)
 
@@ -162,7 +166,7 @@ export function useLiquidateOffer() {
       const burnScript = Script.newOpReturn(BURN_PAYLOAD)
 
       const pset = new TxBuilder(lwkNetwork)
-        .feeRate(DEFAULT_FEE_RATE)
+        .feeRate(feeRate)
         .setWalletUtxos([new OutPoint(params.feeOutpoint)])
         .setInputOrder([
           new OutPoint(params.activeOfferOutpoint),

@@ -11,6 +11,7 @@ import {
 
 import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -44,7 +45,6 @@ import { bytesToHex } from '@/utils/hex'
 import { toBytes32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
-const DEFAULT_FEE_RATE = 100
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 
 // 10% of the total fee goes to the protocol, matching PROTOCOL_FEE_PERCENTAGE in Rust.
@@ -122,10 +122,11 @@ export function useRepayOffer() {
 
       stage = 'trace back to pending offer transaction for metadata'
       const pendingOfferOutpoint = activeOfferTx.inputs[0].outpoint()
-      const [pendingOfferTx, principalTx, feeTx] = await Promise.all([
+      const [pendingOfferTx, principalTx, feeTx, feeRate] = await Promise.all([
         fetchTransaction(pendingOfferOutpoint),
         fetchTransaction(principalOutpoint),
         fetchTransaction(feeOutpoint),
+        fetchFeeRateSatPerKvb(),
       ])
 
       stage = 'extract UTXO values from transactions'
@@ -236,7 +237,7 @@ export function useRepayOffer() {
       ]
 
       let txBuilder = new TxBuilder(lwkNetwork)
-        .feeRate(DEFAULT_FEE_RATE)
+        .feeRate(feeRate)
         .setWalletUtxos(walletInputOutpointStrings.map(o => new OutPoint(o)))
         .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
         .addExternalUtxos([

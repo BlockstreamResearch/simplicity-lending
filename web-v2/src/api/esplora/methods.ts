@@ -11,6 +11,8 @@ import {
   esploraOutspendListSchema,
   type EsploraTx,
   esploraTxSchema,
+  type FeeEstimates,
+  feeEstimatesSchema,
   type ScriptHashTxEntry,
   scriptHashTxListSchema,
   type ScriptHashUtxoEntry,
@@ -125,6 +127,12 @@ export async function fetchLatestBlockHash(options: RequestParams = {}): Promise
 
 export async function fetchLatestBlockHeight(options: RequestParams = {}): Promise<number> {
   return requestText(buildEsploraUrl('/blocks/tip/height'), blockHeightTextSchema, {
+    signal: options.signal,
+  })
+}
+
+export async function fetchFeeEstimates(options: RequestParams = {}): Promise<FeeEstimates> {
+  return requestJson(buildEsploraUrl('/fee-estimates'), feeEstimatesSchema, {
     signal: options.signal,
   })
 }

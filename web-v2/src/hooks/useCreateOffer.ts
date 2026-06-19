@@ -14,6 +14,7 @@ import {
 } from 'lwk_web'
 
 import { broadcastTx, fetchLatestBlockHeight } from '@/api/esplora/methods'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertExplicitAmount,
   fetchTransaction,
@@ -48,7 +49,6 @@ const ISSUING_UTXOS_COUNT = 2
 const REISSUANCE_FLAGS = 0n
 const REISSUANCE_TOKEN_AMOUNT = 0n
 const NFT_AMOUNT = 1n
-const DEFAULT_FEE_RATE = 100
 
 export interface CreateOfferParams {
   factoryAuthOutpoint: string
@@ -113,12 +113,13 @@ export function useCreateOffer() {
       const collateralOutpoint = new OutPoint(params.collateralOutpoint)
 
       stage = 'load transaction context'
-      const [factoryAuthTx, issuanceFactoryTx, collateralTx, currentBlockHeight] =
+      const [factoryAuthTx, issuanceFactoryTx, collateralTx, currentBlockHeight, feeRate] =
         await Promise.all([
           fetchTransaction(factoryAuthOutpoint),
           fetchTransaction(issuanceFactoryOutpoint),
           fetchTransaction(collateralOutpoint),
           fetchLatestBlockHeight(),
+          fetchFeeRateSatPerKvb(),
         ])
       const factoryAuthTxOut = requireTxOut(
         factoryAuthTx,
@@ -229,7 +230,7 @@ export function useCreateOffer() {
       let txBuilder = new TxBuilder(lwkNetwork)
 
       stage = 'TxBuilder.feeRate'
-      txBuilder = txBuilder.feeRate(DEFAULT_FEE_RATE)
+      txBuilder = txBuilder.feeRate(feeRate)
 
       stage = 'TxBuilder.setInputOrder'
       txBuilder = txBuilder.setInputOrder([
