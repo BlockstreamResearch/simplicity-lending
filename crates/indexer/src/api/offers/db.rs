@@ -3,7 +3,7 @@ use sqlx::{PgPool, Postgres, QueryBuilder};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::api::utils::{format_hex, parse_filter_hex};
+use crate::api::utils::{format_hex, format_satoshis, parse_filter_hex};
 use crate::api::{OfferListQuery, SortDir};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
@@ -12,8 +12,27 @@ use crate::models::{
 
 use super::dto::{
     OfferDetailsResponse, OfferListItemFull, OfferListItemShort, OfferListResponse, OfferUtxoDto,
-    OfferUtxoOutpointShort, ParticipantDto, ParticipantShort,
+    OfferUtxoOutpointShort, OffersOverview, ParticipantDto, ParticipantShort,
 };
+
+use crate::api::borrowers::dto::AssetAmount;
+
+#[derive(sqlx::FromRow)]
+struct AssetSumRow {
+    asset_id: Vec<u8>,
+    amount: i64,
+}
+
+fn asset_amounts_from_rows(rows: Vec<AssetSumRow>) -> Vec<AssetAmount> {
+    rows.into_iter()
+        .map(|row| AssetAmount {
+            asset: format_hex(row.asset_id),
+            amount: format_satoshis(row.amount),
+        })
+        .collect()
+}
+
+const OPEN_COLLATERAL_STATUSES: [OfferStatus; 2] = [OfferStatus::Pending, OfferStatus::Active];
 
 #[derive(sqlx::FromRow)]
 struct ParticipantListRow {
@@ -100,6 +119,47 @@ pub(crate) async fn enrich_offer_list_items(
     }
 
     Ok(())
+}
+
+#[tracing::instrument(name = "Fetching offers overview from DB", skip(db))]
+pub async fn fetch_overview(db: &PgPool) -> Result<OffersOverview, sqlx::Error> {
+    let (collateral_rows, principal_rows, active_loans_count) = tokio::try_join!(
+        sqlx::query_as::<_, AssetSumRow>(
+            r#"
+            SELECT collateral_asset_id AS asset_id, SUM(collateral_amount)::BIGINT AS amount
+            FROM offers
+            WHERE current_status = ANY($1)
+            GROUP BY collateral_asset_id
+            "#,
+        )
+        .bind(OPEN_COLLATERAL_STATUSES)
+        .fetch_all(db),
+        sqlx::query_as::<_, AssetSumRow>(
+            r#"
+            SELECT principal_asset_id AS asset_id, SUM(principal_amount)::BIGINT AS amount
+            FROM offers
+            WHERE current_status = $1
+            GROUP BY principal_asset_id
+            "#,
+        )
+        .bind(OfferStatus::Active)
+        .fetch_all(db),
+        sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT COUNT(*)::BIGINT
+            FROM offers
+            WHERE current_status = $1
+            "#,
+        )
+        .bind(OfferStatus::Active)
+        .fetch_one(db),
+    )?;
+
+    Ok(OffersOverview {
+        collateral_locked: asset_amounts_from_rows(collateral_rows),
+        active_loan_principal: asset_amounts_from_rows(principal_rows),
+        active_loans_count: active_loans_count as u64,
+    })
 }
 
 pub(crate) fn apply_offer_list_filters<'a>(

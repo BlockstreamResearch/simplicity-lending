@@ -301,6 +301,32 @@ async fn get_offers_returns_all_seeded_offers_with_correct_status() -> anyhow::R
 
 #[tokio::test]
 #[serial]
+async fn get_offers_overview_returns_active_totals_only() -> anyhow::Result<()> {
+    let (base_url, server_handle, _pending_offer, _active_offer) = setup_seeded_api().await?;
+    let http = reqwest::Client::new();
+
+    let overview = get_json(&http, format!("{base_url}/offers/overview")).await?;
+
+    assert_eq!(overview["active_loans_count"], 1);
+    assert_eq!(
+        overview["collateral_locked"].as_array().map_or(0, Vec::len),
+        1
+    );
+    assert_eq!(overview["collateral_locked"][0]["amount"], "2000");
+    assert_eq!(
+        overview["active_loan_principal"]
+            .as_array()
+            .map_or(0, Vec::len),
+        1
+    );
+    assert_eq!(overview["active_loan_principal"][0]["amount"], "500");
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
 async fn get_offers_by_script_returns_only_owners_of_unspent_match() -> anyhow::Result<()> {
     let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
     let http = reqwest::Client::new();

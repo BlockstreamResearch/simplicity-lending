@@ -11,7 +11,26 @@ use crate::api::params::ScriptQuery;
 use crate::api::utils::parse_script_pubkey;
 use crate::api::{ApiError, AppState, OfferListQuery};
 
-use super::dto::{OfferDetailsResponse, OfferListResponse};
+use super::dto::{OfferDetailsResponse, OfferListResponse, OffersOverview};
+
+#[utoipa::path(
+    get,
+    path = "/offers/overview",
+    tag = "offers",
+    operation_id = "get_offers_overview",
+    responses(
+        (status = 200, description = "Protocol-wide active loan totals", body = OffersOverview),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    )
+)]
+#[tracing::instrument(name = "Getting offers overview", skip(state))]
+pub async fn get_overview(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<OffersOverview>, ApiError> {
+    let overview = super::db::fetch_overview(&state.db).await?;
+
+    Ok(Json(overview))
+}
 
 #[utoipa::path(
     get,

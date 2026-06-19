@@ -225,6 +225,18 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 - `participants`: latest participant UTXO per role (`borrower`, `lender`)
 - `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
 
+**Offers overview** (`GET /offers/overview`):
+
+```json
+{
+  "collateral_locked": [{ "asset": "…", "amount": "1000" }],
+  "active_loan_principal": [{ "asset": "…", "amount": "500" }],
+  "active_loans_count": 1
+}
+```
+
+Aggregates **active** offers for `active_loan_principal` and `active_loans_count`. `collateral_locked` includes **pending** and **active** offers. Amounts are grouped by asset; each `amount` is a decimal satoshi string.
+
 **Borrower overview** (`GET /borrowers/overview`):
 
 ```json
@@ -276,6 +288,7 @@ Overview sums (`collateral_locked`, `borrowings`) are per asset across the borro
 
 | Method | Endpoint | Description | Params / Body |
 | :--- | :--- | :--- | :--- |
+| `GET` | `/offers/overview` | Protocol-wide active loan totals | — |
 | `GET` | `/offers` | Paginated short offer list | offer list filters (see above) |
 | `GET` | `/offers/by-script` | Offer IDs where `script_pubkey` matches an unspent participant UTXO (borrower or lender) | `script_pubkey` (query param, hex) |
 | `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and unspent offer UTXOs | — |

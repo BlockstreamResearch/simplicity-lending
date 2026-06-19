@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
 
+use crate::api::borrowers::dto::AssetAmount;
 use crate::api::utils::{format_hex, format_satoshis};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
@@ -70,6 +71,13 @@ pub struct OfferListResponse {
     pub total: u64,
     pub limit: u64,
     pub offset: u64,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct OffersOverview {
+    pub collateral_locked: Vec<AssetAmount>,
+    pub active_loan_principal: Vec<AssetAmount>,
+    pub active_loans_count: u64,
 }
 
 impl From<OfferModelShort> for OfferListItemShort {

@@ -12,8 +12,8 @@ use crate::api::factories::handlers as factory_handlers;
 use crate::api::lenders::dto::LenderOverview;
 use crate::api::lenders::handlers as lender_handlers;
 use crate::api::offers::dto::{
-    OfferListItemShort, OfferListResponse, OfferUtxoDto, OfferUtxoOutpointShort, ParticipantDto,
-    ParticipantShort,
+    OfferListItemShort, OfferListResponse, OfferUtxoDto, OfferUtxoOutpointShort, OffersOverview,
+    ParticipantDto, ParticipantShort,
 };
 use crate::api::offers::handlers as offer_handlers;
 use crate::api::params::{OfferSortBy, SortDir};
@@ -29,6 +29,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         description = "REST API for the Simplicity Lending protocol indexer."
     ),
     paths(
+        offer_handlers::get_overview,
         offer_handlers::list_offers,
         offer_handlers::get_ids_by_script,
         offer_handlers::get_details,
@@ -52,6 +53,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         OfferDetailsResponseSchema,
         OfferListItemShort,
         OfferListResponse,
+        OffersOverview,
         OfferSortBy,
         OfferStatus,
         OfferUtxoDto,
@@ -87,6 +89,7 @@ mod tests {
         let paths = spec.paths.paths;
 
         assert!(paths.contains_key("/offers"));
+        assert!(paths.contains_key("/offers/overview"));
         assert!(paths.contains_key("/offers/by-script"));
         assert!(paths.contains_key("/offers/{id}"));
         assert!(paths.contains_key("/borrowers/overview"));
