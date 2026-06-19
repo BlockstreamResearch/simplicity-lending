@@ -6,7 +6,7 @@ use crate::api::offers::dto::{OfferListItemShort, OfferListResponse};
 use crate::api::utils::{format_hex, format_satoshis};
 use crate::models::{OfferModelShort, OfferStatus, ParticipantType};
 
-use super::dto::{AssetAmount, BorrowerDashboardResponse, BorrowerOverview};
+use super::dto::{AssetAmount, BorrowerOverview};
 
 const OPEN_BORROWER_STATUSES: [OfferStatus; 2] = [OfferStatus::Pending, OfferStatus::Active];
 
@@ -56,7 +56,7 @@ fn asset_amounts_from_rows(rows: Vec<AssetSumRow>) -> Vec<AssetAmount> {
     skip(db, script_pubkey),
     fields(script_pubkey = %hex::encode(script_pubkey))
 )]
-async fn fetch_overview(
+pub async fn fetch_overview(
     db: &PgPool,
     script_pubkey: &[u8],
 ) -> Result<BorrowerOverview, sqlx::Error> {
@@ -126,7 +126,7 @@ async fn fetch_overview(
     })
 }
 
-async fn fetch_offer_list(
+pub async fn fetch_offer_list(
     db: &PgPool,
     script_pubkey: &[u8],
     query: &OfferListQuery,
@@ -179,30 +179,4 @@ async fn fetch_offer_list(
         limit,
         offset,
     })
-}
-
-#[tracing::instrument(
-    name = "Fetching borrower dashboard from DB",
-    skip(db, script_pubkey, query),
-    fields(
-        script_pubkey = %hex::encode(script_pubkey),
-        limit = %query.effective_limit(),
-        offset = %query.effective_offset(),
-        status = ?query.status,
-        collateral_asset = ?query.collateral_asset,
-        principal_asset = ?query.principal_asset,
-        factory_id = ?query.factory_id,
-        sort_by = ?query.sort_by,
-        sort_dir = ?query.sort_dir,
-    )
-)]
-pub async fn fetch_dashboard(
-    db: &PgPool,
-    script_pubkey: &[u8],
-    query: OfferListQuery,
-) -> Result<BorrowerDashboardResponse, sqlx::Error> {
-    let overview = fetch_overview(db, script_pubkey).await?;
-    let offers = fetch_offer_list(db, script_pubkey, &query).await?;
-
-    Ok(BorrowerDashboardResponse { overview, offers })
 }

@@ -4,7 +4,7 @@
 use utoipa::IntoParams;
 use uuid::Uuid;
 
-use crate::api::params::{OfferSortBy, SortDir};
+use crate::api::params::{OfferSortBy, ScriptQuery, SortDir};
 
 /// OpenAPI query parameters for `GET /offers` (flat query string).
 #[derive(IntoParams)]
@@ -27,10 +27,13 @@ pub struct OfferListParams {
     pub sort_dir: Option<SortDir>,
 }
 
-/// OpenAPI query parameters for `GET /borrowers/by-script` (flat query string).
+/// OpenAPI query parameters for `GET /borrowers/overview` (flat query string).
+pub type BorrowerOverviewParams = ScriptQuery;
+
+/// OpenAPI query parameters for `GET /borrowers/offers` (flat query string).
 #[derive(IntoParams)]
 #[into_params(parameter_in = Query)]
-pub struct BorrowerDashboardParams {
+pub struct BorrowerOffersParams {
     /// Wallet script pubkey hex.
     #[param(example = "00144f883a4bb668547b534ae815bc32628893b6f435")]
     pub script_pubkey: String,

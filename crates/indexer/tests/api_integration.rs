@@ -622,17 +622,16 @@ async fn active_offer_details_includes_borrower_principal_utxo() -> anyhow::Resu
 
 #[tokio::test]
 #[serial]
-async fn borrower_dashboard_returns_overview_and_filtered_offers() -> anyhow::Result<()> {
-    let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
+async fn borrower_overview_returns_totals_for_script() -> anyhow::Result<()> {
+    let (base_url, server_handle, _pending, _active) = setup_seeded_api().await?;
     let http = reqwest::Client::new();
 
-    let dashboard = get_json(
+    let overview = get_json(
         &http,
-        format!("{base_url}/borrowers/by-script?script_pubkey=52ac"),
+        format!("{base_url}/borrowers/overview?script_pubkey=52ac"),
     )
     .await?;
 
-    let overview = &dashboard["overview"];
     assert_eq!(overview["active_loans"], 1);
     assert_eq!(overview["pending_offers"], 1);
     assert_eq!(
@@ -643,7 +642,36 @@ async fn borrower_dashboard_returns_overview_and_filtered_offers() -> anyhow::Re
     assert_eq!(overview["borrowings"].as_array().map_or(0, Vec::len), 1);
     assert_eq!(overview["borrowings"][0]["amount"], "1000");
 
-    let offers = &dashboard["offers"];
+    let unknown_wallet = get_json(
+        &http,
+        format!("{base_url}/borrowers/overview?script_pubkey=dead"),
+    )
+    .await?;
+    assert_eq!(unknown_wallet["active_loans"], 0);
+    assert_eq!(unknown_wallet["pending_offers"], 0);
+    assert_eq!(
+        unknown_wallet["collateral_locked"]
+            .as_array()
+            .map_or(0, Vec::len),
+        0
+    );
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn borrower_offers_returns_paginated_list_for_script() -> anyhow::Result<()> {
+    let (base_url, server_handle, pending_offer, active_offer) = setup_seeded_api().await?;
+    let http = reqwest::Client::new();
+
+    let offers = get_json(
+        &http,
+        format!("{base_url}/borrowers/offers?script_pubkey=52ac"),
+    )
+    .await?;
+
     assert_eq!(offers["total"], 2);
     assert_eq!(offers["limit"], 50);
     assert_eq!(offers["offset"], 0);
@@ -662,31 +690,36 @@ async fn borrower_dashboard_returns_overview_and_filtered_offers() -> anyhow::Re
 
     let pending_only = get_json(
         &http,
-        format!("{base_url}/borrowers/by-script?script_pubkey=52ac&status=pending"),
+        format!("{base_url}/borrowers/offers?script_pubkey=52ac&status=pending"),
     )
     .await?;
-    assert_eq!(pending_only["offers"]["total"], 1);
-    assert_eq!(
-        pending_only["offers"]["items"][0]["id"],
-        pending_offer.to_string()
-    );
-    assert_eq!(pending_only["overview"]["pending_offers"], 1);
-    assert_eq!(pending_only["overview"]["active_loans"], 1);
+    assert_eq!(pending_only["total"], 1);
+    assert_eq!(pending_only["items"][0]["id"], pending_offer.to_string());
 
     let unknown_wallet = get_json(
         &http,
-        format!("{base_url}/borrowers/by-script?script_pubkey=dead"),
+        format!("{base_url}/borrowers/offers?script_pubkey=dead"),
     )
     .await?;
-    assert_eq!(unknown_wallet["overview"]["active_loans"], 0);
-    assert_eq!(unknown_wallet["overview"]["pending_offers"], 0);
-    assert_eq!(
-        unknown_wallet["overview"]["collateral_locked"]
-            .as_array()
-            .map_or(0, Vec::len),
-        0
-    );
-    assert_eq!(unknown_wallet["offers"]["total"], 0);
+    assert_eq!(unknown_wallet["total"], 0);
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn borrower_overview_is_not_filtered_by_offer_list_params() -> anyhow::Result<()> {
+    let (base_url, server_handle, _pending, _active) = setup_seeded_api().await?;
+    let http = reqwest::Client::new();
+
+    let overview = get_json(
+        &http,
+        format!("{base_url}/borrowers/overview?script_pubkey=52ac&status=pending"),
+    )
+    .await?;
+    assert_eq!(overview["pending_offers"], 1);
+    assert_eq!(overview["active_loans"], 1);
 
     server_handle.abort();
     Ok(())

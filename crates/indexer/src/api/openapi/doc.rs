@@ -3,7 +3,7 @@ use utoipa::OpenApi;
 #[cfg(feature = "swagger-ui")]
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::api::borrowers::dto::{AssetAmount, BorrowerDashboardResponse, BorrowerOverview};
+use crate::api::borrowers::dto::{AssetAmount, BorrowerOverview};
 use crate::api::borrowers::handlers as borrower_handlers;
 use crate::api::factories::dto::{
     FactoryAuthUtxoDto, FactoryDetailsResponse, FactoryProgramUtxoDto,
@@ -29,13 +29,13 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         offer_handlers::list_offers,
         offer_handlers::get_ids_by_script,
         offer_handlers::get_details,
-        borrower_handlers::get_by_script,
+        borrower_handlers::get_overview_by_script,
+        borrower_handlers::list_offers_by_script,
         factory_handlers::get_by_script,
         factory_handlers::get_by_id,
     ),
     components(schemas(
         AssetAmount,
-        BorrowerDashboardResponse,
         BorrowerOverview,
         ErrorBody,
         ErrorResponse,
@@ -56,7 +56,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
     )),
     tags(
         (name = "offers", description = "Lending offer queries"),
-        (name = "borrowers", description = "Borrower dashboard"),
+        (name = "borrowers", description = "Borrower queries"),
         (name = "factories", description = "Issuance factory queries"),
     )
 )]
@@ -80,7 +80,8 @@ mod tests {
         assert!(paths.contains_key("/offers"));
         assert!(paths.contains_key("/offers/by-script"));
         assert!(paths.contains_key("/offers/{id}"));
-        assert!(paths.contains_key("/borrowers/by-script"));
+        assert!(paths.contains_key("/borrowers/overview"));
+        assert!(paths.contains_key("/borrowers/offers"));
         assert!(paths.contains_key("/factories/by-script"));
         assert!(paths.contains_key("/factories/{id}"));
     }
@@ -99,13 +100,13 @@ mod tests {
     }
 
     #[test]
-    fn borrower_by_script_has_flat_query_params() {
+    fn borrower_offers_has_flat_query_params() {
         let spec = ApiDoc::openapi();
         let path = spec
             .paths
             .paths
-            .get("/borrowers/by-script")
-            .expect("borrowers path");
+            .get("/borrowers/offers")
+            .expect("borrowers offers path");
         let get = path.get.as_ref().expect("GET operation");
         let params = get.parameters.as_ref().expect("query parameters");
 

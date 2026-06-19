@@ -185,7 +185,7 @@ cargo build -p lending-indexer --no-default-features
 
 ### Filtering Parameters (Query Params)
 
-The following parameters are available for `GET /offers` and for the `offers` list inside `GET /borrowers/by-script`:
+The following parameters are available for `GET /offers` and `GET /borrowers/offers`:
 
 - `status`: Filter by one or more offer states (`pending`, `active`, `repaid`, `liquidated`, `cancelled`, `claimed`). Use a comma-separated list, e.g. `status=pending,active`.
 - `factory_id`: Filter by issuance factory UUID.
@@ -198,7 +198,7 @@ The following parameters are available for `GET /offers` and for the `offers` li
 
 ### Response Shapes
 
-**Short offer** (`OfferListItemShort`) — used in `GET /offers` and `GET /borrowers/by-script` → `offers.items`:
+**Short offer** (`OfferListItemShort`) — used in `GET /offers` and `GET /borrowers/offers`:
 
 - `id`, `issuance_factory_id`, `status`
 - `collateral_asset`, `principal_asset` (hex)
@@ -207,7 +207,7 @@ The following parameters are available for `GET /offers` and for the `offers` li
 - `loan_expiration_height` (block height)
 - `created_at_height`, `created_at_txid` (hex)
 
-**Paginated offer list** (`GET /offers`, `GET /borrowers/by-script` → `offers`):
+**Paginated offer list** (`GET /offers`, `GET /borrowers/offers`):
 
 ```json
 {
@@ -223,27 +223,25 @@ The following parameters are available for `GET /offers` and for the `offers` li
 - `participants`: latest participant UTXO per role (`borrower`, `lender`)
 - `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
 
-**Borrower dashboard** (`GET /borrowers/by-script`):
+**Borrower overview** (`GET /borrowers/overview`):
 
 ```json
 {
-  "overview": {
-    "collateral_locked": [{ "asset": "…", "amount": "1000" }],
-    "borrowings": [{ "asset": "…", "amount": "500" }],
-    "active_loans": 1,
-    "pending_offers": 2
-  },
-  "offers": { "items": [], "total": 0, "limit": 50, "offset": 0 }
+  "collateral_locked": [{ "asset": "…", "amount": "1000" }],
+  "borrowings": [{ "asset": "…", "amount": "500" }],
+  "active_loans": 1,
+  "pending_offers": 2
 }
 ```
 
-Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`); each `amount` is a decimal satoshi string. Counts (`active_loans`, `pending_offers`) are totals by status. The offer list is scoped to offers where the given `script_pubkey` is the latest borrower.
+Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`); each `amount` is a decimal satoshi string. Counts (`active_loans`, `pending_offers`) are totals by status.
 
 ### Borrowers Endpoints
 
 | Method | Endpoint | Description | Params / Body |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/borrowers/by-script` | Borrower dashboard: overview totals and paginated short offer list | `script_pubkey` (query param, hex); offer list filters (see above) |
+| `GET` | `/borrowers/overview` | Borrower overview totals | `script_pubkey` (query param, hex) |
+| `GET` | `/borrowers/offers` | Paginated short offer list for the borrower | `script_pubkey` (query param, hex); offer list filters (see above) |
 
 ### Factories Endpoints
 
