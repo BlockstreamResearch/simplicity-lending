@@ -42,9 +42,7 @@ export function selectDemoScriptAuthInputs(
   const authUtxo = lbtcUtxos.find(utxo => utxoToOutpointString(utxo) !== fundingOutpoint)
 
   if (!authUtxo) {
-    throw new Error(
-      'Need a second confirmed wallet L-BTC UTXO to use as the ScriptAuth auth input',
-    )
+    throw new Error('Need a second confirmed wallet L-BTC UTXO to use as the ScriptAuth auth input')
   }
 
   return { authUtxo, fundingUtxo }

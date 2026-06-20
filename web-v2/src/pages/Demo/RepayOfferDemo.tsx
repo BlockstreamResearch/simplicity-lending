@@ -115,8 +115,7 @@ export default function RepayOfferDemo() {
     return walletUtxos
       .filter(
         utxo =>
-          isConfirmedWalletUtxo(utxo) &&
-          utxo.unblinded().asset().toString() === principalAsset.id,
+          isConfirmedWalletUtxo(utxo) && utxo.unblinded().asset().toString() === principalAsset.id,
       )
       .map(utxo => {
         const outpoint = utxoToOutpointString(utxo)

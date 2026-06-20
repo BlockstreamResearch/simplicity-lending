@@ -26,8 +26,7 @@ export function usePolicyAssetUtxos(enabled: boolean): UsePolicyAssetUtxosResult
     select: utxos =>
       utxos
         .filter(
-          utxo =>
-            isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()),
+          utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()),
         )
         .map(utxo => ({
           outpoint: utxoToOutpointString(utxo),
