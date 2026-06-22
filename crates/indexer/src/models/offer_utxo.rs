@@ -18,6 +18,7 @@ use uuid::Uuid;
 pub enum UtxoType {
     PendingOffer,
     ActiveOffer,
+    BorrowerPrincipal,
     Cancellation,
     Repayment,
     Liquidation,

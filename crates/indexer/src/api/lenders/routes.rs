@@ -8,6 +8,6 @@ use super::handlers;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/borrowers/overview", get(handlers::get_overview_by_script))
-        .route("/borrowers/offers", get(handlers::list_offers_by_script))
+        .route("/lenders/overview", get(handlers::get_overview_by_script))
+        .route("/lenders/offers", get(handlers::list_offers_by_script))
 }

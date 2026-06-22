@@ -158,6 +158,16 @@ impl OffersTracker {
                 self.handle_repayment_claim(sql_tx, old_outpoint, offer_id, txid, block_height)
                     .await
             }
+            UtxoType::BorrowerPrincipal => {
+                self.handle_borrower_principal_spend(
+                    sql_tx,
+                    old_outpoint,
+                    offer_id,
+                    txid,
+                    block_height,
+                )
+                .await
+            }
             _ => {
                 tracing::warn!("Unexpected transition for UTXO type: {:?}", utxo_type);
 
@@ -245,6 +255,47 @@ impl OffersTracker {
             },
         );
 
+        let borrower_principal_outpoint = OutPoint { txid, vout: 1 };
+        let borrower_principal_utxo = OfferUtxoModel {
+            offer_id,
+            txid: borrower_principal_outpoint.txid.to_byte_array().to_vec(),
+            vout: borrower_principal_outpoint.vout as i32,
+            utxo_type: UtxoType::BorrowerPrincipal,
+            created_at_height: block_height as i64,
+            spent_at_height: None,
+            spent_txid: None,
+        };
+
+        insert_offer_utxo(sql_tx, &borrower_principal_utxo).await?;
+
+        self.cache.insert(
+            borrower_principal_outpoint,
+            OffersWatchEntry {
+                offer_id,
+                utxo_type: UtxoType::BorrowerPrincipal,
+            },
+        );
+
+        Ok(())
+    }
+
+    #[tracing::instrument(
+        name = "Handling borrower principal spend",
+        skip(self, sql_tx, old_outpoint, offer_id, txid, block_height),
+        fields(%offer_id, %txid, %block_height),
+    )]
+    async fn handle_borrower_principal_spend(
+        &mut self,
+        sql_tx: &mut DbTx<'_>,
+        old_outpoint: &OutPoint,
+        offer_id: Uuid,
+        txid: Txid,
+        block_height: u64,
+    ) -> anyhow::Result<()> {
+        spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
+        self.cache.remove(old_outpoint);
+
+        tracing::info!(%offer_id, "Borrower principal UTXO spent");
         Ok(())
     }
 

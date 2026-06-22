@@ -1,17 +1,17 @@
 use sqlx::{PgPool, Postgres, QueryBuilder};
 
 use crate::api::OfferListQuery;
+use crate::api::borrowers::dto::AssetAmount;
 use crate::api::offers::db::{
     apply_offer_list_filters, enrich_offer_list_items, push_offer_list_order_by,
 };
 use crate::api::offers::dto::{OfferListItemShort, OfferListResponse};
 use crate::api::participants::push_latest_participant_offers_scope;
 use crate::api::utils::{format_hex, format_satoshis};
+
 use crate::models::{OfferModelShort, OfferStatus, ParticipantType};
 
-use super::dto::{AssetAmount, BorrowerOverview};
-
-const OPEN_BORROWER_STATUSES: [OfferStatus; 2] = [OfferStatus::Pending, OfferStatus::Active];
+use super::dto::LenderOverview;
 
 #[derive(sqlx::FromRow)]
 struct AssetSumRow {
@@ -20,9 +20,9 @@ struct AssetSumRow {
 }
 
 #[derive(sqlx::FromRow)]
-struct BorrowerCountsRow {
+struct LenderCountsRow {
     active_loans: i64,
-    pending_offers: i64,
+    to_be_claimed: i64,
 }
 
 fn asset_amounts_from_rows(rows: Vec<AssetSumRow>) -> Vec<AssetAmount> {
@@ -35,52 +35,52 @@ fn asset_amounts_from_rows(rows: Vec<AssetSumRow>) -> Vec<AssetAmount> {
 }
 
 #[tracing::instrument(
-    name = "Fetching borrower overview from DB",
+    name = "Fetching lender overview from DB",
     skip(db, script_pubkey),
     fields(script_pubkey = %hex::encode(script_pubkey))
 )]
 pub async fn fetch_overview(
     db: &PgPool,
     script_pubkey: &[u8],
-) -> Result<BorrowerOverview, sqlx::Error> {
-    let mut collateral_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+) -> Result<LenderOverview, sqlx::Error> {
+    let mut supplied_builder: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"
-        SELECT collateral_asset_id AS asset_id, SUM(collateral_amount)::BIGINT AS amount
+        SELECT principal_asset_id AS asset_id, SUM(principal_amount)::BIGINT AS amount
         FROM offers
-        WHERE 1=1
-        "#,
+        WHERE current_status = "#,
     );
+    supplied_builder.push_bind(OfferStatus::Active);
+    supplied_builder.push(" AND 1=1");
     push_latest_participant_offers_scope(
-        &mut collateral_builder,
-        ParticipantType::Borrower,
+        &mut supplied_builder,
+        ParticipantType::Lender,
         script_pubkey,
     );
-    collateral_builder.push(" AND current_status = ANY(");
-    collateral_builder.push_bind(OPEN_BORROWER_STATUSES);
-    collateral_builder.push(") GROUP BY collateral_asset_id");
+    supplied_builder.push(" GROUP BY principal_asset_id");
 
-    let collateral_rows = collateral_builder
+    let supplied_rows = supplied_builder
         .build_query_as::<AssetSumRow>()
         .fetch_all(db)
         .await?;
 
-    let mut borrowings_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+    let mut interest_builder: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"
-        SELECT principal_asset_id AS asset_id, SUM(principal_amount)::BIGINT AS amount
+        SELECT
+            principal_asset_id AS asset_id,
+            SUM((principal_amount * interest_rate / 10000))::BIGINT AS amount
         FROM offers
-        WHERE 1=1
-        "#,
+        WHERE current_status = "#,
     );
+    interest_builder.push_bind(OfferStatus::Active);
+    interest_builder.push(" AND 1=1");
     push_latest_participant_offers_scope(
-        &mut borrowings_builder,
-        ParticipantType::Borrower,
+        &mut interest_builder,
+        ParticipantType::Lender,
         script_pubkey,
     );
-    borrowings_builder.push(" AND current_status = ANY(");
-    borrowings_builder.push_bind(OPEN_BORROWER_STATUSES);
-    borrowings_builder.push(") GROUP BY principal_asset_id");
+    interest_builder.push(" GROUP BY principal_asset_id");
 
-    let borrowings_rows = borrowings_builder
+    let interest_rows = interest_builder
         .build_query_as::<AssetSumRow>()
         .fetch_all(db)
         .await?;
@@ -95,29 +95,29 @@ pub async fn fetch_overview(
         r#")::BIGINT AS active_loans,
             COUNT(*) FILTER (WHERE current_status = "#,
     );
-    counts_builder.push_bind(OfferStatus::Pending);
+    counts_builder.push_bind(OfferStatus::Repaid);
     counts_builder.push(
-        r#")::BIGINT AS pending_offers
+        r#")::BIGINT AS to_be_claimed
         FROM offers
         WHERE 1=1
         "#,
     );
     push_latest_participant_offers_scope(
         &mut counts_builder,
-        ParticipantType::Borrower,
+        ParticipantType::Lender,
         script_pubkey,
     );
 
     let counts = counts_builder
-        .build_query_as::<BorrowerCountsRow>()
+        .build_query_as::<LenderCountsRow>()
         .fetch_one(db)
         .await?;
 
-    Ok(BorrowerOverview {
-        collateral_locked: asset_amounts_from_rows(collateral_rows),
-        borrowings: asset_amounts_from_rows(borrowings_rows),
+    Ok(LenderOverview {
+        supplied_loans: asset_amounts_from_rows(supplied_rows),
+        interest_outstanding: asset_amounts_from_rows(interest_rows),
         active_loans: counts.active_loans as u64,
-        pending_offers: counts.pending_offers as u64,
+        to_be_claimed: counts.to_be_claimed as u64,
     })
 }
 
@@ -133,7 +133,7 @@ pub async fn fetch_offer_list(
         QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM offers WHERE 1=1");
     push_latest_participant_offers_scope(
         &mut count_builder,
-        ParticipantType::Borrower,
+        ParticipantType::Lender,
         script_pubkey,
     );
     apply_offer_list_filters(&mut count_builder, query);
@@ -159,7 +159,7 @@ pub async fn fetch_offer_list(
     );
     push_latest_participant_offers_scope(
         &mut query_builder,
-        ParticipantType::Borrower,
+        ParticipantType::Lender,
         script_pubkey,
     );
     apply_offer_list_filters(&mut query_builder, query);

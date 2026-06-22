@@ -8,6 +8,7 @@ use uuid::Uuid;
     PartialEq,
     PartialOrd,
     Eq,
+    Ord,
     sqlx::Type,
     Serialize,
     Deserialize,

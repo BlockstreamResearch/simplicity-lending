@@ -31,7 +31,8 @@
                 "cancellation",
                 "repayment",
                 "liquidation",
-                "claim"
+                "claim",
+                "borrower_principal"
               ]
             }
           }

@@ -4,11 +4,42 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
 
+use crate::api::borrowers::dto::AssetAmount;
 use crate::api::utils::{format_hex, format_satoshis};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
     ParticipantType, UtxoType,
 };
+
+#[derive(Serialize, ToSchema)]
+pub struct ParticipantShort {
+    pub participant_type: ParticipantType,
+    pub script_pubkey: String,
+}
+
+impl From<&OfferParticipantModel> for ParticipantShort {
+    fn from(value: &OfferParticipantModel) -> Self {
+        Self {
+            participant_type: value.participant_type,
+            script_pubkey: value.script_pubkey.to_hex(),
+        }
+    }
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct OfferUtxoOutpointShort {
+    pub txid: String,
+    pub vout: u32,
+}
+
+impl From<&OfferUtxoModel> for OfferUtxoOutpointShort {
+    fn from(value: &OfferUtxoModel) -> Self {
+        Self {
+            txid: format_hex(value.txid.clone()),
+            vout: value.vout as u32,
+        }
+    }
+}
 
 #[derive(Serialize, ToSchema)]
 pub struct OfferListItemShort {
@@ -29,6 +60,9 @@ pub struct OfferListItemShort {
     pub loan_expiration_height: u32,
     pub created_at_height: u64,
     pub created_at_txid: String,
+    pub participants: Vec<ParticipantShort>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub borrower_principal_utxo: Option<OfferUtxoOutpointShort>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -37,6 +71,13 @@ pub struct OfferListResponse {
     pub total: u64,
     pub limit: u64,
     pub offset: u64,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct OffersOverview {
+    pub collateral_locked: Vec<AssetAmount>,
+    pub active_loan_principal: Vec<AssetAmount>,
+    pub active_loans_count: u64,
 }
 
 impl From<OfferModelShort> for OfferListItemShort {
@@ -53,6 +94,8 @@ impl From<OfferModelShort> for OfferListItemShort {
             loan_expiration_height: value.loan_expiration_time as u32,
             created_at_height: value.created_at_height as u64,
             created_at_txid: format_hex(value.created_at_txid),
+            participants: Vec::new(),
+            borrower_principal_utxo: None,
         }
     }
 }
@@ -82,6 +125,8 @@ impl From<OfferModel> for OfferListItemFull {
                 loan_expiration_height: value.loan_expiration_time as u32,
                 created_at_height: value.created_at_height as u64,
                 created_at_txid: format_hex(value.created_at_txid),
+                participants: Vec::new(),
+                borrower_principal_utxo: None,
             },
             borrower_nft_asset: format_hex(value.borrower_nft_asset_id),
             lender_nft_asset: format_hex(value.lender_nft_asset_id),
@@ -152,7 +197,10 @@ pub struct OfferDetailsResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{OfferListItemFull, OfferListItemShort, OfferUtxoDto, ParticipantDto};
+    use super::{
+        OfferListItemFull, OfferListItemShort, OfferUtxoDto, OfferUtxoOutpointShort,
+        ParticipantDto, ParticipantShort,
+    };
     use crate::models::{
         OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
         ParticipantType, UtxoType,
@@ -188,6 +236,45 @@ mod tests {
         assert_eq!(dto.loan_expiration_height, 123);
         assert_eq!(dto.created_at_height, 456);
         assert_eq!(dto.created_at_txid, "ccbbaa");
+        assert!(dto.participants.is_empty());
+        assert!(dto.borrower_principal_utxo.is_none());
+    }
+
+    #[test]
+    fn participant_short_from_model_maps_type_and_script() {
+        let model = OfferParticipantModel {
+            offer_id: Uuid::new_v4(),
+            participant_type: ParticipantType::Borrower,
+            script_pubkey: vec![0x52, 0xac],
+            txid: vec![0x01],
+            vout: 3,
+            created_at_height: 1,
+            spent_txid: None,
+            spent_at_height: None,
+        };
+
+        let dto = ParticipantShort::from(&model);
+
+        assert_eq!(dto.participant_type, ParticipantType::Borrower);
+        assert_eq!(dto.script_pubkey, "52ac");
+    }
+
+    #[test]
+    fn offer_utxo_outpoint_short_from_model_maps_txid_and_vout() {
+        let model = OfferUtxoModel {
+            offer_id: Uuid::new_v4(),
+            txid: vec![0xab, 0xcd],
+            vout: 1,
+            utxo_type: UtxoType::BorrowerPrincipal,
+            created_at_height: 2,
+            spent_txid: None,
+            spent_at_height: None,
+        };
+
+        let dto = OfferUtxoOutpointShort::from(&model);
+
+        assert_eq!(dto.txid, "cdab");
+        assert_eq!(dto.vout, 1);
     }
 
     #[test]
@@ -289,6 +376,26 @@ mod tests {
         assert_eq!(dto.created_at_height, 123);
         assert_eq!(dto.spent_txid, Some("bbaa".to_string()));
         assert_eq!(dto.spent_at_height, Some(456));
+    }
+
+    #[test]
+    fn offer_utxo_dto_from_model_handles_unspent_borrower_principal() {
+        let model = OfferUtxoModel {
+            offer_id: Uuid::new_v4(),
+            txid: vec![0x22],
+            vout: 1,
+            utxo_type: UtxoType::BorrowerPrincipal,
+            created_at_height: 2,
+            spent_txid: None,
+            spent_at_height: None,
+        };
+
+        let dto = OfferUtxoDto::from(model);
+
+        assert_eq!(dto.vout, 1);
+        assert_eq!(dto.utxo_type, UtxoType::BorrowerPrincipal);
+        assert_eq!(dto.spent_txid, None);
+        assert_eq!(dto.spent_at_height, None);
     }
 
     #[test]
