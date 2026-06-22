@@ -91,7 +91,7 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
       }}
       onSuccess={onSuccess}
     >
-      <OfferDetailsBody offer={offer} principalLabel='Loan Amount' />
+      <OfferDetailsBody offer={offer} />
     </OfferActionShell>
   )
 }

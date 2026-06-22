@@ -90,7 +90,7 @@ export default function LiquidateOfferModal({
       }}
       onSuccess={onSuccess}
     >
-      <OfferDetailsBody offer={offer} highlightTerm principalLabel='Loan Amount' />
+      <OfferDetailsBody offer={offer} highlightTerm />
     </OfferActionShell>
   )
 }

@@ -1,15 +1,23 @@
-import { Table } from '@heroui/react'
+import { Table, Tooltip } from '@heroui/react'
 import type { Key } from 'react'
 import { useState } from 'react'
 
 import type { OfferShort } from '@/api/indexer/schemas'
+import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import OfferActionModal from '@/components/modals/OfferActionModal'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { UiPagination } from '@/components/ui/UiPagination'
 import type { ConfigAsset } from '@/constants/network-config'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount } from '@/utils/format'
+import { resolveOfferInteraction } from '@/utils/offerActions'
 import { bpsToPercent, calcInterest, formatOfferTermLeft } from '@/utils/offers'
+
+const SEVERITY_COLOR = {
+  danger: 'text-danger',
+  warning: 'text-warning',
+} as const
 
 interface OffersTableProps<T extends OfferShort> {
   offers: T[]
@@ -32,6 +40,7 @@ export default function OffersTable<T extends OfferShort>({
   onPageChange,
   onActionSuccess,
 }: OffersTableProps<T>) {
+  const { scriptPubkey } = useWallet()
   const [selectedOffer, setSelectedOffer] = useState<T | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -56,28 +65,45 @@ export default function OffersTable<T extends OfferShort>({
               <Table.Column>Term Left</Table.Column>
               <Table.Column>Status</Table.Column>
             </Table.Header>
-            <Table.Body items={offers} dependencies={[currentBlockHeight]}>
-              {offer => (
-                <Table.Row id={offer.id}>
-                  <Table.Cell>
-                    {formatAmount(offer.collateral_amount, collateralAsset.decimals)}
-                  </Table.Cell>
-                  <Table.Cell>
-                    {formatAmount(offer.principal_amount, principalAsset.decimals)}
-                  </Table.Cell>
-                  <Table.Cell>
-                    {formatAmount(
-                      calcInterest(offer.principal_amount, offer.interest_rate),
-                      principalAsset.decimals,
-                    )}
-                  </Table.Cell>
-                  <Table.Cell>{bpsToPercent(offer.interest_rate)}</Table.Cell>
-                  <Table.Cell>{formatOfferTermLeft(offer, currentBlockHeight)}</Table.Cell>
-                  <Table.Cell>
-                    <OfferStatusChip status={offer.status} />
-                  </Table.Cell>
-                </Table.Row>
-              )}
+            <Table.Body items={offers} dependencies={[currentBlockHeight, scriptPubkey]}>
+              {offer => {
+                const { severity, message } = resolveOfferInteraction(
+                  offer,
+                  scriptPubkey,
+                  currentBlockHeight,
+                )
+                return (
+                  <Table.Row id={offer.id}>
+                    <Table.Cell>
+                      <span className='inline-flex items-center gap-1.5'>
+                        {formatAmount(offer.collateral_amount, collateralAsset.decimals)}
+                        {severity && message && (
+                          <Tooltip>
+                            <Tooltip.Trigger className={`inline-flex ${SEVERITY_COLOR[severity]}`}>
+                              <TriangleExclamationIcon className='size-3.5' />
+                            </Tooltip.Trigger>
+                            <Tooltip.Content>{message}</Tooltip.Content>
+                          </Tooltip>
+                        )}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell>
+                      {formatAmount(offer.principal_amount, principalAsset.decimals)}
+                    </Table.Cell>
+                    <Table.Cell>
+                      {formatAmount(
+                        calcInterest(offer.principal_amount, offer.interest_rate),
+                        principalAsset.decimals,
+                      )}
+                    </Table.Cell>
+                    <Table.Cell>{bpsToPercent(offer.interest_rate)}</Table.Cell>
+                    <Table.Cell>{formatOfferTermLeft(offer, currentBlockHeight)}</Table.Cell>
+                    <Table.Cell>
+                      <OfferStatusChip status={offer.status} />
+                    </Table.Cell>
+                  </Table.Row>
+                )
+              }}
             </Table.Body>
           </Table.Content>
         </Table.ScrollContainer>

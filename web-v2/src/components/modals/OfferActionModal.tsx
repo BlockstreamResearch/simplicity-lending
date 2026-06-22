@@ -54,7 +54,7 @@ export default function OfferActionModal({
           chip={<OfferStatusChip status={offer.status} />}
           onClose={onClose}
         >
-          <OfferDetailsBody offer={offer} principalLabel='Loan Amount' />
+          <OfferDetailsBody offer={offer} />
         </OfferActionShell>
       )
   }

@@ -9,21 +9,12 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { calcInterest, computeApr, formatOfferTermLeft } from '@/utils/offers'
 
-type Counterparty = 'borrower' | 'lender'
-
 interface OfferDetailsBodyProps {
   offer: OfferShort
-  counterparty?: Counterparty
   highlightTerm?: boolean
-  principalLabel: string
 }
 
-export default function OfferDetailsBody({
-  offer,
-  counterparty = 'borrower',
-  highlightTerm,
-  principalLabel,
-}: OfferDetailsBodyProps) {
+export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsBodyProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
   const { balances } = useWallet()
   const { data: currentBlockHeight } = useBlockHeight()
@@ -31,18 +22,16 @@ export default function OfferDetailsBody({
   const loanInfoRows = useMemo<DetailRow[]>(() => {
     const interest = calcInterest(offer.principal_amount, offer.interest_rate)
     const loanDurationBlocks = offer.loan_expiration_height - offer.created_at_height
-    const counterpartyParticipant = offer.participants.find(
-      p => p.participant_type === counterparty,
-    )
-    const counterpartyLabel = counterparty === 'lender' ? 'Lender Address' : 'Borrower Address'
+    const borrower = offer.participants.find(p => p.participant_type === 'borrower')
+    const lender = offer.participants.find(p => p.participant_type === 'lender')
 
-    return [
+    const rows: DetailRow[] = [
       {
         label: 'Collateral Amount',
         value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
       },
       {
-        label: principalLabel,
+        label: 'Loan Amount',
         value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
       },
       {
@@ -50,14 +39,17 @@ export default function OfferDetailsBody({
         value: `${formatAmount(interest, principalAsset.decimals)} ${principalAsset.symbol}`,
       },
       { label: 'APR', value: `${computeApr(offer.interest_rate, loanDurationBlocks).toFixed(2)}%` },
-      {
-        label: counterpartyLabel,
-        value: counterpartyParticipant
-          ? truncateAddress(counterpartyParticipant.script_pubkey)
-          : '–',
-      },
     ]
-  }, [offer, counterparty, collateralAsset, principalAsset, principalLabel])
+
+    if (borrower) {
+      rows.push({ label: 'Borrower Address', value: truncateAddress(borrower.script_pubkey) })
+    }
+    if (lender) {
+      rows.push({ label: 'Lender Address', value: truncateAddress(lender.script_pubkey) })
+    }
+
+    return rows
+  }, [offer, collateralAsset, principalAsset])
 
   const termRows = useMemo<DetailRow[]>(
     () => [

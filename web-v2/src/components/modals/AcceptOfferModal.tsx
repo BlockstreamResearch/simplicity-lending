@@ -107,7 +107,7 @@ export default function AcceptOfferModal({
       }}
       onSuccess={onSuccess}
     >
-      <OfferDetailsBody offer={offer} principalLabel='Loan Amount' />
+      <OfferDetailsBody offer={offer} />
     </OfferActionShell>
   )
 }
