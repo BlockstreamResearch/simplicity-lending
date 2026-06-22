@@ -22,82 +22,48 @@ export type OfferAction =
   | 'liquidate'
   | 'none'
 
-export type OfferWarningSeverity = 'danger' | 'warning'
-
-export interface OfferInteraction {
-  action: OfferAction
-  severity: OfferWarningSeverity | null
-  message: string | null
-}
-
-const DETAILS_ONLY: OfferInteraction = { action: 'none', severity: null, message: null }
-
 function isOfferExpired(offer: OfferShort, currentBlockHeight: number): boolean {
   return currentBlockHeight > offer.loan_expiration_height
 }
 
-function resolveLenderInteraction(offer: OfferShort, expired: boolean): OfferInteraction {
+function resolveLenderAction(offer: OfferShort, expired: boolean): OfferAction {
   switch (offer.status) {
     case 'pending':
-      return expired
-        ? {
-            action: 'none',
-            severity: null,
-            message: 'This offer has expired and can no longer be accepted.',
-          }
-        : { action: 'accept', severity: null, message: null }
+      return expired ? 'none' : 'accept'
     case 'active':
-      return expired
-        ? {
-            action: 'liquidate',
-            severity: 'danger',
-            message: 'Loan expired. You can liquidate the collateral.',
-          }
-        : DETAILS_ONLY
+      return expired ? 'liquidate' : 'none'
     case 'repaid':
-      return {
-        action: 'claim-interest',
-        severity: 'warning',
-        message: 'Claim your loan repayment.',
-      }
+      return 'claim-interest'
     default:
-      return DETAILS_ONLY
+      return 'none'
   }
 }
 
-function resolveBorrowerInteraction(offer: OfferShort, expired: boolean): OfferInteraction {
+function resolveBorrowerAction(offer: OfferShort): OfferAction {
   switch (offer.status) {
     case 'pending':
-      return expired
-        ? {
-            action: 'cancel',
-            severity: 'danger',
-            message: 'Offer expired. Cancel to reclaim your collateral.',
-          }
-        : { action: 'cancel', severity: null, message: null }
+      return 'cancel'
     case 'active':
-      return offer.borrower_principal_utxo
-        ? { action: 'claim-principal', severity: 'warning', message: 'Claim your loan principal.' }
-        : { action: 'repay', severity: null, message: null }
+      return offer.borrower_principal_utxo ? 'claim-principal' : 'repay'
     default:
-      return DETAILS_ONLY
+      return 'none'
   }
 }
 
-export function resolveOfferInteraction(
+export function resolveOfferAction(
   offer: OfferShort,
   walletScriptPubkey: string | null,
   currentBlockHeight: number,
-): OfferInteraction {
-  const actorRole = resolveActorRole(offer, walletScriptPubkey)
+): OfferAction {
+  const role = resolveActorRole(offer, walletScriptPubkey)
   const expired = isOfferExpired(offer, currentBlockHeight)
 
-  switch (actorRole) {
+  switch (role) {
     case 'lender':
-      return resolveLenderInteraction(offer, expired)
+      return resolveLenderAction(offer, expired)
     case 'borrower':
-      return resolveBorrowerInteraction(offer, expired)
+      return resolveBorrowerAction(offer)
     case 'guest':
-      return DETAILS_ONLY
+      return 'none'
   }
 }

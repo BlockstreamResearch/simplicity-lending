@@ -16,28 +16,33 @@ export default function YourSupply() {
   const { data: currentBlockHeight } = useBlockHeight()
 
   const offset = (page - 1) * SUPPLY_PAGE_SIZE
-  const lenderQuery = useLenderOffers(
+  const {
+    data: lenderData,
+    isLoading,
+    refetch,
+  } = useLenderOffers(
     scriptPubkey ?? '',
     { limit: SUPPLY_PAGE_SIZE, offset },
     { placeholderData: keepPreviousData },
   )
 
-  const offers = lenderQuery.data?.items ?? []
-  const totalOffers = lenderQuery.data?.total ?? 0
+  const offers = lenderData?.items ?? []
+  const totalOffers = lenderData?.total ?? 0
   const pageCount = Math.ceil(totalOffers / SUPPLY_PAGE_SIZE)
-  const isLoading = lenderQuery.isLoading
 
   return (
     <div className='bg-surface-secondary flex flex-col gap-3 rounded-3xl p-6'>
-      <header className='flex items-center gap-2'>
+      <header className='flex items-center gap-1.75'>
         <ArrowSquareUpIcon className='size-6' />
-        <h3 className='text-[11px] font-semibold uppercase tracking-wide'>Your Supply</h3>
+        <h3 className='text-foreground text-[11px] font-semibold uppercase tracking-[0.0061em]'>
+          Your Supply
+        </h3>
       </header>
 
       {isLoading ? (
-        <div className='flex flex-col gap-3'>
+        <div className='flex flex-col gap-1'>
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className='h-10 w-full' />
+            <Skeleton key={i} className='h-14 w-full' />
           ))}
         </div>
       ) : !offers.length ? (
@@ -49,7 +54,7 @@ export default function YourSupply() {
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
-          onActionSuccess={() => lenderQuery.refetch()}
+          onActionSuccess={() => refetch()}
         />
       )}
     </div>

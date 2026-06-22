@@ -24,16 +24,19 @@ export default function YourBorrows() {
   const { hasAccount } = useBorrowerAccount()
 
   const offset = (page - 1) * BORROW_PAGE_SIZE
-  const borrowerQuery = useBorrowerOffers(scriptPubkey ?? '', {
+  const {
+    data: borrowerData,
+    isLoading,
+    refetch,
+  } = useBorrowerOffers(scriptPubkey ?? '', {
     limit: BORROW_PAGE_SIZE,
     offset,
   })
   const { data: currentBlockHeight } = useBlockHeight()
 
-  const offers = borrowerQuery.data?.items ?? []
-  const totalOffers = borrowerQuery.data?.total ?? 0
+  const offers = borrowerData?.items ?? []
+  const totalOffers = borrowerData?.total ?? 0
   const pageCount = Math.ceil(totalOffers / BORROW_PAGE_SIZE)
-  const isLoading = borrowerQuery.isLoading
 
   const handleCreateOffer = () => {
     if (hasAccount) setIsOfferModalOpen(true)
@@ -66,7 +69,7 @@ export default function YourBorrows() {
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
-          onActionSuccess={() => borrowerQuery.refetch()}
+          onActionSuccess={() => refetch()}
         />
       )}
 

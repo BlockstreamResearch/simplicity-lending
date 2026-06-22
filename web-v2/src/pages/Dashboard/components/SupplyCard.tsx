@@ -16,8 +16,7 @@ import { DataRow } from './DataRow'
 
 export function SupplyCard() {
   const navigate = useNavigate()
-  const { balance, stats, claimableOffers, isLoading, error, refetch } = useLenderStats()
-  const alertOffer = claimableOffers[0]
+  const { balance, stats, repaidOffer, isLoading, error, refetch } = useLenderStats()
 
   useEffect(() => {
     if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your supply.')
@@ -67,11 +66,11 @@ export function SupplyCard() {
         />
       </div>
 
-      {alertOffer && (
+      {repaidOffer && (
         <CardAlert
           variant='accent'
           title='Repayment Available'
-          description={`Loan #${truncateAddress(alertOffer.id)} has been repaid. You can now claim the repayment.`}
+          description={`Loan #${truncateAddress(repaidOffer.id)} has been repaid. You can now claim the repayment.`}
           actionLabel='Claim Now'
           isDisabled
         />

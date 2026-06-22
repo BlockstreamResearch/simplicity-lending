@@ -16,7 +16,7 @@ export interface LenderStats {
 export interface UseLenderStatsResult {
   balance: bigint
   stats: LenderStats
-  claimableOffers: OfferShort[]
+  repaidOffer: OfferShort | null
   isLoading: boolean
   error: Error | null
   refetch: () => void
@@ -28,17 +28,25 @@ export function useLenderStats({
   const { isReady, balances, scriptPubkey } = useWallet()
   const script = scriptPubkey ?? ''
 
-  const overviewQuery = useLenderOverview(script, { refetchInterval: pollIntervalMs })
-  const offersQuery = useLenderOffers(script, { limit: 100 }, { refetchInterval: pollIntervalMs })
+  const {
+    data: overview,
+    isLoading: overviewLoading,
+    error: overviewError,
+    refetch: refetchOverview,
+  } = useLenderOverview(script, { refetchInterval: pollIntervalMs })
+
+  const {
+    data: offersData,
+    isLoading: offersLoading,
+    error: offersError,
+    refetch: refetchOffers,
+  } = useLenderOffers(script, { status: 'repaid', limit: 1 }, { refetchInterval: pollIntervalMs })
 
   const refetch = useCallback(() => {
-    overviewQuery.refetch()
-    offersQuery.refetch()
-  }, [overviewQuery, offersQuery])
+    refetchOverview()
+    refetchOffers()
+  }, [refetchOverview, refetchOffers])
 
-  const overview = overviewQuery.data
-  const offers = offersQuery.data?.items ?? []
-  const claimableOffers = offers.filter(o => o.status === 'repaid')
   const balance = BigInt(balances[NETWORK_CONFIG.principalAsset.id] ?? 0)
 
   return {
@@ -53,9 +61,9 @@ export function useLenderStats({
       activeLoans: overview?.active_loans ?? 0,
       repaidToClaim: overview?.to_be_claimed ?? 0,
     },
-    claimableOffers,
-    isLoading: isReady && (overviewQuery.isLoading || offersQuery.isLoading),
-    error: overviewQuery.error ?? offersQuery.error ?? null,
+    repaidOffer: offersData?.items[0] ?? null,
+    isLoading: isReady && (overviewLoading || offersLoading),
+    error: overviewError ?? offersError ?? null,
     refetch,
   }
 }

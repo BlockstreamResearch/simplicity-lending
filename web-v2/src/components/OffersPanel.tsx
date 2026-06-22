@@ -19,25 +19,27 @@ interface OffersPanelProps {
 export default function OffersPanel({ title, pageSize, status, onSuccess }: OffersPanelProps) {
   const [page, setPage] = useState(1)
 
-  const offersQuery = useOffers(
+  const {
+    data: offersData,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useOffers(
     { status, limit: pageSize, offset: (page - 1) * pageSize },
     { placeholderData: keepPreviousData },
   )
   const { data: currentBlockHeight } = useBlockHeight()
 
-  const offers = offersQuery.data?.items ?? []
-  const pageCount = Math.ceil((offersQuery.data?.total ?? 0) / pageSize)
-
-  const isLoading = offersQuery.isLoading
-  const isFetching = offersQuery.isFetching
-  const error = offersQuery.error
+  const offers = offersData?.items ?? []
+  const pageCount = Math.ceil((offersData?.total ?? 0) / pageSize)
 
   const handleRetry = () => {
-    offersQuery.refetch()
+    refetch()
   }
 
   const handleSuccess = () => {
-    offersQuery.refetch()
+    refetch()
     onSuccess?.()
   }
 

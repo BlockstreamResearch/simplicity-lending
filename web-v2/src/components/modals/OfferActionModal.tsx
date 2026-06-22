@@ -8,7 +8,7 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
-import { resolveOfferInteraction } from '@/utils/offerActions'
+import { resolveOfferAction } from '@/utils/offerActions'
 
 interface OfferActionModalProps {
   offer: OfferShort | null
@@ -28,7 +28,7 @@ export default function OfferActionModal({
 
   if (!offer) return null
 
-  const { action } = resolveOfferInteraction(offer, scriptPubkey, currentBlockHeight)
+  const action = resolveOfferAction(offer, scriptPubkey, currentBlockHeight)
 
   switch (action) {
     case 'accept':

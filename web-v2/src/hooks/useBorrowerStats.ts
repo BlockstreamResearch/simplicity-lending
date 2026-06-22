@@ -1,5 +1,3 @@
-import { useCallback } from 'react'
-
 import { useBorrowerOverview } from '@/api/indexer/hooks'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -21,13 +19,7 @@ export interface UseBorrowerStatsResult {
 
 export function useBorrowerStats(): UseBorrowerStatsResult {
   const { scriptPubkey } = useWallet()
-  const query = useBorrowerOverview(scriptPubkey ?? '')
-
-  const overview = query.data
-
-  const refetch = useCallback(() => {
-    query.refetch()
-  }, [query])
+  const { data: overview, isLoading, error, refetch } = useBorrowerOverview(scriptPubkey ?? '')
 
   return {
     stats: {
@@ -40,8 +32,8 @@ export function useBorrowerStats(): UseBorrowerStatsResult {
       activeLoans: overview?.active_loans ?? 0,
       pendingOffers: overview?.pending_offers ?? 0,
     },
-    isLoading: query.isLoading,
-    error: query.error,
+    isLoading: isLoading,
+    error: error,
     refetch,
   }
 }

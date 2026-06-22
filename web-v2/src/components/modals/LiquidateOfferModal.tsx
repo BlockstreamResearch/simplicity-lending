@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
+import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
@@ -12,7 +13,6 @@ import { selectFeeUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
-import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/utils/offerOutpoints'
 
 interface LiquidateOfferModalProps {
   isOpen: boolean

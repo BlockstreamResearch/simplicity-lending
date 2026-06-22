@@ -31,6 +31,7 @@ interface OfferActionShellProps {
   children: ReactNode
 }
 
+// TODO: Consider replacing with UiModal + proper component decomposition (details, tx status) inside each action modal
 export default function OfferActionShell({
   isOpen,
   title,
