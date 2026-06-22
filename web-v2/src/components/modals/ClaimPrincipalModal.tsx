@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { resolveNftOutpoints } from '@/api/indexer/utils'
+import { resolveNftOutpoints, toOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
@@ -44,7 +44,7 @@ export default function ClaimPrincipalModal({
 
   const claimBorrowerPrincipal = async () => {
     if (!offer.borrower_principal_utxo) throw new Error('Borrower principal UTXO not found')
-    const principalOutpoint = `${offer.borrower_principal_utxo.txid}:${offer.borrower_principal_utxo.vout}`
+    const principalOutpoint = toOutpoint(offer.borrower_principal_utxo)
 
     const fullOffer = await fetchOffer(offer.id)
     const nftOutpoints = resolveNftOutpoints(fullOffer)

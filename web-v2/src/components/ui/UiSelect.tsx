@@ -4,24 +4,17 @@ import {
   Label,
   ListBox,
   ListBoxItem,
+  type ListBoxItemRootProps,
   Select,
   type SelectProps,
 } from '@heroui/react'
 import type { ReactNode } from 'react'
 
-export type UiSelectKey = string | number
-
-export interface UiSelectOption {
-  id: UiSelectKey
-  label: string
-  isDisabled?: boolean
-}
-
 export interface UiSelectProps extends Omit<
-  SelectProps<UiSelectOption, 'single'>,
+  SelectProps<ListBoxItemRootProps, 'single'>,
   'children' | 'items'
 > {
-  options: UiSelectOption[]
+  options: ListBoxItemRootProps[]
   label?: ReactNode
   placeholder?: string
   description?: ReactNode
@@ -52,10 +45,8 @@ export function UiSelect({
       {invalid && errorMessage && <FieldError>{errorMessage}</FieldError>}
       <Select.Popover>
         <ListBox items={options}>
-          {(option: UiSelectOption) => (
-            <ListBoxItem id={option.id} textValue={option.label} isDisabled={option.isDisabled}>
-              {option.label}
-            </ListBoxItem>
+          {(option: ListBoxItemRootProps) => (
+            <ListBoxItem {...option}>{option.textValue}</ListBoxItem>
           )}
         </ListBox>
       </Select.Popover>

@@ -318,8 +318,8 @@ export default function UtxoChopperDemo() {
           label='Asset'
           placeholder='Select asset'
           options={assetOptions}
-          selectedKey={assetFilter}
-          onSelectionChange={key => {
+          value={assetFilter}
+          onChange={key => {
             setAssetFilter(key ? String(key) : 'all')
             setValue('fundingOutpoint', '')
           }}
@@ -333,9 +333,9 @@ export default function UtxoChopperDemo() {
               label='Funding asset UTXO'
               placeholder='Select wallet asset UTXO'
               options={fundingUtxoOptions}
-              selectedKey={field.value || null}
+              value={field.value || null}
               errorMessage={fieldState.error?.message}
-              onSelectionChange={key => field.onChange(key ? String(key) : '')}
+              onChange={key => field.onChange(key ? String(key) : '')}
               description={
                 fundingUtxoOptions.length
                   ? `${fundingUtxoOptions.length} wallet asset UTXO(s)`

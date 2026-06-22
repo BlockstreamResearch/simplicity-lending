@@ -7,12 +7,11 @@ import {
   Label,
   ListBox,
   ListBoxItem,
+  type ListBoxItemRootProps,
 } from '@heroui/react'
 import type { ReactNode } from 'react'
 
-import type { UiSelectOption } from './UiSelect'
-
-export interface UiComboboxProps extends Omit<ComboBoxProps<UiSelectOption>, 'children'> {
+export interface UiComboboxProps extends Omit<ComboBoxProps<ListBoxItemRootProps>, 'children'> {
   label?: ReactNode
   placeholder?: string
   description?: ReactNode
@@ -39,11 +38,9 @@ export function UiCombobox({
       {description && !invalid && <Description>{description}</Description>}
       {invalid && errorMessage && <FieldError>{errorMessage}</FieldError>}
       <ComboBox.Popover>
-        <ListBox<UiSelectOption>>
-          {(option: UiSelectOption) => (
-            <ListBoxItem id={option.id} textValue={option.label} isDisabled={option.isDisabled}>
-              {option.label}
-            </ListBoxItem>
+        <ListBox<ListBoxItemRootProps>>
+          {(option: ListBoxItemRootProps) => (
+            <ListBoxItem {...option}>{option.textValue}</ListBoxItem>
           )}
         </ListBox>
       </ComboBox.Popover>

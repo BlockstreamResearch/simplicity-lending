@@ -14,6 +14,7 @@ import { UiFieldLabel } from '@/components/ui/UiFieldLabel'
 import { UiModal } from '@/components/ui/UiModal'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
+import { env } from '@/constants/env'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { BPS_DIVISOR } from '@/constants/offers'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
@@ -28,8 +29,17 @@ import { DECIMAL_AMOUNT_RE, formatAmount } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
 import { selectByLargestFirst } from '@/utils/utxo'
 
-import { MAX_LTV, TERM_OPTIONS } from '../helpers'
 import LoanMetricsSummary from './LoanMetricsSummary'
+
+const MAX_LTV = 0.55
+const MINUTES_PER_DAY = 1440
+const TERM_OPTIONS = [
+  ...(env.DEV ? [{ id: 10 / MINUTES_PER_DAY, textValue: '10 minutes' }] : []),
+  { id: 7, textValue: '7 days' },
+  { id: 14, textValue: '14 days' },
+  { id: 30, textValue: '30 days' },
+  { id: 90, textValue: '90 days' },
+]
 
 const CREATE_OFFER_WEIGHT_UNITS =
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY + ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY.IssueAssets
@@ -377,8 +387,8 @@ export default function CreateBorrowOfferModal({
                   label={<UiFieldLabel required>Duration/Term</UiFieldLabel>}
                   placeholder='Select one'
                   options={TERM_OPTIONS}
-                  selectedKey={field.value ?? null}
-                  onSelectionChange={key => field.onChange(Number(key))}
+                  value={field.value}
+                  onChange={key => field.onChange(Number(key))}
                   errorMessage={fieldState.error?.message}
                 />
               )}

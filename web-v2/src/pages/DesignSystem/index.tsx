@@ -1,3 +1,4 @@
+import type { ListBoxItemRootProps } from '@heroui/react'
 import { Card, Chip, Pagination, Spinner, Table } from '@heroui/react'
 import type { ReactNode, SVGProps } from 'react'
 import { useState } from 'react'
@@ -6,7 +7,7 @@ import CoinsIcon from '@/components/icons/CoinsIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiCombobox } from '@/components/ui/UiCombobox'
 import { UiModal } from '@/components/ui/UiModal'
-import { UiSelect, type UiSelectKey, type UiSelectOption } from '@/components/ui/UiSelect'
+import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 
 const SearchIcon = (props: SVGProps<SVGSVGElement>) => (
@@ -244,12 +245,12 @@ const BUTTON_VARIANTS = [
 ] as const
 const BUTTON_SIZES = ['sm', 'md', 'lg'] as const
 
-const ASSETS: UiSelectOption[] = [
-  { id: 'btc', label: 'Bitcoin' },
-  { id: 'lbtc', label: 'Liquid Bitcoin' },
-  { id: 'usdt', label: 'Tether (USDt)' },
-  { id: 'eurx', label: 'EURx' },
-  { id: 'mex', label: 'MEX' },
+const ASSETS: ListBoxItemRootProps[] = [
+  { id: 'btc', textValue: 'Bitcoin' },
+  { id: 'lbtc', textValue: 'Liquid Bitcoin' },
+  { id: 'usdt', textValue: 'Tether (USDt)' },
+  { id: 'eurx', textValue: 'EURx' },
+  { id: 'mex', textValue: 'MEX' },
 ]
 
 function SwatchTile({ label, className, note, fg }: Swatch) {
@@ -296,11 +297,11 @@ const STATUS_CHIP: Record<OfferStatus, { color: 'success' | 'accent' | 'default'
 const TOTAL_RESULTS = 120
 const DEFAULT_PAGE_SIZE = 10
 
-const PAGE_SIZE_OPTIONS: UiSelectOption[] = [
-  { id: 5, label: '5' },
-  { id: 10, label: '10' },
-  { id: 25, label: '25' },
-  { id: 50, label: '50' },
+const PAGE_SIZE_OPTIONS: ListBoxItemRootProps[] = [
+  { id: 5, textValue: '5' },
+  { id: 10, textValue: '10' },
+  { id: 25, textValue: '25' },
+  { id: 50, textValue: '50' },
 ]
 
 const RefreshIcon = (props: SVGProps<SVGSVGElement>) => (
@@ -335,7 +336,7 @@ function TableDemo() {
   const isFirst = currentPage <= 1
   const isLast = currentPage >= pageCount
 
-  const handlePageSizeChange = (key: UiSelectKey) => {
+  const handlePageSizeChange = (key: string | number) => {
     setPageSize(Number(key))
     setPage(1)
   }
@@ -380,8 +381,8 @@ function TableDemo() {
               <span>Showing</span>
               <UiSelect
                 options={PAGE_SIZE_OPTIONS}
-                selectedKey={pageSize}
-                onSelectionChange={key => handlePageSizeChange(key as UiSelectKey)}
+                value={pageSize}
+                onChange={key => handlePageSizeChange(key as string | number)}
                 className='w-20'
               />
               <span>of {TOTAL_RESULTS} results</span>
@@ -445,8 +446,8 @@ function ModalDemo() {
 }
 
 export default function DesignSystemPage() {
-  const [asset, setAsset] = useState<UiSelectKey | null>('btc')
-  const [assetSearch, setAssetSearch] = useState<UiSelectKey | null>(null)
+  const [asset, setAsset] = useState<string | number | null>('btc')
+  const [assetSearch, setAssetSearch] = useState<string | number | null>(null)
 
   return (
     <div className='flex flex-col'>
@@ -606,15 +607,15 @@ export default function DesignSystemPage() {
             label='Asset'
             placeholder='Pick an asset'
             options={ASSETS}
-            selectedKey={asset}
-            onSelectionChange={key => setAsset(key as UiSelectKey | null)}
+            value={asset}
+            onChange={key => setAsset(key)}
           />
           <UiCombobox
             label='Asset (searchable)'
             placeholder='Type to filter…'
             defaultItems={ASSETS}
-            selectedKey={assetSearch}
-            onSelectionChange={key => setAssetSearch(key as UiSelectKey | null)}
+            value={assetSearch}
+            onChange={key => setAssetSearch(key)}
           />
           <UiSelect
             label='Asset (error)'

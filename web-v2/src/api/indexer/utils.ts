@@ -1,6 +1,6 @@
 import type { OfferDetails } from '@/api/indexer/schemas'
 
-const toOutpoint = (entry: { txid: string; vout: number }) => `${entry.txid}:${entry.vout}`
+export const toOutpoint = (entry: { txid: string; vout: number }) => `${entry.txid}:${entry.vout}`
 
 export function resolveNftOutpoints(offer: OfferDetails): {
   lenderNft: string
