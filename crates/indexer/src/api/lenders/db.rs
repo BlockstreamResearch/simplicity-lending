@@ -1,35 +1,19 @@
 use sqlx::{PgPool, Postgres, QueryBuilder};
 
 use crate::api::OfferListQuery;
-use crate::api::borrowers::dto::AssetAmount;
+use crate::api::db::{AssetSumRow, asset_amounts_from_rows};
 use crate::api::offers::dto::OfferListResponse;
 use crate::api::offers::list_query::fetch_participant_offers_list;
 use crate::api::query::attach_latest_participant_offers_scope;
-use crate::api::utils::{format_hex, format_satoshis};
 
 use crate::models::{OfferStatus, ParticipantType};
 
 use super::dto::LenderOverview;
 
 #[derive(sqlx::FromRow)]
-struct AssetSumRow {
-    asset_id: Vec<u8>,
-    amount: i64,
-}
-
-#[derive(sqlx::FromRow)]
 struct LenderCountsRow {
     active_loans: i64,
     to_be_claimed: i64,
-}
-
-fn asset_amounts_from_rows(rows: Vec<AssetSumRow>) -> Vec<AssetAmount> {
-    rows.into_iter()
-        .map(|row| AssetAmount {
-            asset: format_hex(row.asset_id),
-            amount: format_satoshis(row.amount),
-        })
-        .collect()
 }
 
 #[tracing::instrument(

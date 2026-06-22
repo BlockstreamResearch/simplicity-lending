@@ -1,7 +1,7 @@
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use crate::api::borrowers::dto::AssetAmount;
+use crate::api::dto::AssetAmount;
 
 #[derive(Serialize, ToSchema)]
 pub struct LenderOverview {

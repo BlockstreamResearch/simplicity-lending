@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
 
-use crate::api::borrowers::dto::AssetAmount;
+use crate::api::dto::AssetAmount;
 use crate::api::utils::{format_hex, format_satoshis};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,

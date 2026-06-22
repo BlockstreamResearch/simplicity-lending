@@ -4,7 +4,7 @@ use uuid::Uuid;
 use simplex::simplicityhl::elements::hex::ToHex;
 
 use crate::api::OfferListQuery;
-use crate::api::utils::{format_hex, format_satoshis};
+use crate::api::db::{AssetSumRow, asset_amounts_from_rows};
 use crate::models::{
     OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType, UtxoType,
 };
@@ -14,23 +14,6 @@ use super::dto::{
     ParticipantDto,
 };
 use super::list_query::fetch_all_offers_list;
-
-use crate::api::borrowers::dto::AssetAmount;
-
-#[derive(sqlx::FromRow)]
-struct AssetSumRow {
-    asset_id: Vec<u8>,
-    amount: i64,
-}
-
-fn asset_amounts_from_rows(rows: Vec<AssetSumRow>) -> Vec<AssetAmount> {
-    rows.into_iter()
-        .map(|row| AssetAmount {
-            asset: format_hex(row.asset_id),
-            amount: format_satoshis(row.amount),
-        })
-        .collect()
-}
 
 const OPEN_COLLATERAL_STATUSES: [OfferStatus; 2] = [OfferStatus::Pending, OfferStatus::Active];
 

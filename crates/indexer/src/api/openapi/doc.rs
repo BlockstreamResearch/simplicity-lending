@@ -3,8 +3,9 @@ use utoipa::OpenApi;
 #[cfg(feature = "swagger-ui")]
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::api::borrowers::dto::{AssetAmount, BorrowerOverview};
+use crate::api::borrowers::dto::BorrowerOverview;
 use crate::api::borrowers::handlers as borrower_handlers;
+use crate::api::dto::AssetAmount;
 use crate::api::factories::dto::{
     FactoryAuthUtxoDto, FactoryDetailsResponse, FactoryProgramUtxoDto,
 };
