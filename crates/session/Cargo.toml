@@ -1,0 +1,19 @@
+[package]
+name = "lending-session"
+version = "0.1.0"
+edition = "2024"
+description = "Simplicity Lending session lib"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+smplx-std = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+anyhow = "1"
+cargo-husky = { workspace = true }

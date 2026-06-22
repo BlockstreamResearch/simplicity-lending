@@ -3,7 +3,7 @@
 FROM rust:1.93-bookworm AS lwk-builder
 
 ARG LWK_REF=jade-serial-improvements
-ARG LWK_COMMIT=b2d0ad3ccbca3839b968e4ec48f5e64fae5db328
+ARG LWK_COMMIT=31fdeca963816a3c83e431b2240802183d78a9ec
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git pkg-config libssl-dev ca-certificates clang \

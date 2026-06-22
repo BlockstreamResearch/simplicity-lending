@@ -1768,6 +1768,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lending-session"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cargo-husky",
+ "smplx-std",
+ "thiserror",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
