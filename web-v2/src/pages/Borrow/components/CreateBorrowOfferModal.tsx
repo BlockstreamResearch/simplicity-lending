@@ -69,7 +69,28 @@ function createBorrowOfferSchema({
       const collateralBase = toBigintAmount(data.collateral, collateralDecimals)
       const principalBase = toBigintAmount(data.borrow, principalDecimals)
       const feeBase = toBigintAmount(data.fee, principalDecimals)
-      if (!collateralBase || !principalBase) return
+      if (collateralBase <= 0n) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['collateral'],
+          message: 'Collateral is below the minimum asset unit',
+        })
+      }
+      if (principalBase <= 0n) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['borrow'],
+          message: `Borrow amount is below the minimum ${principalSymbol} unit`,
+        })
+      }
+      if (feeBase <= 0n) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['fee'],
+          message: `Fee is below the minimum ${principalSymbol} unit`,
+        })
+      }
+      if (collateralBase <= 0n || principalBase <= 0n || feeBase <= 0n) return
 
       const feeBps = feeToBps(feeBase, principalBase)
       if (feeBps > MAX_INTEREST_RATE_BPS) {
