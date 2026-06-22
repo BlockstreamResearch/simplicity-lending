@@ -99,3 +99,6 @@ export const blockHeightTextSchema = z
   .string()
   .regex(/^\d+$/, 'block height must be a positive integer string')
   .transform(value => Number.parseInt(value, 10))
+
+export const feeEstimatesSchema = z.record(z.string(), z.number())
+export type FeeEstimates = z.infer<typeof feeEstimatesSchema>

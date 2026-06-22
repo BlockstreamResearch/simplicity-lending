@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveCreateOfferNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
@@ -9,12 +10,21 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
-import { selectFeeUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import {
+  estimateFeeBudgetSats,
+  selectAssetUtxos,
+  selectFeeUtxos,
+  utxoToOutpointString,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
+import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
+import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { bpsToPercent, calcInterest } from '@/utils/offers'
-import { selectOptimalUtxo } from '@/utils/utxo'
+
+const ACCEPT_WEIGHT_UNITS =
+  LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance + SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY
 
 interface AcceptOfferModalProps {
   isOpen: boolean
@@ -40,26 +50,30 @@ export default function AcceptOfferModal({
     if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
 
     await syncWallet()
-    const blindedWalletUtxos = await getBlindedWalletUtxos()
+    const [blindedWalletUtxos, feeRate] = await Promise.all([
+      getBlindedWalletUtxos(),
+      fetchFeeRateSatPerKvb(),
+    ])
 
-    const principalUtxo = selectOptimalUtxo(
-      blindedWalletUtxos
-        .filter(u => u.unblinded().asset().toString() === principalAsset.id)
-        .map(u => ({ outpoint: utxoToOutpointString(u), value: u.unblinded().value() })),
+    const principalUtxos = selectAssetUtxos(
+      blindedWalletUtxos,
+      principalAsset.id,
       offer.principal_amount,
+      principalAsset.symbol,
     )
-    if (!principalUtxo) throw new Error(`Insufficient ${principalAsset.symbol} balance`)
 
-    const feeUtxo = selectFeeUtxo(blindedWalletUtxos, lwkNetwork.policyAsset())
+    const feeBudgetSats = estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
+    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset(), feeBudgetSats)
     const nftOutpoints = resolveCreateOfferNftOutpoints(fullOffer)
     if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+    const { lenderNft, borrowerNft } = nftOutpoints
 
     return acceptOffer({
       pendingOfferOutpoint,
-      lenderNftOutpoint: nftOutpoints.lenderNft,
-      borrowerNftReferenceOutpoint: nftOutpoints.borrowerNft,
-      principalOutpoint: principalUtxo.outpoint,
-      feeOutpoint: utxoToOutpointString(feeUtxo),
+      lenderNftOutpoint: lenderNft,
+      borrowerNftReferenceOutpoint: borrowerNft,
+      principalOutpoints: principalUtxos.map(utxoToOutpointString),
+      feeOutpoints: feeUtxos.map(utxoToOutpointString),
     })
   }
 

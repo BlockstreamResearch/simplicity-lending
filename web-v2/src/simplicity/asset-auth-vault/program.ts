@@ -64,6 +64,21 @@ export type AssetAuthVaultWitnessParams =
       amountToSupply: Uint64
     }
 
+export type AssetAuthVaultBranch = AssetAuthVaultWitnessParams['branch']
+
+// ExternalUtxo max-weight-to-satisfy for the AssetAuthVault covenant input, per branch.
+// WithdrawAll is measured from a real broadcast tx (1328 bytes, plus margin). The other
+// branches aren't exercised by any hook yet, so they keep the old conservative placeholder
+// until measured for real.
+export const ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY: Record<AssetAuthVaultBranch, number> = {
+  WithdrawAll: 1500,
+
+  // Not tested
+  WithdrawPart: 30_000,
+  Supply: 30_000,
+  FinalSupply: 30_000,
+}
+
 export function loadAssetAuthVaultProgram(params: AssetAuthVaultProgramParams): SimplicityProgram {
   return SimplicityProgram.load(sources.asset_auth_vault, buildAssetAuthVaultArguments(params))
 }

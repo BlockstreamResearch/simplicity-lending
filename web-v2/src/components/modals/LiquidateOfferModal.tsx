@@ -2,6 +2,7 @@ import { Chip } from '@heroui/react'
 import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
@@ -9,10 +10,19 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useLiquidateOffer } from '@/hooks/useLiquidateOffer'
-import { selectFeeUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import {
+  estimateFeeBudgetSats,
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+  selectFeeUtxos,
+  utxoToOutpointString,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
+import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
+
+const LIQUIDATE_WEIGHT_UNITS =
+  LENDING_MAX_WEIGHT_TO_SATISFY.Liquidation + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
 
 interface LiquidateOfferModalProps {
   isOpen: boolean
@@ -41,14 +51,18 @@ export default function LiquidateOfferModal({
     if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
 
     await syncWallet()
-    const blindedWalletUtxos = await getBlindedWalletUtxos()
-    const feeUtxo = selectFeeUtxo(blindedWalletUtxos, lwkNetwork.policyAsset())
+    const [blindedWalletUtxos, feeRate] = await Promise.all([
+      getBlindedWalletUtxos(),
+      fetchFeeRateSatPerKvb(),
+    ])
+    const feeBudgetSats = estimateFeeBudgetSats(LIQUIDATE_WEIGHT_UNITS, feeRate)
+    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset(), feeBudgetSats)
 
     return liquidateOffer({
       activeOfferOutpoint,
       createOfferTxid: offer.created_at_txid,
       lenderNftOutpoint,
-      feeOutpoint: utxoToOutpointString(feeUtxo),
+      feeOutpoints: feeUtxos.map(utxoToOutpointString),
     })
   }
 

@@ -6,6 +6,7 @@ import CreateOfferDemo from './CreateOfferDemo'
 import LenderVaultClaimDemo from './LenderVaultClaimDemo'
 import LiquidateOfferDemo from './LiquidateOfferDemo'
 import RepayOfferDemo from './RepayOfferDemo'
+import UtxoChopperDemo from './UtxoChopperDemo'
 import { WalletDemo } from './WalletDemo'
 
 export default function DemoPage() {
@@ -13,6 +14,7 @@ export default function DemoPage() {
     <div className='space-y-4 p-6'>
       <h1 className='text-3xl font-semibold'>Demo</h1>
       <WalletDemo />
+      <UtxoChopperDemo />
       <CreateBorrowerAccountDemo />
       <CreateOfferDemo />
       <AcceptOfferDemo />

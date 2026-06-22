@@ -17,6 +17,10 @@ const WITNESS = {
   INPUT_SCRIPT_INDEX: 'INPUT_SCRIPT_INDEX',
 } as const
 
+// ExternalUtxo max-weight-to-satisfy for the ScriptAuth covenant input. Measured from real
+// broadcast txs (program + CMR + control block + witness data = 331 bytes), plus margin.
+export const SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY = 400
+
 export function loadScriptAuthProgram(scriptHash: Bytes32): SimplicityProgram {
   return SimplicityProgram.load(sources.script_auth, buildScriptAuthArguments(scriptHash))
 }

@@ -1,15 +1,15 @@
 import type { AssetAmount, OfferShort } from '@/api/indexer/schemas'
+import { BPS_DIVISOR } from '@/constants/offers'
 
 import { formatTermLeft } from './format'
 import { normalizeHex } from './hex'
 
-const BPS_DIVISOR = 10_000
 const AVERAGE_BLOCK_TIME_SECONDS = 60
 const BLOCKS_PER_DAY = (24 * 60 * 60) / AVERAGE_BLOCK_TIME_SECONDS
 const BLOCKS_PER_YEAR = 365 * BLOCKS_PER_DAY
 
 export function calcInterest(principal: bigint, bps: number): bigint {
-  return (principal * BigInt(Math.round(bps))) / BigInt(BPS_DIVISOR)
+  return (principal * BigInt(Math.round(bps))) / BPS_DIVISOR
 }
 
 export function bpsToPercent(bps: number): string {
@@ -22,12 +22,12 @@ export function daysToBlocks(days: number): number {
 
 export function feeToBps(feeBaseUnits: bigint, principalBaseUnits: bigint): number {
   if (principalBaseUnits <= 0n) return 0
-  return Number((feeBaseUnits * BigInt(BPS_DIVISOR)) / principalBaseUnits)
+  return Number((feeBaseUnits * BPS_DIVISOR) / principalBaseUnits)
 }
 
 export function computeApr(bps: number, loanDurationBlocks: number): number {
   if (loanDurationBlocks <= 0) return 0
-  return (bps / BPS_DIVISOR) * (BLOCKS_PER_YEAR / loanDurationBlocks) * 100
+  return (bps / Number(BPS_DIVISOR)) * (BLOCKS_PER_YEAR / loanDurationBlocks) * 100
 }
 
 export function computeLtv({

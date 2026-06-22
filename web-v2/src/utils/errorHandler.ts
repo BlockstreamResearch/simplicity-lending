@@ -7,14 +7,6 @@ import {
   ApiValidationError,
   BroadcastError,
 } from '@/api/errors'
-// For debugging
-export function wrapErrorWithContext(error: unknown, context: string): Error {
-  const message = error instanceof Error ? error.message : String(error)
-  const responseBody = error instanceof ApiError ? error.body : undefined
-  const responseDetails = responseBody ? ` | response: ${responseBody}` : ''
-
-  return new Error(`${context}: ${message}${responseDetails}`, { cause: error })
-}
 
 export class ErrorHandler {
   static process(error: unknown, message?: string): void {
