@@ -130,7 +130,7 @@ export function TransactionBody({
                     ? 'Confirmed'
                     : 'Pending…',
             },
-            ...(!confirmations
+            ...(confirmations
               ? [
                   {
                     label: 'Confirmations',
