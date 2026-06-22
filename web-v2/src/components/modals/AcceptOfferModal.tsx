@@ -1,9 +1,10 @@
 import { useMutation } from '@tanstack/react-query'
+import { useMemo } from 'react'
 
-import { useBlockHeight } from '@/api/esplora/hooks'
-import { useOffer } from '@/api/indexer/hooks'
+import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import OfferModal from '@/components/modals/OfferModal'
+import OfferActionShell from '@/components/modals/OfferActionShell'
+import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
@@ -12,7 +13,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { resolveCreateOfferNftOutpoints, resolvePendingOutpoint } from '@/utils/offerOutpoints'
-import { bpsToPercent, calcInterest, getOfferDisplayStatus } from '@/utils/offers'
+import { bpsToPercent, calcInterest } from '@/utils/offers'
 import { selectOptimalUtxo } from '@/utils/utxo'
 
 interface AcceptOfferModalProps {
@@ -32,37 +33,31 @@ export default function AcceptOfferModal({
   const { syncWallet, getBlindedWalletUtxos } = useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
-  const blockHeightQuery = useBlockHeight()
-  const currentBlockHeight = blockHeightQuery.data ?? 0
-
-  const fullOfferQuery = useOffer(offer.id)
-  const fullOffer = fullOfferQuery.data ?? null
 
   const acceptBorrowOffer = async () => {
-    if (!fullOffer) throw new Error('Offer details not loaded')
+    const fullOffer = await fetchOffer(offer.id)
     const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
     if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
 
     await syncWallet()
-    const walletUtxos = await getBlindedWalletUtxos()
+    const blindedWalletUtxos = await getBlindedWalletUtxos()
 
     const principalUtxo = selectOptimalUtxo(
-      walletUtxos
+      blindedWalletUtxos
         .filter(u => u.unblinded().asset().toString() === principalAsset.id)
         .map(u => ({ outpoint: utxoToOutpointString(u), value: u.unblinded().value() })),
       offer.principal_amount,
     )
     if (!principalUtxo) throw new Error(`Insufficient ${principalAsset.symbol} balance`)
 
-    const feeUtxo = selectFeeUtxo(walletUtxos, lwkNetwork.policyAsset())
+    const feeUtxo = selectFeeUtxo(blindedWalletUtxos, lwkNetwork.policyAsset())
     const nftOutpoints = resolveCreateOfferNftOutpoints(fullOffer)
     if (!nftOutpoints) throw new Error('Offer NFT participants not found')
-    const { lenderNft, borrowerNftReference } = nftOutpoints
 
     return acceptOffer({
       pendingOfferOutpoint,
-      lenderNftOutpoint: lenderNft,
-      borrowerNftReferenceOutpoint: borrowerNftReference,
+      lenderNftOutpoint: nftOutpoints.lenderNft,
+      borrowerNftReferenceOutpoint: nftOutpoints.borrowerNft,
       principalOutpoint: principalUtxo.outpoint,
       feeOutpoint: utxoToOutpointString(feeUtxo),
     })
@@ -70,39 +65,38 @@ export default function AcceptOfferModal({
 
   const { mutate, reset, data, error, status } = useMutation({ mutationFn: acceptBorrowOffer })
 
-  const borrower = fullOffer?.participants.find(p => p.participant_type === 'borrower')
-  const title = `${truncateAddress(borrower?.script_pubkey ?? offer.created_at_txid)} Supply Offers`
+  const borrower = offer.participants.find(p => p.participant_type === 'borrower')
+  const title = `${truncateAddress(borrower?.script_pubkey || '')} Supply Offers`
 
-  const txSummary = [
-    {
-      label: 'Collateral',
-      value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
-    },
-    {
-      label: 'Principal Supplied',
-      value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
-    },
-    {
-      label: 'Earn',
-      value: `${formatAmount(calcInterest(offer.principal_amount, offer.interest_rate), principalAsset.decimals)} ${principalAsset.symbol}`,
-    },
-    { label: 'APR', value: bpsToPercent(offer.interest_rate) },
-  ]
+  const txSummary = useMemo(
+    () => [
+      {
+        label: 'Collateral',
+        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
+      },
+      {
+        label: 'Principal Supplied',
+        value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
+      },
+      {
+        label: 'Earn',
+        value: `${formatAmount(calcInterest(offer.principal_amount, offer.interest_rate), principalAsset.decimals)} ${principalAsset.symbol}`,
+      },
+      { label: 'APR', value: bpsToPercent(offer.interest_rate) },
+    ],
+    [offer, collateralAsset, principalAsset],
+  )
 
   return (
-    <OfferModal
+    <OfferActionShell
       isOpen={isOpen}
-      offer={offer}
-      fullOffer={fullOffer}
       title={title}
-      chip={<OfferStatusChip status={getOfferDisplayStatus(offer, currentBlockHeight)} />}
-      principalLabel='Loan Amount'
+      chip={<OfferStatusChip status={offer.status} />}
       action={{
         label: 'Accept & Supply',
         eyebrow: 'Accept Offer',
         summary: txSummary,
         status,
-        disabled: !fullOffer,
         txid: data?.txid,
         error: error?.message,
         onConfirm: () => mutate(),
@@ -112,6 +106,8 @@ export default function AcceptOfferModal({
         onClose()
       }}
       onSuccess={onSuccess}
-    />
+    >
+      <OfferDetailsBody offer={offer} principalLabel='Loan Amount' />
+    </OfferActionShell>
   )
 }

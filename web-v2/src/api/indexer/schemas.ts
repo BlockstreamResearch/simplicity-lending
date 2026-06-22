@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import { ErrorHandler } from '@/utils/errorHandler'
 import { blockHeightSchema, finiteNumber, u64AsBigint } from '@/utils/zod'
 
 export const offerStatusSchema = z.enum([
@@ -10,16 +9,8 @@ export const offerStatusSchema = z.enum([
   'liquidated',
   'cancelled',
   'claimed',
-  'unknown',
 ])
 export type OfferStatus = z.infer<typeof offerStatusSchema>
-
-const offerStatusWithFallback = offerStatusSchema.catch(ctx => {
-  ErrorHandler.processWithoutFeedback(
-    new Error(`[api] unrecognized offer status: ${String(ctx.input)}`),
-  )
-  return 'unknown'
-})
 
 export const participantTypeSchema = z.enum(['borrower', 'lender'])
 export type ParticipantType = z.infer<typeof participantTypeSchema>
@@ -27,8 +18,7 @@ export type ParticipantType = z.infer<typeof participantTypeSchema>
 export const offerUtxoTypeSchema = z.enum([
   'pending_offer',
   'active_offer',
-  'pre_lock',
-  'lending',
+  'borrower_principal',
   'cancellation',
   'repayment',
   'liquidation',
@@ -36,10 +26,22 @@ export const offerUtxoTypeSchema = z.enum([
 ])
 export type OfferUtxoType = z.infer<typeof offerUtxoTypeSchema>
 
+export const participantShortSchema = z.object({
+  participant_type: participantTypeSchema,
+  script_pubkey: z.string(),
+})
+export type ParticipantShort = z.infer<typeof participantShortSchema>
+
+export const offerOutpointShortSchema = z.object({
+  txid: z.string(),
+  vout: z.coerce.number(),
+})
+export type OfferOutpointShort = z.infer<typeof offerOutpointShortSchema>
+
 export const offerShortSchema = z.object({
   id: z.string(),
   issuance_factory_id: z.string(),
-  status: offerStatusWithFallback,
+  status: offerStatusSchema,
   collateral_asset: z.string(),
   principal_asset: z.string(),
   collateral_amount: u64AsBigint,
@@ -48,6 +50,8 @@ export const offerShortSchema = z.object({
   loan_expiration_height: finiteNumber.default(0),
   created_at_height: blockHeightSchema,
   created_at_txid: z.string(),
+  participants: z.array(participantShortSchema).default([]),
+  borrower_principal_utxo: offerOutpointShortSchema.optional(),
 })
 export type OfferShort = z.infer<typeof offerShortSchema>
 
@@ -69,7 +73,6 @@ export const participantDtoSchema = z.object({
   spent_at_height: z.coerce.number().nullable(),
 })
 export type ParticipantDto = z.infer<typeof participantDtoSchema>
-export type OfferParticipant = ParticipantDto
 
 export const offerUtxoSchema = z.object({
   offer_id: z.string(),
@@ -88,8 +91,6 @@ export const offerDetailsSchema = offerFullSchema.extend({
 })
 export type OfferDetails = z.infer<typeof offerDetailsSchema>
 
-export const offerIdListSchema = z.array(z.string())
-
 export const offerListResponseSchema = z.object({
   items: z.array(offerShortSchema),
   total: z.coerce.number(),
@@ -104,6 +105,13 @@ export const assetAmountSchema = z.object({
 })
 export type AssetAmount = z.infer<typeof assetAmountSchema>
 
+export const offersOverviewSchema = z.object({
+  collateral_locked: z.array(assetAmountSchema),
+  active_loan_principal: z.array(assetAmountSchema),
+  active_loans_count: z.coerce.number(),
+})
+export type OffersOverview = z.infer<typeof offersOverviewSchema>
+
 export const borrowerOverviewSchema = z.object({
   collateral_locked: z.array(assetAmountSchema),
   borrowings: z.array(assetAmountSchema),
@@ -112,11 +120,13 @@ export const borrowerOverviewSchema = z.object({
 })
 export type BorrowerOverview = z.infer<typeof borrowerOverviewSchema>
 
-export const borrowerByScriptSchema = z.object({
-  overview: borrowerOverviewSchema,
-  offers: offerListResponseSchema,
+export const lenderOverviewSchema = z.object({
+  supplied_loans: z.array(assetAmountSchema),
+  interest_outstanding: z.array(assetAmountSchema),
+  active_loans: z.coerce.number(),
+  to_be_claimed: z.coerce.number(),
 })
-export type BorrowerByScript = z.infer<typeof borrowerByScriptSchema>
+export type LenderOverview = z.infer<typeof lenderOverviewSchema>
 
 export const factoryStatusSchema = z.enum(['active', 'removed'])
 export type FactoryStatus = z.infer<typeof factoryStatusSchema>

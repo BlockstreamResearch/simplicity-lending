@@ -1,4 +1,5 @@
 import {
+  type DefinedUseQueryResult,
   useMutation,
   type UseMutationOptions,
   type UseMutationResult,
@@ -80,12 +81,13 @@ export function useAddressTxs(
 
 export function useBlockHeight(
   refetchIntervalMs: number = DEFAULT_BLOCK_HEIGHT_POLL_MS,
-): UseQueryResult<number> {
+): DefinedUseQueryResult<number> {
   return useQuery({
     queryKey: esploraQueryKeys.blockHeight,
     queryFn: ({ signal }) => fetchLatestBlockHeight({ signal }),
     staleTime: STALE_TIME_MS.tip,
     refetchInterval: refetchIntervalMs,
+    initialData: 0,
   })
 }
 

@@ -23,12 +23,7 @@ export default function SupplyPage() {
               <UserBalances />
               <SupplyOverview />
               <YourSupply />
-              <OffersPanel
-                title='Most recent Borrow Offers'
-                status='pending'
-                pageSize={10}
-                interactive
-              />
+              <OffersPanel title='Most recent Borrow Offers' status='pending' pageSize={10} />
             </div>
           )
         }

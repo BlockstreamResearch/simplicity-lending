@@ -1,28 +1,33 @@
+import { useMemo } from 'react'
+
 import UserOverview, { type OverviewTile } from '@/components/UserOverview'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useBorrowerStats } from '@/hooks/useBorrowerStats'
 import { formatAmount } from '@/utils/format'
-import { bpsToPercent } from '@/utils/offers'
 
 export default function BorrowOverview() {
   const { stats, isLoading } = useBorrowerStats()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
 
-  const tiles: OverviewTile[] = [
-    {
-      label: 'Collateral Locked',
-      value: formatAmount(stats.lockedCollateral, collateralAsset.decimals),
-      asset: collateralAsset,
-    },
-    {
-      label: 'Borrowings',
-      value: formatAmount(stats.borrowings, principalAsset.decimals),
-      asset: principalAsset,
-    },
-    { label: 'Average APR', value: bpsToPercent(stats.averageApr) },
-    { label: 'Active Loans', value: String(stats.activeLoans) },
-    { label: 'Pending Offers', value: String(stats.pendingOffers) },
-  ]
+  const tiles = useMemo<OverviewTile[]>(
+    () => [
+      {
+        label: 'Collateral Locked',
+        value: formatAmount(stats.lockedCollateral, collateralAsset.decimals),
+        asset: collateralAsset,
+      },
+      {
+        label: 'Borrowings',
+        value: formatAmount(stats.borrowings, principalAsset.decimals),
+        asset: principalAsset,
+      },
+      // TODO: show real value once /borrowers/overview returns an average APR (backend doesn't expose it yet).
+      { label: 'Average APR', value: '—' },
+      { label: 'Active Loans', value: String(stats.activeLoans) },
+      { label: 'Pending Offers', value: String(stats.pendingOffers) },
+    ],
+    [stats, collateralAsset, principalAsset],
+  )
 
   return (
     <UserOverview

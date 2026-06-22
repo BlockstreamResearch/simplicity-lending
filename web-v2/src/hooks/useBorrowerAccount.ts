@@ -72,7 +72,7 @@ export function useBorrowerAccount() {
 
   const refetchFactory = useCallback((): void => {
     if (!scriptPubkey) return
-    void queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey) })
+    queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey) })
   }, [scriptPubkey, queryClient])
 
   const createBorrowerAccount = async (): Promise<BorrowerAccountCreationResult> => {
@@ -163,7 +163,7 @@ export function useBorrowerAccount() {
         },
       ],
     )
-    void queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey ?? '') })
+    queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey ?? '') })
 
     return result
   }

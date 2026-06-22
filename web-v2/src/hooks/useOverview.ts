@@ -1,32 +1,30 @@
 import { useMemo } from 'react'
 
-import { useOffers } from '@/api/indexer/hooks'
+import { useOffersOverview } from '@/api/indexer/hooks'
+import { NETWORK_CONFIG } from '@/constants/network-config'
+import { findAssetAmount } from '@/utils/offers'
 
 export interface DashboardOverview {
   totalCollateral: bigint
   totalActiveLoans: bigint
-  avgInterestRate: number
   activeLoansCount: number
 }
-// TODO: Stats should be computed server-side via a dedicated /stats endpoint (tracked in indexer README).
-// Current approach fetches up to 100 active offers and aggregates client-side — rewrite this hook once the endpoint exists.
+
 export function useOverview({ pollIntervalMs = 30_000 }: { pollIntervalMs?: number } = {}) {
-  const offersQuery = useOffers(
-    { status: 'active', limit: 100 },
-    { refetchInterval: pollIntervalMs },
-  )
+  const overviewQuery = useOffersOverview({ refetchInterval: pollIntervalMs })
 
   const overview = useMemo<DashboardOverview>(() => {
-    const active = offersQuery.data?.items ?? []
+    const data = overviewQuery.data
     return {
-      totalCollateral: active.reduce((acc, o) => acc + o.collateral_amount, 0n),
-      totalActiveLoans: active.reduce((acc, o) => acc + o.principal_amount, 0n),
-      avgInterestRate: active.length
-        ? active.reduce((acc, o) => acc + o.interest_rate, 0) / active.length
-        : 0,
-      activeLoansCount: active.length,
+      totalCollateral: data
+        ? findAssetAmount(data.collateral_locked, NETWORK_CONFIG.collateralAsset.id)
+        : 0n,
+      totalActiveLoans: data
+        ? findAssetAmount(data.active_loan_principal, NETWORK_CONFIG.principalAsset.id)
+        : 0n,
+      activeLoansCount: data?.active_loans_count ?? 0,
     }
-  }, [offersQuery.data])
+  }, [overviewQuery.data])
 
-  return { overview, isLoading: offersQuery.isLoading }
+  return { overview, isLoading: overviewQuery.isLoading }
 }

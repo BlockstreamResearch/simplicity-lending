@@ -1,20 +1,31 @@
 import { Skeleton } from '@heroui/react'
+import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
-import type { OfferShort } from '@/api/indexer/schemas'
+import { useLenderOffers } from '@/api/indexer/hooks'
 import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
-import OfferActionModals from '@/components/modals/OfferActionModals'
 import OffersTable from '@/components/OffersTable'
-import { useLenderStats } from '@/hooks/useLenderStats'
+import { useWallet } from '@/providers/wallet/useWallet'
+
+const SUPPLY_PAGE_SIZE = 10
 
 export default function YourSupply() {
-  const blockHeightQuery = useBlockHeight()
-  const currentBlockHeight = blockHeightQuery.data ?? 0
+  const [page, setPage] = useState(1)
+  const { scriptPubkey } = useWallet()
+  const { data: currentBlockHeight } = useBlockHeight()
 
-  const [selectedOffer, setSelectedOffer] = useState<OfferShort | null>(null)
+  const offset = (page - 1) * SUPPLY_PAGE_SIZE
+  const lenderQuery = useLenderOffers(
+    scriptPubkey ?? '',
+    { limit: SUPPLY_PAGE_SIZE, offset },
+    { placeholderData: keepPreviousData },
+  )
 
-  const { offers: lenderOffers, isLoading, refetch } = useLenderStats()
+  const offers = lenderQuery.data?.items ?? []
+  const totalOffers = lenderQuery.data?.total ?? 0
+  const pageCount = Math.ceil(totalOffers / SUPPLY_PAGE_SIZE)
+  const isLoading = lenderQuery.isLoading
 
   return (
     <div className='bg-surface-secondary flex flex-col gap-3 rounded-3xl p-6'>
@@ -29,25 +40,18 @@ export default function YourSupply() {
             <Skeleton key={i} className='h-10 w-full' />
           ))}
         </div>
-      ) : !lenderOffers.length ? (
-        <p className='text-muted py-6 text-center text-sm'>No active lends</p>
+      ) : !offers.length ? (
+        <p className='text-muted py-6 text-center text-sm'>No active loans</p>
       ) : (
         <OffersTable
-          offers={lenderOffers}
+          offers={offers}
           currentBlockHeight={currentBlockHeight}
-          onRowPress={setSelectedOffer}
+          page={page}
+          pageCount={pageCount}
+          onPageChange={setPage}
+          onActionSuccess={() => lenderQuery.refetch()}
         />
       )}
-
-      <OfferActionModals
-        offer={selectedOffer}
-        viewerRole='lender'
-        onClose={() => setSelectedOffer(null)}
-        onSuccess={() => {
-          setSelectedOffer(null)
-          refetch()
-        }}
-      />
     </div>
   )
 }

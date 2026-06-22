@@ -4,57 +4,40 @@ import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffers } from '@/api/indexer/hooks'
-import type { OfferShort, OfferStatus } from '@/api/indexer/schemas'
+import type { OfferStatus } from '@/api/indexer/schemas'
 import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
-import OfferActionModals from '@/components/modals/OfferActionModals'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
-import { useWallet } from '@/providers/wallet/useWallet'
-import type { ViewerRole } from '@/utils/offerActions'
 
 interface OffersPanelProps {
   title: string
   pageSize: number
   status?: OfferStatus
-  interactive?: boolean
-  viewerRole?: ViewerRole
   onSuccess?: () => void
 }
 
-export default function OffersPanel({
-  title,
-  pageSize,
-  status,
-  interactive,
-  viewerRole = 'lender',
-  onSuccess,
-}: OffersPanelProps) {
+export default function OffersPanel({ title, pageSize, status, onSuccess }: OffersPanelProps) {
   const [page, setPage] = useState(1)
-  const [selectedOffer, setSelectedOffer] = useState<OfferShort | null>(null)
-  const { isReady } = useWallet()
 
   const offersQuery = useOffers(
     { status, limit: pageSize, offset: (page - 1) * pageSize },
     { placeholderData: keepPreviousData },
   )
-  const blockHeightQuery = useBlockHeight()
-  const currentBlockHeight = blockHeightQuery.data ?? 0
+  const { data: currentBlockHeight } = useBlockHeight()
 
   const offers = offersQuery.data?.items ?? []
   const pageCount = Math.ceil((offersQuery.data?.total ?? 0) / pageSize)
 
-  const isLoading = offersQuery.isLoading || blockHeightQuery.isLoading
-  const isFetching = offersQuery.isFetching || blockHeightQuery.isFetching
-  const error = offersQuery.error ?? blockHeightQuery.error
+  const isLoading = offersQuery.isLoading
+  const isFetching = offersQuery.isFetching
+  const error = offersQuery.error
 
   const handleRetry = () => {
-    void offersQuery.refetch()
-    void blockHeightQuery.refetch()
+    offersQuery.refetch()
   }
 
   const handleSuccess = () => {
-    setSelectedOffer(null)
-    void offersQuery.refetch()
+    offersQuery.refetch()
     onSuccess?.()
   }
 
@@ -95,16 +78,7 @@ export default function OffersPanel({
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
-          onRowPress={interactive && isReady ? setSelectedOffer : undefined}
-        />
-      )}
-
-      {interactive && (
-        <OfferActionModals
-          offer={selectedOffer}
-          viewerRole={viewerRole}
-          onClose={() => setSelectedOffer(null)}
-          onSuccess={handleSuccess}
+          onActionSuccess={handleSuccess}
         />
       )}
     </div>

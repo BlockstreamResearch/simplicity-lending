@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
-import { useBorrowersByScript } from '@/api/indexer/hooks'
+import { useBorrowerOffers } from '@/api/indexer/hooks'
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
@@ -23,12 +23,11 @@ export function BorrowCard() {
   const navigate = useNavigate()
   const { balances, scriptPubkey } = useWallet()
   const { stats, isLoading, error, refetch } = useBorrowerStats()
-  const offersQuery = useBorrowersByScript(scriptPubkey ?? '', { status: 'active', limit: 50 })
-  const blockHeightQuery = useBlockHeight()
+  const offersQuery = useBorrowerOffers(scriptPubkey ?? '', { status: 'active', limit: 50 })
+  const { data: currentBlockHeight } = useBlockHeight()
 
   const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
-  const currentBlockHeight = blockHeightQuery.data ?? 0
-  const activeOffers = offersQuery.data?.offers.items ?? []
+  const activeOffers = offersQuery.data?.items ?? []
   const nearExpiryOffers = activeOffers.filter(o => {
     const termLeft = getOfferTermLeft(o, currentBlockHeight)
     return termLeft > 0 && termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS

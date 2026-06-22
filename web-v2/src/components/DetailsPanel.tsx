@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react'
 
-import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
-
 export interface DetailRow {
   label: string
   value: ReactNode
@@ -29,10 +27,7 @@ export default function DetailsPanel({ title, rows, bordered }: DetailsPanelProp
               i > 0 ? 'border-separator border-t' : ''
             }`}
           >
-            <span className='text-foreground flex items-center gap-2 font-medium'>
-              {row.label}
-              <CircleInfoIcon className='text-muted size-3' />
-            </span>
+            <span className='text-foreground font-medium'>{row.label}</span>
             <span className='font-medium'>{row.value}</span>
           </div>
         ))}

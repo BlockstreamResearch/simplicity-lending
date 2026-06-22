@@ -3,16 +3,19 @@ import { normalizeHex } from '@/utils/hex'
 
 import { requestJson, type RequestParams } from '../client'
 import {
-  type BorrowerByScript,
-  borrowerByScriptSchema,
+  type BorrowerOverview,
+  borrowerOverviewSchema,
   type FactoryDetails,
   factoryDetailsSchema,
   factoryListSchema,
+  type LenderOverview,
+  lenderOverviewSchema,
   type OfferDetails,
   offerDetailsSchema,
-  offerIdListSchema,
   type OfferListResponse,
   offerListResponseSchema,
+  type OffersOverview,
+  offersOverviewSchema,
   type OfferStatus,
 } from './schemas'
 
@@ -28,15 +31,17 @@ function buildSearchUrl(path: string, params: Record<string, string>): string {
 export type SortDir = 'asc' | 'desc'
 
 export type SortField =
+  | 'created_at_height'
   | 'collateral_amount'
   | 'principal_amount'
   | 'interest_rate'
-  | 'loan_expiration_time'
+  | 'loan_expiration_height'
 
 export interface ListOffersParams {
   status?: OfferStatus | OfferStatus[]
   factoryId?: string
-  asset?: string
+  collateralAsset?: string
+  principalAsset?: string
   limit?: number
   offset?: number
   sortBy?: SortField
@@ -49,7 +54,8 @@ function toQueryParams(params: ListOffersParams): Record<string, string> {
     q.status = Array.isArray(params.status) ? params.status.join(',') : params.status
   }
   if (params.factoryId) q.factory_id = params.factoryId
-  if (params.asset) q.asset = params.asset
+  if (params.collateralAsset) q.collateral_asset = params.collateralAsset
+  if (params.principalAsset) q.principal_asset = params.principalAsset
   if (params.limit !== undefined) q.limit = String(params.limit)
   if (params.offset !== undefined) q.offset = String(params.offset)
   if (params.sortBy) q.sort_by = params.sortBy
@@ -73,26 +79,54 @@ export async function fetchOffer(
   return requestJson(buildOfferUrl(offerId), offerDetailsSchema, { signal: options.signal })
 }
 
-export async function fetchOfferIdsByScript(
-  scriptPubkeyHex: string,
-  options: RequestParams = {},
-): Promise<string[]> {
-  const url = buildSearchUrl('/offers/by-script', {
-    script_pubkey: normalizeHex(scriptPubkeyHex),
+export async function fetchOffersOverview(options: RequestParams = {}): Promise<OffersOverview> {
+  return requestJson(`${env.VITE_API_URL}/offers/overview`, offersOverviewSchema, {
+    signal: options.signal,
   })
-  return requestJson(url, offerIdListSchema, { signal: options.signal })
 }
 
-export async function fetchBorrowersByScript(
+export async function fetchBorrowerOverview(
+  scriptPubkeyHex: string,
+  options: RequestParams = {},
+): Promise<BorrowerOverview> {
+  const url = buildSearchUrl('/borrowers/overview', {
+    script_pubkey: normalizeHex(scriptPubkeyHex),
+  })
+  return requestJson(url, borrowerOverviewSchema, { signal: options.signal })
+}
+
+export async function fetchBorrowerOffers(
   scriptPubkeyHex: string,
   params: ListOffersParams = {},
   options: RequestParams = {},
-): Promise<BorrowerByScript> {
-  const url = buildSearchUrl('/borrowers/by-script', {
+): Promise<OfferListResponse> {
+  const url = buildSearchUrl('/borrowers/offers', {
     script_pubkey: normalizeHex(scriptPubkeyHex),
     ...toQueryParams(params),
   })
-  return requestJson(url, borrowerByScriptSchema, { signal: options.signal })
+  return requestJson(url, offerListResponseSchema, { signal: options.signal })
+}
+
+export async function fetchLenderOverview(
+  scriptPubkeyHex: string,
+  options: RequestParams = {},
+): Promise<LenderOverview> {
+  const url = buildSearchUrl('/lenders/overview', {
+    script_pubkey: normalizeHex(scriptPubkeyHex),
+  })
+  return requestJson(url, lenderOverviewSchema, { signal: options.signal })
+}
+
+export async function fetchLenderOffers(
+  scriptPubkeyHex: string,
+  params: ListOffersParams = {},
+  options: RequestParams = {},
+): Promise<OfferListResponse> {
+  const url = buildSearchUrl('/lenders/offers', {
+    script_pubkey: normalizeHex(scriptPubkeyHex),
+    ...toQueryParams(params),
+  })
+  return requestJson(url, offerListResponseSchema, { signal: options.signal })
 }
 
 export async function fetchFactoriesByScript(

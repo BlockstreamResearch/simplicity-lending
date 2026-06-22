@@ -14,24 +14,22 @@ export function RecentOffers() {
   const [page, setPage] = useState(1)
   const offset = (page - 1) * DASHBOARD_TABLE_PAGE_SIZE
 
-  const offersQuery = useOffers(
-    { limit: DASHBOARD_TABLE_PAGE_SIZE, offset },
-    { placeholderData: keepPreviousData },
-  )
-  const blockHeightQuery = useBlockHeight()
-  const currentBlockHeight = blockHeightQuery.data ?? 0
+  const {
+    data: offersData,
+    isLoading,
+    isFetching,
+    error,
+    refetch: refetchOffers,
+  } = useOffers({ limit: DASHBOARD_TABLE_PAGE_SIZE, offset }, { placeholderData: keepPreviousData })
+  const { data: currentBlockHeight, refetch: refetchBlockHeight } = useBlockHeight()
 
-  const offers = offersQuery.data?.items ?? []
-  const total = offersQuery.data?.total ?? 0
+  const offers = offersData?.items ?? []
+  const total = offersData?.total ?? 0
   const pageCount = Math.ceil(total / DASHBOARD_TABLE_PAGE_SIZE)
 
-  const isLoading = offersQuery.isLoading || blockHeightQuery.isLoading
-  const isFetching = offersQuery.isFetching || blockHeightQuery.isFetching
-  const error = offersQuery.error ?? blockHeightQuery.error
-
   const handleRetry = () => {
-    void offersQuery.refetch()
-    void blockHeightQuery.refetch()
+    refetchOffers()
+    refetchBlockHeight()
   }
 
   return (
@@ -71,6 +69,7 @@ export function RecentOffers() {
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
+          onActionSuccess={handleRetry}
         />
       )}
     </div>

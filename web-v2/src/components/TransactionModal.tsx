@@ -54,17 +54,38 @@ function StatusIcon({ status }: { status: MutationStatus }) {
   )
 }
 
-export default function TransactionModal({
-  isOpen,
+export function TransactionStatusTitle({
+  status,
   eyebrow,
+}: {
+  status: MutationStatus
+  eyebrow: string
+}) {
+  return (
+    <span className='flex items-center gap-3'>
+      <StatusIcon status={status} />
+      <span className='flex flex-col'>
+        <span className='text-sm font-normal'>{eyebrow}</span>
+        <span>{TITLE[status]}</span>
+      </span>
+    </span>
+  )
+}
+
+interface TransactionBodyProps {
+  status: MutationStatus
+  summary?: TransactionSummaryRow[]
+  txid?: string | null
+  errorMessage?: string | null
+}
+
+export function TransactionBody({
   status,
   summary = [],
   txid,
   errorMessage,
-  onClose,
-}: TransactionModalProps) {
+}: TransactionBodyProps) {
   const txStatus = useTxStatus(txid)
-  const isProcessing = status === 'pending'
 
   const rows = useMemo<TransactionSummaryRow[]>(
     () => [
@@ -100,6 +121,38 @@ export default function TransactionModal({
   )
 
   return (
+    <div className='flex flex-col gap-4'>
+      {rows.length > 0 && (
+        <div className='bg-surface-secondary flex flex-col rounded-xl p-6'>
+          {rows.map((row, index) => (
+            <div key={row.label} className={index > 0 ? 'border-separator mt-3 border-t pt-3' : ''}>
+              <div className='flex items-center justify-between text-sm'>
+                <span className='font-medium'>{row.label}</span>
+                <span className='font-medium'>{row.value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {status === 'error' && errorMessage && (
+        <p className='text-danger text-sm wrap-break-word'>{errorMessage}</p>
+      )}
+    </div>
+  )
+}
+
+export default function TransactionModal({
+  isOpen,
+  eyebrow,
+  status,
+  summary = [],
+  txid,
+  errorMessage,
+  onClose,
+}: TransactionModalProps) {
+  const isProcessing = status === 'pending'
+
+  return (
     <UiModal
       isOpen={isOpen}
       onOpenChange={open => {
@@ -108,41 +161,14 @@ export default function TransactionModal({
       isDismissable={!isProcessing}
       showCloseButton={!isProcessing}
       size='md'
-      title={
-        <span className='flex items-center gap-3'>
-          <StatusIcon status={status} />
-          <span className='flex flex-col'>
-            <span className='text-sm font-normal'>{eyebrow}</span>
-            <span>{TITLE[status]}</span>
-          </span>
-        </span>
-      }
+      title={<TransactionStatusTitle status={status} eyebrow={eyebrow} />}
       footer={
         <UiButton className='w-full' variant='primary' isDisabled={isProcessing} onPress={onClose}>
           {status === 'success' ? 'Done' : 'Close'}
         </UiButton>
       }
     >
-      <div className='flex flex-col gap-4'>
-        {rows.length > 0 && (
-          <div className='bg-surface-secondary flex flex-col rounded-xl p-6'>
-            {rows.map((row, index) => (
-              <div
-                key={row.label}
-                className={index > 0 ? 'border-separator mt-3 border-t pt-3' : ''}
-              >
-                <div className='flex items-center justify-between text-sm'>
-                  <span className='font-medium'>{row.label}</span>
-                  <span className='font-medium'>{row.value}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {status === 'error' && errorMessage && (
-          <p className='text-danger text-sm wrap-break-word'>{errorMessage}</p>
-        )}
-      </div>
+      <TransactionBody status={status} summary={summary} txid={txid} errorMessage={errorMessage} />
     </UiModal>
   )
 }

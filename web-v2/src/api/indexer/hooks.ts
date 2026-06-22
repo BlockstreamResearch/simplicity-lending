@@ -7,16 +7,26 @@ import {
 
 import { STALE_TIME_MS } from '../staleTime'
 import {
-  fetchBorrowersByScript,
+  fetchBorrowerOffers,
+  fetchBorrowerOverview,
   fetchFactoriesByScript,
   fetchFactory,
+  fetchLenderOffers,
+  fetchLenderOverview,
   fetchOffer,
-  fetchOfferIdsByScript,
   fetchOffers,
+  fetchOffersOverview,
   type ListOffersParams,
 } from './methods'
-import { borrowerQueryKeys, factoryQueryKeys, offersQueryKeys } from './queryKeys'
-import type { BorrowerByScript, FactoryDetails, OfferDetails, OfferListResponse } from './schemas'
+import { borrowerQueryKeys, factoryQueryKeys, lenderQueryKeys, offersQueryKeys } from './queryKeys'
+import type {
+  BorrowerOverview,
+  FactoryDetails,
+  LenderOverview,
+  OfferDetails,
+  OfferListResponse,
+  OffersOverview,
+} from './schemas'
 
 export interface ExtraQueryOptions<T = unknown> {
   refetchInterval?: number
@@ -46,29 +56,70 @@ export function useOffer(offerId: string): UseQueryResult<OfferDetails> {
   })
 }
 
-export function useOfferIdsByScript(
-  scriptPubkeyHex: string,
-  options: ExtraQueryOptions<string[]> = {},
-): UseQueryResult<string[]> {
+export function useOffersOverview(
+  options: ExtraQueryOptions<OffersOverview> = {},
+): UseQueryResult<OffersOverview> {
   return useQuery({
-    queryKey: offersQueryKeys.byScript(scriptPubkeyHex),
-    queryFn: ({ signal }) => fetchOfferIdsByScript(scriptPubkeyHex, { signal }),
+    queryKey: offersQueryKeys.overview(),
+    queryFn: ({ signal }) => fetchOffersOverview({ signal }),
+    staleTime: options.staleTime ?? STALE_TIME_MS.medium,
+    refetchInterval: options.refetchInterval,
+    placeholderData: options.placeholderData,
+  })
+}
+
+export function useBorrowerOverview(
+  scriptPubkeyHex: string,
+  options: ExtraQueryOptions<BorrowerOverview> = {},
+): UseQueryResult<BorrowerOverview> {
+  return useQuery({
+    queryKey: borrowerQueryKeys.overview(scriptPubkeyHex),
+    queryFn: ({ signal }) => fetchBorrowerOverview(scriptPubkeyHex, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
     refetchInterval: options.refetchInterval,
     enabled: !!scriptPubkeyHex,
   })
 }
 
-export function useBorrowersByScript(
+export function useBorrowerOffers(
   scriptPubkeyHex: string,
   params: ListOffersParams = {},
-  options: ExtraQueryOptions<BorrowerByScript> = {},
-): UseQueryResult<BorrowerByScript> {
+  options: ExtraQueryOptions<OfferListResponse> = {},
+): UseQueryResult<OfferListResponse> {
   return useQuery({
-    queryKey: borrowerQueryKeys.byScript(scriptPubkeyHex, params),
-    queryFn: ({ signal }) => fetchBorrowersByScript(scriptPubkeyHex, params, { signal }),
+    queryKey: borrowerQueryKeys.offers(scriptPubkeyHex, params),
+    queryFn: ({ signal }) => fetchBorrowerOffers(scriptPubkeyHex, params, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
     refetchInterval: options.refetchInterval,
+    placeholderData: options.placeholderData,
+    enabled: !!scriptPubkeyHex,
+  })
+}
+
+export function useLenderOverview(
+  scriptPubkeyHex: string,
+  options: ExtraQueryOptions<LenderOverview> = {},
+): UseQueryResult<LenderOverview> {
+  return useQuery({
+    queryKey: lenderQueryKeys.overview(scriptPubkeyHex),
+    queryFn: ({ signal }) => fetchLenderOverview(scriptPubkeyHex, { signal }),
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
+    refetchInterval: options.refetchInterval,
+    enabled: !!scriptPubkeyHex,
+  })
+}
+
+export function useLenderOffers(
+  scriptPubkeyHex: string,
+  params: ListOffersParams = {},
+  options: ExtraQueryOptions<OfferListResponse> = {},
+): UseQueryResult<OfferListResponse> {
+  return useQuery({
+    queryKey: lenderQueryKeys.offers(scriptPubkeyHex, params),
+    queryFn: ({ signal }) => fetchLenderOffers(scriptPubkeyHex, params, { signal }),
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
+    refetchInterval: options.refetchInterval,
+    placeholderData: options.placeholderData,
     enabled: !!scriptPubkeyHex,
   })
 }

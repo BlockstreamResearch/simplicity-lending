@@ -4,7 +4,6 @@ import { useMemo } from 'react'
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
 import { useOverview } from '@/hooks/useOverview'
 import { formatAmount } from '@/utils/format'
-import { bpsToPercent } from '@/utils/offers'
 
 interface OverviewStat {
   label: string
@@ -28,7 +27,8 @@ export default function OverviewStats() {
         value: formatAmount(overview.totalActiveLoans, principalAsset.decimals),
         asset: principalAsset,
       },
-      { label: 'Average Interest Rate', value: bpsToPercent(overview.avgInterestRate) },
+      // TODO: show real value once /offers/overview returns an average interest rate (backend doesn't expose it yet).
+      { label: 'Average Interest Rate', value: '—' },
       { label: 'Number of Active Loans', value: String(overview.activeLoansCount) },
     ],
     [overview, collateralAsset, principalAsset],
