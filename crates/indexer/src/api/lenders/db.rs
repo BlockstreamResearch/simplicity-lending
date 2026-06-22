@@ -2,14 +2,12 @@ use sqlx::{PgPool, Postgres, QueryBuilder};
 
 use crate::api::OfferListQuery;
 use crate::api::borrowers::dto::AssetAmount;
-use crate::api::offers::db::{
-    apply_offer_list_filters, enrich_offer_list_items, push_offer_list_order_by,
-};
-use crate::api::offers::dto::{OfferListItemShort, OfferListResponse};
-use crate::api::participants::push_latest_participant_offers_scope;
+use crate::api::offers::dto::OfferListResponse;
+use crate::api::offers::list_query::fetch_participant_offers_list;
+use crate::api::query::attach_latest_participant_offers_scope;
 use crate::api::utils::{format_hex, format_satoshis};
 
-use crate::models::{OfferModelShort, OfferStatus, ParticipantType};
+use crate::models::{OfferStatus, ParticipantType};
 
 use super::dto::LenderOverview;
 
@@ -51,7 +49,7 @@ pub async fn fetch_overview(
     );
     supplied_builder.push_bind(OfferStatus::Active);
     supplied_builder.push(" AND 1=1");
-    push_latest_participant_offers_scope(
+    attach_latest_participant_offers_scope(
         &mut supplied_builder,
         ParticipantType::Lender,
         script_pubkey,
@@ -73,7 +71,7 @@ pub async fn fetch_overview(
     );
     interest_builder.push_bind(OfferStatus::Active);
     interest_builder.push(" AND 1=1");
-    push_latest_participant_offers_scope(
+    attach_latest_participant_offers_scope(
         &mut interest_builder,
         ParticipantType::Lender,
         script_pubkey,
@@ -102,7 +100,7 @@ pub async fn fetch_overview(
         WHERE 1=1
         "#,
     );
-    push_latest_participant_offers_scope(
+    attach_latest_participant_offers_scope(
         &mut counts_builder,
         ParticipantType::Lender,
         script_pubkey,
@@ -126,62 +124,5 @@ pub async fn fetch_offer_list(
     script_pubkey: &[u8],
     query: &OfferListQuery,
 ) -> Result<OfferListResponse, sqlx::Error> {
-    let limit = query.effective_limit();
-    let offset = query.effective_offset();
-
-    let mut count_builder: QueryBuilder<Postgres> =
-        QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM offers WHERE 1=1");
-    push_latest_participant_offers_scope(
-        &mut count_builder,
-        ParticipantType::Lender,
-        script_pubkey,
-    );
-    apply_offer_list_filters(&mut count_builder, query);
-    let total: i64 = count_builder.build_query_scalar().fetch_one(db).await?;
-
-    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-        r#"
-        SELECT
-            id,
-            issuance_factory_id,
-            current_status,
-            collateral_asset_id,
-            principal_asset_id,
-            collateral_amount,
-            principal_amount,
-            interest_rate,
-            loan_expiration_time,
-            created_at_height,
-            created_at_txid
-        FROM offers
-        WHERE 1=1
-        "#,
-    );
-    push_latest_participant_offers_scope(
-        &mut query_builder,
-        ParticipantType::Lender,
-        script_pubkey,
-    );
-    apply_offer_list_filters(&mut query_builder, query);
-    push_offer_list_order_by(&mut query_builder, query);
-    query_builder.push(" LIMIT ");
-    query_builder.push_bind(limit as i64);
-    query_builder.push(" OFFSET ");
-    query_builder.push_bind(offset as i64);
-
-    let rows = query_builder
-        .build_query_as::<OfferModelShort>()
-        .fetch_all(db)
-        .await?;
-
-    let mut items: Vec<OfferListItemShort> =
-        rows.into_iter().map(OfferListItemShort::from).collect();
-    enrich_offer_list_items(db, &mut items).await?;
-
-    Ok(OfferListResponse {
-        items,
-        total: total as u64,
-        limit,
-        offset,
-    })
+    fetch_participant_offers_list(db, query, ParticipantType::Lender, script_pubkey).await
 }

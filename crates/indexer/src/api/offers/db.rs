@@ -1,19 +1,19 @@
-use simplex::simplicityhl::elements::hex::ToHex;
-use sqlx::{PgPool, Postgres, QueryBuilder};
-use std::collections::HashMap;
+use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::api::utils::{format_hex, format_satoshis, parse_filter_hex};
-use crate::api::{OfferListQuery, SortDir};
+use simplex::simplicityhl::elements::hex::ToHex;
+
+use crate::api::OfferListQuery;
+use crate::api::utils::{format_hex, format_satoshis};
 use crate::models::{
-    OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
-    ParticipantType, UtxoType,
+    OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType, UtxoType,
 };
 
 use super::dto::{
-    OfferDetailsResponse, OfferListItemFull, OfferListItemShort, OfferListResponse, OfferUtxoDto,
-    OfferUtxoOutpointShort, OffersOverview, ParticipantDto, ParticipantShort,
+    OfferDetailsResponse, OfferListItemFull, OfferListResponse, OfferUtxoDto, OffersOverview,
+    ParticipantDto,
 };
+use super::list_query::fetch_all_offers_list;
 
 use crate::api::borrowers::dto::AssetAmount;
 
@@ -33,93 +33,6 @@ fn asset_amounts_from_rows(rows: Vec<AssetSumRow>) -> Vec<AssetAmount> {
 }
 
 const OPEN_COLLATERAL_STATUSES: [OfferStatus; 2] = [OfferStatus::Pending, OfferStatus::Active];
-
-#[derive(sqlx::FromRow)]
-struct ParticipantListRow {
-    offer_id: Uuid,
-    participant_type: ParticipantType,
-    script_pubkey: Vec<u8>,
-}
-
-#[derive(sqlx::FromRow)]
-struct BorrowerPrincipalListRow {
-    offer_id: Uuid,
-    txid: Vec<u8>,
-    vout: i32,
-}
-
-pub(crate) async fn enrich_offer_list_items(
-    db: &PgPool,
-    items: &mut [OfferListItemShort],
-) -> Result<(), sqlx::Error> {
-    if items.is_empty() {
-        return Ok(());
-    }
-
-    let offer_ids: Vec<Uuid> = items.iter().map(|item| item.id).collect();
-
-    let participant_rows = sqlx::query_as::<_, ParticipantListRow>(
-        r#"
-        SELECT DISTINCT ON (offer_id, participant_type)
-            offer_id,
-            participant_type,
-            script_pubkey
-        FROM offer_participants
-        WHERE offer_id = ANY($1)
-        ORDER BY offer_id, participant_type, created_at_height DESC
-        "#,
-    )
-    .bind(&offer_ids)
-    .fetch_all(db)
-    .await?;
-
-    let principal_rows = sqlx::query_as::<_, BorrowerPrincipalListRow>(
-        r#"
-        SELECT offer_id, txid, vout
-        FROM offer_utxos
-        WHERE spent_txid IS NULL
-          AND utxo_type = $1
-          AND offer_id = ANY($2)
-        "#,
-    )
-    .bind(UtxoType::BorrowerPrincipal)
-    .bind(&offer_ids)
-    .fetch_all(db)
-    .await?;
-
-    let mut participants_by_offer: HashMap<Uuid, Vec<ParticipantShort>> = HashMap::new();
-    for row in participant_rows {
-        participants_by_offer
-            .entry(row.offer_id)
-            .or_default()
-            .push(ParticipantShort {
-                participant_type: row.participant_type,
-                script_pubkey: row.script_pubkey.to_hex(),
-            });
-    }
-
-    for participants in participants_by_offer.values_mut() {
-        participants.sort_by_key(|participant| participant.participant_type);
-    }
-
-    let mut principal_by_offer: HashMap<Uuid, OfferUtxoOutpointShort> = HashMap::new();
-    for row in principal_rows {
-        principal_by_offer.insert(
-            row.offer_id,
-            OfferUtxoOutpointShort {
-                txid: format_hex(row.txid),
-                vout: row.vout as u32,
-            },
-        );
-    }
-
-    for item in items.iter_mut() {
-        item.participants = participants_by_offer.remove(&item.id).unwrap_or_default();
-        item.borrower_principal_utxo = principal_by_offer.remove(&item.id);
-    }
-
-    Ok(())
-}
 
 #[tracing::instrument(name = "Fetching offers overview from DB", skip(db))]
 pub async fn fetch_overview(db: &PgPool) -> Result<OffersOverview, sqlx::Error> {
@@ -162,58 +75,6 @@ pub async fn fetch_overview(db: &PgPool) -> Result<OffersOverview, sqlx::Error> 
     })
 }
 
-pub(crate) fn apply_offer_list_filters<'a>(
-    query_builder: &mut QueryBuilder<'a, Postgres>,
-    query: &'a OfferListQuery,
-) {
-    if !query.status.is_empty() {
-        query_builder.push(" AND current_status = ANY(");
-        query_builder.push_bind(query.status.clone());
-        query_builder.push(")");
-    }
-
-    if let Some(factory_id) = query.factory_id {
-        query_builder.push(" AND issuance_factory_id = ");
-        query_builder.push_bind(factory_id);
-    }
-
-    if let Some(collateral_asset_hex) = &query.collateral_asset {
-        if let Some(bin) = parse_filter_hex(collateral_asset_hex) {
-            query_builder.push(" AND collateral_asset_id = ");
-            query_builder.push_bind(bin);
-        } else {
-            tracing::warn!(
-                collateral_asset_hex,
-                "Failed to decode collateral_asset hex filter"
-            );
-        }
-    }
-
-    if let Some(principal_asset_hex) = &query.principal_asset {
-        if let Some(bin) = parse_filter_hex(principal_asset_hex) {
-            query_builder.push(" AND principal_asset_id = ");
-            query_builder.push_bind(bin);
-        } else {
-            tracing::warn!(
-                principal_asset_hex,
-                "Failed to decode principal_asset hex filter"
-            );
-        }
-    }
-}
-
-pub(crate) fn push_offer_list_order_by(
-    query_builder: &mut QueryBuilder<Postgres>,
-    query: &OfferListQuery,
-) {
-    query_builder.push(" ORDER BY ");
-    query_builder.push(query.sort_by.sql_column());
-    query_builder.push(match query.sort_dir {
-        SortDir::Asc => " ASC",
-        SortDir::Desc => " DESC",
-    });
-}
-
 #[tracing::instrument(
     name = "Fetching offers list from DB",
     skip(db, query),
@@ -232,57 +93,7 @@ pub async fn fetch_list(
     db: &PgPool,
     query: OfferListQuery,
 ) -> Result<OfferListResponse, sqlx::Error> {
-    let limit = query.effective_limit();
-    let offset = query.effective_offset();
-
-    let mut count_builder: QueryBuilder<Postgres> =
-        QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM offers WHERE 1=1");
-    apply_offer_list_filters(&mut count_builder, &query);
-    let total: i64 = count_builder.build_query_scalar().fetch_one(db).await?;
-
-    let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-        r#"
-            SELECT
-                id,
-                issuance_factory_id,
-                current_status,
-                collateral_asset_id,
-                principal_asset_id,
-                collateral_amount,
-                principal_amount,
-                interest_rate,
-                loan_expiration_time,
-                created_at_height,
-                created_at_txid
-            FROM offers
-            WHERE 1=1
-        "#,
-    );
-
-    apply_offer_list_filters(&mut query_builder, &query);
-    push_offer_list_order_by(&mut query_builder, &query);
-
-    query_builder.push(" LIMIT ");
-    query_builder.push_bind(limit as i64);
-
-    query_builder.push(" OFFSET ");
-    query_builder.push_bind(offset as i64);
-
-    let rows = query_builder
-        .build_query_as::<OfferModelShort>()
-        .fetch_all(db)
-        .await?;
-
-    let mut items: Vec<OfferListItemShort> =
-        rows.into_iter().map(OfferListItemShort::from).collect();
-    enrich_offer_list_items(db, &mut items).await?;
-
-    Ok(OfferListResponse {
-        items,
-        total: total as u64,
-        limit,
-        offset,
-    })
+    fetch_all_offers_list(db, &query).await
 }
 
 async fn fetch_full_info_by_id(

@@ -5,7 +5,7 @@ mod lenders;
 mod offers;
 mod openapi;
 mod params;
-mod participants;
+mod query;
 pub mod server;
 mod state;
 pub mod utils;

@@ -2,7 +2,7 @@ use sqlx::{Postgres, QueryBuilder};
 
 use crate::models::ParticipantType;
 
-pub fn push_latest_participant_offers_scope<'a>(
+pub fn attach_latest_participant_offers_scope<'a>(
     query_builder: &mut QueryBuilder<'a, Postgres>,
     participant_type: ParticipantType,
     script_pubkey: &'a [u8],
