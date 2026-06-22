@@ -146,7 +146,7 @@ export default function CreateOfferDemo() {
     busy: false,
     error: null,
   })
-  const txStatus = useTxStatus(state.txid)
+  const { status: txStatus } = useTxStatus(state.txid)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const collateralUtxoOptions = useMemo(() => {

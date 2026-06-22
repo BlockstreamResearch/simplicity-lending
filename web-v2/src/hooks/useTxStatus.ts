@@ -7,24 +7,33 @@ const FINALIZED_THRESHOLD = 2
 
 export type TxStatus = 'processing' | 'confirmed' | 'finalized'
 
-export function useTxStatus(txid?: string | null, pollIntervalMs = 15_000): TxStatus | null {
+export function useTxStatus(
+  txid?: string | null,
+  pollIntervalMs = 15_000,
+): { status: TxStatus | null; confirmations: number | null } {
   const { data } = useQuery({
     queryKey: ['tx-status', txid],
     enabled: Boolean(txid),
-    refetchInterval: query => (query.state.data === 'finalized' ? false : pollIntervalMs),
-    queryFn: async (): Promise<TxStatus> => {
-      const status = await fetchTxStatus(txid as string)
+    refetchInterval: query => (query.state.data?.status === 'finalized' ? false : pollIntervalMs),
+    queryFn: async () => {
+      const txStatus = await fetchTxStatus(txid as string)
 
-      if (!status.confirmed || status.block_height === undefined) return 'processing'
+      if (!txStatus.confirmed || txStatus.block_height === undefined) {
+        return { status: 'processing' as TxStatus, confirmations: null }
+      }
 
       const tip = await fetchLatestBlockHeight()
-      const confirmations = tip - status.block_height + 1
+      const confirmations = tip - txStatus.block_height + 1
+      const status: TxStatus =
+        confirmations >= FINALIZED_THRESHOLD
+          ? 'finalized'
+          : confirmations >= CONFIRMED_THRESHOLD
+            ? 'confirmed'
+            : 'processing'
 
-      if (confirmations >= FINALIZED_THRESHOLD) return 'finalized'
-      if (confirmations >= CONFIRMED_THRESHOLD) return 'confirmed'
-      return 'processing'
+      return { status, confirmations }
     },
   })
 
-  return data ?? null
+  return data ?? { status: null, confirmations: null }
 }

@@ -55,7 +55,7 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     () => [
       { label: 'Duration (Expires at)', value: formatOfferTermLeft(offer, currentBlockHeight) },
       { label: 'Current Block', value: String(currentBlockHeight) },
-      { label: 'Repayment Due Block', value: `#${offer.loan_expiration_height}` },
+      { label: 'Repayment Due Block', value: String(offer.loan_expiration_height) },
       {
         label: 'Blocks to Liquidation',
         value: `${Math.max(0, offer.loan_expiration_height - currentBlockHeight)} Blocks`,

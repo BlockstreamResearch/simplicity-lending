@@ -81,8 +81,13 @@ export default function YourBorrows() {
       <CreateBorrowerAccountModal
         isOpen={isAccountModalOpen}
         onOpenChange={setIsAccountModalOpen}
+        onClose={refetch}
       />
-      <CreateBorrowOfferModal isOpen={isOfferModalOpen} onOpenChange={setIsOfferModalOpen} />
+      <CreateBorrowOfferModal
+        isOpen={isOfferModalOpen}
+        onOpenChange={setIsOfferModalOpen}
+        onClose={refetch}
+      />
     </section>
   )
 }

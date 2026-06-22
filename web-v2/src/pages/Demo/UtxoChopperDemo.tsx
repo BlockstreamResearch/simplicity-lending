@@ -1,6 +1,6 @@
 import type { WalletTxOut } from 'lwk_web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
-import { Controller, type Resolver, useForm } from 'react-hook-form'
+import { Controller, type Resolver, useForm, useWatch } from 'react-hook-form'
 import { z as zod } from 'zod'
 
 import { UiButton } from '@/components/ui/UiButton'
@@ -112,15 +112,15 @@ export default function UtxoChopperDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { chopUtxo } = useUtxoChopper()
-  const { control, handleSubmit, setValue, watch } = useForm<UtxoChopperForm>({
+  const { control, handleSubmit, setValue } = useForm<UtxoChopperForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
     resolver: utxoChopperFormResolver,
   })
-  const watchedFundingOutpoint = watch('fundingOutpoint')
-  const watchedFeeOutpoints = watch('feeOutpoints')
-  const watchedPieceAmount = watch('pieceAmount')
-  const watchedPieceCount = watch('pieceCount')
+  const watchedFundingOutpoint = useWatch({ control, name: 'fundingOutpoint' })
+  const watchedFeeOutpoints = useWatch({ control, name: 'feeOutpoints' })
+  const watchedPieceAmount = useWatch({ control, name: 'pieceAmount' })
+  const watchedPieceCount = useWatch({ control, name: 'pieceCount' })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
   const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
   const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
@@ -128,7 +128,7 @@ export default function UtxoChopperDemo() {
     error: null,
   })
   const [assetFilter, setAssetFilter] = useState<string>('all')
-  const txStatus = useTxStatus(state.result?.txid ?? null)
+  const { status: txStatus } = useTxStatus(state.result?.txid ?? null)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const assetOptions = useMemo(() => {

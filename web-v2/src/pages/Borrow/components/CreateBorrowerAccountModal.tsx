@@ -9,13 +9,15 @@ import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 interface CreateBorrowerAccountModalProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
+  onClose: () => void
 }
 
 export default function CreateBorrowerAccountModal({
   isOpen,
   onOpenChange,
+  onClose,
 }: CreateBorrowerAccountModalProps) {
-  const { createBorrowerAccount } = useBorrowerAccount()
+  const { createBorrowerAccount, refetchFactory } = useBorrowerAccount()
   const { mutate, reset, data, error, status } = useMutation({
     mutationFn: createBorrowerAccount,
   })
@@ -23,6 +25,8 @@ export default function CreateBorrowerAccountModal({
   const handleClose = () => {
     reset()
     onOpenChange(false)
+    refetchFactory()
+    onClose()
   }
 
   if (status !== 'idle') {

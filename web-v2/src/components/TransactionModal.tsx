@@ -1,6 +1,6 @@
-import { Spinner } from '@heroui/react'
+import { Spinner, Toast } from '@heroui/react'
 import type { MutationStatus } from '@tanstack/react-query'
-import { type ReactNode, useMemo } from 'react'
+import { type ReactNode, useEffect, useMemo } from 'react'
 
 import { getTxExplorerUrl } from '@/api/esplora/utils'
 import CheckIcon from '@/components/icons/CheckIcon'
@@ -79,13 +79,29 @@ interface TransactionBodyProps {
   errorMessage?: string | null
 }
 
+function notifyTxConfirmed(txid: string, confirmations: number) {
+  Toast.toast.success('Transaction Confirmed', {
+    description: `${confirmations} confirmation${confirmations !== 1 ? 's' : ''} received.`,
+    actionProps: {
+      children: 'View',
+      onPress: () => window.open(getTxExplorerUrl(txid), '_blank', 'noopener'),
+    },
+  })
+}
+
 export function TransactionBody({
   status,
   summary = [],
   txid,
   errorMessage,
 }: TransactionBodyProps) {
-  const txStatus = useTxStatus(txid)
+  const { status: txStatus, confirmations } = useTxStatus(txid)
+
+  useEffect(() => {
+    if (txid && txStatus === 'finalized' && confirmations !== null) {
+      notifyTxConfirmed(txid, confirmations)
+    }
+  }, [txStatus, txid, confirmations])
 
   const rows = useMemo<TransactionSummaryRow[]>(
     () => [
@@ -114,10 +130,18 @@ export function TransactionBody({
                     ? 'Confirmed'
                     : 'Pending…',
             },
+            ...(!confirmations
+              ? [
+                  {
+                    label: 'Confirmations',
+                    value: `${confirmations} Confirmation${confirmations !== 1 ? 's' : ''}`,
+                  },
+                ]
+              : []),
           ]
         : []),
     ],
-    [summary, txid, txStatus],
+    [summary, txid, txStatus, confirmations],
   )
 
   return (

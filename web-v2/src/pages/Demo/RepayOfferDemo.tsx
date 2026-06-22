@@ -106,7 +106,7 @@ export default function RepayOfferDemo() {
     busy: false,
     error: null,
   })
-  const txStatus = useTxStatus(state.result?.txid ?? null)
+  const { status: txStatus } = useTxStatus(state.result?.txid ?? null)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const principalAsset = NETWORK_CONFIG.principalAsset

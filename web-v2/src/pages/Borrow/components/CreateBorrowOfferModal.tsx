@@ -136,11 +136,13 @@ type CreateBorrowOfferValues = z.infer<ReturnType<typeof createBorrowOfferSchema
 interface CreateBorrowOfferModalProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
+  onClose: () => void
 }
 
 export default function CreateBorrowOfferModal({
   isOpen,
   onOpenChange,
+  onClose,
 }: CreateBorrowOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
   const { balances } = useWallet()
@@ -254,6 +256,7 @@ export default function CreateBorrowOfferModal({
     reset()
     resetForm()
     onOpenChange(false)
+    onClose()
   }
 
   const onSubmit = handleSubmit(() => {

@@ -110,7 +110,7 @@ export default function LiquidateOfferDemo() {
     busy: false,
     error: null,
   })
-  const txStatus = useTxStatus(state.result?.txid ?? null)
+  const { status: txStatus } = useTxStatus(state.result?.txid ?? null)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const feeUtxoOptions = useMemo(() => {

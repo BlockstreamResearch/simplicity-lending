@@ -22,8 +22,8 @@ export default function CreateBorrowerAccountDemo() {
     useState<BroadcastState<BorrowerAccountCreationResult>>(INITIAL_STATE)
   const [removeState, setRemoveState] = useState<BroadcastState<null>>(INITIAL_STATE)
 
-  const createTxStatus = useTxStatus(createState.result?.txid ?? null)
-  const removeTxStatus = useTxStatus(null)
+  const { status: createTxStatus } = useTxStatus(createState.result?.txid ?? null)
+  const { status: removeTxStatus } = useTxStatus(null)
 
   const handleCreate = async () => {
     setCreateState({ busy: true, error: null, result: null })
