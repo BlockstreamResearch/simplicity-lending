@@ -34,6 +34,7 @@ export function selectByLargestFirst<T extends { value: bigint }>(
   )
 }
 
+// Keep this for debug multi utxo
 export function selectBySmallestFirst<T extends { value: bigint }>(
   items: T[],
   target: bigint,
