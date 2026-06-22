@@ -2,7 +2,7 @@ import type { OfferDetails } from '@/api/indexer/schemas'
 
 const toOutpoint = (entry: { txid: string; vout: number }) => `${entry.txid}:${entry.vout}`
 
-export function resolveCreateOfferNftOutpoints(offer: OfferDetails): {
+export function resolveNftOutpoints(offer: OfferDetails): {
   lenderNft: string
   borrowerNft: string
 } | null {
@@ -33,4 +33,9 @@ export function resolveRepaymentOutpoint(offer: OfferDetails): string | null {
 export function resolveLenderNftOutpoint(offer: OfferDetails): string | null {
   const lender = offer.participants.find(p => p.participant_type === 'lender')
   return lender ? toOutpoint(lender) : null
+}
+
+export function resolveBorrowerNftOutpoint(offer: OfferDetails): string | null {
+  const borrower = offer.participants.find(p => p.participant_type === 'borrower')
+  return borrower ? toOutpoint(borrower) : null
 }

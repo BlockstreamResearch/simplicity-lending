@@ -1,0 +1,138 @@
+import { Chip } from '@heroui/react'
+import { useMutation } from '@tanstack/react-query'
+import { useMemo } from 'react'
+
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchOffer } from '@/api/indexer/methods'
+import type { OfferShort } from '@/api/indexer/schemas'
+import { resolveActiveOutpoint, resolveBorrowerNftOutpoint } from '@/api/indexer/utils'
+import OfferActionShell from '@/components/modals/OfferActionShell'
+import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
+import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useRepayOffer } from '@/hooks/useRepayOffer'
+import {
+  estimateFeeBudgetSats,
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+  selectAssetUtxos,
+  selectFeeUtxos,
+  utxoToOutpointString,
+} from '@/lwk/utxo'
+import { useLwk } from '@/providers/lwk/useLwk'
+import { useWallet } from '@/providers/wallet/useWallet'
+import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
+import { formatAmount, truncateAddress } from '@/utils/format'
+import { calcInterest } from '@/utils/offers'
+
+const REPAY_WEIGHT_UNITS =
+  LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
+
+interface RepayOfferModalProps {
+  isOpen: boolean
+  offer: OfferShort
+  onClose: () => void
+  onSuccess: () => void
+}
+
+export default function RepayOfferModal({
+  isOpen,
+  offer,
+  onClose,
+  onSuccess,
+}: RepayOfferModalProps) {
+  const { collateralAsset, principalAsset } = NETWORK_CONFIG
+  const { syncWallet, getBlindedWalletUtxos } = useWallet()
+  const { lwkNetwork } = useLwk()
+  const { repayOffer } = useRepayOffer()
+
+  const repayBorrowOffer = async () => {
+    const fullOffer = await fetchOffer(offer.id)
+    const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
+    if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
+
+    const borrowerNftOutpoint = resolveBorrowerNftOutpoint(fullOffer)
+    if (!borrowerNftOutpoint) throw new Error('Borrower NFT UTXO not found')
+
+    const totalToRepay =
+      offer.principal_amount + calcInterest(offer.principal_amount, offer.interest_rate)
+
+    await syncWallet()
+    const [blindedWalletUtxos, feeRate] = await Promise.all([
+      getBlindedWalletUtxos(),
+      fetchFeeRateSatPerKvb(),
+    ])
+
+    const principalUtxos = selectAssetUtxos(
+      blindedWalletUtxos,
+      principalAsset.id,
+      totalToRepay,
+      principalAsset.symbol,
+    )
+
+    const feeBudgetSats = estimateFeeBudgetSats(REPAY_WEIGHT_UNITS, feeRate)
+    const feeUtxos = selectFeeUtxos(
+      blindedWalletUtxos,
+      lwkNetwork.policyAsset(),
+      feeBudgetSats,
+      feeRate,
+    )
+
+    return repayOffer({
+      activeOfferOutpoint,
+      borrowerNftOutpoint,
+      principalOutpoints: principalUtxos.map(utxoToOutpointString),
+      feeOutpoints: feeUtxos.map(utxoToOutpointString),
+    })
+  }
+
+  const { mutate, reset, data, error, status } = useMutation({ mutationFn: repayBorrowOffer })
+
+  const txSummary = useMemo(() => {
+    const interest = calcInterest(offer.principal_amount, offer.interest_rate)
+    return [
+      {
+        label: 'Principal',
+        value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
+      },
+      {
+        label: 'Interest',
+        value: `${formatAmount(interest, principalAsset.decimals)} ${principalAsset.symbol}`,
+      },
+      {
+        label: 'Total Repayment',
+        value: `${formatAmount(offer.principal_amount + interest, principalAsset.decimals)} ${principalAsset.symbol}`,
+      },
+      {
+        label: 'Collateral Returned',
+        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
+      },
+    ]
+  }, [offer, principalAsset, collateralAsset])
+
+  return (
+    <OfferActionShell
+      isOpen={isOpen}
+      title={`#${truncateAddress(offer.id)} - Repay`}
+      chip={
+        <Chip color='warning' variant='soft' size='sm'>
+          Repay
+        </Chip>
+      }
+      action={{
+        label: 'Repay Loan',
+        eyebrow: 'Repay Loan',
+        summary: txSummary,
+        status,
+        txid: data?.txid,
+        error: error?.message,
+        onConfirm: () => mutate(),
+      }}
+      onClose={() => {
+        reset()
+        onClose()
+      }}
+      onSuccess={onSuccess}
+    >
+      <OfferDetailsBody offer={offer} />
+    </OfferActionShell>
+  )
+}

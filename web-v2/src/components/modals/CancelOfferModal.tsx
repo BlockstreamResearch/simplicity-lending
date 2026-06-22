@@ -1,3 +1,4 @@
+import { Chip } from '@heroui/react'
 import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
@@ -7,12 +8,11 @@ import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
-import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { useAcceptOffer } from '@/hooks/useAcceptOffer'
+import { useCancelOffer } from '@/hooks/useCancelOffer'
 import {
   estimateFeeBudgetSats,
-  selectAssetUtxos,
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   selectFeeUtxos,
   utxoToOutpointString,
 } from '@/lwk/utxo'
@@ -21,33 +21,40 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
-import { bpsToPercent, calcInterest } from '@/utils/offers'
 
-const ACCEPT_WEIGHT_UNITS =
-  LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance + SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY
+const CANCEL_WEIGHT_UNITS =
+  LENDING_MAX_WEIGHT_TO_SATISFY.OfferCancellation +
+  SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY +
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
 
-interface AcceptOfferModalProps {
+interface CancelOfferModalProps {
   isOpen: boolean
   offer: OfferShort
   onClose: () => void
   onSuccess: () => void
 }
 
-export default function AcceptOfferModal({
+export default function CancelOfferModal({
   isOpen,
   offer,
   onClose,
   onSuccess,
-}: AcceptOfferModalProps) {
-  const { collateralAsset, principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos } = useWallet()
+}: CancelOfferModalProps) {
+  const { collateralAsset } = NETWORK_CONFIG
+  const { syncWallet, getBlindedWalletUtxos, getReceiveAddress } = useWallet()
   const { lwkNetwork } = useLwk()
-  const { acceptOffer } = useAcceptOffer()
+  const { cancelOffer } = useCancelOffer()
 
-  const acceptBorrowOffer = async () => {
+  const cancelBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
     const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
     if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
+
+    const nftOutpoints = resolveNftOutpoints(fullOffer)
+    if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+
+    const collateralRecipientAddress = await getReceiveAddress()
+    if (!collateralRecipientAddress) throw new Error('Missing wallet receive address')
 
     await syncWallet()
     const [blindedWalletUtxos, feeRate] = await Promise.all([
@@ -55,65 +62,48 @@ export default function AcceptOfferModal({
       fetchFeeRateSatPerKvb(),
     ])
 
-    const principalUtxos = selectAssetUtxos(
-      blindedWalletUtxos,
-      principalAsset.id,
-      offer.principal_amount,
-      principalAsset.symbol,
-    )
-
-    const feeBudgetSats = estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
+    const feeBudgetSats = estimateFeeBudgetSats(CANCEL_WEIGHT_UNITS, feeRate)
     const feeUtxos = selectFeeUtxos(
       blindedWalletUtxos,
       lwkNetwork.policyAsset(),
       feeBudgetSats,
       feeRate,
     )
-    const nftOutpoints = resolveNftOutpoints(fullOffer)
-    if (!nftOutpoints) throw new Error('Offer NFT participants not found')
-    const { lenderNft, borrowerNft } = nftOutpoints
 
-    return acceptOffer({
+    return cancelOffer({
       pendingOfferOutpoint,
-      lenderNftOutpoint: lenderNft,
-      borrowerNftReferenceOutpoint: borrowerNft,
-      principalOutpoints: principalUtxos.map(utxoToOutpointString),
+      lenderNftOutpoint: nftOutpoints.lenderNft,
+      borrowerNftOutpoint: nftOutpoints.borrowerNft,
+      collateralRecipientAddress,
       feeOutpoints: feeUtxos.map(utxoToOutpointString),
     })
   }
 
-  const { mutate, reset, data, error, status } = useMutation({ mutationFn: acceptBorrowOffer })
-
-  const borrower = offer.participants.find(p => p.participant_type === 'borrower')
-  const title = `${truncateAddress(borrower?.script_pubkey || '')} Supply Offers`
+  const { mutate, reset, data, error, status } = useMutation({ mutationFn: cancelBorrowOffer })
 
   const txSummary = useMemo(
     () => [
       {
-        label: 'Collateral',
+        label: 'Collateral Returned',
         value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
       },
-      {
-        label: 'Principal Supplied',
-        value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
-      {
-        label: 'Earn',
-        value: `${formatAmount(calcInterest(offer.principal_amount, offer.interest_rate), principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
-      { label: 'APR', value: bpsToPercent(offer.interest_rate) },
     ],
-    [offer, collateralAsset, principalAsset],
+    [offer, collateralAsset],
   )
 
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={title}
-      chip={<OfferStatusChip status={offer.status} />}
+      title={`#${truncateAddress(offer.id)} - Cancel`}
+      chip={
+        <Chip color='danger' variant='soft' size='sm'>
+          Cancel
+        </Chip>
+      }
       action={{
-        label: 'Accept & Supply',
-        eyebrow: 'Accept Offer',
+        label: 'Cancel Offer',
+        variant: 'danger-soft',
+        eyebrow: 'Cancel Offer',
         summary: txSummary,
         status,
         txid: data?.txid,

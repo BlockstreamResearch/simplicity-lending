@@ -91,7 +91,10 @@ export default function OffersTable<T extends OfferShort>({
               <Table.Column>Term Left</Table.Column>
               <Table.Column>Status</Table.Column>
             </Table.Header>
-            <Table.Body items={offers} dependencies={[currentBlockHeight, scriptPubkey]}>
+            <Table.Body
+              items={offers}
+              dependencies={[currentBlockHeight, scriptPubkey, resolveOfferWarning]}
+            >
               {offer => {
                 const warning = resolveOfferWarning(offer)
                 return (

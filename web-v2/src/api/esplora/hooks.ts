@@ -88,6 +88,7 @@ export function useBlockHeight(
     staleTime: STALE_TIME_MS.tip,
     refetchInterval: refetchIntervalMs,
     initialData: 0,
+    initialDataUpdatedAt: 0,
   })
 }
 

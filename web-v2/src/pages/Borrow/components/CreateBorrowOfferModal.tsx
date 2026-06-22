@@ -43,6 +43,7 @@ interface BorrowOfferContext {
   feeBudgetSats: bigint
 }
 const MAX_INTEREST_RATE_BPS = 65_535
+const MIN_PAYMENT_AMOUNT = 0.1
 
 const positiveAmount = z
   .string()
@@ -63,7 +64,7 @@ function createBorrowOfferSchema({
       collateral: positiveAmount,
       borrow: positiveAmount,
       fee: positiveAmount,
-      termDays: z.number().int().positive(),
+      termDays: z.number().positive(),
     })
     .superRefine((data, ctx) => {
       const collateralBase = toBigintAmount(data.collateral, collateralDecimals)
@@ -91,6 +92,22 @@ function createBorrowOfferSchema({
         })
       }
       if (collateralBase <= 0n || principalBase <= 0n || feeBase <= 0n) return
+
+      if (Number(data.borrow) < MIN_PAYMENT_AMOUNT) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['borrow'],
+          message: `Minimum borrow is ${MIN_PAYMENT_AMOUNT} ${principalSymbol}`,
+        })
+      }
+      if (Number(data.fee) < MIN_PAYMENT_AMOUNT) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['fee'],
+          message: `Minimum fee is ${MIN_PAYMENT_AMOUNT} ${principalSymbol}`,
+        })
+      }
+      if (Number(data.borrow) < MIN_PAYMENT_AMOUNT || Number(data.fee) < MIN_PAYMENT_AMOUNT) return
 
       const feeBps = feeToBps(feeBase, principalBase)
       if (feeBps > MAX_INTEREST_RATE_BPS) {
