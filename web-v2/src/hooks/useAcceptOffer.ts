@@ -8,9 +8,9 @@ import {
   TxOutSecrets,
 } from 'lwk_web'
 
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,

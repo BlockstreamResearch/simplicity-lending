@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import OfferActionShell from '@/components/modals/OfferActionShell'
@@ -8,7 +9,6 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
-import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   estimateFeeBudgetSats,
   selectAssetUtxos,

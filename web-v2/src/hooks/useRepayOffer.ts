@@ -9,9 +9,10 @@ import {
   TxOutSecrets,
 } from 'lwk_web'
 
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
+import { BPS_DIVISOR } from '@/constants/offers'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -48,10 +49,9 @@ const BURN_PAYLOAD = new TextEncoder().encode('burn')
 // 10% of the total fee goes to the protocol, matching PROTOCOL_FEE_PERCENTAGE in Rust.
 // Check crates/contracts/src/programs/lending/offer.rs)
 const PROTOCOL_FEE_BPS = 1_000n
-const BASIS_POINTS = 10_000n
 
 function getTotalProtocolFee(totalFee: bigint): bigint {
-  return (totalFee * PROTOCOL_FEE_BPS) / BASIS_POINTS
+  return (totalFee * PROTOCOL_FEE_BPS) / BPS_DIVISOR
 }
 
 export interface RepayOfferParams {

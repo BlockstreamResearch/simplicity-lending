@@ -15,6 +15,7 @@ import { UiModal } from '@/components/ui/UiModal'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { BPS_DIVISOR } from '@/constants/offers'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
 import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
@@ -41,8 +42,6 @@ interface BorrowOfferContext {
   utxos: PolicyAssetUtxo[]
   feeBudgetSats: bigint
 }
-
-const BPS_DIVISOR = 10_000n
 const MAX_INTEREST_RATE_BPS = 65_535
 
 const positiveAmount = z

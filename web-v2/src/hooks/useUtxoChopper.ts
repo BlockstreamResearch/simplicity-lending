@@ -1,7 +1,7 @@
 import { Address, OutPoint, TxBuilder } from 'lwk_web'
 
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'
-import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import { assertDistinctOutpoints } from '@/lwk/transaction'
 import { isPolicyAssetUtxo, requireWalletUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'

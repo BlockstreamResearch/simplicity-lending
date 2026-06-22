@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/lwk/fee'
+import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 
 export function useFeeRateSatPerKvb(enabled: boolean): number {
   const { data } = useQuery({

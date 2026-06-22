@@ -13,8 +13,8 @@ import {
   XOnlyPublicKey,
 } from 'lwk_web'
 
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { broadcastTx, fetchLatestBlockHeight } from '@/api/esplora/methods'
-import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import {
   assertExplicitAmount,
   fetchTransaction,

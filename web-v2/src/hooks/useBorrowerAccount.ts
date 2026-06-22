@@ -10,11 +10,11 @@ import {
 } from 'lwk_web'
 import { useCallback, useMemo } from 'react'
 
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
-import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'

@@ -1,5 +1,6 @@
-import { fetchFeeEstimates } from '@/api/esplora/methods'
 import { ErrorHandler } from '@/utils/errorHandler'
+
+import { fetchFeeEstimates } from './methods'
 
 // lwk_wollet's TxBuilder.feeRate() takes sat/kvb, not sat/vb — see the doc comment on
 // lwk_wollet::TxBuilder::fee_rate ("Multiply sats/vb value by 1000").
