@@ -63,7 +63,12 @@ export default function AcceptOfferModal({
     )
 
     const feeBudgetSats = estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset(), feeBudgetSats)
+    const feeUtxos = selectFeeUtxos(
+      blindedWalletUtxos,
+      lwkNetwork.policyAsset(),
+      feeBudgetSats,
+      feeRate,
+    )
     const nftOutpoints = resolveCreateOfferNftOutpoints(fullOffer)
     if (!nftOutpoints) throw new Error('Offer NFT participants not found')
     const { lenderNft, borrowerNft } = nftOutpoints

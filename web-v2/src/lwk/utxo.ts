@@ -75,25 +75,35 @@ export function isPolicyAssetUtxo(utxo: WalletTxOut, policyAsset: AssetId | stri
 
 // Unmeasured placeholder weight (WU) for the wallet's own confidential input(s) + change output.
 export const WALLET_OVERHEAD_WEIGHT_UNITS = 6000
+// Additional wallet P2WPKH input delta measured from Liquid testnet create-offer txs:
+// 1650 WU / 6 extra wallet inputs ≈ 275 WU, rounded up for margin.
+const FEE_WALLET_INPUT_WEIGHT_UNITS = 400
+
+function weightUnitsToSats(weightUnits: number, feeRateSatPerKvb: number): bigint {
+  const vsize = Math.ceil(weightUnits / 4)
+  return BigInt(Math.ceil((vsize * feeRateSatPerKvb) / 1000))
+}
 
 // Sat ceiling for fee-UTXO selection, scaled by feeRate instead of a flat guess.
 export function estimateFeeBudgetSats(
   externalWeightUnits: number,
   feeRateSatPerKvb: number,
 ): bigint {
-  const totalVsize = Math.ceil((externalWeightUnits + WALLET_OVERHEAD_WEIGHT_UNITS) / 4)
-  return BigInt(Math.ceil((totalVsize * feeRateSatPerKvb) / 1000))
+  return weightUnitsToSats(externalWeightUnits + WALLET_OVERHEAD_WEIGHT_UNITS, feeRateSatPerKvb)
 }
 
 export function selectFeeUtxos(
   walletUtxos: WalletTxOut[],
   policyAsset: AssetId | string,
   budgetSats: bigint,
+  feeRateSatPerKvb: number,
 ): WalletTxOut[] {
   const candidates = walletUtxos
     .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAsset))
     .map(utxo => ({ value: utxo.unblinded().value(), utxo }))
-  const selected = selectByLargestFirst(candidates, budgetSats)
+  const selected = selectByLargestFirst(candidates, budgetSats, {
+    perItemReserve: weightUnitsToSats(FEE_WALLET_INPUT_WEIGHT_UNITS, feeRateSatPerKvb),
+  })
   if (!selected) throw new Error('Insufficient confirmed L-BTC balance to cover fees')
   return selected.map(item => item.utxo)
 }

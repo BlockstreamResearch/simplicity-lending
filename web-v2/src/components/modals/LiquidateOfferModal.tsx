@@ -56,7 +56,12 @@ export default function LiquidateOfferModal({
       fetchFeeRateSatPerKvb(),
     ])
     const feeBudgetSats = estimateFeeBudgetSats(LIQUIDATE_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset(), feeBudgetSats)
+    const feeUtxos = selectFeeUtxos(
+      blindedWalletUtxos,
+      lwkNetwork.policyAsset(),
+      feeBudgetSats,
+      feeRate,
+    )
 
     return liquidateOffer({
       activeOfferOutpoint,

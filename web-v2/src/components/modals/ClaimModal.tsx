@@ -52,7 +52,12 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
       fetchFeeRateSatPerKvb(),
     ])
     const feeBudgetSats = estimateFeeBudgetSats(CLAIM_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset(), feeBudgetSats)
+    const feeUtxos = selectFeeUtxos(
+      blindedWalletUtxos,
+      lwkNetwork.policyAsset(),
+      feeBudgetSats,
+      feeRate,
+    )
 
     return claimLenderVault({
       lenderVaultOutpoint: vaultOutpoint,
