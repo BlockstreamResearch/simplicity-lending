@@ -6,6 +6,7 @@ import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
 import { getTxExplorerUrl } from '@/api/esplora/utils'
+import { useAssetPriceUsd } from '@/api/prices/hooks'
 import BalanceCard from '@/components/BalanceCard'
 import PlusIcon from '@/components/icons/PlusIcon'
 import TransactionModal from '@/components/TransactionModal'
@@ -146,8 +147,7 @@ export default function CreateBorrowOfferModal({
 }: CreateBorrowOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
   const { balances } = useWallet()
-  // TODO: implement price feed
-  const collateralUsd = null
+  const collateralUsd = useAssetPriceUsd(collateralAsset.id)
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { factoryState, refetchFactory } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()

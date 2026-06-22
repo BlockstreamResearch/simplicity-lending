@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useBorrowerOffers } from '@/api/indexer/hooks'
+import { useAssetPriceUsd } from '@/api/prices/hooks'
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
@@ -12,7 +13,7 @@ import { RoutePath } from '@/constants/routes'
 import { useBorrowerStats } from '@/hooks/useBorrowerStats'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ErrorHandler } from '@/utils/errorHandler'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { formatAmount, formatUsd, truncateAddress } from '@/utils/format'
 import { getOfferTermLeft } from '@/utils/offers'
 
 import { AssetAmount } from './AssetAmount'
@@ -25,8 +26,10 @@ export function BorrowCard() {
   const { stats, isLoading, error, refetch } = useBorrowerStats()
   const offersQuery = useBorrowerOffers(scriptPubkey ?? '', { status: 'active', limit: 50 })
   const { data: currentBlockHeight } = useBlockHeight()
+  const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)
 
   const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
+  const balanceUsd = formatUsd(balance, NETWORK_CONFIG.collateralAsset.decimals, collateralPriceUsd)
   const activeOffers = offersQuery.data?.items ?? []
   const nearExpiryOffers = activeOffers.filter(o => {
     const termLeft = getOfferTermLeft(o, currentBlockHeight)
@@ -55,12 +58,15 @@ export function BorrowCard() {
       {isLoading ? (
         <Skeleton className='h-8 w-32 rounded-lg' />
       ) : (
-        <p className='text-display'>
-          <AssetAmount
-            value={formatAmount(balance, NETWORK_CONFIG.collateralAsset.decimals)}
-            unit={NETWORK_CONFIG.collateralAsset.symbol}
-          />
-        </p>
+        <div className='flex flex-col gap-1'>
+          <p className='text-display'>
+            <AssetAmount
+              value={formatAmount(balance, NETWORK_CONFIG.collateralAsset.decimals)}
+              unit={NETWORK_CONFIG.collateralAsset.symbol}
+            />
+          </p>
+          <span className='text-muted text-xs'>{balanceUsd ?? '—'}</span>
+        </div>
       )}
 
       <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>

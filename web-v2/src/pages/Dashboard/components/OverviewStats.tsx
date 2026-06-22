@@ -1,37 +1,43 @@
 import { Skeleton } from '@heroui/react'
 import { useMemo } from 'react'
 
+import { useAssetPriceUsd } from '@/api/prices/hooks'
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
 import { useOverview } from '@/hooks/useOverview'
-import { formatAmount } from '@/utils/format'
+import { formatAmount, formatUsd } from '@/utils/format'
 
 interface OverviewStat {
   label: string
   value: string
+  usdValue?: string | null
   asset?: ConfigAsset
 }
 
 export default function OverviewStats() {
   const { overview, isLoading } = useOverview()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
+  const collateralPriceUsd = useAssetPriceUsd(collateralAsset.id)
+  const principalPriceUsd = useAssetPriceUsd(principalAsset.id)
 
   const stats = useMemo<OverviewStat[]>(
     () => [
       {
         label: 'Total Collateral Locked',
         value: formatAmount(overview.totalCollateral, collateralAsset.decimals),
+        usdValue: formatUsd(overview.totalCollateral, collateralAsset.decimals, collateralPriceUsd),
         asset: collateralAsset,
       },
       {
         label: 'Total Active Loans',
         value: formatAmount(overview.totalActiveLoans, principalAsset.decimals),
+        usdValue: formatUsd(overview.totalActiveLoans, principalAsset.decimals, principalPriceUsd),
         asset: principalAsset,
       },
       // TODO: show real value once /offers/overview returns an average interest rate (backend doesn't expose it yet).
       { label: 'Average Interest Rate', value: '—' },
       { label: 'Number of Active Loans', value: String(overview.activeLoansCount) },
     ],
-    [overview, collateralAsset, principalAsset],
+    [overview, collateralAsset, principalAsset, collateralPriceUsd, principalPriceUsd],
   )
 
   return (
@@ -47,14 +53,17 @@ export default function OverviewStats() {
             {isLoading ? (
               <Skeleton className='h-8 w-24 rounded-lg' />
             ) : (
-              <div className='flex items-center justify-between gap-2'>
-                <span className='text-display'>{stat.value}</span>
-                {stat.asset && Icon && (
-                  <span className='inline-flex items-center gap-1.5 text-sm font-medium'>
-                    <Icon className='size-4' />
-                    {stat.asset.symbol}
-                  </span>
-                )}
+              <div className='flex flex-col gap-1'>
+                <div className='flex items-center justify-between gap-2'>
+                  <span className='text-display'>{stat.value}</span>
+                  {stat.asset && Icon && (
+                    <span className='inline-flex items-center gap-1.5 text-sm font-medium'>
+                      <Icon className='size-4' />
+                      {stat.asset.symbol}
+                    </span>
+                  )}
+                </div>
+                {stat.asset && <span className='text-muted text-xs'>{stat.usdValue ?? '—'}</span>}
               </div>
             )}
           </div>

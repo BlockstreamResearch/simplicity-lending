@@ -2,13 +2,14 @@ import { Skeleton } from '@heroui/react'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { useAssetPriceUsd } from '@/api/prices/hooks'
 import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
 import { useLenderStats } from '@/hooks/useLenderStats'
 import { ErrorHandler } from '@/utils/errorHandler'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { formatAmount, formatUsd, truncateAddress } from '@/utils/format'
 
 import { AssetAmount } from './AssetAmount'
 import CardAlert from './CardAlert'
@@ -17,6 +18,8 @@ import { DataRow } from './DataRow'
 export function SupplyCard() {
   const navigate = useNavigate()
   const { balance, stats, repaidOffer, isLoading, error, refetch } = useLenderStats()
+  const principalPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.principalAsset.id)
+  const balanceUsd = formatUsd(balance, NETWORK_CONFIG.principalAsset.decimals, principalPriceUsd)
 
   useEffect(() => {
     if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your supply.')
@@ -39,12 +42,15 @@ export function SupplyCard() {
       {isLoading ? (
         <Skeleton className='h-8 w-32 rounded-lg' />
       ) : (
-        <p className='text-display'>
-          <AssetAmount
-            value={formatAmount(balance, NETWORK_CONFIG.principalAsset.decimals)}
-            unit={NETWORK_CONFIG.principalAsset.symbol}
-          />
-        </p>
+        <div className='flex flex-col gap-1'>
+          <p className='text-display'>
+            <AssetAmount
+              value={formatAmount(balance, NETWORK_CONFIG.principalAsset.decimals)}
+              unit={NETWORK_CONFIG.principalAsset.symbol}
+            />
+          </p>
+          <span className='text-muted text-xs'>{balanceUsd ?? '—'}</span>
+        </div>
       )}
 
       <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>

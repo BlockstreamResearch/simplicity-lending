@@ -32,3 +32,14 @@ export function truncateAddress(address: string): string {
 }
 
 export const DECIMAL_AMOUNT_RE = /^\d+(\.\d+)?$/
+
+// satoshis + USD price per unit → "$1,234.56", or null if price isn't available.
+export function formatUsd(
+  amount: bigint,
+  decimals: number,
+  priceUsd: number | null | undefined,
+): string | null {
+  if (priceUsd === null || priceUsd === undefined) return null
+  const value = (Number(amount) / 10 ** decimals) * priceUsd
+  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}

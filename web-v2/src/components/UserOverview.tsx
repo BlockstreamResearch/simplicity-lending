@@ -5,6 +5,7 @@ import { type ConfigAsset } from '@/constants/network-config'
 export interface OverviewTile {
   label: string
   value: string
+  usdValue?: string | null
   asset?: ConfigAsset | null
 }
 
@@ -36,14 +37,17 @@ export default function UserOverview({
               {isLoading ? (
                 <Skeleton className='h-8 w-20 rounded-lg' />
               ) : (
-                <div className='flex items-center justify-between gap-2'>
-                  <span className='text-display'>{tile.value}</span>
-                  {tile.asset && Icon && (
-                    <span className='inline-flex items-center gap-1.5 text-sm font-medium'>
-                      <Icon className='size-4' />
-                      {tile.asset.symbol}
-                    </span>
-                  )}
+                <div className='flex flex-col gap-1'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <span className='text-display'>{tile.value}</span>
+                    {tile.asset && Icon && (
+                      <span className='inline-flex items-center gap-1.5 text-sm font-medium'>
+                        <Icon className='size-4' />
+                        {tile.asset.symbol}
+                      </span>
+                    )}
+                  </div>
+                  {tile.asset && <span className='text-muted text-xs'>{tile.usdValue ?? '—'}</span>}
                 </div>
               )}
             </div>
