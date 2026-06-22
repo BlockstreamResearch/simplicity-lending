@@ -8,12 +8,22 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
-import { selectFeeUtxos, utxoToOutpointString } from '@/lwk/utxo'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
+import {
+  estimateFeeBudgetSats,
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+  selectFeeUtxos,
+  utxoToOutpointString,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
+import { ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth-vault/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { resolveLenderNftOutpoint, resolveRepaymentOutpoint } from '@/utils/offerOutpoints'
 import { calcInterest } from '@/utils/offers'
+
+const CLAIM_WEIGHT_UNITS =
+  ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawAll + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
 
 interface ClaimModalProps {
   isOpen: boolean
@@ -37,8 +47,12 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
     if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
 
     await syncWallet()
-    const blindedWalletUtxos = await getBlindedWalletUtxos()
-    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset())
+    const [blindedWalletUtxos, feeRate] = await Promise.all([
+      getBlindedWalletUtxos(),
+      fetchFeeRateSatPerKvb(),
+    ])
+    const feeBudgetSats = estimateFeeBudgetSats(CLAIM_WEIGHT_UNITS, feeRate)
+    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset(), feeBudgetSats)
 
     return claimLenderVault({
       lenderVaultOutpoint: vaultOutpoint,

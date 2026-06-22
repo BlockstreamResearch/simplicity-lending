@@ -8,11 +8,21 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useLiquidateOffer } from '@/hooks/useLiquidateOffer'
-import { selectFeeUtxos, utxoToOutpointString } from '@/lwk/utxo'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
+import {
+  estimateFeeBudgetSats,
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+  selectFeeUtxos,
+  utxoToOutpointString,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
+import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/utils/offerOutpoints'
+
+const LIQUIDATE_WEIGHT_UNITS =
+  LENDING_MAX_WEIGHT_TO_SATISFY.Liquidation + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
 
 interface LiquidateOfferModalProps {
   isOpen: boolean
@@ -41,8 +51,12 @@ export default function LiquidateOfferModal({
     if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
 
     await syncWallet()
-    const blindedWalletUtxos = await getBlindedWalletUtxos()
-    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset())
+    const [blindedWalletUtxos, feeRate] = await Promise.all([
+      getBlindedWalletUtxos(),
+      fetchFeeRateSatPerKvb(),
+    ])
+    const feeBudgetSats = estimateFeeBudgetSats(LIQUIDATE_WEIGHT_UNITS, feeRate)
+    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset(), feeBudgetSats)
 
     return liquidateOffer({
       activeOfferOutpoint,

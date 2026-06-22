@@ -17,9 +17,11 @@ import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
+import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
-import { FEE_BUDGET_SATS } from '@/lwk/utxo'
+import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
 import { useWallet } from '@/providers/wallet/useWallet'
+import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
 import { DECIMAL_AMOUNT_RE, formatAmount } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
@@ -28,12 +30,16 @@ import { selectByLargestFirst } from '@/utils/utxo'
 import { MAX_LTV, TERM_OPTIONS } from '../helpers'
 import LoanMetricsSummary from './LoanMetricsSummary'
 
+const CREATE_OFFER_WEIGHT_UNITS =
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY + ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY.IssueAssets
+
 interface BorrowOfferContext {
   collateralDecimals: number
   principalDecimals: number
   principalSymbol: string
   collateralUsd: number | null
   utxos: PolicyAssetUtxo[]
+  feeBudgetSats: bigint
 }
 
 const BPS_DIVISOR = 10_000n
@@ -51,6 +57,7 @@ function createBorrowOfferSchema({
   principalSymbol,
   collateralUsd,
   utxos,
+  feeBudgetSats,
 }: BorrowOfferContext) {
   return z
     .object({
@@ -94,7 +101,7 @@ function createBorrowOfferSchema({
       }
 
       const collateralBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
-      if (utxos.length > 0 && collateralBalance < collateralBase + FEE_BUDGET_SATS) {
+      if (utxos.length > 0 && collateralBalance < collateralBase + feeBudgetSats) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['collateral'],
@@ -122,6 +129,11 @@ export default function CreateBorrowOfferModal({
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { factoryState, refetchFactory } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()
+  const feeRate = useFeeRateSatPerKvb(isOpen)
+  const feeBudgetSats = useMemo(
+    () => estimateFeeBudgetSats(CREATE_OFFER_WEIGHT_UNITS, feeRate),
+    [feeRate],
+  )
 
   const formContext = useMemo<BorrowOfferContext>(
     () => ({
@@ -130,6 +142,7 @@ export default function CreateBorrowOfferModal({
       principalSymbol: principalAsset.symbol,
       collateralUsd,
       utxos: isLoadingUtxos ? [] : utxos,
+      feeBudgetSats,
     }),
     [
       collateralAsset.decimals,
@@ -138,6 +151,7 @@ export default function CreateBorrowOfferModal({
       collateralUsd,
       utxos,
       isLoadingUtxos,
+      feeBudgetSats,
     ],
   )
 
@@ -161,7 +175,7 @@ export default function CreateBorrowOfferModal({
 
   const createBorrowOffer = useCallback(async () => {
     if (!factoryState) throw new Error('No active factory found. Create a borrower account first.')
-    const collateralUtxos = selectByLargestFirst(utxos, collateralBase + FEE_BUDGET_SATS)
+    const collateralUtxos = selectByLargestFirst(utxos, collateralBase + feeBudgetSats)
     if (!collateralUtxos) throw new Error('No suitable collateral UTXOs found')
     const result = await createOffer({
       factoryAuthOutpoint: factoryState.factoryAuthOutpoint,
@@ -188,6 +202,7 @@ export default function CreateBorrowOfferModal({
     factoryState,
     utxos,
     collateralBase,
+    feeBudgetSats,
     principalBase,
     bps,
     loanDurationBlocks,

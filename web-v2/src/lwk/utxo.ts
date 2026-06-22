@@ -73,19 +73,27 @@ export function isPolicyAssetUtxo(utxo: WalletTxOut, policyAsset: AssetId | stri
   return utxo.unblinded().asset().toString() === policyAsset.toString()
 }
 
-// Generous ceiling for fee-UTXO selection — real fees in this protocol are tens to a few
-// hundred sats after the weight-constant fixes; this just needs to comfortably cover them
-// before TxBuilder computes the exact fee and returns change.
-export const FEE_BUDGET_SATS = 1000n
+// Unmeasured placeholder weight (WU) for the wallet's own confidential input(s) + change output.
+export const WALLET_OVERHEAD_WEIGHT_UNITS = 6000
+
+// Sat ceiling for fee-UTXO selection, scaled by feeRate instead of a flat guess.
+export function estimateFeeBudgetSats(
+  externalWeightUnits: number,
+  feeRateSatPerKvb: number,
+): bigint {
+  const totalVsize = Math.ceil((externalWeightUnits + WALLET_OVERHEAD_WEIGHT_UNITS) / 4)
+  return BigInt(Math.ceil((totalVsize * feeRateSatPerKvb) / 1000))
+}
 
 export function selectFeeUtxos(
   walletUtxos: WalletTxOut[],
   policyAsset: AssetId | string,
+  budgetSats: bigint,
 ): WalletTxOut[] {
   const candidates = walletUtxos
     .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAsset))
     .map(utxo => ({ value: utxo.unblinded().value(), utxo }))
-  const selected = selectByLargestFirst(candidates, FEE_BUDGET_SATS)
+  const selected = selectByLargestFirst(candidates, budgetSats)
   if (!selected) throw new Error('Insufficient confirmed L-BTC balance to cover fees')
   return selected.map(item => item.utxo)
 }

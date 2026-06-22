@@ -8,12 +8,23 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
-import { selectAssetUtxos, selectFeeUtxos, utxoToOutpointString } from '@/lwk/utxo'
+import { fetchFeeRateSatPerKvb } from '@/lwk/fee'
+import {
+  estimateFeeBudgetSats,
+  selectAssetUtxos,
+  selectFeeUtxos,
+  utxoToOutpointString,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
+import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
+import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { resolveCreateOfferNftOutpoints, resolvePendingOutpoint } from '@/utils/offerOutpoints'
 import { bpsToPercent, calcInterest } from '@/utils/offers'
+
+const ACCEPT_WEIGHT_UNITS =
+  LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance + SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY
 
 interface AcceptOfferModalProps {
   isOpen: boolean
@@ -39,7 +50,10 @@ export default function AcceptOfferModal({
     if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
 
     await syncWallet()
-    const blindedWalletUtxos = await getBlindedWalletUtxos()
+    const [blindedWalletUtxos, feeRate] = await Promise.all([
+      getBlindedWalletUtxos(),
+      fetchFeeRateSatPerKvb(),
+    ])
 
     const principalUtxos = selectAssetUtxos(
       blindedWalletUtxos,
@@ -48,7 +62,8 @@ export default function AcceptOfferModal({
       principalAsset.symbol,
     )
 
-    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset())
+    const feeBudgetSats = estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
+    const feeUtxos = selectFeeUtxos(blindedWalletUtxos, lwkNetwork.policyAsset(), feeBudgetSats)
     const nftOutpoints = resolveCreateOfferNftOutpoints(fullOffer)
     if (!nftOutpoints) throw new Error('Offer NFT participants not found')
     const { lenderNft, borrowerNft } = nftOutpoints
