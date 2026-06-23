@@ -9,7 +9,8 @@ export function useLiquidPricesUsd(): UseQueryResult<AssetPricesUsd> {
   return useQuery({
     queryKey: pricesQueryKeys.liquidUsd,
     queryFn: ({ signal }) => fetchLiquidPricesUsd({ signal }),
-    staleTime: STALE_TIME_MS.medium,
+    staleTime: STALE_TIME_MS.short,
+    refetchInterval: STALE_TIME_MS.short,
   })
 }
 

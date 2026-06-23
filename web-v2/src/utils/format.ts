@@ -1,6 +1,14 @@
 const MINUTES_PER_BLOCK = 1 // Liquid ~1 min/block
 const MINUTES_PER_HOUR = 60
 const MINUTES_PER_DAY = 1440
+const GROUP_LOCALE = 'en-US'
+
+function formatDecimalParts(whole: bigint, frac: string, negative = false): string {
+  const wholeStr = whole.toLocaleString(GROUP_LOCALE)
+  const fracStr = frac.replace(/0+$/, '')
+  const out = fracStr ? `${wholeStr}.${fracStr}` : wholeStr
+  return negative ? `-${out}` : out
+}
 
 // satoshis → grouped decimal string, trailing zeros trimmed.
 export function formatAmount(amount: bigint, decimals: number): string {
@@ -10,11 +18,7 @@ export function formatAmount(amount: bigint, decimals: number): string {
   const whole = abs / base
   const frac = abs % base
 
-  const wholeStr = whole.toLocaleString('en-US')
-  const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/, '')
-
-  const out = fracStr ? `${wholeStr}.${fracStr}` : wholeStr
-  return negative ? `-${out}` : out
+  return formatDecimalParts(whole, frac.toString().padStart(decimals, '0'), negative)
 }
 
 // blocks remaining → "Expired" / "~Xm" / "~Xh" / ">Xd".
@@ -41,5 +45,10 @@ export function formatUsd(
 ): string | null {
   if (priceUsd === null || priceUsd === undefined) return null
   const value = (Number(amount) / 10 ** decimals) * priceUsd
-  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  if (!Number.isFinite(value)) return null
+
+  const negative = value < 0
+  const [whole = '0', frac = ''] = Math.abs(value).toFixed(2).split('.')
+  const formatted = formatDecimalParts(BigInt(whole), frac)
+  return negative ? `-$${formatted}` : `$${formatted}`
 }
