@@ -1,6 +1,8 @@
 import { Skeleton } from '@heroui/react'
 
 import { type ConfigAsset } from '@/constants/network-config'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
+import { getPolicyAssetUnit, isPolicyAsset } from '@/utils/policyAssetDenomination'
 
 export interface OverviewTile {
   label: string
@@ -20,6 +22,8 @@ export default function UserOverview({
   isLoading,
   gridClassName = 'grid grid-cols-2 gap-4 sm:grid-cols-4 lg:gap-6',
 }: UserOverviewProps) {
+  const { denomination } = useAssetDenomination()
+
   return (
     <section className='flex flex-col gap-2'>
       <h2 className='text-muted text-[11px] font-semibold tracking-wide uppercase'>
@@ -28,6 +32,10 @@ export default function UserOverview({
       <div className={gridClassName}>
         {tiles.map(tile => {
           const Icon = tile.asset?.icon
+          const unit =
+            tile.asset && isPolicyAsset(tile.asset)
+              ? getPolicyAssetUnit(denomination, tile.asset)
+              : tile.asset?.symbol
           return (
             <div
               key={tile.label}
@@ -43,7 +51,7 @@ export default function UserOverview({
                     {tile.asset && Icon && (
                       <span className='inline-flex items-center gap-1.5 text-sm font-medium'>
                         <Icon className='size-4' />
-                        {tile.asset.symbol}
+                        {unit}
                       </span>
                     )}
                   </div>

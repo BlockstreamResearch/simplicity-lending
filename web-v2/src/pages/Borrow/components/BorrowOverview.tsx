@@ -4,11 +4,14 @@ import { useAssetPriceUsd } from '@/api/prices/hooks'
 import UserOverview, { type OverviewTile } from '@/components/UserOverview'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useBorrowerStats } from '@/hooks/useBorrowerStats'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { formatAmount, formatUsd } from '@/utils/format'
+import { formatPolicyAssetAmount } from '@/utils/policyAssetDenomination'
 
 export default function BorrowOverview() {
   const { stats, isLoading } = useBorrowerStats()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
+  const { denomination } = useAssetDenomination()
   const collateralPriceUsd = useAssetPriceUsd(collateralAsset.id)
   const principalPriceUsd = useAssetPriceUsd(principalAsset.id)
 
@@ -16,7 +19,7 @@ export default function BorrowOverview() {
     () => [
       {
         label: 'Collateral Locked',
-        value: formatAmount(stats.lockedCollateral, collateralAsset.decimals),
+        value: formatPolicyAssetAmount(stats.lockedCollateral, denomination, collateralAsset),
         usdValue: formatUsd(stats.lockedCollateral, collateralAsset.decimals, collateralPriceUsd),
         asset: collateralAsset,
       },
@@ -31,7 +34,7 @@ export default function BorrowOverview() {
       { label: 'Active Loans', value: String(stats.activeLoans) },
       { label: 'Pending Offers', value: String(stats.pendingOffers) },
     ],
-    [stats, collateralAsset, principalAsset, collateralPriceUsd, principalPriceUsd],
+    [stats, collateralAsset, principalAsset, collateralPriceUsd, principalPriceUsd, denomination],
   )
 
   return (

@@ -5,6 +5,7 @@ import type { PropsWithChildren } from 'react'
 
 import { env } from '@/constants/env'
 
+import { AssetDenominationProvider } from './assetDenomination/AssetDenominationProvider'
 import { LwkProvider } from './lwk/LwkProvider'
 import { PendingTransactionsProvider } from './pendingTransactions/PendingTransactionsProvider'
 import { pendingTxToastQueue } from './pendingTransactions/pendingTxToastQueue'
@@ -16,7 +17,9 @@ export function AppProviders({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <LwkProvider>
         <WalletProvider>
-          <PendingTransactionsProvider>{children}</PendingTransactionsProvider>
+          <AssetDenominationProvider>
+            <PendingTransactionsProvider>{children}</PendingTransactionsProvider>
+          </AssetDenominationProvider>
           <ToastProvider placement='top end' />
           <ToastProvider queue={pendingTxToastQueue} placement='bottom' />
         </WalletProvider>

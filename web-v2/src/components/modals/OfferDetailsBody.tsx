@@ -5,9 +5,11 @@ import type { OfferShort } from '@/api/indexer/schemas'
 import BalanceCard from '@/components/BalanceCard'
 import DetailsPanel, { type DetailRow } from '@/components/DetailsPanel'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { calcInterest, computeApr, formatOfferTermLeft } from '@/utils/offers'
+import { formatPolicyAssetDisplay } from '@/utils/policyAssetDenomination'
 
 interface OfferDetailsBodyProps {
   offer: OfferShort
@@ -17,6 +19,7 @@ interface OfferDetailsBodyProps {
 export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsBodyProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
   const { balances } = useWallet()
+  const { denomination } = useAssetDenomination()
   const { data: currentBlockHeight } = useBlockHeight()
 
   const loanInfoRows = useMemo<DetailRow[]>(() => {
@@ -28,7 +31,7 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     const rows: DetailRow[] = [
       {
         label: 'Collateral Amount',
-        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
+        value: formatPolicyAssetDisplay(offer.collateral_amount, denomination, collateralAsset),
       },
       {
         label: 'Loan Amount',
@@ -49,7 +52,7 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     }
 
     return rows
-  }, [offer, collateralAsset, principalAsset])
+  }, [offer, collateralAsset, principalAsset, denomination])
 
   const termRows = useMemo<DetailRow[]>(
     () => [

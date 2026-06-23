@@ -16,11 +16,13 @@ import {
   selectFeeUtxos,
   utxoToOutpointString,
 } from '@/lwk/utxo'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { truncateAddress } from '@/utils/format'
+import { formatPolicyAssetDisplay } from '@/utils/policyAssetDenomination'
 
 const LIQUIDATE_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.Liquidation + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
@@ -43,6 +45,7 @@ export default function LiquidateOfferModal({
   const { lwkNetwork } = useLwk()
   const { liquidateOffer } = useLiquidateOffer()
   const { addPendingTx } = usePendingTransactions()
+  const { denomination } = useAssetDenomination()
 
   const liquidateExpiredOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -91,11 +94,11 @@ export default function LiquidateOfferModal({
     () => [
       {
         label: 'Collateral',
-        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
+        value: formatPolicyAssetDisplay(offer.collateral_amount, denomination, collateralAsset),
       },
       { label: 'Expiration Block', value: `#${offer.loan_expiration_height}` },
     ],
-    [offer, collateralAsset],
+    [offer, collateralAsset, denomination],
   )
 
   return (

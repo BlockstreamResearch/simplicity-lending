@@ -16,6 +16,7 @@ import {
   selectFeeUtxos,
   utxoToOutpointString,
 } from '@/lwk/utxo'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -23,6 +24,7 @@ import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { bpsToPercent, calcInterest } from '@/utils/offers'
+import { formatPolicyAssetDisplay } from '@/utils/policyAssetDenomination'
 
 const ACCEPT_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance + SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY
@@ -45,6 +47,7 @@ export default function AcceptOfferModal({
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
   const { addPendingTx } = usePendingTransactions()
+  const { denomination } = useAssetDenomination()
 
   const acceptBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -105,7 +108,7 @@ export default function AcceptOfferModal({
     () => [
       {
         label: 'Collateral',
-        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
+        value: formatPolicyAssetDisplay(offer.collateral_amount, denomination, collateralAsset),
       },
       {
         label: 'Principal Supplied',
@@ -117,7 +120,7 @@ export default function AcceptOfferModal({
       },
       { label: 'APR', value: bpsToPercent(offer.interest_rate) },
     ],
-    [offer, collateralAsset, principalAsset],
+    [offer, collateralAsset, principalAsset, denomination],
   )
 
   return (

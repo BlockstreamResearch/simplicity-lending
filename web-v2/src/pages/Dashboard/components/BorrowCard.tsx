@@ -11,10 +11,16 @@ import { NETWORK_CONFIG } from '@/constants/network-config'
 import { REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/offers'
 import { RoutePath } from '@/constants/routes'
 import { useBorrowerStats } from '@/hooks/useBorrowerStats'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ErrorHandler } from '@/utils/errorHandler'
 import { formatAmount, formatUsd, truncateAddress } from '@/utils/format'
 import { getOfferTermLeft } from '@/utils/offers'
+import {
+  formatPolicyAssetAmount,
+  formatPolicyAssetDisplay,
+  getPolicyAssetUnit,
+} from '@/utils/policyAssetDenomination'
 
 import { AssetAmount } from './AssetAmount'
 import CardAlert from './CardAlert'
@@ -24,9 +30,11 @@ export function BorrowCard() {
   const navigate = useNavigate()
   const { balances, scriptPubkey } = useWallet()
   const { stats, isLoading, error, refetch } = useBorrowerStats()
+  const { denomination } = useAssetDenomination()
   const offersQuery = useBorrowerOffers(scriptPubkey ?? '', { status: 'active', limit: 50 })
   const { data: currentBlockHeight } = useBlockHeight()
   const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)
+  const collateralUnit = getPolicyAssetUnit(denomination, NETWORK_CONFIG.collateralAsset)
 
   const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.collateralAsset.decimals, collateralPriceUsd)
@@ -50,9 +58,7 @@ export function BorrowCard() {
           </span>
           <h3 className='text-h3'>Your Borrows</h3>
         </div>
-        <p className='text-muted text-h4'>
-          Complete Balance {NETWORK_CONFIG.collateralAsset.symbol}
-        </p>
+        <p className='text-muted text-h4'>Complete Balance {collateralUnit}</p>
       </header>
 
       {isLoading ? (
@@ -61,8 +67,8 @@ export function BorrowCard() {
         <div className='flex flex-col gap-1'>
           <p className='text-display'>
             <AssetAmount
-              value={formatAmount(balance, NETWORK_CONFIG.collateralAsset.decimals)}
-              unit={NETWORK_CONFIG.collateralAsset.symbol}
+              value={formatPolicyAssetAmount(balance, denomination, NETWORK_CONFIG.collateralAsset)}
+              unit={collateralUnit}
             />
           </p>
           <span className='text-muted text-xs'>{balanceUsd ?? '—'}</span>
@@ -72,7 +78,11 @@ export function BorrowCard() {
       <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>
         <DataRow
           label='User Total Locked Collateral:'
-          value={`${formatAmount(stats.lockedCollateral, NETWORK_CONFIG.collateralAsset.decimals)} ${NETWORK_CONFIG.collateralAsset.symbol}`}
+          value={formatPolicyAssetDisplay(
+            stats.lockedCollateral,
+            denomination,
+            NETWORK_CONFIG.collateralAsset,
+          )}
           isLoading={isLoading}
         />
         <DataRow

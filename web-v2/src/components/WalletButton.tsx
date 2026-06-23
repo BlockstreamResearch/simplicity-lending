@@ -1,4 +1,4 @@
-import { buttonVariants, Chip, Dropdown } from '@heroui/react'
+import { buttonVariants, Chip, Dropdown, Tabs } from '@heroui/react'
 import { useState } from 'react'
 
 import CheckIcon from '@/components/icons/CheckIcon'
@@ -6,6 +6,8 @@ import CopyIcon from '@/components/icons/CopyIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
+import type { PolicyAssetDenomination } from '@/providers/assetDenomination/types'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
@@ -24,6 +26,7 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
   const [disconnecting, setDisconnecting] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [copied, copyToClipboard] = useCopyToClipboard()
+  const { denomination, setDenomination } = useAssetDenomination()
 
   const handleDisconnect = async () => {
     setDisconnecting(true)
@@ -86,6 +89,32 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
                     >
                       {copied ? <CheckIcon className='size-4' /> : <CopyIcon className='size-4' />}
                     </UiButton>
+                  </div>
+                  <div className='flex flex-col gap-1.5'>
+                    <span className='text-muted text-[11px] font-semibold tracking-wide'>
+                      Balance unit
+                    </span>
+                    <Tabs.Root
+                      aria-label='Balance unit'
+                      selectedKey={denomination}
+                      onSelectionChange={key => setDenomination(key as PolicyAssetDenomination)}
+                      variant='secondary'
+                    >
+                      <Tabs.List className='bg-surface-secondary grid w-full grid-cols-2 rounded-xl p-1'>
+                        <Tabs.Tab
+                          id='lbtc'
+                          className='text-muted hover:text-foreground data-[selected]:bg-surface data-[selected]:text-foreground data-[selected]:shadow-sm justify-center rounded-lg px-3 py-2 text-sm font-semibold transition'
+                        >
+                          LBTC
+                        </Tabs.Tab>
+                        <Tabs.Tab
+                          id='sats'
+                          className='text-muted hover:text-foreground data-[selected]:bg-surface data-[selected]:text-foreground data-[selected]:shadow-sm justify-center rounded-lg px-3 py-2 text-sm font-semibold transition'
+                        >
+                          sats
+                        </Tabs.Tab>
+                      </Tabs.List>
+                    </Tabs.Root>
                   </div>
                   <UiButton
                     variant='danger'

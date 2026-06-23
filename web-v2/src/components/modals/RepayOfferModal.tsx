@@ -17,12 +17,14 @@ import {
   selectFeeUtxos,
   utxoToOutpointString,
 } from '@/lwk/utxo'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
 import { calcInterest } from '@/utils/offers'
+import { formatPolicyAssetDisplay } from '@/utils/policyAssetDenomination'
 
 const REPAY_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
@@ -45,6 +47,7 @@ export default function RepayOfferModal({
   const { lwkNetwork } = useLwk()
   const { repayOffer } = useRepayOffer()
   const { addPendingTx } = usePendingTransactions()
+  const { denomination } = useAssetDenomination()
 
   const repayBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -117,10 +120,10 @@ export default function RepayOfferModal({
       },
       {
         label: 'Collateral Returned',
-        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
+        value: formatPolicyAssetDisplay(offer.collateral_amount, denomination, collateralAsset),
       },
     ]
-  }, [offer, principalAsset, collateralAsset])
+  }, [offer, principalAsset, collateralAsset, denomination])
 
   return (
     <OfferActionShell
