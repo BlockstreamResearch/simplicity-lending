@@ -27,8 +27,16 @@ export function formatTermLeft(blocksLeft: number): string {
 }
 
 export function truncateAddress(address: string): string {
-  if (address.length <= 10) return address
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
+  if (!address) return ''
+  if (address.length <= 12) return address
+
+  // If it's a long Liquid Confidential address, use a balanced layout
+  if (address.length > 50) {
+    return `${address.slice(0, 6)}...${address.slice(-6)}`
+  }
+
+  // Fallback for standard Bitcoin or Unconfidential Liquid addresses
+  return `${address.slice(0, 8)}...${address.slice(-4)}`
 }
 
 export const DECIMAL_AMOUNT_RE = /^\d+(\.\d+)?$/

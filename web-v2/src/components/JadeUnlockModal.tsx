@@ -15,7 +15,7 @@ export function JadeUnlockModal() {
   if (connectionStatus !== prevConnectionStatus) {
     setPrevConnectionStatus(connectionStatus)
     if (connectionStatus === 'locked') setIsOpen(true)
-    else if (connectionStatus === 'ready') setIsOpen(false)
+    else if (connectionStatus === 'ready' || !isError) setIsOpen(false)
   }
 
   // Stay open across a retry — only swap the inner content — instead of closing and

@@ -87,7 +87,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const id = setInterval(() => {
       const session = sessionRef.current
-      if (!session) return
+      if (!session || connectingRef.current) return
 
       session.connector
         .getConnectionStatus()
@@ -168,6 +168,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (attempt !== connectionChangeCounterRef.current) {
           connector.disconnect().catch(console.warn)
           return
+        }
+
+        if (connectionStatus === 'locked') {
+          setState(s => ({ ...s, connectionStatus: 'disconnected' }))
         }
 
         const wollet = new WolletBuilder(lwkNetwork, descriptor).utxoOnly(true).build()
