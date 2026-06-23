@@ -142,34 +142,6 @@ export function useBorrowerAccount() {
       metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
     }
 
-    // Optimistic update: indexer lag means the factory won't appear in API for several seconds
-    queryClient.setQueryData<FactoryDetails[]>(
-      factoryQueryKeys.byScript(scriptPubkey ?? ''),
-      old => [
-        ...(old ?? []),
-        {
-          id: result.txid,
-          factory_asset_id: result.issuedAssetId,
-          program_script_pubkey: result.factoryAddress,
-          status: 'active',
-          issuing_utxos_count: ISSUING_UTXOS_COUNT,
-          reissuance_flags: REISSUANCE_FLAGS,
-          created_at_height: 0,
-          created_at_txid: result.txid,
-          auth_utxo: {
-            txid: result.txid,
-            vout: 0,
-            script_pubkey: scriptPubkey ?? '',
-            created_at_height: 0,
-          },
-          program_utxo: {
-            txid: result.txid,
-            vout: 1,
-            created_at_height: 0,
-          },
-        },
-      ],
-    )
     queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey ?? '') })
 
     return result
@@ -187,6 +159,7 @@ export function useBorrowerAccount() {
     refetchFactory,
     hasAccount,
     removeBorrowerAccount,
+    scriptPubkey,
   }
 }
 

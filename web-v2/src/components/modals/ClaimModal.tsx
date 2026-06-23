@@ -17,6 +17,7 @@ import {
   utxoToOutpointString,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth-vault/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
@@ -34,9 +35,10 @@ interface ClaimModalProps {
 
 export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { claimLenderVault } = useLenderVaultClaim()
+  const { addPendingTx } = usePendingTransactions()
 
   const claimVault = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -66,7 +68,19 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
     })
   }
 
-  const { mutate, reset, data, error, status } = useMutation({ mutationFn: claimVault })
+  const { mutate, reset, data, error, status } = useMutation({
+    mutationFn: claimVault,
+    onSuccess: result => {
+      void addPendingTx({
+        txid: result.txid,
+        kind: 'claim_interest',
+        walletScriptPubkey: scriptPubkey ?? '',
+        offerId: offer.id,
+        previousOfferStatus: 'repaid',
+        expectedOfferStatus: 'claimed',
+      })
+    },
+  })
 
   const txSummary = useMemo(() => {
     const interestAmount = calcInterest(offer.principal_amount, offer.interest_rate)

@@ -17,6 +17,7 @@ import {
   utxoToOutpointString,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
@@ -38,9 +39,10 @@ export default function LiquidateOfferModal({
   onSuccess,
 }: LiquidateOfferModalProps) {
   const { collateralAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { liquidateOffer } = useLiquidateOffer()
+  const { addPendingTx } = usePendingTransactions()
 
   const liquidateExpiredOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -71,7 +73,19 @@ export default function LiquidateOfferModal({
     })
   }
 
-  const { mutate, reset, data, error, status } = useMutation({ mutationFn: liquidateExpiredOffer })
+  const { mutate, reset, data, error, status } = useMutation({
+    mutationFn: liquidateExpiredOffer,
+    onSuccess: result => {
+      void addPendingTx({
+        txid: result.txid,
+        kind: 'liquidate_offer',
+        walletScriptPubkey: scriptPubkey ?? '',
+        offerId: offer.id,
+        previousOfferStatus: 'active',
+        expectedOfferStatus: 'liquidated',
+      })
+    },
+  })
 
   const txSummary = useMemo(
     () => [

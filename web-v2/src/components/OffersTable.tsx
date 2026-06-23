@@ -9,10 +9,12 @@ import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { UiPagination } from '@/components/ui/UiPagination'
 import type { ConfigAsset } from '@/constants/network-config'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount } from '@/utils/format'
 import { resolveActorRole } from '@/utils/offerActions'
 import { bpsToPercent, calcInterest, formatOfferTermLeft } from '@/utils/offers'
+import { getOfferPendingTx } from '@/utils/pendingTransactions'
 
 const SEVERITY_COLOR = {
   danger: 'text-danger',
@@ -41,6 +43,7 @@ export default function OffersTable<T extends OfferShort>({
   onActionSuccess,
 }: OffersTableProps<T>) {
   const { scriptPubkey } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const resolveOfferWarning = useCallback(
     (offer: OfferShort): { severity: keyof typeof SEVERITY_COLOR; message: string } | null => {
@@ -93,10 +96,11 @@ export default function OffersTable<T extends OfferShort>({
             </Table.Header>
             <Table.Body
               items={offers}
-              dependencies={[currentBlockHeight, scriptPubkey, resolveOfferWarning]}
+              dependencies={[currentBlockHeight, scriptPubkey, resolveOfferWarning, pendingTxs]}
             >
               {offer => {
-                const warning = resolveOfferWarning(offer)
+                const isProcessing = Boolean(getOfferPendingTx(offer.id, pendingTxs))
+                const warning = isProcessing ? null : resolveOfferWarning(offer)
                 return (
                   <Table.Row id={offer.id}>
                     <Table.Cell>
@@ -126,7 +130,7 @@ export default function OffersTable<T extends OfferShort>({
                     <Table.Cell>{bpsToPercent(offer.interest_rate)}</Table.Cell>
                     <Table.Cell>{formatOfferTermLeft(offer, currentBlockHeight)}</Table.Cell>
                     <Table.Cell>
-                      <OfferStatusChip status={offer.status} />
+                      <OfferStatusChip status={offer.status} isProcessing={isProcessing} />
                     </Table.Cell>
                   </Table.Row>
                 )

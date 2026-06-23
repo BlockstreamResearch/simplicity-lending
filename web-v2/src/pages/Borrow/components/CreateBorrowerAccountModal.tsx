@@ -1,10 +1,12 @@
 import { useMutation } from '@tanstack/react-query'
+import { useState } from 'react'
 
 import CircleDashedIcon from '@/components/icons/CircleDashedIcon'
 import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
 interface CreateBorrowerAccountModalProps {
   isOpen: boolean
@@ -17,26 +19,48 @@ export default function CreateBorrowerAccountModal({
   onOpenChange,
   onClose,
 }: CreateBorrowerAccountModalProps) {
-  const { createBorrowerAccount, refetchFactory } = useBorrowerAccount()
+  const { createBorrowerAccount, refetchFactory, scriptPubkey } = useBorrowerAccount()
+  const { addPendingTx, surfaceToast } = usePendingTransactions()
   const { mutate, reset, data, error, status } = useMutation({
     mutationFn: createBorrowerAccount,
+    onSuccess: result => {
+      void addPendingTx({
+        txid: result.txid,
+        kind: 'create_borrower_account',
+        walletScriptPubkey: scriptPubkey ?? '',
+      })
+    },
   })
 
+  const liveTxid = data?.txid ?? null
+  const liveErrorMessage = error?.message
+  const [frozen, setFrozen] = useState({ status, txid: liveTxid, errorMessage: liveErrorMessage })
+  if (
+    isOpen &&
+    (frozen.status !== status ||
+      frozen.txid !== liveTxid ||
+      frozen.errorMessage !== liveErrorMessage)
+  ) {
+    setFrozen({ status, txid: liveTxid, errorMessage: liveErrorMessage })
+  }
+  const view = isOpen ? { status, txid: liveTxid, errorMessage: liveErrorMessage } : frozen
+
   const handleClose = () => {
+    if (data?.txid) surfaceToast(data.txid)
     reset()
     onOpenChange(false)
     refetchFactory()
     onClose()
   }
 
-  if (status !== 'idle') {
+  if (view.status !== 'idle') {
     return (
       <TransactionModal
         isOpen={isOpen}
         eyebrow='New Borrower Account'
-        status={status}
-        txid={data?.txid ?? null}
-        errorMessage={error?.message}
+        status={view.status}
+        txid={view.txid}
+        errorMessage={view.errorMessage}
         onClose={handleClose}
       />
     )

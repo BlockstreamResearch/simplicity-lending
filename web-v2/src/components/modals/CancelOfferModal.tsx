@@ -17,6 +17,7 @@ import {
   utxoToOutpointString,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
@@ -41,9 +42,10 @@ export default function CancelOfferModal({
   onSuccess,
 }: CancelOfferModalProps) {
   const { collateralAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, getReceiveAddress } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, getReceiveAddress, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { cancelOffer } = useCancelOffer()
+  const { addPendingTx } = usePendingTransactions()
 
   const cancelBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -79,7 +81,19 @@ export default function CancelOfferModal({
     })
   }
 
-  const { mutate, reset, data, error, status } = useMutation({ mutationFn: cancelBorrowOffer })
+  const { mutate, reset, data, error, status } = useMutation({
+    mutationFn: cancelBorrowOffer,
+    onSuccess: result => {
+      void addPendingTx({
+        txid: result.txid,
+        kind: 'cancel_offer',
+        walletScriptPubkey: scriptPubkey ?? '',
+        offerId: offer.id,
+        previousOfferStatus: 'pending',
+        expectedOfferStatus: 'cancelled',
+      })
+    },
+  })
 
   const txSummary = useMemo(
     () => [

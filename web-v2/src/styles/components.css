@@ -23,6 +23,10 @@
     @apply rounded-[1.25rem];
   }
 
+  .dropdown__popover {
+    @apply rounded-2xl;
+  }
+
   /* Figma chip padding 4px 12px; HeroUI defaults are 8px horizontal. */
   .chip {
     @apply px-3;
