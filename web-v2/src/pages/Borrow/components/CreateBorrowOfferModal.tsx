@@ -177,7 +177,7 @@ export default function CreateBorrowOfferModal({
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { factoryState, refetchFactory } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()
-  const { addPendingTx, surfaceToast } = usePendingTransactions()
+  const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const feeRate = useFeeRateSatPerKvb(isOpen)
   const feeBudgetSats = useMemo(
     () => estimateFeeBudgetSats(CREATE_OFFER_WEIGHT_UNITS, feeRate),
@@ -280,7 +280,7 @@ export default function CreateBorrowOfferModal({
   )
 
   const liveErrorMessage = error?.message
-  const [frozen, setFrozen] = useState({
+  const [frozenView, setFrozenView] = useState({
     status,
     summary: txSummary,
     txid: data,
@@ -288,19 +288,19 @@ export default function CreateBorrowOfferModal({
   })
   if (
     isOpen &&
-    (frozen.status !== status ||
-      frozen.summary !== txSummary ||
-      frozen.txid !== data ||
-      frozen.errorMessage !== liveErrorMessage)
+    (frozenView.status !== status ||
+      frozenView.summary !== txSummary ||
+      frozenView.txid !== data ||
+      frozenView.errorMessage !== liveErrorMessage)
   ) {
-    setFrozen({ status, summary: txSummary, txid: data, errorMessage: liveErrorMessage })
+    setFrozenView({ status, summary: txSummary, txid: data, errorMessage: liveErrorMessage })
   }
   const view = isOpen
     ? { status, summary: txSummary, txid: data, errorMessage: liveErrorMessage }
-    : frozen
+    : frozenView
 
   const handleClose = () => {
-    if (data) surfaceToast(data)
+    if (data) addSurfaceToast(data)
     reset()
     resetForm()
     onOpenChange(false)

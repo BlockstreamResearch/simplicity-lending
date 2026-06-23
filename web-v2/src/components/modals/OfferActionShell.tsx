@@ -66,7 +66,7 @@ export default function OfferActionShell({
   onSuccess,
   children,
 }: OfferActionShellProps) {
-  const { surfaceToast } = usePendingTransactions()
+  const { addSurfaceToast } = usePendingTransactions()
   const liveView = deriveView(action)
 
   // Closing a modal resets its mutation (status -> 'idle') synchronously, in the same tick as the
@@ -91,7 +91,7 @@ export default function OfferActionShell({
   const handleOpenChange = (open: boolean) => {
     if (open) return
     if (action?.status === 'success') onSuccess?.()
-    if (action?.txid) surfaceToast(action.txid)
+    if (action?.txid) addSurfaceToast(action.txid)
     onClose()
   }
 

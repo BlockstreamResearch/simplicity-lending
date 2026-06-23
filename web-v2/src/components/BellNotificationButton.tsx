@@ -4,10 +4,36 @@ import { useState } from 'react'
 import { getTxExplorerUrl } from '@/api/esplora/utils'
 import BellBoldIcon from '@/components/icons/BellBoldIcon'
 import { UiButton } from '@/components/ui/UiButton'
+import type { PendingTxRecord } from '@/providers/pendingTransactions/types'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
 import { getConfirmationProgressText, PENDING_TX_KIND_LABEL } from '@/utils/pendingTransactions'
+
+function NotificationRow({ tx }: { tx: PendingTxRecord }) {
+  return (
+    <div className='bg-surface-secondary flex flex-col gap-1 rounded-lg p-3'>
+      <div className='flex items-center justify-between gap-2'>
+        <span className='text-sm font-medium'>{PENDING_TX_KIND_LABEL[tx.kind]}</span>
+        <Chip
+          size='sm'
+          variant='soft'
+          color={tx.confirmationStatus === 'failed' ? 'danger' : 'default'}
+        >
+          {getConfirmationProgressText(tx)}
+        </Chip>
+      </div>
+      <a
+        className='text-accent text-xs underline'
+        href={getTxExplorerUrl(tx.txid)}
+        target='_blank'
+        rel='noopener noreferrer'
+      >
+        {truncateAddress(tx.txid)}
+      </a>
+    </div>
+  )
+}
 
 export function BellNotificationButton() {
   const { connectionStatus, reconnecting, syncing, receiveAddress } = useWallet()
@@ -51,31 +77,7 @@ export function BellNotificationButton() {
           {pendingTxs.length === 0 ? (
             <p className='text-muted text-sm'>No pending transactions.</p>
           ) : (
-            pendingTxs.map(tx => (
-              <div
-                key={tx.txid}
-                className='bg-surface-secondary flex flex-col gap-1 rounded-lg p-3'
-              >
-                <div className='flex items-center justify-between gap-2'>
-                  <span className='text-sm font-medium'>{PENDING_TX_KIND_LABEL[tx.kind]}</span>
-                  <Chip
-                    size='sm'
-                    variant='soft'
-                    color={tx.confirmationStatus === 'failed' ? 'danger' : 'default'}
-                  >
-                    {getConfirmationProgressText(tx)}
-                  </Chip>
-                </div>
-                <a
-                  className='text-accent text-xs underline'
-                  href={getTxExplorerUrl(tx.txid)}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  {truncateAddress(tx.txid)}
-                </a>
-              </div>
-            ))
+            pendingTxs.map(tx => <NotificationRow key={tx.txid} tx={tx} />)
           )}
         </div>
       </Dropdown.Popover>

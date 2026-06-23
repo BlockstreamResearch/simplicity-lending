@@ -8,19 +8,19 @@ export function getOfferPendingTx(
 }
 
 export const PENDING_TX_KIND_LABEL: Record<PendingTxKind, string> = {
-  create_borrower_account: 'Creating borrower account',
-  create_offer: 'Creating offer',
-  accept_offer: 'Accepting offer',
-  cancel_offer: 'Cancelling offer',
-  claim_principal: 'Claiming principal',
-  repay_offer: 'Repaying loan',
-  claim_interest: 'Claiming repayment',
-  liquidate_offer: 'Liquidating offer',
+  create_borrower_account: 'Create borrower account',
+  create_offer: 'Create offer',
+  accept_offer: 'Accept offer',
+  cancel_offer: 'Cancel offer',
+  claim_principal: 'Claim principal',
+  repay_offer: 'Repay loan',
+  claim_interest: 'Claim repayment',
+  liquidate_offer: 'Liquidate offer',
 }
 
 export function getConfirmationProgressText(record: PendingTxRecord): string {
   switch (record.confirmationStatus) {
-    case 'broadcasted':
+    case 'processing':
       return record.confirmations === null ? 'Broadcasted' : '0/2 confirmations'
     case 'confirmed':
       return '1/2 confirmations'

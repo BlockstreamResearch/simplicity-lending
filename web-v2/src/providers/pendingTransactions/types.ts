@@ -10,7 +10,7 @@ export type PendingTxKind =
   | 'claim_interest'
   | 'liquidate_offer'
 
-export type PendingTxConfirmationStatus = 'broadcasted' | 'confirmed' | 'finalized' | 'failed'
+export type PendingTxConfirmationStatus = 'processing' | 'confirmed' | 'finalized' | 'failed'
 
 export interface PendingTxRecord {
   txid: string
@@ -50,5 +50,5 @@ export interface PendingTransactionsContextValue {
    * the bottom-center toast should pick up tracking it. Tracking continues even if a modal that
    * stayed open the whole time never calls this.
    */
-  surfaceToast: (txid: string) => void
+  addSurfaceToast: (txid: string) => void
 }

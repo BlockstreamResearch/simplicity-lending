@@ -1,36 +1,20 @@
 import { useEffect, useRef } from 'react'
 
 import { pendingTxToastQueue } from '@/providers/pendingTransactions/pendingTxToastQueue'
-import type {
-  PendingTxConfirmationStatus,
-  PendingTxRecord,
-} from '@/providers/pendingTransactions/types'
+import type { PendingTxRecord } from '@/providers/pendingTransactions/types'
 import { PENDING_TX_KIND_LABEL } from '@/utils/pendingTransactions'
 
-const MILESTONE_ORDER: PendingTxConfirmationStatus[] = [
-  'broadcasted',
-  'confirmed',
-  'finalized',
-  'failed',
-]
-
-function milestoneRank(status: PendingTxConfirmationStatus): number {
-  return MILESTONE_ORDER.indexOf(status)
-}
-
-interface ProgressEntry {
-  rank: number
+interface TrackedEntry {
   toastKey: string | null
+  label: string
 }
 
 /**
- * Two independent toast behaviors (bottom-center, friendly plain-language text):
- * - Progress toasts (Submitting…/Confirming…/Confirmed) only for txids the user explicitly
- *   "surfaced" by closing that tx's modal early while it was still pending.
- * - A "Done" toast fires unconditionally for every tx that completes (gets cleaned up by the
- *   indexer), regardless of whether it was ever surfaced — so completion is always acknowledged
- *   even if the user never opened/closed a modal for it while it was in flight.
- * Tx tracking itself (confirmations, cleanup) never depends on any of this.
+ * One toast per tx, two states (bottom-center, plain language):
+ * "Waiting for transaction…" (persistent, from the moment it's surfaced) -> "Transaction
+ * confirmed" (once the indexer actually catches up and the record is cleaned up) or a failure
+ * message if it times out. Only for txids the user explicitly "surfaced" by closing that tx's
+ * modal early while it was still pending — tx tracking itself never depends on this.
  */
 export function PendingTxToasts({
   pendingTxs,
@@ -39,71 +23,48 @@ export function PendingTxToasts({
   pendingTxs: PendingTxRecord[]
   surfacedTxids: Set<string>
 }) {
-  const progressRef = useRef<Map<string, ProgressEntry>>(new Map())
-  const seenLabelsRef = useRef<Map<string, string>>(new Map())
+  const trackedRef = useRef<Map<string, TrackedEntry>>(new Map())
 
   useEffect(() => {
     const currentTxids = new Set(pendingTxs.map(record => record.txid))
 
     for (const record of pendingTxs) {
-      seenLabelsRef.current.set(record.txid, PENDING_TX_KIND_LABEL[record.kind])
-
       if (!surfacedTxids.has(record.txid)) continue
 
-      const rank = milestoneRank(record.confirmationStatus)
-      const previous = progressRef.current.get(record.txid)
-      if (previous && previous.rank >= rank) continue
+      const existing = trackedRef.current.get(record.txid)
+      const label = existing?.label ?? PENDING_TX_KIND_LABEL[record.kind]
 
-      if (previous?.toastKey) pendingTxToastQueue.close(previous.toastKey)
-
-      const label = PENDING_TX_KIND_LABEL[record.kind]
-      let toastKey: string | null = null
-      switch (record.confirmationStatus) {
-        case 'broadcasted':
-          toastKey = pendingTxToastQueue.add(
-            { title: label, description: 'Submitting…', isLoading: true },
-            { timeout: 0 },
-          )
-          break
-        case 'confirmed':
-          toastKey = pendingTxToastQueue.add(
-            { title: label, description: 'Confirming…', isLoading: true },
-            { timeout: 0 },
-          )
-          break
-        case 'finalized':
-          toastKey = pendingTxToastQueue.add(
-            { title: label, description: 'Confirmed', variant: 'success' },
-            { timeout: 0 },
-          )
-          break
-        case 'failed':
-          toastKey = pendingTxToastQueue.add(
-            {
-              title: label,
-              description: "Couldn't confirm — check your wallet",
-              variant: 'danger',
-            },
-            { timeout: 0 },
-          )
-          break
+      if (record.confirmationStatus === 'failed') {
+        if (existing && existing.toastKey === null) continue // already showing the failure toast
+        if (existing?.toastKey) pendingTxToastQueue.close(existing.toastKey)
+        pendingTxToastQueue.add(
+          { title: label, description: "Couldn't confirm — check your wallet", variant: 'danger' },
+          { timeout: 0 },
+        )
+        trackedRef.current.set(record.txid, { toastKey: null, label })
+        continue
       }
 
-      progressRef.current.set(record.txid, { rank, toastKey })
+      if (existing) continue // already showing "Waiting for transaction…"
+
+      const toastKey = pendingTxToastQueue.add(
+        { title: label, description: 'Waiting for transaction…', isLoading: true },
+        { timeout: 0 },
+      )
+      trackedRef.current.set(record.txid, { toastKey, label })
     }
 
-    for (const [txid, label] of seenLabelsRef.current) {
+    for (const [txid, entry] of trackedRef.current) {
       if (currentTxids.has(txid)) continue
 
-      const progress = progressRef.current.get(txid)
-      if (progress?.toastKey) pendingTxToastQueue.close(progress.toastKey)
-      pendingTxToastQueue.add(
-        { title: label, description: 'Done', variant: 'success' },
-        { timeout: 6_000 },
-      )
-
-      progressRef.current.delete(txid)
-      seenLabelsRef.current.delete(txid)
+      if (entry.toastKey) {
+        pendingTxToastQueue.close(entry.toastKey)
+        pendingTxToastQueue.add(
+          { title: entry.label, description: 'Transaction confirmed', variant: 'success' },
+          { timeout: 6_000 },
+        )
+      }
+      trackedRef.current.delete(txid)
     }
   }, [pendingTxs, surfacedTxids])
 

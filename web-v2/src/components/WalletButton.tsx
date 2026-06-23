@@ -69,7 +69,7 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
                 {truncateAddress(receiveAddress)}
               </Dropdown.Trigger>
               <Dropdown.Popover placement='bottom end' className='p-4'>
-                <div className='flex min-w-55 flex-col gap-3'>
+                <div className='flex flex-col gap-3'>
                   {!isMainnet && (
                     <Chip color='warning' variant='soft' size='sm' className='self-start'>
                       {NETWORK_LABEL[network as 'liquidtestnet' | 'regtest']}

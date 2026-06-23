@@ -20,7 +20,7 @@ export default function CreateBorrowerAccountModal({
   onClose,
 }: CreateBorrowerAccountModalProps) {
   const { createBorrowerAccount, refetchFactory, scriptPubkey } = useBorrowerAccount()
-  const { addPendingTx, surfaceToast } = usePendingTransactions()
+  const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const { mutate, reset, data, error, status } = useMutation({
     mutationFn: createBorrowerAccount,
     onSuccess: result => {
@@ -34,19 +34,23 @@ export default function CreateBorrowerAccountModal({
 
   const liveTxid = data?.txid ?? null
   const liveErrorMessage = error?.message
-  const [frozen, setFrozen] = useState({ status, txid: liveTxid, errorMessage: liveErrorMessage })
+  const [frozenView, setFrozenView] = useState({
+    status,
+    txid: liveTxid,
+    errorMessage: liveErrorMessage,
+  })
   if (
     isOpen &&
-    (frozen.status !== status ||
-      frozen.txid !== liveTxid ||
-      frozen.errorMessage !== liveErrorMessage)
+    (frozenView.status !== status ||
+      frozenView.txid !== liveTxid ||
+      frozenView.errorMessage !== liveErrorMessage)
   ) {
-    setFrozen({ status, txid: liveTxid, errorMessage: liveErrorMessage })
+    setFrozenView({ status, txid: liveTxid, errorMessage: liveErrorMessage })
   }
-  const view = isOpen ? { status, txid: liveTxid, errorMessage: liveErrorMessage } : frozen
+  const view = isOpen ? { status, txid: liveTxid, errorMessage: liveErrorMessage } : frozenView
 
   const handleClose = () => {
-    if (data?.txid) surfaceToast(data.txid)
+    if (data?.txid) addSurfaceToast(data.txid)
     reset()
     onOpenChange(false)
     refetchFactory()

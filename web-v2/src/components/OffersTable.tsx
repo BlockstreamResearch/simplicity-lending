@@ -92,7 +92,7 @@ export default function OffersTable<T extends OfferShort>({
               <Table.Column>Earn ({principalAsset.symbol})</Table.Column>
               <Table.Column>APR (%)</Table.Column>
               <Table.Column>Term Left</Table.Column>
-              <Table.Column>Status</Table.Column>
+              <Table.Column className='min-w-36'>Status</Table.Column>
             </Table.Header>
             <Table.Body
               items={offers}
@@ -129,7 +129,7 @@ export default function OffersTable<T extends OfferShort>({
                     </Table.Cell>
                     <Table.Cell>{bpsToPercent(offer.interest_rate)}</Table.Cell>
                     <Table.Cell>{formatOfferTermLeft(offer, currentBlockHeight)}</Table.Cell>
-                    <Table.Cell>
+                    <Table.Cell className='min-w-36'>
                       <OfferStatusChip status={offer.status} isProcessing={isProcessing} />
                     </Table.Cell>
                   </Table.Row>

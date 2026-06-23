@@ -21,12 +21,9 @@ import type { AddPendingTxInput, PendingTxRecord } from './types'
 const CONFIRMATION_POLL_MS = 15_000
 const INDEXER_POLL_MS = 10_000
 const STUCK_AFTER_FINALIZED_MS = 2 * 60 * 1000
-const TTL_MS = 24 * 60 * 60 * 1000
+/** Defensive cap on how long a pending record can sit untracked before we give up on it. */
+const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000
 const SWEEP_INTERVAL_MS = 15_000
-
-function isActive(record: PendingTxRecord): boolean {
-  return record.confirmationStatus !== 'failed'
-}
 
 function PendingTxConfirmationTracker({
   record,
@@ -39,19 +36,17 @@ function PendingTxConfirmationTracker({
 
   useEffect(() => {
     if (status === null) return
-    const confirmationStatus =
-      status === 'finalized' ? 'finalized' : status === 'confirmed' ? 'confirmed' : 'broadcasted'
-    if (
-      confirmationStatus === record.confirmationStatus &&
-      confirmations === record.confirmations
-    ) {
-      return
-    }
-    const patch: Partial<PendingTxRecord> = { confirmationStatus, confirmations }
-    if (confirmationStatus === 'finalized' && !record.finalizedAt) {
+    // `TxStatus` ('processing' | 'confirmed' | 'finalized') is a subset of
+    // `PendingTxConfirmationStatus`, so it can be stored directly with no mapping.
+    if (status === record.confirmationStatus && confirmations === record.confirmations) return
+    const patch: Partial<PendingTxRecord> = { confirmationStatus: status, confirmations }
+    if (status === 'finalized' && !record.finalizedAt) {
       patch.finalizedAt = Date.now()
     }
     onUpdate(record.txid, patch)
+    // `record`/`onUpdate` are deliberately omitted: they get a new identity on every parent
+    // render, and re-running this on every such render (instead of only on real Esplora-poll
+    // changes) would make it fire constantly instead of just on status/confirmation changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, confirmations])
 
@@ -89,6 +84,9 @@ function OfferCleanupWatcher({
         onChecked(record.txid)
       }
     }
+    // `records`/`onRemove`/`onChecked` are deliberately omitted: they get a new identity on every
+    // parent render, and listing them would re-run this on every such render instead of only when
+    // the polled offer data actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuccess, offer])
 
@@ -122,6 +120,9 @@ function CreateOfferCleanupWatcher({
         onChecked(record.txid)
       }
     }
+    // `records`/`onRemove`/`onChecked` are deliberately omitted: they get a new identity on every
+    // parent render, and listing them would re-run this on every such render instead of only when
+    // the polled offers list actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuccess, data])
 
@@ -155,6 +156,9 @@ function CreateBorrowerAccountCleanupWatcher({
         onChecked(record.txid)
       }
     }
+    // `records`/`onRemove`/`onChecked` are deliberately omitted: they get a new identity on every
+    // parent render, and listing them would re-run this on every such render instead of only when
+    // the polled factories list actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuccess, data])
 
@@ -204,7 +208,7 @@ function PendingTransactionsStore({
       const now = Date.now()
       const record: PendingTxRecord = {
         ...input,
-        confirmationStatus: 'broadcasted',
+        confirmationStatus: 'processing',
         confirmations: null,
         createdAt: now,
         updatedAt: now,
@@ -252,11 +256,11 @@ function PendingTransactionsStore({
     [removePendingTx],
   )
 
-  const surfaceToast = useCallback((txid: string) => {
+  const addSurfaceToast = useCallback((txid: string) => {
     setSurfacedTxids(prev => (prev.has(txid) ? prev : new Set(prev).add(txid)))
   }, [])
 
-  // 2-minute stuck-after-finalized sweep + 24h defensive TTL.
+  // 2-minute stuck-after-finalized sweep + 24h defensive max-age cap.
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now()
@@ -273,7 +277,7 @@ function PendingTransactionsStore({
           })
           continue
         }
-        if (now - record.createdAt > TTL_MS) {
+        if (now - record.createdAt > MAX_PENDING_AGE_MS) {
           void updatePendingTx(record.txid, {
             confirmationStatus: 'failed',
             errorMessage: 'Transaction tracking timed out.',
@@ -284,7 +288,10 @@ function PendingTransactionsStore({
     return () => clearInterval(id)
   }, [pendingTxs, updatePendingTx])
 
-  const activeRecords = useMemo(() => pendingTxs.filter(isActive), [pendingTxs])
+  const activeRecords = useMemo(
+    () => pendingTxs.filter(record => record.confirmationStatus !== 'failed'),
+    [pendingTxs],
+  )
 
   const offerIdGroups = useMemo(() => {
     const groups = new Map<string, PendingTxRecord[]>()
@@ -307,8 +314,15 @@ function PendingTransactionsStore({
   )
 
   const contextValue = useMemo(
-    () => ({ pendingTxs, isLoading, addPendingTx, updatePendingTx, removePendingTx, surfaceToast }),
-    [pendingTxs, isLoading, addPendingTx, updatePendingTx, removePendingTx, surfaceToast],
+    () => ({
+      pendingTxs,
+      isLoading,
+      addPendingTx,
+      updatePendingTx,
+      removePendingTx,
+      addSurfaceToast,
+    }),
+    [pendingTxs, isLoading, addPendingTx, updatePendingTx, removePendingTx, addSurfaceToast],
   )
 
   return (
