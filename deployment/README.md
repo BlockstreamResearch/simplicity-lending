@@ -40,7 +40,7 @@ Set these values in `deployment/configs/compose.env`:
 
 - `PUBLIC_ORIGIN`: the final public HTTPS origin, for example `https://lending.example.com`
 - `WEB_PORT`: host port mapped to the public web server
-- `VITE_API_URL`: public indexer API URL baked into `web-v2`, for example `https://lending.example.com/api`
+- `VITE_API_URL`: indexer API URL baked into `web-v2`, for example `/api` for the same-origin nginx proxy or `https://lending.example.com/api`
 - `VITE_ESPLORA_BASE_URL`: public Esplora/explorer base URL, for example `https://blockstream.info/liquidtestnet`
 - `VITE_NETWORK`: `liquid`, `liquidtestnet`, or `regtest`
 - `VITE_WATERFALLS_URL`: Waterfalls server base URL for LWK sync
@@ -55,9 +55,9 @@ Set these values in `deployment/configs/compose.env`:
 ## GitLab Image Builds
 
 The GitLab `build_web` job passes the `VITE_*` variables above as Docker build args. It
-fails early when `VITE_API_URL`, `VITE_ESPLORA_BASE_URL`, `VITE_NETWORK`, or
-`VITE_WATERFALLS_URL` is missing. Configure those variables in the mirrored GitLab
-project before running the web image job.
+defaults to Liquid testnet values and `/api` for the same-origin nginx API proxy, while
+allowing GitLab project variables with the same names to override those defaults. It
+still fails early when any required value is empty after defaults are applied.
 
 On the default branch, `build_backend` and `build_web` run automatically. On feature
 branches they remain manual so a mirrored PR branch can be tested without deploying

@@ -1,7 +1,15 @@
 import { z as zod } from 'zod'
 
+const absoluteUrlOrPath = zod.string().refine(
+  (value: string) => {
+    if (value.startsWith('/')) return true
+    return zod.string().url().safeParse(value).success
+  },
+  { message: 'must be an absolute URL or same-origin path' },
+)
+
 const envSchema = zod.object({
-  VITE_API_URL: zod.string().url().default('http://localhost:8000'),
+  VITE_API_URL: absoluteUrlOrPath.default('http://localhost:8000'),
   DEV: zod.boolean().default(false),
   PROD: zod.boolean().default(false),
   VITE_ESPLORA_BASE_URL: zod.string().url().default('https://blockstream.info/liquid'),

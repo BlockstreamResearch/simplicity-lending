@@ -24,4 +24,10 @@ build_web:
     DOCKERFILE: deployment/Dockerfile.web
     CONTEXT: .
     DOCKER_BUILD_ARGS: VITE_API_URL VITE_ESPLORA_BASE_URL VITE_NETWORK VITE_WATERFALLS_URL VITE_WATERFALLS_RECIPIENT VITE_DEBUG_MNEMONIC
+    DEFAULT_BUILD_ARGS: >-
+      VITE_API_URL=/api
+      VITE_ESPLORA_BASE_URL=https://blockstream.info/liquidtestnet
+      VITE_NETWORK=liquidtestnet
+      VITE_WATERFALLS_URL=https://waterfalls.liquidwebwallet.org/liquidtestnet
+      VITE_WATERFALLS_RECIPIENT=age1xxzrgrfjm3yrwh3u6a7exgrldked0pdauvr3mx870wl6xzrwm5ps8s2h0p
     REQUIRED_BUILD_ARGS: VITE_API_URL VITE_ESPLORA_BASE_URL VITE_NETWORK VITE_WATERFALLS_URL

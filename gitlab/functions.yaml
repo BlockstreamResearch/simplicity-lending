@@ -44,6 +44,19 @@ create_timestamp:
     - CONTEXT=${CONTEXT:-.}
     - BUILD_ARG_FLAGS=""
     - |
+      for DEFAULT_BUILD_ARG in ${DEFAULT_BUILD_ARGS:-}; do
+        DEFAULT_ARG_NAME="${DEFAULT_BUILD_ARG%%=*}"
+        DEFAULT_ARG_VALUE="${DEFAULT_BUILD_ARG#*=}"
+        if [ "${DEFAULT_ARG_NAME}" = "${DEFAULT_ARG_VALUE}" ]; then
+          echo "Invalid default Docker build variable entry: ${DEFAULT_BUILD_ARG}"
+          exit 1
+        fi
+        if [ -z "$(printenv "${DEFAULT_ARG_NAME}" || true)" ]; then
+          export "${DEFAULT_ARG_NAME}=${DEFAULT_ARG_VALUE}"
+          echo "Using default Docker build variable: ${DEFAULT_ARG_NAME}"
+        fi
+      done
+    - |
       for REQUIRED_ARG in ${REQUIRED_BUILD_ARGS:-}; do
         if [ -z "$(printenv "${REQUIRED_ARG}" || true)" ]; then
           echo "Missing required Docker build variable: ${REQUIRED_ARG}"
