@@ -73,9 +73,11 @@ function OfferCleanupWatcher({
   useEffect(() => {
     if (!isSuccess || !offer) return
     for (const record of records) {
+      // TODO: drop the `confirmationStatus` half of this once the indexer fixes GET
+      // /offers/{id} always returning borrower_principal_utxo: null.
       const isCleaned =
         record.kind === 'claim_principal'
-          ? !offer.borrower_principal_utxo
+          ? !offer.borrower_principal_utxo && record.confirmationStatus !== 'processing'
           : record.expectedOfferStatus !== undefined && offer.status === record.expectedOfferStatus
 
       if (isCleaned) {
