@@ -1,3 +1,4 @@
+import { Spinner } from '@heroui/react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -6,10 +7,15 @@ import { createLwkNetwork, getLwk } from '@/lwk'
 import { LwkContext } from './LwkContext'
 
 const network = env.VITE_NETWORK
+const MIN_LOADER_DURATION_MS = 600
 
 export function LwkProvider({ children }: { children: React.ReactNode }) {
-  const [isReady, setIsReady] = useState(false)
+  const [isLwkReady, setIsLwkReady] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [isLoaderComplete, setIsLoaderComplete] = useState(false)
+  const [isContentVisible, setIsContentVisible] = useState(false)
+
+  const [loadStartedAt] = useState(() => Date.now())
 
   if (error) throw error
 
@@ -19,7 +25,7 @@ export function LwkProvider({ children }: { children: React.ReactNode }) {
     getLwk()
       .then(() => {
         if (!cancelled) {
-          setIsReady(true)
+          setIsLwkReady(true)
         }
       })
       .catch(err => {
@@ -32,12 +38,12 @@ export function LwkProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const lwkNetwork = useMemo(() => {
-    if (!isReady) {
+    if (!isLwkReady) {
       return null
     }
 
     return createLwkNetwork(network)
-  }, [isReady])
+  }, [isLwkReady])
 
   useEffect(() => {
     return () => {
@@ -45,9 +51,41 @@ export function LwkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [lwkNetwork])
 
-  if (!lwkNetwork) {
-    // TODO: Replace with proper loader after UI framework setup
-    return <div>Loading...</div>
+  useEffect(() => {
+    if (!lwkNetwork) return
+
+    const elapsed = Date.now() - loadStartedAt
+    const delay = Math.max(0, MIN_LOADER_DURATION_MS - elapsed)
+
+    const timeoutId = setTimeout(() => {
+      setIsLoaderComplete(true)
+    }, delay)
+
+    return () => clearTimeout(timeoutId)
+  }, [lwkNetwork, loadStartedAt])
+
+  useEffect(() => {
+    if (!isLoaderComplete) return
+
+    const id = requestAnimationFrame(() => {
+      setIsContentVisible(true)
+    })
+
+    return () => cancelAnimationFrame(id)
+  }, [isLoaderComplete])
+
+  if (!lwkNetwork || !isLoaderComplete) {
+    return (
+      <main className='bg-surface text-foreground flex min-h-screen flex-col items-center justify-center gap-5'>
+        <Spinner size='lg' color='accent' />
+        <div className='flex flex-col items-center gap-1.5'>
+          <h1 className='text-2xl leading-none font-black tracking-tight uppercase'>Lending</h1>
+          <p className='text-muted text-xs font-medium tracking-[0.16em] uppercase'>
+            Warming up the wallet engine…
+          </p>
+        </div>
+      </main>
+    )
   }
 
   return (
@@ -60,7 +98,13 @@ export function LwkProvider({ children }: { children: React.ReactNode }) {
         isRegtest: network === 'regtest',
       }}
     >
-      {children}
+      <div
+        className={`transition-opacity duration-300 ${
+          isContentVisible ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        {children}
+      </div>
     </LwkContext.Provider>
   )
 }

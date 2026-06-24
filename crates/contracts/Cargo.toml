@@ -28,4 +28,3 @@ smplx-std = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"
-cargo-husky = { workspace = true }

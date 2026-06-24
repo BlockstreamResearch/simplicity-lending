@@ -1,4 +1,10 @@
-import { Mnemonic, type Network, type Pset, Signer, type WolletDescriptor } from 'lwk_web'
+import {
+  Mnemonic,
+  type Network,
+  type Pset,
+  Signer,
+  type WolletDescriptor,
+} from '@lilbonekit/lwk-web'
 
 import type { ConnectionStatus, WalletType } from '../types'
 import { SeedMissingError, SeedNotConnectedError } from './errors'
