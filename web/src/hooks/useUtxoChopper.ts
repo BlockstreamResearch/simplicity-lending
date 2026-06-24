@@ -1,4 +1,4 @@
-import { Address, OutPoint, TxBuilder } from 'lwk_web'
+import { Address, OutPoint, TxBuilder } from '@lilbonekit/lwk-web'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'

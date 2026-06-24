@@ -1,4 +1,4 @@
-import type { WalletTxOut } from 'lwk_web'
+import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm, useWatch } from 'react-hook-form'
 import { z as zod } from 'zod'

@@ -1,4 +1,10 @@
-import type { EsploraClient, Pset, WalletTxOut, Wollet, WolletDescriptor } from 'lwk_web'
+import type {
+  EsploraClient,
+  Pset,
+  WalletTxOut,
+  Wollet,
+  WolletDescriptor,
+} from '@lilbonekit/lwk-web'
 
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'

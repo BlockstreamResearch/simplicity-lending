@@ -4,7 +4,7 @@ import {
   SimplicityType,
   SimplicityTypedValue,
   SimplicityWitnessValues,
-} from 'lwk_web'
+} from '@lilbonekit/lwk-web'
 import { sources } from 'virtual:simplicity-sources'
 
 import { bytes32ToHex } from '@/utils/hex'
