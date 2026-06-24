@@ -4,7 +4,7 @@ use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::api::offers::dto::{OfferUtxoDto, ParticipantDto};
+use crate::api::offers::dto::{OfferUtxoDto, OfferUtxoOutpointShort, ParticipantDto};
 use crate::models::OfferStatus;
 
 #[derive(Serialize, ToSchema)]
@@ -41,6 +41,8 @@ pub struct OfferDetailsResponseSchema {
     pub borrower_nft_asset: String,
     pub lender_nft_asset: String,
     pub protocol_fee_keeper_asset: String,
+    #[schema(value_type = Option<OfferUtxoOutpointShort>)]
+    pub borrower_principal_utxo: Option<OfferUtxoOutpointShort>,
     pub participants: Vec<ParticipantDto>,
     pub utxos: Vec<OfferUtxoDto>,
 }

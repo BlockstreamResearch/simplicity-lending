@@ -11,7 +11,7 @@ use crate::models::{
 
 use super::dto::{
     OfferDetailsResponse, OfferListItemFull, OfferListResponse, OfferUtxoDto, OffersOverview,
-    ParticipantDto,
+    ParticipantDto, borrower_principal_outpoint_from_utxos,
 };
 use super::list_query::fetch_all_offers_list;
 
@@ -185,6 +185,9 @@ pub async fn fetch_details_by_id(
         fetch_latest_participants(db, offer_id),
         fetch_unspent_utxos(db, offer_id),
     )?;
+
+    let mut info = info;
+    info.base.borrower_principal_utxo = borrower_principal_outpoint_from_utxos(&utxos);
 
     Ok(Some(OfferDetailsResponse {
         info,

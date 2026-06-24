@@ -619,8 +619,16 @@ struct ExpectedOfferDetailsDto {
     borrower_nft_asset: String,
     lender_nft_asset: String,
     protocol_fee_keeper_asset: String,
+    borrower_principal_utxo: Option<ExpectedOfferUtxoOutpointShort>,
     utxos: Vec<ExpectedOfferUtxoDto>,
     participants: Vec<ExpectedParticipantDto>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[allow(dead_code)]
+struct ExpectedOfferUtxoOutpointShort {
+    txid: String,
+    vout: u32,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -692,6 +700,7 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.utxos.len(), 1);
     assert_eq!(dto.utxos[0].utxo_type, "active_offer");
     assert!(dto.utxos[0].spent_txid.is_none());
+    assert!(dto.borrower_principal_utxo.is_none());
     assert_eq!(dto.participants.len(), 2);
     assert!(
         dto.participants
@@ -726,6 +735,11 @@ async fn active_offer_details_includes_borrower_principal_utxo() -> anyhow::Resu
     assert!(utxo_types.contains(&"active_offer"));
     assert!(utxo_types.contains(&"borrower_principal"));
     assert!(dto.utxos.iter().all(|u| u.spent_txid.is_none()));
+
+    let principal = dto
+        .borrower_principal_utxo
+        .expect("active offer should include borrower_principal_utxo");
+    assert_eq!(principal.vout, 1);
 
     server_handle.abort();
     Ok(())

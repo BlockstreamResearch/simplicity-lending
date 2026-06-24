@@ -41,6 +41,18 @@ impl From<&OfferUtxoModel> for OfferUtxoOutpointShort {
     }
 }
 
+pub fn borrower_principal_outpoint_from_utxos(
+    utxos: &[OfferUtxoDto],
+) -> Option<OfferUtxoOutpointShort> {
+    utxos
+        .iter()
+        .find(|utxo| utxo.utxo_type == UtxoType::BorrowerPrincipal)
+        .map(|utxo| OfferUtxoOutpointShort {
+            txid: utxo.txid.clone(),
+            vout: utxo.vout,
+        })
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct OfferListItemShort {
     pub id: Uuid,
@@ -376,6 +388,53 @@ mod tests {
         assert_eq!(dto.created_at_height, 123);
         assert_eq!(dto.spent_txid, Some("bbaa".to_string()));
         assert_eq!(dto.spent_at_height, Some(456));
+    }
+
+    #[test]
+    fn borrower_principal_outpoint_from_utxos_picks_borrower_principal_type() {
+        let offer_id = Uuid::new_v4();
+        let utxos = vec![
+            OfferUtxoDto {
+                offer_id,
+                txid: "aa".to_string(),
+                vout: 0,
+                utxo_type: UtxoType::ActiveOffer,
+                created_at_height: 1,
+                spent_txid: None,
+                spent_at_height: None,
+            },
+            OfferUtxoDto {
+                offer_id,
+                txid: "bb".to_string(),
+                vout: 1,
+                utxo_type: UtxoType::BorrowerPrincipal,
+                created_at_height: 2,
+                spent_txid: None,
+                spent_at_height: None,
+            },
+        ];
+
+        let outpoint = super::borrower_principal_outpoint_from_utxos(&utxos)
+            .expect("should find borrower principal");
+
+        assert_eq!(outpoint.txid, "bb");
+        assert_eq!(outpoint.vout, 1);
+    }
+
+    #[test]
+    fn borrower_principal_outpoint_from_utxos_returns_none_when_missing() {
+        let offer_id = Uuid::new_v4();
+        let utxos = vec![OfferUtxoDto {
+            offer_id,
+            txid: "aa".to_string(),
+            vout: 0,
+            utxo_type: UtxoType::ActiveOffer,
+            created_at_height: 1,
+            spent_txid: None,
+            spent_at_height: None,
+        }];
+
+        assert!(super::borrower_principal_outpoint_from_utxos(&utxos).is_none());
     }
 
     #[test]
