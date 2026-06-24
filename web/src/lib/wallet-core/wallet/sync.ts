@@ -1,4 +1,4 @@
-import type { EsploraClient, Wollet } from 'lwk_web'
+import type { EsploraClient, Wollet } from '@lilbonekit/lwk-web'
 
 /**
  * Syncs wallet state via waterfalls fullScan and applies the update.

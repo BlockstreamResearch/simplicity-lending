@@ -7,7 +7,7 @@ import {
   StateTaprootBuilder,
   type StateTaprootSpendInfo,
   XOnlyPublicKey,
-} from 'lwk_web'
+} from '@lilbonekit/lwk-web'
 import { sources } from 'virtual:simplicity-sources'
 
 import { loadAssetAuthProgram } from '@/simplicity/asset-auth/program'

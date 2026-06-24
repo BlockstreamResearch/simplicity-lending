@@ -1,4 +1,4 @@
-import type { AssetId, WalletTxOut } from 'lwk_web'
+import type { AssetId, WalletTxOut } from '@lilbonekit/lwk-web'
 
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 

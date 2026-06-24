@@ -1,4 +1,4 @@
-import type { Network } from 'lwk_web'
+import type { Network } from '@lilbonekit/lwk-web'
 
 import type { NetworkName } from '@/constants/env'
 

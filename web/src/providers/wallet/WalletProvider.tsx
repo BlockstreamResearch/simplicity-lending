@@ -1,4 +1,4 @@
-import { type Pset, type Wollet, WolletBuilder } from 'lwk_web'
+import { type Pset, type Wollet, WolletBuilder } from '@lilbonekit/lwk-web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'

@@ -3,7 +3,7 @@ import {
   StateTaprootBuilder,
   type StateTaprootSpendInfo,
   XOnlyPublicKey,
-} from 'lwk_web'
+} from '@lilbonekit/lwk-web'
 
 // https://en.bitcoin.it/wiki/BIP_0341#Constructing_and_spending_Taproot_outputs
 export const UNSPENDABLE_TAPROOT_PUBKEY =

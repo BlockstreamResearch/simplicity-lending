@@ -1,4 +1,4 @@
-import type { Transaction } from 'lwk_web'
+import type { Transaction } from '@lilbonekit/lwk-web'
 import { sources } from 'virtual:simplicity-sources'
 
 import { extractOpReturnPayload } from '@/utils/opReturn'
