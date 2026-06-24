@@ -9,6 +9,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::api::borrowers;
 use crate::api::factories;
+use crate::api::health;
 use crate::api::lenders;
 use crate::api::offers;
 use crate::api::openapi;
@@ -18,7 +19,7 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
     let state = Arc::new(AppState { db: db_pool });
 
     let app = Router::new()
-        .merge(super::health::routes())
+        .merge(health::routes())
         .merge(borrowers::routes())
         .merge(lenders::routes())
         .merge(factories::routes())
