@@ -134,7 +134,7 @@ function createBorrowOfferSchema({
           ctx.addIssue({
             code: zod.ZodIssueCode.custom,
             path: ['collateral'],
-            message: 'Not enough Policy Asset UTXO balance for collateral and fees',
+            message: 'Not enough confirmed Policy Asset UTXO balance for collateral and fees',
           })
         }
       }

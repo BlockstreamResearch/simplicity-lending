@@ -35,7 +35,8 @@ export function useTxStatus(
     },
   })
 
-  const { status, confirmations } = data ?? { status: null, confirmations: null }
+  const status = data?.status ?? null
+  const confirmations = data?.confirmations ?? null
   const isComplete = status === 'confirmed' || status === 'finalized'
   return { status, confirmations, isComplete }
 }

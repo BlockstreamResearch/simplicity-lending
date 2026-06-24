@@ -5,8 +5,6 @@ import CheckIcon from '@/components/icons/CheckIcon'
 import ChevronDownIcon from '@/components/icons/ChevronDownIcon'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 
-const STATUS_OPTIONS = offerStatusSchema.options
-
 interface OfferStatusFilterProps {
   value: OfferStatus[]
   onChange: (next: OfferStatus[]) => void
@@ -30,7 +28,7 @@ export function OfferStatusFilter({ value, onChange }: OfferStatusFilterProps) {
       </Popover.Trigger>
       <Popover.Content>
         <Popover.Dialog className='flex flex-col gap-3 p-4 outline-none'>
-          {STATUS_OPTIONS.map(status => (
+          {offerStatusSchema.options.map(status => (
             <StatusOption
               key={status}
               status={status}
