@@ -23,7 +23,7 @@ export interface PendingTxRecord {
   confirmations: number | null
   createdAt: number
   updatedAt: number
-  /** Set once confirmations first reach the finalized threshold; drives the stuck/failed TTL. */
+  /** Set once confirmations first reach the finalized threshold. */
   finalizedAt?: number
   lastIndexerCheckAt?: number
   errorMessage?: string
