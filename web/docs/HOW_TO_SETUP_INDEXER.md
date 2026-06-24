@@ -23,10 +23,10 @@ cargo install --path crates/cli
 simplex --version # Simplex 0.0.5
 ```
 
-## Checkout the `dev` branch
+## Checkout the `main` branch
 
 ```bash
-git checkout dev
+git checkout main
 ```
 
 ## Make sure you have .env file in the root

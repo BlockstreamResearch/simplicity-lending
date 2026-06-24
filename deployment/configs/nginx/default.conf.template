@@ -9,6 +9,14 @@ server {
     return 301 /api/;
   }
 
+  # TODO: Remove after BE fix — the indexer doesn't proxy this itself, so we
+  # forward straight to the upstream price API here instead of /api/.
+  location = /api/prices/v1/liquid/USD {
+    proxy_pass ${WEB_PRICES_API_UPSTREAM}/prices/v1/liquid/USD;
+    proxy_ssl_server_name on;
+    proxy_redirect off;
+  }
+
   location /api/ {
     proxy_pass http://api:8000/;
     proxy_http_version 1.1;
