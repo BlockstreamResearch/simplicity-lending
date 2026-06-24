@@ -7,7 +7,7 @@ import CheckIcon from '@/components/icons/CheckIcon'
 import CircleExclamationIcon from '@/components/icons/CircleExclamationIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
-import { useTxStatus } from '@/hooks/useTxStatus'
+import { type TxStatus, useTxStatus } from '@/hooks/useTxStatus'
 import { truncateAddress } from '@/utils/format'
 
 export interface TransactionSummaryRow {
@@ -25,48 +25,52 @@ interface TransactionModalProps {
   onClose: () => void
 }
 
-const TITLE: Record<MutationStatus, string> = {
-  idle: 'Transaction not started',
-  pending: 'Processing Transaction…',
-  success: 'Transaction Complete',
-  error: 'Transaction Failed',
-}
-
-function StatusIcon({ status }: { status: MutationStatus }) {
-  if (status === 'success') {
-    return (
-      <span className='bg-success/15 text-success flex size-10 items-center justify-center rounded-full'>
-        <CheckIcon className='size-5' />
-      </span>
-    )
-  }
-  if (status === 'error') {
-    return (
-      <span className='bg-danger/15 text-danger flex size-10 items-center justify-center rounded-full'>
-        <CircleExclamationIcon className='size-5' />
-      </span>
-    )
-  }
-  return (
-    <span className='flex size-10 items-center justify-center'>
-      <Spinner size='md' />
-    </span>
-  )
-}
-
 export function TransactionStatusTitle({
   status,
   eyebrow,
+  isComplete,
 }: {
   status: MutationStatus
   eyebrow: string
+  isComplete: boolean
 }) {
+  const { title, icon } = ((): { title: string; icon: ReactNode } => {
+    if (isComplete) {
+      return {
+        title: 'Transaction Complete',
+        icon: (
+          <span className='bg-success/15 text-success flex size-10 items-center justify-center rounded-full'>
+            <CheckIcon className='size-5' />
+          </span>
+        ),
+      }
+    }
+    if (status === 'error') {
+      return {
+        title: 'Transaction Failed',
+        icon: (
+          <span className='bg-danger/15 text-danger flex size-10 items-center justify-center rounded-full'>
+            <CircleExclamationIcon className='size-5' />
+          </span>
+        ),
+      }
+    }
+    return {
+      title: status === 'pending' ? 'Processing Transaction…' : 'Transaction Pending…',
+      icon: (
+        <span className='flex size-10 items-center justify-center'>
+          <Spinner size='md' />
+        </span>
+      ),
+    }
+  })()
+
   return (
     <span className='flex items-center gap-3'>
-      <StatusIcon status={status} />
+      {icon}
       <span className='flex flex-col'>
         <span className='text-sm font-normal'>{eyebrow}</span>
-        <span>{TITLE[status]}</span>
+        <span>{title}</span>
       </span>
     </span>
   )
@@ -77,6 +81,8 @@ interface TransactionBodyProps {
   summary?: TransactionSummaryRow[]
   txid?: string | null
   errorMessage?: string | null
+  txStatus: TxStatus | null
+  confirmations: number | null
 }
 
 function notifyTxConfirmed(txid: string, confirmations: number) {
@@ -94,9 +100,9 @@ export function TransactionBody({
   summary = [],
   txid,
   errorMessage,
+  txStatus,
+  confirmations,
 }: TransactionBodyProps) {
-  const { status: txStatus, confirmations } = useTxStatus(txid)
-
   useEffect(() => {
     if (txid && txStatus === 'finalized' && confirmations !== null) {
       notifyTxConfirmed(txid, confirmations)
@@ -130,14 +136,14 @@ export function TransactionBody({
                     ? 'Confirmed'
                     : 'Pending…',
             },
-            ...(confirmations
-              ? [
-                  {
-                    label: 'Confirmations',
-                    value: `${confirmations} Confirmation${confirmations !== 1 ? 's' : ''}`,
-                  },
-                ]
-              : []),
+          ]
+        : []),
+      ...(confirmations
+        ? [
+            {
+              label: 'Confirmations',
+              value: `${confirmations} Confirmation${confirmations !== 1 ? 's' : ''}`,
+            },
           ]
         : []),
     ],
@@ -174,6 +180,11 @@ export default function TransactionModal({
   errorMessage,
   onClose,
 }: TransactionModalProps) {
+  const {
+    status: txStatus,
+    confirmations,
+    isComplete,
+  } = useTxStatus(status === 'success' ? txid : null)
   const isProcessing = status === 'pending'
 
   return (
@@ -185,14 +196,21 @@ export default function TransactionModal({
       isDismissable={!isProcessing}
       showCloseButton={!isProcessing}
       size='md'
-      title={<TransactionStatusTitle status={status} eyebrow={eyebrow} />}
+      title={<TransactionStatusTitle status={status} eyebrow={eyebrow} isComplete={isComplete} />}
       footer={
         <UiButton className='w-full' variant='primary' isDisabled={isProcessing} onPress={onClose}>
           {status === 'success' ? 'Done' : 'Close'}
         </UiButton>
       }
     >
-      <TransactionBody status={status} summary={summary} txid={txid} errorMessage={errorMessage} />
+      <TransactionBody
+        status={status}
+        summary={summary}
+        txid={txid}
+        errorMessage={errorMessage}
+        txStatus={txStatus}
+        confirmations={confirmations}
+      />
     </UiModal>
   )
 }

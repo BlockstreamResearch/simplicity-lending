@@ -8,6 +8,7 @@ import {
 } from '@/components/TransactionModal'
 import { UiButton, type UiButtonProps } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
+import { useTxStatus } from '@/hooks/useTxStatus'
 
 export interface OfferAction {
   label: string
@@ -43,6 +44,11 @@ export default function OfferActionShell({
 }: OfferActionShellProps) {
   const isTxActive = action !== undefined && action.status !== 'idle'
   const isProcessing = action?.status === 'pending'
+  const {
+    status: txStatus,
+    confirmations,
+    isComplete,
+  } = useTxStatus(action?.status === 'success' ? action.txid : null)
 
   const handleOpenChange = (open: boolean) => {
     if (open) return
@@ -59,7 +65,11 @@ export default function OfferActionShell({
       size='lg'
       title={
         isTxActive ? (
-          <TransactionStatusTitle status={action.status} eyebrow={action.eyebrow} />
+          <TransactionStatusTitle
+            status={action.status}
+            eyebrow={action.eyebrow}
+            isComplete={isComplete}
+          />
         ) : (
           <span className='flex items-center gap-3'>
             {title}
@@ -95,6 +105,8 @@ export default function OfferActionShell({
           summary={action.summary}
           txid={action.txid}
           errorMessage={action.error}
+          txStatus={txStatus}
+          confirmations={confirmations}
         />
       ) : (
         children

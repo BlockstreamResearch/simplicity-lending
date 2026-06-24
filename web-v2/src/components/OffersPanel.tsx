@@ -1,6 +1,5 @@
 import { Skeleton } from '@heroui/react'
 import { keepPreviousData } from '@tanstack/react-query'
-import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffers } from '@/api/indexer/hooks'
@@ -8,6 +7,7 @@ import type { OfferStatus } from '@/api/indexer/schemas'
 import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
+import { useOfferListControls } from '@/hooks/useOfferListControls'
 
 interface OffersPanelProps {
   title: string
@@ -17,7 +17,7 @@ interface OffersPanelProps {
 }
 
 export default function OffersPanel({ title, pageSize, status, onSuccess }: OffersPanelProps) {
-  const [page, setPage] = useState(1)
+  const { page, setPage, params, sort, setSort } = useOfferListControls({ pageSize, status })
 
   const {
     data: offersData,
@@ -25,10 +25,7 @@ export default function OffersPanel({ title, pageSize, status, onSuccess }: Offe
     isFetching,
     error,
     refetch,
-  } = useOffers(
-    { status, limit: pageSize, offset: (page - 1) * pageSize },
-    { placeholderData: keepPreviousData },
-  )
+  } = useOffers(params, { placeholderData: keepPreviousData })
   const { data: currentBlockHeight } = useBlockHeight()
 
   const offers = offersData?.items ?? []
@@ -81,6 +78,8 @@ export default function OffersPanel({ title, pageSize, status, onSuccess }: Offe
           pageCount={pageCount}
           onPageChange={setPage}
           onActionSuccess={handleSuccess}
+          sort={sort}
+          onSortChange={setSort}
         />
       )}
     </div>

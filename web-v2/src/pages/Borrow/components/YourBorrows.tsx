@@ -1,4 +1,5 @@
 import { Skeleton } from '@heroui/react'
+import { keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
@@ -8,6 +9,7 @@ import PlusIcon from '@/components/icons/PlusIcon'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useOfferListControls } from '@/hooks/useOfferListControls'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import CreateBorrowerAccountModal from './CreateBorrowerAccountModal'
@@ -16,22 +18,20 @@ import CreateBorrowOfferModal from './CreateBorrowOfferModal'
 const BORROW_PAGE_SIZE = 10
 
 export default function YourBorrows() {
-  const [page, setPage] = useState(1)
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false)
 
   const { scriptPubkey } = useWallet()
   const { hasAccount } = useBorrowerAccount()
 
-  const offset = (page - 1) * BORROW_PAGE_SIZE
+  const { page, setPage, params, sort, setSort, statusFilter, setStatusFilter } =
+    useOfferListControls({ pageSize: BORROW_PAGE_SIZE })
+
   const {
     data: borrowerData,
     isLoading,
     refetch,
-  } = useBorrowerOffers(scriptPubkey ?? '', {
-    limit: BORROW_PAGE_SIZE,
-    offset,
-  })
+  } = useBorrowerOffers(scriptPubkey ?? '', params, { placeholderData: keepPreviousData })
   const { data: currentBlockHeight } = useBlockHeight()
 
   const offers = borrowerData?.items ?? []
@@ -58,7 +58,7 @@ export default function YourBorrows() {
             <Skeleton key={i} className='h-14 w-full rounded' />
           ))}
         </div>
-      ) : offers.length === 0 ? (
+      ) : offers.length === 0 && !statusFilter.length ? (
         <div className='bg-surface border-muted flex h-14 items-center rounded border border-dashed px-4 opacity-50'>
           <span className='text-foreground text-sm font-medium'>No borrow offers yet.</span>
         </div>
@@ -70,6 +70,10 @@ export default function YourBorrows() {
           pageCount={pageCount}
           onPageChange={setPage}
           onActionSuccess={() => refetch()}
+          sort={sort}
+          onSortChange={setSort}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
         />
       )}
 

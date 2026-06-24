@@ -14,10 +14,15 @@ const OFFER_STATUS_CHIP_CONFIG: Record<OfferStatus, { color: ChipColor; label: s
   claimed: { color: 'default', label: 'Claimed' },
 }
 
-export function OfferStatusChip({ status }: { status: OfferStatus }) {
+interface OfferStatusChipProps {
+  status: OfferStatus
+  size?: 'sm' | 'md' | 'lg'
+}
+
+export function OfferStatusChip({ status, size = 'sm' }: OfferStatusChipProps) {
   const { color, label } = OFFER_STATUS_CHIP_CONFIG[status]
   return (
-    <Chip color={color} variant='soft' size='sm'>
+    <Chip color={color} variant='soft' size={size}>
       <CircleDashedIcon className='size-3.5' />
       {label}
     </Chip>

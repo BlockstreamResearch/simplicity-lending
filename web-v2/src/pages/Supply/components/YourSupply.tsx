@@ -1,30 +1,27 @@
 import { Skeleton } from '@heroui/react'
 import { keepPreviousData } from '@tanstack/react-query'
-import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useLenderOffers } from '@/api/indexer/hooks'
 import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
 import OffersTable from '@/components/OffersTable'
+import { useOfferListControls } from '@/hooks/useOfferListControls'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 const SUPPLY_PAGE_SIZE = 10
 
 export default function YourSupply() {
-  const [page, setPage] = useState(1)
   const { scriptPubkey } = useWallet()
   const { data: currentBlockHeight } = useBlockHeight()
 
-  const offset = (page - 1) * SUPPLY_PAGE_SIZE
+  const { page, setPage, params, sort, setSort, statusFilter, setStatusFilter } =
+    useOfferListControls({ pageSize: SUPPLY_PAGE_SIZE })
+
   const {
     data: lenderData,
     isLoading,
     refetch,
-  } = useLenderOffers(
-    scriptPubkey ?? '',
-    { limit: SUPPLY_PAGE_SIZE, offset },
-    { placeholderData: keepPreviousData },
-  )
+  } = useLenderOffers(scriptPubkey ?? '', params, { placeholderData: keepPreviousData })
 
   const offers = lenderData?.items ?? []
   const totalOffers = lenderData?.total ?? 0
@@ -45,7 +42,7 @@ export default function YourSupply() {
             <Skeleton key={i} className='h-14 w-full' />
           ))}
         </div>
-      ) : !offers.length ? (
+      ) : !offers.length && !statusFilter.length ? (
         <p className='text-muted py-6 text-center text-sm'>No active loans</p>
       ) : (
         <OffersTable
@@ -55,6 +52,10 @@ export default function YourSupply() {
           pageCount={pageCount}
           onPageChange={setPage}
           onActionSuccess={() => refetch()}
+          sort={sort}
+          onSortChange={setSort}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
         />
       )}
     </div>

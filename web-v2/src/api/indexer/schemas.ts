@@ -1,8 +1,8 @@
-import { z } from 'zod'
+import { z as zod } from 'zod'
 
 import { blockHeightSchema, finiteNumber, u64AsBigint } from '@/utils/zod'
 
-export const offerStatusSchema = z.enum([
+export const offerStatusSchema = zod.enum([
   'pending',
   'active',
   'repaid',
@@ -10,12 +10,12 @@ export const offerStatusSchema = z.enum([
   'cancelled',
   'claimed',
 ])
-export type OfferStatus = z.infer<typeof offerStatusSchema>
+export type OfferStatus = zod.infer<typeof offerStatusSchema>
 
-export const participantTypeSchema = z.enum(['borrower', 'lender'])
-export type ParticipantType = z.infer<typeof participantTypeSchema>
+export const participantTypeSchema = zod.enum(['borrower', 'lender'])
+export type ParticipantType = zod.infer<typeof participantTypeSchema>
 
-export const offerUtxoTypeSchema = z.enum([
+export const offerUtxoTypeSchema = zod.enum([
   'pending_offer',
   'active_offer',
   'borrower_principal',
@@ -24,140 +24,140 @@ export const offerUtxoTypeSchema = z.enum([
   'liquidation',
   'claim',
 ])
-export type OfferUtxoType = z.infer<typeof offerUtxoTypeSchema>
+export type OfferUtxoType = zod.infer<typeof offerUtxoTypeSchema>
 
-export const participantShortSchema = z.object({
+export const participantShortSchema = zod.object({
   participant_type: participantTypeSchema,
-  script_pubkey: z.string(),
+  script_pubkey: zod.string(),
 })
-export type ParticipantShort = z.infer<typeof participantShortSchema>
+export type ParticipantShort = zod.infer<typeof participantShortSchema>
 
-export const offerOutpointShortSchema = z.object({
-  txid: z.string(),
-  vout: z.coerce.number(),
+export const offerOutpointShortSchema = zod.object({
+  txid: zod.string(),
+  vout: zod.coerce.number(),
 })
-export type OfferOutpointShort = z.infer<typeof offerOutpointShortSchema>
+export type OfferOutpointShort = zod.infer<typeof offerOutpointShortSchema>
 
-export const offerShortSchema = z.object({
-  id: z.string(),
-  issuance_factory_id: z.string(),
+export const offerShortSchema = zod.object({
+  id: zod.string(),
+  issuance_factory_id: zod.string(),
   status: offerStatusSchema,
-  collateral_asset: z.string(),
-  principal_asset: z.string(),
+  collateral_asset: zod.string(),
+  principal_asset: zod.string(),
   collateral_amount: u64AsBigint,
   principal_amount: u64AsBigint,
   interest_rate: finiteNumber.default(0),
   loan_expiration_height: finiteNumber.default(0),
   created_at_height: blockHeightSchema,
-  created_at_txid: z.string(),
-  participants: z.array(participantShortSchema).default([]),
+  created_at_txid: zod.string(),
+  participants: zod.array(participantShortSchema).default([]),
   borrower_principal_utxo: offerOutpointShortSchema.optional(),
 })
-export type OfferShort = z.infer<typeof offerShortSchema>
+export type OfferShort = zod.infer<typeof offerShortSchema>
 
 export const offerFullSchema = offerShortSchema.extend({
-  borrower_nft_asset: z.string(),
-  lender_nft_asset: z.string(),
-  protocol_fee_keeper_asset: z.string(),
+  borrower_nft_asset: zod.string(),
+  lender_nft_asset: zod.string(),
+  protocol_fee_keeper_asset: zod.string(),
 })
-export type OfferFull = z.infer<typeof offerFullSchema>
+export type OfferFull = zod.infer<typeof offerFullSchema>
 
-export const participantDtoSchema = z.object({
-  offer_id: z.string(),
+export const participantDtoSchema = zod.object({
+  offer_id: zod.string(),
   participant_type: participantTypeSchema,
-  script_pubkey: z.string(),
-  txid: z.string(),
-  vout: z.coerce.number(),
+  script_pubkey: zod.string(),
+  txid: zod.string(),
+  vout: zod.coerce.number(),
   created_at_height: blockHeightSchema,
-  spent_txid: z.string().nullable(),
-  spent_at_height: z.coerce.number().nullable(),
+  spent_txid: zod.string().nullable(),
+  spent_at_height: zod.coerce.number().nullable(),
 })
-export type ParticipantDto = z.infer<typeof participantDtoSchema>
+export type ParticipantDto = zod.infer<typeof participantDtoSchema>
 
-export const offerUtxoSchema = z.object({
-  offer_id: z.string(),
-  txid: z.string(),
-  vout: z.coerce.number(),
+export const offerUtxoSchema = zod.object({
+  offer_id: zod.string(),
+  txid: zod.string(),
+  vout: zod.coerce.number(),
   utxo_type: offerUtxoTypeSchema,
   created_at_height: blockHeightSchema,
-  spent_txid: z.string().nullable(),
-  spent_at_height: z.coerce.number().nullable(),
+  spent_txid: zod.string().nullable(),
+  spent_at_height: zod.coerce.number().nullable(),
 })
-export type OfferUtxo = z.infer<typeof offerUtxoSchema>
+export type OfferUtxo = zod.infer<typeof offerUtxoSchema>
 
 export const offerDetailsSchema = offerFullSchema.extend({
-  participants: z.array(participantDtoSchema).default([]),
-  utxos: z.array(offerUtxoSchema).default([]),
+  participants: zod.array(participantDtoSchema).default([]),
+  utxos: zod.array(offerUtxoSchema).default([]),
 })
-export type OfferDetails = z.infer<typeof offerDetailsSchema>
+export type OfferDetails = zod.infer<typeof offerDetailsSchema>
 
-export const offerListResponseSchema = z.object({
-  items: z.array(offerShortSchema),
-  total: z.coerce.number(),
-  limit: z.coerce.number(),
-  offset: z.coerce.number(),
+export const offerListResponseSchema = zod.object({
+  items: zod.array(offerShortSchema),
+  total: zod.coerce.number(),
+  limit: zod.coerce.number(),
+  offset: zod.coerce.number(),
 })
-export type OfferListResponse = z.infer<typeof offerListResponseSchema>
+export type OfferListResponse = zod.infer<typeof offerListResponseSchema>
 
-export const assetAmountSchema = z.object({
-  asset: z.string(),
+export const assetAmountSchema = zod.object({
+  asset: zod.string(),
   amount: u64AsBigint,
 })
-export type AssetAmount = z.infer<typeof assetAmountSchema>
+export type AssetAmount = zod.infer<typeof assetAmountSchema>
 
-export const offersOverviewSchema = z.object({
-  collateral_locked: z.array(assetAmountSchema),
-  active_loan_principal: z.array(assetAmountSchema),
-  active_loans_count: z.coerce.number(),
+export const offersOverviewSchema = zod.object({
+  collateral_locked: zod.array(assetAmountSchema),
+  active_loan_principal: zod.array(assetAmountSchema),
+  active_loans_count: zod.coerce.number(),
 })
-export type OffersOverview = z.infer<typeof offersOverviewSchema>
+export type OffersOverview = zod.infer<typeof offersOverviewSchema>
 
-export const borrowerOverviewSchema = z.object({
-  collateral_locked: z.array(assetAmountSchema),
-  borrowings: z.array(assetAmountSchema),
-  active_loans: z.coerce.number(),
-  pending_offers: z.coerce.number(),
+export const borrowerOverviewSchema = zod.object({
+  collateral_locked: zod.array(assetAmountSchema),
+  borrowings: zod.array(assetAmountSchema),
+  active_loans: zod.coerce.number(),
+  pending_offers: zod.coerce.number(),
 })
-export type BorrowerOverview = z.infer<typeof borrowerOverviewSchema>
+export type BorrowerOverview = zod.infer<typeof borrowerOverviewSchema>
 
-export const lenderOverviewSchema = z.object({
-  supplied_loans: z.array(assetAmountSchema),
-  interest_outstanding: z.array(assetAmountSchema),
-  active_loans: z.coerce.number(),
-  to_be_claimed: z.coerce.number(),
+export const lenderOverviewSchema = zod.object({
+  supplied_loans: zod.array(assetAmountSchema),
+  interest_outstanding: zod.array(assetAmountSchema),
+  active_loans: zod.coerce.number(),
+  to_be_claimed: zod.coerce.number(),
 })
-export type LenderOverview = z.infer<typeof lenderOverviewSchema>
+export type LenderOverview = zod.infer<typeof lenderOverviewSchema>
 
-export const factoryStatusSchema = z.enum(['active', 'removed'])
-export type FactoryStatus = z.infer<typeof factoryStatusSchema>
+export const factoryStatusSchema = zod.enum(['active', 'removed'])
+export type FactoryStatus = zod.infer<typeof factoryStatusSchema>
 
-export const factoryAuthUtxoSchema = z.object({
-  txid: z.string(),
-  vout: z.coerce.number(),
-  script_pubkey: z.string(),
+export const factoryAuthUtxoSchema = zod.object({
+  txid: zod.string(),
+  vout: zod.coerce.number(),
+  script_pubkey: zod.string(),
   created_at_height: blockHeightSchema,
 })
-export type FactoryAuthUtxo = z.infer<typeof factoryAuthUtxoSchema>
+export type FactoryAuthUtxo = zod.infer<typeof factoryAuthUtxoSchema>
 
-export const factoryProgramUtxoSchema = z.object({
-  txid: z.string(),
-  vout: z.coerce.number(),
+export const factoryProgramUtxoSchema = zod.object({
+  txid: zod.string(),
+  vout: zod.coerce.number(),
   created_at_height: blockHeightSchema,
 })
-export type FactoryProgramUtxo = z.infer<typeof factoryProgramUtxoSchema>
+export type FactoryProgramUtxo = zod.infer<typeof factoryProgramUtxoSchema>
 
-export const factoryDetailsSchema = z.object({
-  id: z.string(),
-  factory_asset_id: z.string(),
-  program_script_pubkey: z.string(),
+export const factoryDetailsSchema = zod.object({
+  id: zod.string(),
+  factory_asset_id: zod.string(),
+  program_script_pubkey: zod.string(),
   status: factoryStatusSchema,
-  issuing_utxos_count: z.coerce.number(),
+  issuing_utxos_count: zod.coerce.number(),
   reissuance_flags: u64AsBigint,
   created_at_height: blockHeightSchema,
-  created_at_txid: z.string(),
+  created_at_txid: zod.string(),
   auth_utxo: factoryAuthUtxoSchema.nullable(),
   program_utxo: factoryProgramUtxoSchema.nullable(),
 })
-export type FactoryDetails = z.infer<typeof factoryDetailsSchema>
+export type FactoryDetails = zod.infer<typeof factoryDetailsSchema>
 
-export const factoryListSchema = z.array(factoryDetailsSchema)
+export const factoryListSchema = zod.array(factoryDetailsSchema)

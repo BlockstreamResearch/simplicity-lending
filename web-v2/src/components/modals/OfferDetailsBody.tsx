@@ -23,7 +23,6 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     const interest = calcInterest(offer.principal_amount, offer.interest_rate)
     const loanDurationBlocks = offer.loan_expiration_height - offer.created_at_height
     const borrower = offer.participants.find(p => p.participant_type === 'borrower')
-    const lender = offer.participants.find(p => p.participant_type === 'lender')
 
     const rows: DetailRow[] = [
       {
@@ -42,10 +41,7 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     ]
 
     if (borrower) {
-      rows.push({ label: 'Borrower Address', value: truncateAddress(borrower.script_pubkey) })
-    }
-    if (lender) {
-      rows.push({ label: 'Lender Address', value: truncateAddress(lender.script_pubkey) })
+      rows.push({ label: 'Borrower ID', value: truncateAddress(borrower.script_pubkey) })
     }
 
     return rows

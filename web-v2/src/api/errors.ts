@@ -1,4 +1,4 @@
-import type { z } from 'zod'
+import type { z as zod } from 'zod'
 
 export class ApiError extends Error {
   readonly status: number | undefined
@@ -14,8 +14,8 @@ export class ApiError extends Error {
 }
 
 export class ApiValidationError extends ApiError {
-  readonly issues: z.ZodIssue[]
-  constructor(message: string, issues: z.ZodIssue[]) {
+  readonly issues: zod.ZodIssue[]
+  constructor(message: string, issues: zod.ZodIssue[]) {
     super(message)
     this.name = 'ApiValidationError'
     this.issues = issues
