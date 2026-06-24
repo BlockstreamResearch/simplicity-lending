@@ -8,6 +8,8 @@ import {
 } from '@/components/TransactionModal'
 import { UiButton, type UiButtonProps } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
+import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
 export interface OfferAction {
   label: string
@@ -31,6 +33,30 @@ interface OfferActionShellProps {
   children: ReactNode
 }
 
+interface ActionView {
+  isTxActive: boolean
+  status: MutationStatus
+  eyebrow: string
+  summary: TransactionSummaryRow[]
+  txid?: string
+  error?: string
+}
+
+// Stable reference so `deriveView(undefined)` doesn't hand back a fresh `[]` every call — that
+// would always compare unequal below and force a setState (hence a re-render) on every render.
+const EMPTY_SUMMARY: TransactionSummaryRow[] = []
+
+function deriveView(action: OfferAction | undefined): ActionView {
+  return {
+    isTxActive: action !== undefined && action.status !== 'idle',
+    status: action?.status ?? 'idle',
+    eyebrow: action?.eyebrow ?? '',
+    summary: action?.summary ?? EMPTY_SUMMARY,
+    txid: action?.txid,
+    error: action?.error,
+  }
+}
+
 // TODO: Consider replacing with UiModal + proper component decomposition (details, tx status) inside each action modal
 export default function OfferActionShell({
   isOpen,
@@ -41,12 +67,15 @@ export default function OfferActionShell({
   onSuccess,
   children,
 }: OfferActionShellProps) {
-  const isTxActive = action !== undefined && action.status !== 'idle'
+  const { addSurfaceToast } = usePendingTransactions()
+  const view = useFreezeViewWhileOpen(isOpen, deriveView(action))
+
   const isProcessing = action?.status === 'pending'
 
   const handleOpenChange = (open: boolean) => {
     if (open) return
     if (action?.status === 'success') onSuccess?.()
+    if (action?.txid) addSurfaceToast(action.txid)
     onClose()
   }
 
@@ -58,8 +87,8 @@ export default function OfferActionShell({
       showCloseButton={!isProcessing}
       size='lg'
       title={
-        isTxActive ? (
-          <TransactionStatusTitle status={action.status} eyebrow={action.eyebrow} />
+        view.isTxActive ? (
+          <TransactionStatusTitle status={view.status} eyebrow={view.eyebrow} />
         ) : (
           <span className='flex items-center gap-3'>
             {title}
@@ -68,14 +97,14 @@ export default function OfferActionShell({
         )
       }
       footer={
-        isTxActive ? (
+        view.isTxActive ? (
           <UiButton
             className='w-full'
             variant='primary'
             isDisabled={isProcessing}
             onPress={() => handleOpenChange(false)}
           >
-            {action.status === 'success' ? 'Done' : 'Close'}
+            {view.status === 'success' ? 'Done' : 'Close'}
           </UiButton>
         ) : action ? (
           <UiButton
@@ -89,12 +118,12 @@ export default function OfferActionShell({
         ) : undefined
       }
     >
-      {isTxActive ? (
+      {view.isTxActive ? (
         <TransactionBody
-          status={action.status}
-          summary={action.summary}
-          txid={action.txid}
-          errorMessage={action.error}
+          status={view.status}
+          summary={view.summary}
+          txid={view.txid}
+          errorMessage={view.error}
         />
       ) : (
         children

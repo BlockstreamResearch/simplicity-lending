@@ -1,11 +1,9 @@
-import { Toast } from '@heroui/react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
-import { getTxExplorerUrl } from '@/api/esplora/utils'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import BalanceCard from '@/components/BalanceCard'
 import PlusIcon from '@/components/icons/PlusIcon'
@@ -21,8 +19,10 @@ import { BPS_DIVISOR } from '@/constants/offers'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
 import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
+import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
 import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
@@ -173,11 +173,12 @@ export default function CreateBorrowOfferModal({
   onClose,
 }: CreateBorrowOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
-  const { balances } = useWallet()
+  const { balances, scriptPubkey } = useWallet()
   const collateralUsd = useAssetPriceUsd(collateralAsset.id)
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { factoryState, refetchFactory } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()
+  const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const feeRate = useFeeRateSatPerKvb(isOpen)
   const feeBudgetSats = useMemo(
     () => estimateFeeBudgetSats(CREATE_OFFER_WEIGHT_UNITS, feeRate),
@@ -239,13 +240,6 @@ export default function CreateBorrowOfferModal({
       protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
     })
     refetchFactory()
-    Toast.toast.success('Offer Created', {
-      description: 'Your loan offer has been created successfully.',
-      actionProps: {
-        children: 'Details',
-        onPress: () => window.open(getTxExplorerUrl(result.txid), '_blank', 'noopener'),
-      },
-    })
     return result.txid
   }, [
     factoryState,
@@ -261,6 +255,13 @@ export default function CreateBorrowOfferModal({
 
   const { mutate, reset, data, error, status } = useMutation({
     mutationFn: createBorrowOffer,
+    onSuccess: txid => {
+      void addPendingTx({
+        txid,
+        kind: 'create_offer',
+        walletScriptPubkey: scriptPubkey ?? '',
+      })
+    },
   })
   const apr = computeApr(bps, loanDurationBlocks)
   const ltv = computeLtv({
@@ -279,7 +280,16 @@ export default function CreateBorrowOfferModal({
     [values.borrow, values.collateral, principalAsset.symbol, collateralAsset.symbol],
   )
 
+  const liveErrorMessage = error?.message
+  const view = useFreezeViewWhileOpen(isOpen, {
+    status,
+    summary: txSummary,
+    txid: data,
+    errorMessage: liveErrorMessage,
+  })
+
   const handleClose = () => {
+    if (data) addSurfaceToast(data)
     reset()
     resetForm()
     onOpenChange(false)
@@ -290,15 +300,15 @@ export default function CreateBorrowOfferModal({
     mutate()
   })
 
-  if (status !== 'idle') {
+  if (view.status !== 'idle') {
     return (
       <TransactionModal
         isOpen={isOpen}
         eyebrow='New Offer'
-        status={status}
-        summary={txSummary}
-        txid={data}
-        errorMessage={error?.message}
+        status={view.status}
+        summary={view.summary}
+        txid={view.txid}
+        errorMessage={view.errorMessage}
         onClose={handleClose}
       />
     )

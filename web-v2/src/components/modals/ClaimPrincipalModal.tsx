@@ -17,6 +17,7 @@ import {
   utxoToOutpointString,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ASSET_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
@@ -38,9 +39,10 @@ export default function ClaimPrincipalModal({
   onSuccess,
 }: ClaimPrincipalModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { claimPrincipal } = useClaimPrincipal()
+  const { addPendingTx } = usePendingTransactions()
 
   const claimBorrowerPrincipal = async () => {
     if (!offer.borrower_principal_utxo) throw new Error('Borrower principal UTXO not found')
@@ -73,6 +75,16 @@ export default function ClaimPrincipalModal({
 
   const { mutate, reset, data, error, status } = useMutation({
     mutationFn: claimBorrowerPrincipal,
+    onSuccess: result => {
+      void addPendingTx({
+        txid: result.txid,
+        kind: 'claim_principal',
+        walletScriptPubkey: scriptPubkey ?? '',
+        offerId: offer.id,
+        previousOfferStatus: 'active',
+        expectedOfferStatus: 'active',
+      })
+    },
   })
 
   const txSummary = useMemo(

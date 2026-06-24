@@ -17,6 +17,7 @@ import {
   utxoToOutpointString,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
@@ -40,9 +41,10 @@ export default function AcceptOfferModal({
   onSuccess,
 }: AcceptOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
+  const { addPendingTx } = usePendingTransactions()
 
   const acceptBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -82,7 +84,19 @@ export default function AcceptOfferModal({
     })
   }
 
-  const { mutate, reset, data, error, status } = useMutation({ mutationFn: acceptBorrowOffer })
+  const { mutate, reset, data, error, status } = useMutation({
+    mutationFn: acceptBorrowOffer,
+    onSuccess: result => {
+      void addPendingTx({
+        txid: result.txid,
+        kind: 'accept_offer',
+        walletScriptPubkey: scriptPubkey ?? '',
+        offerId: offer.id,
+        previousOfferStatus: 'pending',
+        expectedOfferStatus: 'active',
+      })
+    },
+  })
 
   const borrower = offer.participants.find(p => p.participant_type === 'borrower')
   const title = `${truncateAddress(borrower?.script_pubkey || '')} Supply Offers`

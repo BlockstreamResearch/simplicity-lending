@@ -1,7 +1,9 @@
 import { buttonVariants } from '@heroui/react'
 import { Link, Outlet } from 'react-router-dom'
 
+import { BellNotificationButton } from '@/components/BellNotificationButton'
 import ArrowSquareOutIcon from '@/components/icons/ArrowSquareOutIcon'
+import { JadeUnlockModal } from '@/components/JadeUnlockModal'
 import { WalletButton } from '@/components/WalletButton'
 import { env } from '@/constants/env'
 import { RoutePath } from '@/constants/routes'
@@ -44,12 +46,13 @@ export default function AppLayout() {
               About Simplicity
               <ArrowSquareOutIcon className='size-4' />
             </a>
-            {/* TODO: notifications — render bell button once wired. */}
+            <BellNotificationButton />
             <WalletButton />
           </div>
         </header>
 
         <Outlet />
+        <JadeUnlockModal />
 
         <footer className='text-muted flex flex-col gap-3 text-xs'>
           <nav className='flex flex-wrap items-center gap-4 font-medium'>

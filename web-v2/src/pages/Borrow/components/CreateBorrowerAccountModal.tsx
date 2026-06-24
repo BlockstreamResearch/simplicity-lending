@@ -5,6 +5,8 @@ import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
 interface CreateBorrowerAccountModalProps {
   isOpen: boolean
@@ -17,26 +19,43 @@ export default function CreateBorrowerAccountModal({
   onOpenChange,
   onClose,
 }: CreateBorrowerAccountModalProps) {
-  const { createBorrowerAccount, refetchFactory } = useBorrowerAccount()
+  const { createBorrowerAccount, refetchFactory, scriptPubkey } = useBorrowerAccount()
+  const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const { mutate, reset, data, error, status } = useMutation({
     mutationFn: createBorrowerAccount,
+    onSuccess: result => {
+      void addPendingTx({
+        txid: result.txid,
+        kind: 'create_borrower_account',
+        walletScriptPubkey: scriptPubkey ?? '',
+      })
+    },
+  })
+
+  const liveTxid = data?.txid ?? null
+  const liveErrorMessage = error?.message
+  const view = useFreezeViewWhileOpen(isOpen, {
+    status,
+    txid: liveTxid,
+    errorMessage: liveErrorMessage,
   })
 
   const handleClose = () => {
+    if (data?.txid) addSurfaceToast(data.txid)
     reset()
     onOpenChange(false)
     refetchFactory()
     onClose()
   }
 
-  if (status !== 'idle') {
+  if (view.status !== 'idle') {
     return (
       <TransactionModal
         isOpen={isOpen}
         eyebrow='New Borrower Account'
-        status={status}
-        txid={data?.txid ?? null}
-        errorMessage={error?.message}
+        status={view.status}
+        txid={view.txid}
+        errorMessage={view.errorMessage}
         onClose={handleClose}
       />
     )

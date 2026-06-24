@@ -14,7 +14,21 @@ const OFFER_STATUS_CHIP_CONFIG: Record<OfferStatus, { color: ChipColor; label: s
   claimed: { color: 'default', label: 'Claimed' },
 }
 
-export function OfferStatusChip({ status }: { status: OfferStatus }) {
+export function OfferStatusChip({
+  status,
+  isProcessing,
+}: {
+  status: OfferStatus
+  isProcessing?: boolean
+}) {
+  if (isProcessing) {
+    return (
+      <Chip color='default' variant='soft' size='sm'>
+        <CircleDashedIcon className='size-3.5 animate-spin' />
+        Processing...
+      </Chip>
+    )
+  }
   const { color, label } = OFFER_STATUS_CHIP_CONFIG[status]
   return (
     <Chip color={color} variant='soft' size='sm'>
