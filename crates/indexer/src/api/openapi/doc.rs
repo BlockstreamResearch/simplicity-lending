@@ -10,6 +10,7 @@ use crate::api::factories::dto::{
     FactoryAuthUtxoDto, FactoryDetailsResponse, FactoryProgramUtxoDto,
 };
 use crate::api::factories::handlers as factory_handlers;
+use crate::api::health::{self, HealthResponse};
 use crate::api::lenders::dto::LenderOverview;
 use crate::api::lenders::handlers as lender_handlers;
 use crate::api::offers::dto::{
@@ -40,6 +41,8 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         lender_handlers::list_offers_by_script,
         factory_handlers::get_by_script,
         factory_handlers::get_by_id,
+        health::health,
+        health::ready,
     ),
     components(schemas(
         AssetAmount,
@@ -50,6 +53,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         FactoryDetailsResponse,
         FactoryProgramUtxoDto,
         FactoryStatus,
+        HealthResponse,
         LenderOverview,
         OfferDetailsResponseSchema,
         OfferListItemShort,
@@ -70,6 +74,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         (name = "borrowers", description = "Borrower queries"),
         (name = "lenders", description = "Lender queries"),
         (name = "factories", description = "Issuance factory queries"),
+        (name = "health", description = "Liveness and readiness checks"),
     )
 )]
 pub struct ApiDoc;
@@ -99,6 +104,8 @@ mod tests {
         assert!(paths.contains_key("/lenders/offers"));
         assert!(paths.contains_key("/factories/by-script"));
         assert!(paths.contains_key("/factories/{id}"));
+        assert!(paths.contains_key("/health"));
+        assert!(paths.contains_key("/ready"));
     }
 
     #[test]

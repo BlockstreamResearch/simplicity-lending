@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
-import { z } from 'zod'
+import { z as zod } from 'zod'
 
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import BalanceCard from '@/components/BalanceCard'
@@ -67,11 +67,61 @@ interface BorrowOfferContext {
 const MAX_INTEREST_RATE_BPS = 65_535
 const MIN_PAYMENT_AMOUNT = 0.1
 
-const positiveAmount = z
-  .string()
-  .trim()
-  .regex(DECIMAL_AMOUNT_RE, 'Enter a valid amount')
-  .refine(v => Number(v) > 0, 'Enter a positive amount')
+function parseAmount(
+  ctx: zod.RefinementCtx,
+  raw: string,
+  path: 'collateral' | 'borrow' | 'fee',
+  decimals: number,
+  belowUnitMessage: string,
+) {
+  const value = raw.trim()
+  if (!DECIMAL_AMOUNT_RE.test(value)) {
+    ctx.addIssue({ code: zod.ZodIssueCode.custom, path: [path], message: 'Enter a valid amount' })
+    return null
+  }
+  if (Number(value) <= 0) {
+    ctx.addIssue({
+      code: zod.ZodIssueCode.custom,
+      path: [path],
+      message: 'Enter a positive amount',
+    })
+    return null
+  }
+  const base = toBigintAmount(value, decimals)
+  if (base <= 0n) {
+    ctx.addIssue({ code: zod.ZodIssueCode.custom, path: [path], message: belowUnitMessage })
+    return null
+  }
+  return base
+}
+
+function parsePolicyAssetCollateral(
+  ctx: zod.RefinementCtx,
+  raw: string,
+  denomination: PolicyAssetDenomination,
+  asset: ConfigAsset,
+  unit: string,
+) {
+  const value = raw.trim()
+  const base = parsePolicyAssetInput(value, denomination, asset)
+  if (base === null) {
+    ctx.addIssue({
+      code: zod.ZodIssueCode.custom,
+      path: ['collateral'],
+      message: denomination === 'sats' ? 'Enter a whole number of sats' : 'Enter a valid amount',
+    })
+    return null
+  }
+  if (base <= 0n) {
+    ctx.addIssue({
+      code: zod.ZodIssueCode.custom,
+      path: ['collateral'],
+      message: `Enter a positive ${unit} amount`,
+    })
+    return null
+  }
+  return base
+}
 
 function createBorrowOfferSchema({
   collateralAsset,
@@ -84,76 +134,79 @@ function createBorrowOfferSchema({
   utxos,
   feeBudgetSats,
 }: BorrowOfferContext) {
-  return z
+  const minPaymentBase = toBigintAmount(String(MIN_PAYMENT_AMOUNT), principalDecimals)
+
+  return zod
     .object({
-      collateral: z
-        .string()
-        .trim()
-        .min(1, 'Enter a valid amount')
-        .refine(
-          v => parsePolicyAssetInput(v, collateralDenomination, collateralAsset) !== null,
-          collateralDenomination === 'sats'
-            ? 'Enter a whole number of sats'
-            : 'Enter a valid amount',
-        )
-        .refine(
-          v => (parsePolicyAssetInput(v, collateralDenomination, collateralAsset) ?? 0n) > 0n,
-          `Enter a positive ${collateralUnit} amount`,
-        ),
-      borrow: positiveAmount,
-      fee: positiveAmount,
-      termDays: z.number().positive(),
+      collateral: zod.string(),
+      borrow: zod.string(),
+      fee: zod.string(),
+      termDays: zod.number().optional(),
     })
     .superRefine((data, ctx) => {
-      const collateralBase =
-        parsePolicyAssetInput(data.collateral, collateralDenomination, collateralAsset) ?? 0n
-      const principalBase = toBigintAmount(data.borrow, principalDecimals)
-      const feeBase = toBigintAmount(data.fee, principalDecimals)
-      if (collateralBase <= 0n) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['collateral'],
-          message: 'Collateral is below the minimum asset unit',
-        })
+      if (data.termDays === undefined) {
+        ctx.addIssue({ code: zod.ZodIssueCode.custom, path: ['termDays'], message: 'Required' })
       }
-      if (principalBase <= 0n) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['borrow'],
-          message: `Borrow amount is below the minimum ${principalSymbol} unit`,
-        })
-      }
-      if (feeBase <= 0n) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['fee'],
-          message: `Fee is below the minimum ${principalSymbol} unit`,
-        })
-      }
-      if (collateralBase <= 0n || principalBase <= 0n || feeBase <= 0n) return
 
-      if (Number(data.borrow) < MIN_PAYMENT_AMOUNT) {
+      const collateralBase = parsePolicyAssetCollateral(
+        ctx,
+        data.collateral,
+        collateralDenomination,
+        collateralAsset,
+        collateralUnit,
+      )
+      const principalBase = parseAmount(
+        ctx,
+        data.borrow,
+        'borrow',
+        principalDecimals,
+        `Borrow amount is below the minimum ${principalSymbol} unit`,
+      )
+      const feeBase = parseAmount(
+        ctx,
+        data.fee,
+        'fee',
+        principalDecimals,
+        `Fee is below the minimum ${principalSymbol} unit`,
+      )
+
+      if (collateralBase !== null) {
+        const collateralBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
+        if (utxos.length > 0 && collateralBalance < collateralBase + feeBudgetSats) {
+          ctx.addIssue({
+            code: zod.ZodIssueCode.custom,
+            path: ['collateral'],
+            message: 'Not enough confirmed Policy Asset UTXO balance for collateral and fees',
+          })
+        }
+      }
+
+      const borrowTooSmall = principalBase !== null && principalBase < minPaymentBase
+      const feeTooSmall = feeBase !== null && feeBase < minPaymentBase
+      if (borrowTooSmall) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: zod.ZodIssueCode.custom,
           path: ['borrow'],
           message: `Minimum borrow is ${MIN_PAYMENT_AMOUNT} ${principalSymbol}`,
         })
       }
-      if (Number(data.fee) < MIN_PAYMENT_AMOUNT) {
+      if (feeTooSmall) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: zod.ZodIssueCode.custom,
           path: ['fee'],
           message: `Minimum fee is ${MIN_PAYMENT_AMOUNT} ${principalSymbol}`,
         })
       }
-      if (Number(data.borrow) < MIN_PAYMENT_AMOUNT || Number(data.fee) < MIN_PAYMENT_AMOUNT) return
+
+      if (collateralBase === null || principalBase === null || feeBase === null) return
+      if (borrowTooSmall || feeTooSmall) return
 
       const feeBps = feeToBps(feeBase, principalBase)
       if (feeBps > MAX_INTEREST_RATE_BPS) {
         const maxFeeBase = (principalBase * BigInt(MAX_INTEREST_RATE_BPS + 1) - 1n) / BPS_DIVISOR
         const maxFee = `${formatAmount(maxFeeBase, principalDecimals)} ${principalSymbol}`
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: zod.ZodIssueCode.custom,
           path: ['fee'],
           message:
             `Fee is too high. Max fee for this borrow amount is ${maxFee} ` +
@@ -170,24 +223,15 @@ function createBorrowOfferSchema({
       })
       if (ltv !== null && ltv > MAX_LTV) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: zod.ZodIssueCode.custom,
           path: ['borrow'],
           message: `LTV ${(ltv * 100).toFixed(1)}% exceeds maximum ${(MAX_LTV * 100).toFixed(0)}%`,
-        })
-      }
-
-      const collateralBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
-      if (utxos.length > 0 && collateralBalance < collateralBase + feeBudgetSats) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['collateral'],
-          message: 'Not enough Policy Asset UTXO balance for collateral and fees',
         })
       }
     })
 }
 
-type CreateBorrowOfferValues = z.infer<ReturnType<typeof createBorrowOfferSchema>>
+type CreateBorrowOfferValues = zod.infer<ReturnType<typeof createBorrowOfferSchema>>
 
 interface CreateBorrowOfferModalProps {
   isOpen: boolean
@@ -249,6 +293,7 @@ export default function CreateBorrowOfferModal({
     setValue,
   } = useForm<CreateBorrowOfferValues>({
     resolver,
+    mode: 'all',
     defaultValues: { collateral: '', borrow: '', fee: '', termDays: undefined },
   })
 

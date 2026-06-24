@@ -10,7 +10,7 @@ export type TxStatus = 'processing' | 'confirmed' | 'finalized'
 export function useTxStatus(
   txid?: string | null,
   pollIntervalMs = 15_000,
-): { status: TxStatus | null; confirmations: number | null } {
+): { status: TxStatus | null; confirmations: number | null; isComplete: boolean } {
   const { data } = useQuery({
     queryKey: ['tx-status', txid],
     enabled: Boolean(txid),
@@ -35,5 +35,8 @@ export function useTxStatus(
     },
   })
 
-  return data ?? { status: null, confirmations: null }
+  const status = data?.status ?? null
+  const confirmations = data?.confirmations ?? null
+  const isComplete = status === 'confirmed' || status === 'finalized'
+  return { status, confirmations, isComplete }
 }

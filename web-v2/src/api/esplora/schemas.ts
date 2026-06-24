@@ -1,104 +1,104 @@
-import { z } from 'zod'
+import { z as zod } from 'zod'
 
-export const txStatusSchema = z.object({
-  confirmed: z.boolean(),
-  block_height: z.number().optional(),
-  block_hash: z.string().optional(),
-  block_time: z.number().optional(),
+export const txStatusSchema = zod.object({
+  confirmed: zod.boolean(),
+  block_height: zod.number().optional(),
+  block_hash: zod.string().optional(),
+  block_time: zod.number().optional(),
 })
-export type TxStatus = z.infer<typeof txStatusSchema>
+export type TxStatus = zod.infer<typeof txStatusSchema>
 
-export const chainOrMempoolStatsSchema = z
+export const chainOrMempoolStatsSchema = zod
   .object({
-    tx_count: z.number(),
-    funded_txo_count: z.number(),
-    funded_txo_sum: z.number().optional(),
-    spent_txo_count: z.number(),
-    spent_txo_sum: z.number().optional(),
+    tx_count: zod.number(),
+    funded_txo_count: zod.number(),
+    funded_txo_sum: zod.number().optional(),
+    spent_txo_count: zod.number(),
+    spent_txo_sum: zod.number().optional(),
   })
   .passthrough()
-export type ChainOrMempoolStats = z.infer<typeof chainOrMempoolStatsSchema>
+export type ChainOrMempoolStats = zod.infer<typeof chainOrMempoolStatsSchema>
 
-export const addressInfoSchema = z
+export const addressInfoSchema = zod
   .object({
-    address: z.string(),
+    address: zod.string(),
     chain_stats: chainOrMempoolStatsSchema,
     mempool_stats: chainOrMempoolStatsSchema,
   })
   .passthrough()
-export type AddressInfo = z.infer<typeof addressInfoSchema>
+export type AddressInfo = zod.infer<typeof addressInfoSchema>
 
-export const scriptHashUtxoEntrySchema = z
+export const scriptHashUtxoEntrySchema = zod
   .object({
-    txid: z.string(),
-    vout: z.number(),
-    value: z.number().optional(),
-    valuecommitment: z.string().optional(),
-    asset: z.string().optional(),
-    assetcommitment: z.string().optional(),
-    nonce: z.string().optional(),
-    noncecommitment: z.string().optional(),
+    txid: zod.string(),
+    vout: zod.number(),
+    value: zod.number().optional(),
+    valuecommitment: zod.string().optional(),
+    asset: zod.string().optional(),
+    assetcommitment: zod.string().optional(),
+    nonce: zod.string().optional(),
+    noncecommitment: zod.string().optional(),
     status: txStatusSchema,
   })
   .passthrough()
-export type ScriptHashUtxoEntry = z.infer<typeof scriptHashUtxoEntrySchema>
+export type ScriptHashUtxoEntry = zod.infer<typeof scriptHashUtxoEntrySchema>
 
-export const scriptHashTxEntrySchema = z
+export const scriptHashTxEntrySchema = zod
   .object({
-    txid: z.string(),
+    txid: zod.string(),
     status: txStatusSchema,
   })
   .passthrough()
-export type ScriptHashTxEntry = z.infer<typeof scriptHashTxEntrySchema>
+export type ScriptHashTxEntry = zod.infer<typeof scriptHashTxEntrySchema>
 
-export const esploraVoutSchema = z
+export const esploraVoutSchema = zod
   .object({
-    scriptpubkey: z.string().optional(),
-    scriptpubkey_hex: z.string().optional(),
-    value: z.number().optional(),
-    asset: z.string().optional(),
+    scriptpubkey: zod.string().optional(),
+    scriptpubkey_hex: zod.string().optional(),
+    value: zod.number().optional(),
+    asset: zod.string().optional(),
   })
   .passthrough()
-export type EsploraVout = z.infer<typeof esploraVoutSchema>
+export type EsploraVout = zod.infer<typeof esploraVoutSchema>
 
-export const esploraVinSchema = z
+export const esploraVinSchema = zod
   .object({
-    txid: z.string().optional(),
-    vout: z.number().optional(),
-    is_coinbase: z.boolean().optional(),
+    txid: zod.string().optional(),
+    vout: zod.number().optional(),
+    is_coinbase: zod.boolean().optional(),
   })
   .passthrough()
-export type EsploraVin = z.infer<typeof esploraVinSchema>
+export type EsploraVin = zod.infer<typeof esploraVinSchema>
 
-export const esploraTxSchema = z
+export const esploraTxSchema = zod
   .object({
-    txid: z.string(),
-    vout: z.array(esploraVoutSchema),
-    vin: z.array(esploraVinSchema).optional(),
+    txid: zod.string(),
+    vout: zod.array(esploraVoutSchema),
+    vin: zod.array(esploraVinSchema).optional(),
     status: txStatusSchema.optional(),
   })
   .passthrough()
-export type EsploraTx = z.infer<typeof esploraTxSchema>
+export type EsploraTx = zod.infer<typeof esploraTxSchema>
 
-export const esploraOutspendSchema = z
+export const esploraOutspendSchema = zod
   .object({
-    spent: z.boolean(),
-    txid: z.string().optional(),
-    vin: z.number().optional(),
+    spent: zod.boolean(),
+    txid: zod.string().optional(),
+    vin: zod.number().optional(),
     status: txStatusSchema.optional(),
   })
   .passthrough()
-export type EsploraOutspend = z.infer<typeof esploraOutspendSchema>
+export type EsploraOutspend = zod.infer<typeof esploraOutspendSchema>
 
-export const txIdListSchema = z.array(z.string())
-export const scriptHashUtxoListSchema = z.array(scriptHashUtxoEntrySchema)
-export const scriptHashTxListSchema = z.array(scriptHashTxEntrySchema)
-export const esploraOutspendListSchema = z.array(esploraOutspendSchema)
+export const txIdListSchema = zod.array(zod.string())
+export const scriptHashUtxoListSchema = zod.array(scriptHashUtxoEntrySchema)
+export const scriptHashTxListSchema = zod.array(scriptHashTxEntrySchema)
+export const esploraOutspendListSchema = zod.array(esploraOutspendSchema)
 
-export const blockHeightTextSchema = z
+export const blockHeightTextSchema = zod
   .string()
   .regex(/^\d+$/, 'block height must be a positive integer string')
   .transform(value => Number.parseInt(value, 10))
 
-export const feeEstimatesSchema = z.record(z.string(), z.number())
-export type FeeEstimates = z.infer<typeof feeEstimatesSchema>
+export const feeEstimatesSchema = zod.record(zod.string(), zod.number())
+export type FeeEstimates = zod.infer<typeof feeEstimatesSchema>

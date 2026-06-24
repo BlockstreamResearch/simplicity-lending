@@ -39,23 +39,35 @@ export default function UserOverview({
           return (
             <div
               key={tile.label}
-              className='bg-surface-secondary flex flex-col gap-3 rounded-3xl p-6'
+              className='bg-surface-secondary flex flex-col gap-3 rounded-3xl p-4 sm:p-6'
             >
               <h3 className='text-muted text-h4'>{tile.label}</h3>
               {isLoading ? (
                 <Skeleton className='h-8 w-20 rounded-lg' />
               ) : (
                 <div className='flex flex-col gap-1'>
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='text-display'>{tile.value}</span>
+                  <div className='flex items-center gap-2'>
+                    <span
+                      title={tile.value}
+                      className='min-w-0 truncate text-2xl font-bold sm:text-display'
+                    >
+                      {tile.value}
+                    </span>
                     {tile.asset && Icon && (
-                      <span className='inline-flex items-center gap-1.5 text-sm font-medium'>
+                      <span className='inline-flex shrink-0 items-center gap-1.5 text-sm font-medium'>
                         <Icon className='size-4' />
                         {unit}
                       </span>
                     )}
                   </div>
-                  {tile.asset && <span className='text-muted text-xs'>{tile.usdValue ?? '—'}</span>}
+                  {tile.asset && (
+                    <span
+                      title={tile.usdValue ?? undefined}
+                      className='text-muted truncate text-xs'
+                    >
+                      {tile.usdValue ?? '—'}
+                    </span>
+                  )}
                 </div>
               )}
             </div>

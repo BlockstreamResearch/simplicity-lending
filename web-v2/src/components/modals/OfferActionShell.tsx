@@ -9,6 +9,7 @@ import {
 import { UiButton, type UiButtonProps } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
+import { useTxStatus } from '@/hooks/useTxStatus'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
 export interface OfferAction {
@@ -71,6 +72,11 @@ export default function OfferActionShell({
   const view = useFreezeViewWhileOpen(isOpen, deriveView(action))
 
   const isProcessing = action?.status === 'pending'
+  const {
+    status: txStatus,
+    confirmations,
+    isComplete,
+  } = useTxStatus(action?.status === 'success' ? action.txid : null)
 
   const handleOpenChange = (open: boolean) => {
     if (open) return
@@ -88,7 +94,11 @@ export default function OfferActionShell({
       size='lg'
       title={
         view.isTxActive ? (
-          <TransactionStatusTitle status={view.status} eyebrow={view.eyebrow} />
+          <TransactionStatusTitle
+            status={view.status}
+            eyebrow={view.eyebrow}
+            isComplete={isComplete}
+          />
         ) : (
           <span className='flex items-center gap-3'>
             {title}
@@ -124,6 +134,8 @@ export default function OfferActionShell({
           summary={view.summary}
           txid={view.txid}
           errorMessage={view.error}
+          txStatus={txStatus}
+          confirmations={confirmations}
         />
       ) : (
         children

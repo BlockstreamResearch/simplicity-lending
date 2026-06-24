@@ -1,11 +1,16 @@
 import { Table, Tooltip } from '@heroui/react'
+import type { SortDescriptor } from '@heroui/react/rac'
 import type { Key } from 'react'
 import { useCallback, useState } from 'react'
 
-import type { OfferShort } from '@/api/indexer/schemas'
+import type { SortField } from '@/api/indexer/methods'
+import type { OfferShort, OfferStatus } from '@/api/indexer/schemas'
+import ChevronDownIcon from '@/components/icons/ChevronDownIcon'
+import ChevronsExpandVerticalIcon from '@/components/icons/ChevronsExpandVerticalIcon'
 import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import OfferActionModal from '@/components/modals/OfferActionModal'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
+import { OfferStatusFilter } from '@/components/OfferStatusFilter'
 import { UiPagination } from '@/components/ui/UiPagination'
 import type { ConfigAsset } from '@/constants/network-config'
 import { NETWORK_CONFIG } from '@/constants/network-config'
@@ -27,6 +32,54 @@ const SEVERITY_COLOR = {
   warning: 'text-warning',
 } as const
 
+type SortDirection = SortDescriptor['direction']
+
+function SortIndicator({ direction }: { direction?: SortDirection }) {
+  if (!direction) return <ChevronsExpandVerticalIcon className='text-muted size-3' />
+  return <ChevronDownIcon className={`size-3 ${direction === 'ascending' ? 'rotate-180' : ''}`} />
+}
+
+function SortableColumn({
+  id,
+  label,
+  sortable,
+}: {
+  id: SortField
+  label: string
+  sortable: boolean
+}) {
+  return (
+    <Table.Column id={id} allowsSorting={sortable}>
+      {sortable
+        ? ({ sortDirection }) => (
+            <span className='inline-flex items-center gap-1'>
+              {label}
+              <SortIndicator direction={sortDirection} />
+            </span>
+          )
+        : label}
+    </Table.Column>
+  )
+}
+
+function StatusColumn({
+  filter,
+  onChange,
+}: {
+  filter?: OfferStatus[]
+  onChange?: (next: OfferStatus[]) => void
+}) {
+  return (
+    <Table.Column id='status'>
+      {onChange ? <OfferStatusFilter value={filter ?? []} onChange={onChange} /> : 'Status'}
+    </Table.Column>
+  )
+}
+
+function EmptyOffers() {
+  return <div className='text-muted py-10 text-center text-sm'>No matching offers</div>
+}
+
 interface OffersTableProps<T extends OfferShort> {
   offers: T[]
   currentBlockHeight: number
@@ -36,6 +89,10 @@ interface OffersTableProps<T extends OfferShort> {
   pageCount?: number
   onPageChange?: (page: number) => void
   onActionSuccess?: () => void
+  sort?: SortDescriptor
+  onSortChange?: (sort?: SortDescriptor) => void
+  statusFilter?: OfferStatus[]
+  onStatusFilterChange?: (next: OfferStatus[]) => void
 }
 
 export default function OffersTable<T extends OfferShort>({
@@ -47,6 +104,10 @@ export default function OffersTable<T extends OfferShort>({
   pageCount,
   onPageChange,
   onActionSuccess,
+  sort,
+  onSortChange,
+  statusFilter,
+  onStatusFilterChange,
 }: OffersTableProps<T>) {
   const { scriptPubkey } = useWallet()
   const { pendingTxs } = usePendingTransactions()
@@ -91,20 +152,40 @@ export default function OffersTable<T extends OfferShort>({
     }
   }
 
+  const handleSortChange = (descriptor: SortDescriptor) => {
+    if (!onSortChange) return
+    if (sort?.column !== descriptor.column) {
+      onSortChange({ column: descriptor.column, direction: 'descending' })
+    } else if (sort.direction === 'descending') {
+      onSortChange({ column: descriptor.column, direction: 'ascending' })
+    } else {
+      onSortChange(undefined)
+    }
+  }
+
   return (
     <>
       <Table variant='secondary'>
         <Table.ScrollContainer>
-          <Table.Content aria-label='Borrow Offers' onRowAction={handleRowAction}>
+          <Table.Content
+            aria-label='Offers'
+            onRowAction={handleRowAction}
+            sortDescriptor={sort}
+            onSortChange={onSortChange ? handleSortChange : undefined}
+          >
             <Table.Header>
-              <Table.Column isRowHeader className='w-44 min-w-44'>
+              <Table.Column id='collateral' isRowHeader className='w-44 min-w-44'>
                 Collateral ({collateralUnit})
               </Table.Column>
-              <Table.Column>Loan Amount ({principalAsset.symbol})</Table.Column>
-              <Table.Column>Earn ({principalAsset.symbol})</Table.Column>
-              <Table.Column>APR (%)</Table.Column>
-              <Table.Column>Term Left</Table.Column>
-              <Table.Column className='min-w-36'>Status</Table.Column>
+              <Table.Column id='loan_amount'>Loan Amount ({principalAsset.symbol})</Table.Column>
+              <Table.Column id='earn'>Earn ({principalAsset.symbol})</Table.Column>
+              <SortableColumn id='interest_rate' label='APR (%)' sortable={!!onSortChange} />
+              <SortableColumn
+                id='loan_expiration_height'
+                label='Term Left'
+                sortable={!!onSortChange}
+              />
+              <StatusColumn filter={statusFilter} onChange={onStatusFilterChange} />
             </Table.Header>
             <Table.Body
               items={offers}
@@ -116,6 +197,7 @@ export default function OffersTable<T extends OfferShort>({
                 denomination,
                 collateralAsset,
               ]}
+              renderEmptyState={EmptyOffers}
             >
               {offer => {
                 const isProcessing = Boolean(getOfferPendingTx(offer.id, pendingTxs))
@@ -163,7 +245,7 @@ export default function OffersTable<T extends OfferShort>({
             </Table.Body>
           </Table.Content>
         </Table.ScrollContainer>
-        {page !== undefined && pageCount !== undefined && onPageChange !== undefined && (
+        {page && pageCount && pageCount > 1 && onPageChange && (
           <Table.Footer className='pr-2 pl-4'>
             <UiPagination currentPage={page} onPageChange={onPageChange} pageCount={pageCount} />
           </Table.Footer>

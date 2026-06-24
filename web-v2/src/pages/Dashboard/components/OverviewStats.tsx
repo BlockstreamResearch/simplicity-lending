@@ -65,23 +65,32 @@ export default function OverviewStats() {
         return (
           <div
             key={stat.label}
-            className='bg-surface-secondary flex flex-col gap-3 rounded-2xl p-6'
+            className='bg-surface-secondary flex flex-col gap-3 rounded-2xl p-4 sm:p-6'
           >
             <h3 className='text-muted text-h4'>{stat.label}</h3>
             {isLoading ? (
               <Skeleton className='h-8 w-24 rounded-lg' />
             ) : (
               <div className='flex flex-col gap-1'>
-                <div className='flex items-center justify-between gap-2'>
-                  <span className='text-display'>{stat.value}</span>
+                <div className='flex items-center gap-2'>
+                  <span
+                    title={stat.value}
+                    className='min-w-0 truncate text-2xl font-bold sm:text-display'
+                  >
+                    {stat.value}
+                  </span>
                   {stat.asset && Icon && (
-                    <span className='inline-flex items-center gap-1.5 text-sm font-medium'>
+                    <span className='inline-flex shrink-0 items-center gap-1.5 text-sm font-medium'>
                       <Icon className='size-4' />
                       {unit}
                     </span>
                   )}
                 </div>
-                {stat.asset && <span className='text-muted text-xs'>{stat.usdValue ?? '—'}</span>}
+                {stat.asset && (
+                  <span title={stat.usdValue ?? undefined} className='text-muted truncate text-xs'>
+                    {stat.usdValue ?? '—'}
+                  </span>
+                )}
               </div>
             )}
           </div>

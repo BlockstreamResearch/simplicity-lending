@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z as zod } from 'zod'
 
 function coerceToBigint(value: unknown): unknown {
   if (value === null || value === undefined) return 0n
@@ -15,11 +15,11 @@ function coerceToNumber(value: unknown): unknown {
   return value
 }
 
-export const u64AsBigint = z.preprocess(coerceToBigint, z.bigint())
+export const u64AsBigint = zod.preprocess(coerceToBigint, zod.bigint())
 
-export const blockHeightSchema = z.preprocess(
+export const blockHeightSchema = zod.preprocess(
   coerceToNumber,
-  z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  zod.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
 )
 
-export const finiteNumber = z.coerce.number().refine(Number.isFinite, 'must be finite')
+export const finiteNumber = zod.coerce.number().refine(Number.isFinite, 'must be finite')

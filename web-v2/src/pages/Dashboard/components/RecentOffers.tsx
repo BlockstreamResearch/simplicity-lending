@@ -1,18 +1,18 @@
 import { Skeleton } from '@heroui/react'
 import { keepPreviousData } from '@tanstack/react-query'
-import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffers } from '@/api/indexer/hooks'
 import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
+import { useOfferListControls } from '@/hooks/useOfferListControls'
 
 import { DASHBOARD_TABLE_PAGE_SIZE } from '../constants'
 
 export function RecentOffers() {
-  const [page, setPage] = useState(1)
-  const offset = (page - 1) * DASHBOARD_TABLE_PAGE_SIZE
+  const { page, setPage, params, sort, setSort, statusFilter, setStatusFilter } =
+    useOfferListControls({ pageSize: DASHBOARD_TABLE_PAGE_SIZE })
 
   const {
     data: offersData,
@@ -20,7 +20,7 @@ export function RecentOffers() {
     isFetching,
     error,
     refetch: refetchOffers,
-  } = useOffers({ limit: DASHBOARD_TABLE_PAGE_SIZE, offset }, { placeholderData: keepPreviousData })
+  } = useOffers(params, { placeholderData: keepPreviousData })
   const { data: currentBlockHeight, refetch: refetchBlockHeight } = useBlockHeight()
 
   const offers = offersData?.items ?? []
@@ -60,7 +60,7 @@ export function RecentOffers() {
             Retry
           </UiButton>
         </div>
-      ) : offers.length === 0 ? (
+      ) : offers.length === 0 && !statusFilter.length ? (
         <p className='text-muted py-10 text-center text-sm'>No offers found</p>
       ) : (
         <OffersTable
@@ -70,6 +70,10 @@ export function RecentOffers() {
           pageCount={pageCount}
           onPageChange={setPage}
           onActionSuccess={handleRetry}
+          sort={sort}
+          onSortChange={setSort}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
         />
       )}
     </div>

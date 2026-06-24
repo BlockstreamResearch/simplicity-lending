@@ -1,16 +1,16 @@
-import { z } from 'zod'
+import { z as zod } from 'zod'
 
-const envSchema = z.object({
-  VITE_API_URL: z.string().url().default('http://localhost:8000'),
-  DEV: z.boolean().default(false),
-  PROD: z.boolean().default(false),
-  VITE_ESPLORA_BASE_URL: z.string().url().default('https://blockstream.info/liquid'),
-  VITE_NETWORK: z.enum(['liquid', 'liquidtestnet', 'regtest']).default('liquid'),
-  VITE_WATERFALLS_URL: z.string().url(),
-  VITE_WATERFALLS_RECIPIENT: z
+const envSchema = zod.object({
+  VITE_API_URL: zod.string().url().default('http://localhost:8000'),
+  DEV: zod.boolean().default(false),
+  PROD: zod.boolean().default(false),
+  VITE_ESPLORA_BASE_URL: zod.string().url().default('https://blockstream.info/liquid'),
+  VITE_NETWORK: zod.enum(['liquid', 'liquidtestnet', 'regtest']).default('liquid'),
+  VITE_WATERFALLS_URL: zod.string().url(),
+  VITE_WATERFALLS_RECIPIENT: zod
     .string()
     .default('age1xxzrgrfjm3yrwh3u6a7exgrldked0pdauvr3mx870wl6xzrwm5ps8s2h0p'),
-  VITE_DEBUG_MNEMONIC: z.string().optional().default(''),
+  VITE_DEBUG_MNEMONIC: zod.string().optional().default(''),
 })
 
 export const env = envSchema.parse({
@@ -24,6 +24,6 @@ export const env = envSchema.parse({
   VITE_DEBUG_MNEMONIC: import.meta.env.VITE_DEBUG_MNEMONIC,
 })
 
-export type AppEnv = z.infer<typeof envSchema>
+export type AppEnv = zod.infer<typeof envSchema>
 
 export type NetworkName = AppEnv['VITE_NETWORK']

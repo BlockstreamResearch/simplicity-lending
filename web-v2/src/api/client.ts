@@ -1,5 +1,5 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios'
-import type { z } from 'zod'
+import type { z as zod } from 'zod'
 
 import { ErrorHandler } from '@/utils/errorHandler'
 
@@ -41,11 +41,11 @@ function safeStringify(data: unknown): string {
   }
 }
 
-function parseWithSchema<Schema extends z.ZodTypeAny>(
+function parseWithSchema<Schema extends zod.ZodTypeAny>(
   data: unknown,
   schema: Schema,
   url: string,
-): z.output<Schema> {
+): zod.output<Schema> {
   const parsed = schema.safeParse(data)
   if (!parsed.success) {
     const validationError = new ApiValidationError(
@@ -58,30 +58,30 @@ function parseWithSchema<Schema extends z.ZodTypeAny>(
   return parsed.data
 }
 
-function isZodSchema(value: unknown): value is z.ZodTypeAny {
+function isZodSchema(value: unknown): value is zod.ZodTypeAny {
   return typeof (value as { safeParse?: unknown } | undefined)?.safeParse === 'function'
 }
 
-export async function requestJson<Schema extends z.ZodTypeAny>(
+export async function requestJson<Schema extends zod.ZodTypeAny>(
   url: string,
   schema: Schema,
   config?: AxiosRequestConfig,
-): Promise<z.output<Schema>> {
+): Promise<zod.output<Schema>> {
   const { data } = await apiClient.request<unknown>({ ...config, url })
   return parseWithSchema(data, schema, url)
 }
 
 export function requestText(url: string, config?: AxiosRequestConfig): Promise<string>
-export function requestText<Schema extends z.ZodTypeAny>(
+export function requestText<Schema extends zod.ZodTypeAny>(
   url: string,
   schema: Schema,
   config?: AxiosRequestConfig,
-): Promise<z.output<Schema>>
-export async function requestText<Schema extends z.ZodTypeAny>(
+): Promise<zod.output<Schema>>
+export async function requestText<Schema extends zod.ZodTypeAny>(
   url: string,
   schemaOrConfig?: Schema | AxiosRequestConfig,
   maybeConfig?: AxiosRequestConfig,
-): Promise<string | z.output<Schema>> {
+): Promise<string | zod.output<Schema>> {
   const schema = isZodSchema(schemaOrConfig) ? schemaOrConfig : undefined
   const config = schema ? maybeConfig : (schemaOrConfig as AxiosRequestConfig | undefined)
   const { data } = await apiClient.request<string>({ ...config, url, responseType: 'text' })

@@ -1,13 +1,13 @@
-import { Spinner } from '@heroui/react'
+import { Spinner, Toast } from '@heroui/react'
 import type { MutationStatus } from '@tanstack/react-query'
-import { type ReactNode, useMemo } from 'react'
+import { type ReactNode, useEffect, useMemo } from 'react'
 
 import { getTxExplorerUrl } from '@/api/esplora/utils'
 import CheckIcon from '@/components/icons/CheckIcon'
 import CircleExclamationIcon from '@/components/icons/CircleExclamationIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
-import { useTxStatus } from '@/hooks/useTxStatus'
+import { type TxStatus, useTxStatus } from '@/hooks/useTxStatus'
 import { truncateAddress } from '@/utils/format'
 
 export interface TransactionSummaryRow {
@@ -25,15 +25,8 @@ interface TransactionModalProps {
   onClose: () => void
 }
 
-const TITLE: Record<MutationStatus, string> = {
-  idle: 'Transaction not started',
-  pending: 'Processing Transaction…',
-  success: 'Transaction Complete',
-  error: 'Transaction Failed',
-}
-
-function StatusIcon({ status }: { status: MutationStatus }) {
-  if (status === 'success') {
+function StatusIcon({ status, isComplete }: { status: MutationStatus; isComplete: boolean }) {
+  if (isComplete) {
     return (
       <span className='bg-success/15 text-success flex size-10 items-center justify-center rounded-full'>
         <CheckIcon className='size-5' />
@@ -54,19 +47,27 @@ function StatusIcon({ status }: { status: MutationStatus }) {
   )
 }
 
+function statusTitle(status: MutationStatus, isComplete: boolean): string {
+  if (isComplete) return 'Transaction Complete'
+  if (status === 'error') return 'Transaction Failed'
+  return status === 'pending' ? 'Processing Transaction…' : 'Transaction Pending…'
+}
+
 export function TransactionStatusTitle({
   status,
   eyebrow,
+  isComplete,
 }: {
   status: MutationStatus
   eyebrow: string
+  isComplete: boolean
 }) {
   return (
     <span className='flex items-center gap-3'>
-      <StatusIcon status={status} />
+      <StatusIcon status={status} isComplete={isComplete} />
       <span className='flex flex-col'>
         <span className='text-sm font-normal'>{eyebrow}</span>
-        <span>{TITLE[status]}</span>
+        <span>{statusTitle(status, isComplete)}</span>
       </span>
     </span>
   )
@@ -77,6 +78,18 @@ interface TransactionBodyProps {
   summary?: TransactionSummaryRow[]
   txid?: string | null
   errorMessage?: string | null
+  txStatus: TxStatus | null
+  confirmations: number | null
+}
+
+function notifyTxConfirmed(txid: string, confirmations: number) {
+  Toast.toast.success('Transaction Confirmed', {
+    description: `${confirmations} confirmation${confirmations !== 1 ? 's' : ''} received.`,
+    actionProps: {
+      children: 'View',
+      onPress: () => window.open(getTxExplorerUrl(txid), '_blank', 'noopener'),
+    },
+  })
 }
 
 export function TransactionBody({
@@ -84,8 +97,14 @@ export function TransactionBody({
   summary = [],
   txid,
   errorMessage,
+  txStatus,
+  confirmations,
 }: TransactionBodyProps) {
-  const { status: txStatus, confirmations } = useTxStatus(txid)
+  useEffect(() => {
+    if (txid && txStatus === 'finalized' && confirmations !== null) {
+      notifyTxConfirmed(txid, confirmations)
+    }
+  }, [txStatus, txid, confirmations])
 
   const rows = useMemo<TransactionSummaryRow[]>(
     () => [
@@ -158,6 +177,11 @@ export default function TransactionModal({
   errorMessage,
   onClose,
 }: TransactionModalProps) {
+  const {
+    status: txStatus,
+    confirmations,
+    isComplete,
+  } = useTxStatus(status === 'success' ? txid : null)
   const isProcessing = status === 'pending'
 
   return (
@@ -169,14 +193,21 @@ export default function TransactionModal({
       isDismissable={!isProcessing}
       showCloseButton={!isProcessing}
       size='md'
-      title={<TransactionStatusTitle status={status} eyebrow={eyebrow} />}
+      title={<TransactionStatusTitle status={status} eyebrow={eyebrow} isComplete={isComplete} />}
       footer={
         <UiButton className='w-full' variant='primary' isDisabled={isProcessing} onPress={onClose}>
           {status === 'success' ? 'Done' : 'Close'}
         </UiButton>
       }
     >
-      <TransactionBody status={status} summary={summary} txid={txid} errorMessage={errorMessage} />
+      <TransactionBody
+        status={status}
+        summary={summary}
+        txid={txid}
+        errorMessage={errorMessage}
+        txStatus={txStatus}
+        confirmations={confirmations}
+      />
     </UiModal>
   )
 }

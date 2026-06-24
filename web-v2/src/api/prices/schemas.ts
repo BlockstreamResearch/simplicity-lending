@@ -1,10 +1,10 @@
-import { z } from 'zod'
+import { z as zod } from 'zod'
 
-export const liquidPricesResponseSchema = z.object({
-  count: z.number(),
-  currency: z.string(),
-  data: z.record(z.string(), z.string()),
+export const liquidPricesResponseSchema = zod.object({
+  count: zod.number(),
+  currency: zod.string(),
+  data: zod.record(zod.string(), zod.string()),
 })
-export type LiquidPricesResponse = z.infer<typeof liquidPricesResponseSchema>
+export type LiquidPricesResponse = zod.infer<typeof liquidPricesResponseSchema>
 
 export type AssetPricesUsd = Record<string, number>
