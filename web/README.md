@@ -1,38 +1,76 @@
-# Simplicity Lending — Web UI
+# Simplicity Lending Web
 
-Demo frontend for the Simplicity Lending protocol. Uses the [Indexer](../crates/indexer/README.md) REST API. See [repo root](../README.md) for full quick start.
+V2 frontend scaffold for the Simplicity Lending protocol.
 
 ## Prerequisites
 
-- Node.js 18+
-- [Indexer API](../crates/indexer/README.md) running (API mode, port 8000). The app uses `VITE_API_URL` (default `http://localhost:8000`); see `.env.example`.
+- Node.js 20.19+
+- pnpm 10+
 
-> [!NOTE]
-> `lwk_web` is a local file dependency. To build it: clone [Blockstream/lwk](https://github.com/Blockstream/lwk), then from the LWK repo run `cd lwk_wasm && RUSTFLAGS='--cfg web_sys_unstable_apis' wasm-pack build --target web --out-dir pkg_web --features simplicity,serial`. Update the `lwk_web` path in `package.json` to point to your `pkg_web` output directory.
+## Environment Variables
 
-## Setup
+Copy `.env.example` to `.env` and adjust as needed.
+
+- `VITE_API_URL` - Base URL for the indexer API.
+- `VITE_ESPLORA_BASE_URL` - Base URL for Esplora.
+- `VITE_NETWORK` - Network name (`liquid`, `liquidtestnet`, `regtest`).
+
+## Stack
+
+- Vite + React + TypeScript
+- Tailwind CSS v4 (token-ready theme scaffold)
+- HeroUI (`@heroui/react`)
+- React Router v7 (protected route stub)
+- React Query v5
+- Zod v3
+- ESLint + Prettier
+
+## Install
+
+> To build the LWK WASM module required by this app, see [docs/HOW_TO_BUILD_LWK_WASM.md](docs/HOW_TO_BUILD_LWK_WASM.md).
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## Run
 
-Start the Indexer API (see [crates/indexer/README.md](../crates/indexer/README.md); run from `crates/indexer` or repo root as documented there), then:
-
 ```bash
-npm run dev
+pnpm dev
 ```
 
-Open the URL shown (e.g. http://localhost:5173).
+## Add Icon
 
-## Scripts
+Generate a new icon component in `src/components/icons`.
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Dev server |
-| `npm run build` | Production build → `dist/` |
-| `npm run preview` | Preview production build |
-| `npm run lint` | ESLint |
-| `npm run format` / `npm run format:check` | Prettier |
-| `npm run test` | Vitest |
+Command:
+
+```bash
+pnpm add-icon <icon-name> "<svg>...</svg>"
+```
+
+Example:
+
+```bash
+pnpm add-icon coins "<svg viewBox='0 0 24 24'>...</svg>"
+```
+
+Notes:
+
+- If SVG content is omitted, the script reads SVG from your clipboard.
+- The generated component is normalized to use `currentColor` and saved as `<name>-icon.tsx`.
+
+## Lint
+
+```bash
+pnpm lint
+```
+
+## Docker
+
+Build and run from this directory:
+
+```bash
+docker build -t simplicity-web .
+docker run --rm -p 8080:80 simplicity-web
+```

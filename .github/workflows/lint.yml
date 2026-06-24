@@ -5,10 +5,10 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'web-v2/**'
+      - 'web/**'
   pull_request:
     paths-ignore:
-      - 'web-v2/**'
+      - 'web/**'
   workflow_call:
 
 permissions:

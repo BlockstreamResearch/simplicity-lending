@@ -1,9 +1,9 @@
 {
   "covenants": [
-    { "id": "p2pk", "path": "web/src/simplicity/sources/p2pk.simf" },
-    { "id": "pre_lock", "path": "crates/contracts/simf/pre_lock.simf" },
-    { "id": "lending", "path": "crates/contracts/simf/lending.simf" },
-    { "id": "asset_auth", "path": "crates/contracts/simf/asset_auth.simf" },
-    { "id": "script_auth", "path": "crates/contracts/simf/script_auth.simf" }
+    { "id": "lending", "path": "../crates/contracts/simf/lending.simf" },
+    { "id": "asset_auth", "path": "../crates/contracts/simf/asset_auth.simf" },
+    { "id": "asset_auth_vault", "path": "../crates/contracts/simf/asset_auth_vault.simf" },
+    { "id": "script_auth", "path": "../crates/contracts/simf/script_auth.simf" },
+    { "id": "issuance_factory", "path": "../crates/contracts/simf/issuance_factory.simf" }
   ]
 }
