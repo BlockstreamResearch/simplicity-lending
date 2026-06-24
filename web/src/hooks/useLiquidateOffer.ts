@@ -7,7 +7,7 @@ import {
   SimplicityLogLevel,
   TxBuilder,
   TxOutSecrets,
-} from 'lwk_web'
+} from '@lilbonekit/lwk-web'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'

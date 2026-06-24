@@ -1,4 +1,3 @@
-import { useQueryClient } from '@tanstack/react-query'
 import {
   Address,
   assetIdFromIssuance,
@@ -7,7 +6,8 @@ import {
   Script,
   TxBuilder,
   XOnlyPublicKey,
-} from 'lwk_web'
+} from '@lilbonekit/lwk-web'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'

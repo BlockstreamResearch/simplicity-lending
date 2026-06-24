@@ -1,4 +1,4 @@
-import type { Pset, Wollet, WolletDescriptor } from 'lwk_web'
+import type { Pset, Wollet, WolletDescriptor } from '@lilbonekit/lwk-web'
 
 import type { ConnectionStatus, WalletType } from '../types'
 

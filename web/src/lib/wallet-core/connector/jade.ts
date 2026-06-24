@@ -5,7 +5,7 @@ import {
   Singlesig,
   type Wollet,
   type WolletDescriptor,
-} from 'lwk_web'
+} from '@lilbonekit/lwk-web'
 
 import type { ConnectionStatus, JadeVersionInfo, WalletType } from '../types'
 import { DEFAULT_WALLET_TYPE } from '../types'

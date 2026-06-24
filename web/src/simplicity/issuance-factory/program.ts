@@ -4,7 +4,7 @@ import {
   SimplicityType,
   SimplicityTypedValue,
   SimplicityWitnessValues,
-} from 'lwk_web'
+} from '@lilbonekit/lwk-web'
 import { sources } from 'virtual:simplicity-sources'
 
 import type { Uint8, Uint32, Uint64 } from '@/utils/uint'
