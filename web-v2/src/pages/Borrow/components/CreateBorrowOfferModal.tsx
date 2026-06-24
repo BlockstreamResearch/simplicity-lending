@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
@@ -19,6 +19,7 @@ import { BPS_DIVISOR } from '@/constants/offers'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
 import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
+import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
 import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/types'
@@ -344,24 +345,12 @@ export default function CreateBorrowOfferModal({
   )
 
   const liveErrorMessage = error?.message
-  const [frozenView, setFrozenView] = useState({
+  const view = useFreezeViewWhileOpen(isOpen, {
     status,
     summary: txSummary,
     txid: data,
     errorMessage: liveErrorMessage,
   })
-  if (
-    isOpen &&
-    (frozenView.status !== status ||
-      frozenView.summary !== txSummary ||
-      frozenView.txid !== data ||
-      frozenView.errorMessage !== liveErrorMessage)
-  ) {
-    setFrozenView({ status, summary: txSummary, txid: data, errorMessage: liveErrorMessage })
-  }
-  const view = isOpen
-    ? { status, summary: txSummary, txid: data, errorMessage: liveErrorMessage }
-    : frozenView
 
   const handleClose = () => {
     if (data) addSurfaceToast(data)

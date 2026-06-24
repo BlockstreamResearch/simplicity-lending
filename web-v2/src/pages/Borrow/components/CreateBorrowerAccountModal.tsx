@@ -1,11 +1,11 @@
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
 
 import CircleDashedIcon from '@/components/icons/CircleDashedIcon'
 import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
 interface CreateBorrowerAccountModalProps {
@@ -34,20 +34,11 @@ export default function CreateBorrowerAccountModal({
 
   const liveTxid = data?.txid ?? null
   const liveErrorMessage = error?.message
-  const [frozenView, setFrozenView] = useState({
+  const view = useFreezeViewWhileOpen(isOpen, {
     status,
     txid: liveTxid,
     errorMessage: liveErrorMessage,
   })
-  if (
-    isOpen &&
-    (frozenView.status !== status ||
-      frozenView.txid !== liveTxid ||
-      frozenView.errorMessage !== liveErrorMessage)
-  ) {
-    setFrozenView({ status, txid: liveTxid, errorMessage: liveErrorMessage })
-  }
-  const view = isOpen ? { status, txid: liveTxid, errorMessage: liveErrorMessage } : frozenView
 
   const handleClose = () => {
     if (data?.txid) addSurfaceToast(data.txid)
