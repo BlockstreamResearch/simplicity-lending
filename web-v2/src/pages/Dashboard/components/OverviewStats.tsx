@@ -3,8 +3,11 @@ import { useMemo } from 'react'
 
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useOverview } from '@/hooks/useOverview'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { formatAmount, formatUsd } from '@/utils/format'
+import { getAssetUnit } from '@/utils/policyAssetDenomination'
 
 interface OverviewStat {
   label: string
@@ -16,6 +19,8 @@ interface OverviewStat {
 export default function OverviewStats() {
   const { overview, isLoading } = useOverview()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
+  const { denomination } = useAssetDenomination()
+  const { formatCollateralAmount } = useFormatAmount()
   const collateralPriceUsd = useAssetPriceUsd(collateralAsset.id)
   const principalPriceUsd = useAssetPriceUsd(principalAsset.id)
 
@@ -23,7 +28,7 @@ export default function OverviewStats() {
     () => [
       {
         label: 'Total Collateral Locked',
-        value: formatAmount(overview.totalCollateral, collateralAsset.decimals),
+        value: formatCollateralAmount(overview.totalCollateral),
         usdValue: formatUsd(overview.totalCollateral, collateralAsset.decimals, collateralPriceUsd),
         asset: collateralAsset,
       },
@@ -37,13 +42,21 @@ export default function OverviewStats() {
       { label: 'Average Interest Rate', value: '—' },
       { label: 'Number of Active Loans', value: String(overview.activeLoansCount) },
     ],
-    [overview, collateralAsset, principalAsset, collateralPriceUsd, principalPriceUsd],
+    [
+      overview,
+      collateralAsset,
+      principalAsset,
+      collateralPriceUsd,
+      principalPriceUsd,
+      formatCollateralAmount,
+    ],
   )
 
   return (
     <div className='grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6'>
       {stats.map(stat => {
         const Icon = stat.asset?.icon
+        const unit = stat.asset ? getAssetUnit(denomination, stat.asset) : undefined
         return (
           <div
             key={stat.label}
@@ -64,7 +77,7 @@ export default function OverviewStats() {
                   {stat.asset && Icon && (
                     <span className='inline-flex shrink-0 items-center gap-1.5 text-sm font-medium'>
                       <Icon className='size-4' />
-                      {stat.asset.symbol}
+                      {unit}
                     </span>
                   )}
                 </div>

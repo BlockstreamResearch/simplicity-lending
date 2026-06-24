@@ -9,6 +9,7 @@ import { resolveActiveOutpoint, resolveBorrowerNftOutpoint } from '@/api/indexer
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useRepayOffer } from '@/hooks/useRepayOffer'
 import {
   estimateFeeBudgetSats,
@@ -21,7 +22,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { truncateAddress } from '@/utils/format'
 import { calcInterest } from '@/utils/offers'
 
 const REPAY_WEIGHT_UNITS =
@@ -40,11 +41,12 @@ export default function RepayOfferModal({
   onClose,
   onSuccess,
 }: RepayOfferModalProps) {
-  const { collateralAsset, principalAsset } = NETWORK_CONFIG
+  const { principalAsset } = NETWORK_CONFIG
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { repayOffer } = useRepayOffer()
   const { addPendingTx } = usePendingTransactions()
+  const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
 
   const repayBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -103,24 +105,15 @@ export default function RepayOfferModal({
   const txSummary = useMemo(() => {
     const interest = calcInterest(offer.principal_amount, offer.interest_rate)
     return [
-      {
-        label: 'Principal',
-        value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
-      {
-        label: 'Interest',
-        value: `${formatAmount(interest, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
+      { label: 'Principal', value: formatPrincipalAmount(offer.principal_amount) },
+      { label: 'Interest', value: formatPrincipalAmount(interest) },
       {
         label: 'Total Repayment',
-        value: `${formatAmount(offer.principal_amount + interest, principalAsset.decimals)} ${principalAsset.symbol}`,
+        value: formatPrincipalAmount(offer.principal_amount + interest),
       },
-      {
-        label: 'Collateral Returned',
-        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
-      },
+      { label: 'Collateral Returned', value: formatCollateralDisplay(offer.collateral_amount) },
     ]
-  }, [offer, principalAsset, collateralAsset])
+  }, [offer, formatPrincipalAmount, formatCollateralDisplay])
 
   return (
     <OfferActionShell

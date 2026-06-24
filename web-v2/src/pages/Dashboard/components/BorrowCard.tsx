@@ -11,9 +11,10 @@ import { NETWORK_CONFIG } from '@/constants/network-config'
 import { REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/offers'
 import { RoutePath } from '@/constants/routes'
 import { useBorrowerStats } from '@/hooks/useBorrowerStats'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ErrorHandler } from '@/utils/errorHandler'
-import { formatAmount, formatUsd, truncateAddress } from '@/utils/format'
+import { formatUsd, truncateAddress } from '@/utils/format'
 import { getOfferTermLeft } from '@/utils/offers'
 
 import { AssetAmount } from './AssetAmount'
@@ -24,6 +25,8 @@ export function BorrowCard() {
   const navigate = useNavigate()
   const { balances, scriptPubkey } = useWallet()
   const { stats, isLoading, error, refetch } = useBorrowerStats()
+  const { collateralUnit, formatCollateralAmount, formatCollateralDisplay, formatPrincipalAmount } =
+    useFormatAmount()
   const offersQuery = useBorrowerOffers(scriptPubkey ?? '', { status: 'active', limit: 50 })
   const { data: currentBlockHeight } = useBlockHeight()
   const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)
@@ -50,9 +53,7 @@ export function BorrowCard() {
           </span>
           <h3 className='text-h3'>Your Borrows</h3>
         </div>
-        <p className='text-muted text-h4'>
-          Complete Balance {NETWORK_CONFIG.collateralAsset.symbol}
-        </p>
+        <p className='text-muted text-h4'>Complete Balance {collateralUnit}</p>
       </header>
 
       {isLoading ? (
@@ -60,10 +61,7 @@ export function BorrowCard() {
       ) : (
         <div className='flex flex-col gap-1'>
           <p className='text-display'>
-            <AssetAmount
-              value={formatAmount(balance, NETWORK_CONFIG.collateralAsset.decimals)}
-              unit={NETWORK_CONFIG.collateralAsset.symbol}
-            />
+            <AssetAmount value={formatCollateralAmount(balance)} unit={collateralUnit} />
           </p>
           <span className='text-muted text-xs'>{balanceUsd ?? '—'}</span>
         </div>
@@ -72,12 +70,12 @@ export function BorrowCard() {
       <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>
         <DataRow
           label='User Total Locked Collateral:'
-          value={`${formatAmount(stats.lockedCollateral, NETWORK_CONFIG.collateralAsset.decimals)} ${NETWORK_CONFIG.collateralAsset.symbol}`}
+          value={formatCollateralDisplay(stats.lockedCollateral)}
           isLoading={isLoading}
         />
         <DataRow
           label='Borrowings:'
-          value={`${formatAmount(stats.borrowings, NETWORK_CONFIG.principalAsset.decimals)} ${NETWORK_CONFIG.principalAsset.symbol}`}
+          value={formatPrincipalAmount(stats.borrowings)}
           isLoading={isLoading}
         />
         <DataRow label='Number of active loans:' value={stats.activeLoans} isLoading={isLoading} />

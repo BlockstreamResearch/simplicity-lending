@@ -8,8 +8,8 @@ import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
-import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useCancelOffer } from '@/hooks/useCancelOffer'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -21,7 +21,7 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { truncateAddress } from '@/utils/format'
 
 const CANCEL_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.OfferCancellation +
@@ -41,11 +41,11 @@ export default function CancelOfferModal({
   onClose,
   onSuccess,
 }: CancelOfferModalProps) {
-  const { collateralAsset } = NETWORK_CONFIG
   const { syncWallet, getBlindedWalletUtxos, getReceiveAddress, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { cancelOffer } = useCancelOffer()
   const { addPendingTx } = usePendingTransactions()
+  const { formatCollateralDisplay } = useFormatAmount()
 
   const cancelBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -97,12 +97,9 @@ export default function CancelOfferModal({
 
   const txSummary = useMemo(
     () => [
-      {
-        label: 'Collateral Returned',
-        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
-      },
+      { label: 'Collateral Returned', value: formatCollateralDisplay(offer.collateral_amount) },
     ],
-    [offer, collateralAsset],
+    [offer, formatCollateralDisplay],
   )
 
   return (

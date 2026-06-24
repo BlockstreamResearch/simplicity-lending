@@ -14,12 +14,18 @@ import { OfferStatusFilter } from '@/components/OfferStatusFilter'
 import { UiPagination } from '@/components/ui/UiPagination'
 import type { ConfigAsset } from '@/constants/network-config'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount } from '@/utils/format'
 import { resolveActorRole } from '@/utils/offerActions'
 import { bpsToPercent, calcInterest, formatOfferTermLeft } from '@/utils/offers'
 import { getOfferPendingTx } from '@/utils/pendingTransactions'
+import {
+  formatPolicyAssetAmount,
+  getAssetUnit,
+  isPolicyAsset,
+} from '@/utils/policyAssetDenomination'
 
 const SEVERITY_COLOR = {
   danger: 'text-danger',
@@ -105,6 +111,8 @@ export default function OffersTable<T extends OfferShort>({
 }: OffersTableProps<T>) {
   const { scriptPubkey } = useWallet()
   const { pendingTxs } = usePendingTransactions()
+  const { denomination } = useAssetDenomination()
+  const collateralUnit = getAssetUnit(denomination, collateralAsset)
 
   const resolveOfferWarning = useCallback(
     (offer: OfferShort): { severity: keyof typeof SEVERITY_COLOR; message: string } | null => {
@@ -164,8 +172,8 @@ export default function OffersTable<T extends OfferShort>({
             onSortChange={onSortChange ? handleSortChange : undefined}
           >
             <Table.Header>
-              <Table.Column id='collateral' isRowHeader>
-                Collateral ({collateralAsset.symbol})
+              <Table.Column id='collateral' isRowHeader className='w-44 min-w-44'>
+                Collateral ({collateralUnit})
               </Table.Column>
               <Table.Column id='loan_amount'>Loan Amount ({principalAsset.symbol})</Table.Column>
               <Table.Column id='earn'>Earn ({principalAsset.symbol})</Table.Column>
@@ -179,7 +187,14 @@ export default function OffersTable<T extends OfferShort>({
             </Table.Header>
             <Table.Body
               items={offers}
-              dependencies={[currentBlockHeight, scriptPubkey, resolveOfferWarning, pendingTxs]}
+              dependencies={[
+                currentBlockHeight,
+                scriptPubkey,
+                resolveOfferWarning,
+                pendingTxs,
+                denomination,
+                collateralAsset,
+              ]}
               renderEmptyState={EmptyOffers}
             >
               {offer => {
@@ -187,9 +202,15 @@ export default function OffersTable<T extends OfferShort>({
                 const warning = isProcessing ? null : resolveOfferWarning(offer)
                 return (
                   <Table.Row id={offer.id}>
-                    <Table.Cell>
-                      <span className='inline-flex items-center gap-1.5'>
-                        {formatAmount(offer.collateral_amount, collateralAsset.decimals)}
+                    <Table.Cell className='w-44 min-w-44'>
+                      <span className='inline-flex items-center gap-1.5 tabular-nums'>
+                        {isPolicyAsset(collateralAsset)
+                          ? formatPolicyAssetAmount(
+                              offer.collateral_amount,
+                              denomination,
+                              collateralAsset,
+                            )
+                          : formatAmount(offer.collateral_amount, collateralAsset.decimals)}
                         {warning && (
                           <Tooltip>
                             <Tooltip.Trigger

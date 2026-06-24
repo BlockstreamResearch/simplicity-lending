@@ -5,8 +5,9 @@ import type { OfferShort } from '@/api/indexer/schemas'
 import BalanceCard from '@/components/BalanceCard'
 import DetailsPanel, { type DetailRow } from '@/components/DetailsPanel'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { truncateAddress } from '@/utils/format'
 import { calcInterest, computeApr, formatOfferTermLeft } from '@/utils/offers'
 
 interface OfferDetailsBodyProps {
@@ -15,8 +16,9 @@ interface OfferDetailsBodyProps {
 }
 
 export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsBodyProps) {
-  const { collateralAsset, principalAsset } = NETWORK_CONFIG
+  const { principalAsset } = NETWORK_CONFIG
   const { balances } = useWallet()
+  const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
   const { data: currentBlockHeight } = useBlockHeight()
 
   const loanInfoRows = useMemo<DetailRow[]>(() => {
@@ -25,18 +27,9 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     const borrower = offer.participants.find(p => p.participant_type === 'borrower')
 
     const rows: DetailRow[] = [
-      {
-        label: 'Collateral Amount',
-        value: `${formatAmount(offer.collateral_amount, collateralAsset.decimals)} ${collateralAsset.symbol}`,
-      },
-      {
-        label: 'Loan Amount',
-        value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
-      {
-        label: 'Expected Earning',
-        value: `${formatAmount(interest, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
+      { label: 'Collateral Amount', value: formatCollateralDisplay(offer.collateral_amount) },
+      { label: 'Loan Amount', value: formatPrincipalAmount(offer.principal_amount) },
+      { label: 'Expected Earning', value: formatPrincipalAmount(interest) },
       { label: 'APR', value: `${computeApr(offer.interest_rate, loanDurationBlocks).toFixed(2)}%` },
     ]
 
@@ -45,7 +38,7 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     }
 
     return rows
-  }, [offer, collateralAsset, principalAsset])
+  }, [offer, formatCollateralDisplay, formatPrincipalAmount])
 
   const termRows = useMemo<DetailRow[]>(
     () => [

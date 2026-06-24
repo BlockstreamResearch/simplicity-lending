@@ -14,7 +14,7 @@ import { UiModal } from '@/components/ui/UiModal'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { env } from '@/constants/env'
-import { NETWORK_CONFIG } from '@/constants/network-config'
+import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
 import { BPS_DIVISOR } from '@/constants/offers'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
@@ -22,12 +22,19 @@ import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
 import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
+import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
+import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
 import { DECIMAL_AMOUNT_RE, formatAmount } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
+import {
+  formatPolicyAssetDisplay,
+  getPolicyAssetUnit,
+  parsePolicyAssetInput,
+} from '@/utils/policyAssetDenomination'
 import { selectByLargestFirst } from '@/utils/utxo'
 
 import LoanMetricsSummary from './LoanMetricsSummary'
@@ -46,7 +53,10 @@ const CREATE_OFFER_WEIGHT_UNITS =
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY + ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY.IssueAssets
 
 interface BorrowOfferContext {
+  collateralAsset: ConfigAsset
   collateralDecimals: number
+  collateralDenomination: PolicyAssetDenomination
+  collateralUnit: string
   principalDecimals: number
   principalSymbol: string
   collateralUsd: number | null
@@ -84,8 +94,39 @@ function parseAmount(
   return base
 }
 
+function parsePolicyAssetCollateral(
+  ctx: zod.RefinementCtx,
+  raw: string,
+  denomination: PolicyAssetDenomination,
+  asset: ConfigAsset,
+  unit: string,
+) {
+  const value = raw.trim()
+  const base = parsePolicyAssetInput(value, denomination, asset)
+  if (base === null) {
+    ctx.addIssue({
+      code: zod.ZodIssueCode.custom,
+      path: ['collateral'],
+      message: denomination === 'sats' ? `Enter a whole number of ${unit}` : 'Enter a valid amount',
+    })
+    return null
+  }
+  if (base <= 0n) {
+    ctx.addIssue({
+      code: zod.ZodIssueCode.custom,
+      path: ['collateral'],
+      message: `Enter a positive ${unit} amount`,
+    })
+    return null
+  }
+  return base
+}
+
 function createBorrowOfferSchema({
+  collateralAsset,
   collateralDecimals,
+  collateralDenomination,
+  collateralUnit,
   principalDecimals,
   principalSymbol,
   collateralUsd,
@@ -106,12 +147,12 @@ function createBorrowOfferSchema({
         ctx.addIssue({ code: zod.ZodIssueCode.custom, path: ['termDays'], message: 'Required' })
       }
 
-      const collateralBase = parseAmount(
+      const collateralBase = parsePolicyAssetCollateral(
         ctx,
         data.collateral,
-        'collateral',
-        collateralDecimals,
-        'Collateral is below the minimum asset unit',
+        collateralDenomination,
+        collateralAsset,
+        collateralUnit,
       )
       const principalBase = parseAmount(
         ctx,
@@ -204,6 +245,8 @@ export default function CreateBorrowOfferModal({
 }: CreateBorrowOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
   const { balances, scriptPubkey } = useWallet()
+  const { denomination } = useAssetDenomination()
+  const collateralUnit = getPolicyAssetUnit(denomination, collateralAsset)
   const collateralUsd = useAssetPriceUsd(collateralAsset.id)
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { factoryState, refetchFactory } = useBorrowerAccount()
@@ -217,7 +260,10 @@ export default function CreateBorrowOfferModal({
 
   const formContext = useMemo<BorrowOfferContext>(
     () => ({
+      collateralAsset,
       collateralDecimals: collateralAsset.decimals,
+      collateralDenomination: denomination,
+      collateralUnit,
       principalDecimals: principalAsset.decimals,
       principalSymbol: principalAsset.symbol,
       collateralUsd,
@@ -225,7 +271,9 @@ export default function CreateBorrowOfferModal({
       feeBudgetSats,
     }),
     [
-      collateralAsset.decimals,
+      collateralAsset,
+      denomination,
+      collateralUnit,
       principalAsset.decimals,
       principalAsset.symbol,
       collateralUsd,
@@ -248,7 +296,8 @@ export default function CreateBorrowOfferModal({
   })
 
   const values = useWatch({ control })
-  const collateralBase = toBigintAmount(values.collateral, collateralAsset.decimals)
+  const collateralBase =
+    parsePolicyAssetInput(values.collateral, denomination, collateralAsset) ?? 0n
   const principalBase = toBigintAmount(values.borrow, principalAsset.decimals)
   const feeBase = toBigintAmount(values.fee, principalAsset.decimals)
   const bps = feeToBps(feeBase, principalBase)
@@ -306,9 +355,12 @@ export default function CreateBorrowOfferModal({
   const txSummary = useMemo(
     () => [
       { label: 'Borrow', value: `${values.borrow || '0'} ${principalAsset.symbol}` },
-      { label: 'Collateral', value: `${values.collateral || '0'} ${collateralAsset.symbol}` },
+      {
+        label: 'Collateral',
+        value: formatPolicyAssetDisplay(collateralBase, denomination, collateralAsset),
+      },
     ],
-    [values.borrow, values.collateral, principalAsset.symbol, collateralAsset.symbol],
+    [values.borrow, principalAsset.symbol, collateralBase, denomination, collateralAsset],
   )
 
   const liveErrorMessage = error?.message
@@ -377,11 +429,11 @@ export default function CreateBorrowOfferModal({
           render={({ field, fieldState }) => (
             <UiTextField
               label={<UiFieldLabel required>Collateral</UiFieldLabel>}
-              placeholder='0.00'
+              placeholder={denomination === 'sats' ? '0' : '0.00'}
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
-              endContent={collateralAsset.symbol}
+              endContent={collateralUnit}
               errorMessage={fieldState.error?.message}
             />
           )}
