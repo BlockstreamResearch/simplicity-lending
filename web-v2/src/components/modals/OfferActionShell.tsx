@@ -1,5 +1,5 @@
 import type { MutationStatus } from '@tanstack/react-query'
-import { type ReactNode, useState } from 'react'
+import type { ReactNode } from 'react'
 
 import {
   TransactionBody,
@@ -8,6 +8,7 @@ import {
 } from '@/components/TransactionModal'
 import { UiButton, type UiButtonProps } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
+import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
 export interface OfferAction {
@@ -67,24 +68,7 @@ export default function OfferActionShell({
   children,
 }: OfferActionShellProps) {
   const { addSurfaceToast } = usePendingTransactions()
-  const liveView = deriveView(action)
-
-  // Closing a modal resets its mutation (status -> 'idle') synchronously, in the same tick as the
-  // close click — while the modal is still playing its exit animation. Without freezing, the
-  // title/body would flicker from the success screen to the idle form right as it closes. Keep
-  // mirroring the live view while open; once closed, keep rendering whatever was last shown.
-  const [frozenView, setFrozenView] = useState(liveView)
-  if (
-    isOpen &&
-    (frozenView.isTxActive !== liveView.isTxActive ||
-      frozenView.status !== liveView.status ||
-      frozenView.txid !== liveView.txid ||
-      frozenView.error !== liveView.error ||
-      frozenView.summary !== liveView.summary)
-  ) {
-    setFrozenView(liveView)
-  }
-  const view = isOpen ? liveView : frozenView
+  const view = useFreezeViewWhileOpen(isOpen, deriveView(action))
 
   const isProcessing = action?.status === 'pending'
 
