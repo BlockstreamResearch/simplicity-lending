@@ -1,0 +1,35 @@
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_BUILDKIT: 1
+  CI_DISPOSABLE_ENVIRONMENT: "true"
+  BACKEND_IMAGE: "${GAR}/simplicity-lending-backend"
+  WEB_IMAGE: "${GAR}/simplicity-lending-web"
+
+stages:
+  - build
+
+default:
+  image: ${CI_DEFAULT_IMAGE}
+  services:
+    - name: docker:27-dind
+      command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--mtu=1450"]
+      alias: docker
+  tags:
+    - cloud
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - unknown_failure
+      - stuck_or_timeout_failure
+
+## disables MR-triggered pipelines and allows only branch-triggered pipelines
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - when: always
+
+include:
+  - gitlab/**.yaml

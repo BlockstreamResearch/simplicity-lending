@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 import { useBlockHeight } from '@/api/esplora/hooks'
 import type { OfferShort } from '@/api/indexer/schemas'
 import AcceptOfferModal from '@/components/modals/AcceptOfferModal'
@@ -9,9 +11,11 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import RepayOfferModal from '@/components/modals/RepayOfferModal'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
 import { resolveOfferAction } from '@/utils/offerActions'
+import { getOfferPendingTx } from '@/utils/pendingTransactions'
 
 interface OfferActionModalProps {
   offer: OfferShort | null
@@ -28,8 +32,40 @@ export default function OfferActionModal({
 }: OfferActionModalProps) {
   const { scriptPubkey } = useWallet()
   const { data: currentBlockHeight } = useBlockHeight()
+  const { pendingTxs } = usePendingTransactions()
+
+  const isProcessingNow = Boolean(offer && getOfferPendingTx(offer.id, pendingTxs))
+
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
+  const [isProcessingAtOpen, setIsProcessingAtOpen] = useState(isProcessingNow)
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen)
+    if (isOpen) setIsProcessingAtOpen(isProcessingNow)
+  }
+
+  useEffect(() => {
+    if (isOpen && isProcessingAtOpen && !isProcessingNow) {
+      onClose()
+    }
+  }, [isOpen, isProcessingAtOpen, isProcessingNow, onClose])
 
   if (!offer) return null
+
+  if (isProcessingAtOpen) {
+    return (
+      <OfferActionShell
+        isOpen={isOpen}
+        title={`#${truncateAddress(offer.id)}`}
+        chip={<OfferStatusChip status={offer.status} isProcessing />}
+        onClose={onClose}
+      >
+        <p className='text-muted mb-4 text-sm'>
+          Transaction is processing. Actions are temporarily disabled.
+        </p>
+        <OfferDetailsBody offer={offer} />
+      </OfferActionShell>
+    )
+  }
 
   const action = resolveOfferAction(offer, scriptPubkey, currentBlockHeight)
 

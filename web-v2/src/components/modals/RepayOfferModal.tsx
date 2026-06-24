@@ -18,6 +18,7 @@ import {
   utxoToOutpointString,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { formatAmount, truncateAddress } from '@/utils/format'
@@ -40,9 +41,10 @@ export default function RepayOfferModal({
   onSuccess,
 }: RepayOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { repayOffer } = useRepayOffer()
+  const { addPendingTx } = usePendingTransactions()
 
   const repayBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -84,7 +86,19 @@ export default function RepayOfferModal({
     })
   }
 
-  const { mutate, reset, data, error, status } = useMutation({ mutationFn: repayBorrowOffer })
+  const { mutate, reset, data, error, status } = useMutation({
+    mutationFn: repayBorrowOffer,
+    onSuccess: result => {
+      void addPendingTx({
+        txid: result.txid,
+        kind: 'repay_offer',
+        walletScriptPubkey: scriptPubkey ?? '',
+        offerId: offer.id,
+        previousOfferStatus: 'active',
+        expectedOfferStatus: 'repaid',
+      })
+    },
+  })
 
   const txSummary = useMemo(() => {
     const interest = calcInterest(offer.principal_amount, offer.interest_rate)

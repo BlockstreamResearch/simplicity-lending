@@ -3,6 +3,7 @@ mod db;
 mod dto;
 mod error;
 mod factories;
+mod health;
 mod lenders;
 mod offers;
 mod openapi;

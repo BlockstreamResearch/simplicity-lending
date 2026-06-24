@@ -25,6 +25,34 @@ interface TransactionModalProps {
   onClose: () => void
 }
 
+function StatusIcon({ status, isComplete }: { status: MutationStatus; isComplete: boolean }) {
+  if (isComplete) {
+    return (
+      <span className='bg-success/15 text-success flex size-10 items-center justify-center rounded-full'>
+        <CheckIcon className='size-5' />
+      </span>
+    )
+  }
+  if (status === 'error') {
+    return (
+      <span className='bg-danger/15 text-danger flex size-10 items-center justify-center rounded-full'>
+        <CircleExclamationIcon className='size-5' />
+      </span>
+    )
+  }
+  return (
+    <span className='flex size-10 items-center justify-center'>
+      <Spinner size='md' />
+    </span>
+  )
+}
+
+function statusTitle(status: MutationStatus, isComplete: boolean): string {
+  if (isComplete) return 'Transaction Complete'
+  if (status === 'error') return 'Transaction Failed'
+  return status === 'pending' ? 'Processing Transaction…' : 'Transaction Pending…'
+}
+
 export function TransactionStatusTitle({
   status,
   eyebrow,
@@ -34,43 +62,12 @@ export function TransactionStatusTitle({
   eyebrow: string
   isComplete: boolean
 }) {
-  const { title, icon } = ((): { title: string; icon: ReactNode } => {
-    if (isComplete) {
-      return {
-        title: 'Transaction Complete',
-        icon: (
-          <span className='bg-success/15 text-success flex size-10 items-center justify-center rounded-full'>
-            <CheckIcon className='size-5' />
-          </span>
-        ),
-      }
-    }
-    if (status === 'error') {
-      return {
-        title: 'Transaction Failed',
-        icon: (
-          <span className='bg-danger/15 text-danger flex size-10 items-center justify-center rounded-full'>
-            <CircleExclamationIcon className='size-5' />
-          </span>
-        ),
-      }
-    }
-    return {
-      title: status === 'pending' ? 'Processing Transaction…' : 'Transaction Pending…',
-      icon: (
-        <span className='flex size-10 items-center justify-center'>
-          <Spinner size='md' />
-        </span>
-      ),
-    }
-  })()
-
   return (
     <span className='flex items-center gap-3'>
-      {icon}
+      <StatusIcon status={status} isComplete={isComplete} />
       <span className='flex flex-col'>
         <span className='text-sm font-normal'>{eyebrow}</span>
-        <span>{title}</span>
+        <span>{statusTitle(status, isComplete)}</span>
       </span>
     </span>
   )
@@ -136,14 +133,14 @@ export function TransactionBody({
                     ? 'Confirmed'
                     : 'Pending…',
             },
-          ]
-        : []),
-      ...(confirmations
-        ? [
-            {
-              label: 'Confirmations',
-              value: `${confirmations} Confirmation${confirmations !== 1 ? 's' : ''}`,
-            },
+            ...(confirmations
+              ? [
+                  {
+                    label: 'Confirmations',
+                    value: `${confirmations} Confirmation${confirmations !== 1 ? 's' : ''}`,
+                  },
+                ]
+              : []),
           ]
         : []),
     ],
