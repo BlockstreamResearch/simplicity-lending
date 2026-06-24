@@ -99,6 +99,26 @@ fn uuid_strings_from_array(value: &Value) -> Vec<String> {
     ids
 }
 
+#[tokio::test]
+#[serial]
+async fn health_endpoints_report_liveness_and_readiness() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let (base_url, _server) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let health = http.get(format!("{base_url}/health")).send().await?;
+    assert_eq!(health.status(), StatusCode::OK);
+    let health_json = response_json(health).await?;
+    assert_eq!(health_json["status"], "ok");
+
+    let ready = http.get(format!("{base_url}/ready")).send().await?;
+    assert_eq!(ready.status(), StatusCode::OK);
+    let ready_json = response_json(ready).await?;
+    assert_eq!(ready_json["status"], "ok");
+
+    Ok(())
+}
+
 fn assert_ids_match_unordered(value: &Value, expected: &[Uuid]) {
     let mut expected_ids: Vec<String> = expected.iter().map(Uuid::to_string).collect();
     expected_ids.sort();

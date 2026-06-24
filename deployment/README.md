@@ -88,4 +88,5 @@ Once the stack is running, verify:
 
 - `http://localhost:${WEB_PORT}/`
 - `http://localhost:${WEB_PORT}/api/health`
+- `http://localhost:${WEB_PORT}/api/ready`
 - `http://localhost:${WEB_PORT}/api/offers?limit=1`

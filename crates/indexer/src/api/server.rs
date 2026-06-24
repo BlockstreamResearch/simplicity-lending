@@ -18,6 +18,7 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
     let state = Arc::new(AppState { db: db_pool });
 
     let app = Router::new()
+        .merge(super::health::routes())
         .merge(borrowers::routes())
         .merge(lenders::routes())
         .merge(factories::routes())

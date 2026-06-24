@@ -33,7 +33,7 @@ RUN CARGO_HTTP_MULTIPLEXING=false cargo install --locked sqlx-cli --no-default-f
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates gettext-base libssl3 \
+    && apt-get install -y --no-install-recommends ca-certificates curl gettext-base libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/crates/indexer
