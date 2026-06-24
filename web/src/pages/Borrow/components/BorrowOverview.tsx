@@ -28,8 +28,6 @@ export default function BorrowOverview() {
         usdValue: formatUsd(stats.borrowings, principalAsset.decimals, principalPriceUsd),
         asset: principalAsset,
       },
-      // TODO: show real value once /borrowers/overview returns an average APR (backend doesn't expose it yet).
-      { label: 'Average APR', value: '—' },
       { label: 'Active Loans', value: String(stats.activeLoans) },
       { label: 'Pending Offers', value: String(stats.pendingOffers) },
     ],
@@ -43,11 +41,5 @@ export default function BorrowOverview() {
     ],
   )
 
-  return (
-    <UserOverview
-      tiles={tiles}
-      isLoading={isLoading}
-      gridClassName='grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:gap-6'
-    />
-  )
+  return <UserOverview tiles={tiles} isLoading={isLoading} />
 }

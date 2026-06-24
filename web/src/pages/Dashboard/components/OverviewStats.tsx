@@ -38,8 +38,6 @@ export default function OverviewStats() {
         usdValue: formatUsd(overview.totalActiveLoans, principalAsset.decimals, principalPriceUsd),
         asset: principalAsset,
       },
-      // TODO: show real value once /offers/overview returns an average interest rate (backend doesn't expose it yet).
-      { label: 'Average Interest Rate', value: '—' },
       { label: 'Number of Active Loans', value: String(overview.activeLoansCount) },
     ],
     [
@@ -53,7 +51,7 @@ export default function OverviewStats() {
   )
 
   return (
-    <div className='grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6'>
+    <div className='grid grid-cols-1 gap-4 sm:grid-cols-3 lg:gap-6'>
       {stats.map(stat => {
         const Icon = stat.asset?.icon
         const unit = stat.asset ? getAssetUnit(denomination, stat.asset) : undefined

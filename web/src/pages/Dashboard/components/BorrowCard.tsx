@@ -1,21 +1,26 @@
 import { Skeleton } from '@heroui/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useBorrowerOffers } from '@/api/indexer/hooks'
+import type { OfferShort } from '@/api/indexer/schemas'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import CoinsIcon from '@/components/icons/CoinsIcon'
+import OfferActionModal from '@/components/modals/OfferActionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/offers'
 import { RoutePath } from '@/constants/routes'
 import { useBorrowerStats } from '@/hooks/useBorrowerStats'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ErrorHandler } from '@/utils/errorHandler'
 import { formatUsd, truncateAddress } from '@/utils/format'
+import { resolveOfferAction } from '@/utils/offerActions'
 import { getOfferTermLeft } from '@/utils/offers'
+import { getOfferPendingTx } from '@/utils/pendingTransactions'
 
 import { AssetAmount } from './AssetAmount'
 import CardAlert from './CardAlert'
@@ -29,16 +34,22 @@ export function BorrowCard() {
     useFormatAmount()
   const offersQuery = useBorrowerOffers(scriptPubkey ?? '', { status: 'active', limit: 50 })
   const { data: currentBlockHeight } = useBlockHeight()
+  const { pendingTxs } = usePendingTransactions()
   const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)
 
   const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.collateralAsset.decimals, collateralPriceUsd)
   const activeOffers = offersQuery.data?.items ?? []
-  const nearExpiryOffers = activeOffers.filter(o => {
+  const repayDueOffer = activeOffers.find(o => {
     const termLeft = getOfferTermLeft(o, currentBlockHeight)
-    return termLeft > 0 && termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS
+    return (
+      !getOfferPendingTx(o.id, pendingTxs) &&
+      resolveOfferAction(o, scriptPubkey, currentBlockHeight) === 'repay' &&
+      termLeft > 0 &&
+      termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS
+    )
   })
-  const alertOffer = nearExpiryOffers[0]
+  const [selectedOffer, setSelectedOffer] = useState<OfferShort | null>(null)
 
   useEffect(() => {
     if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your borrows.')
@@ -86,19 +97,30 @@ export function BorrowCard() {
         />
       </div>
 
-      {alertOffer && (
+      {repayDueOffer && (
         <CardAlert
           variant='warning'
           title='Repayment Due Soon'
-          description={`Loan #${truncateAddress(alertOffer.id)} Nearing Deadline. Repay to Avoid Liquidation.`}
+          description={`Loan #${truncateAddress(repayDueOffer.id)} Nearing Deadline. Repay to Avoid Liquidation.`}
           actionLabel='Repay Now'
-          isDisabled
+          onAction={() => setSelectedOffer(repayDueOffer)}
         />
       )}
 
       <UiButton className='self-start' variant='primary' onPress={() => navigate(RoutePath.Borrow)}>
         Borrow
       </UiButton>
+
+      <OfferActionModal
+        offer={selectedOffer}
+        isOpen={selectedOffer !== null}
+        onClose={() => setSelectedOffer(null)}
+        onSuccess={() => {
+          setSelectedOffer(null)
+          refetch()
+          offersQuery.refetch()
+        }}
+      />
     </section>
   )
 }
