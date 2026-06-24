@@ -5,3 +5,6 @@ target
 web/node_modules
 web/dist
 web/.env
+web-v2/node_modules
+web-v2/dist
+web-v2/.env
