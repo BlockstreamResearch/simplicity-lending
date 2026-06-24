@@ -6,7 +6,7 @@ This deployment stack runs:
 - `migrate` to apply the SQLx schema before the app starts
 - `api` for the lending protocol HTTP API
 - `indexer` for background chain indexing
-- `web` for the public `web-v2` frontend, including `/api` and `/esplora` reverse proxies
+- `web` for the public frontend, including `/api` and `/esplora` reverse proxies
 
 ## Layout
 
@@ -30,7 +30,7 @@ The stack publishes only the web container on `WEB_PORT`. With the example value
 - `/api/*` -> internal `api:8000`
 - `VITE_ESPLORA_BASE_URL` -> the public Esplora/explorer origin
 
-The same-origin `/api` shape avoids browser CORS issues for normal deployment. `web-v2`
+The same-origin `/api` shape avoids browser CORS issues for normal deployment. `web`
 reads its public settings from Vite at image build time, so rebuild the web image after
 changing any `VITE_*` value.
 
@@ -40,7 +40,7 @@ Set these values in `deployment/configs/compose.env`:
 
 - `PUBLIC_ORIGIN`: the final public HTTPS origin, for example `https://lending.example.com`
 - `WEB_PORT`: host port mapped to the public web server
-- `VITE_API_URL`: indexer API URL baked into `web-v2`, for example `/api` for the same-origin nginx proxy or `https://lending.example.com/api`
+- `VITE_API_URL`: indexer API URL baked into `web`, for example `/api` for the same-origin nginx proxy or `https://lending.example.com/api`
 - `VITE_ESPLORA_BASE_URL`: public Esplora/explorer base URL, for example `https://blockstream.info/liquidtestnet`
 - `VITE_NETWORK`: `liquid`, `liquidtestnet`, or `regtest`
 - `VITE_WATERFALLS_URL`: Waterfalls server base URL for LWK sync

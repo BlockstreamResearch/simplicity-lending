@@ -6,7 +6,7 @@
 
 ```bash
 # run from repo root
-docker build -f web-v2/Dockerfile --target lwk-builder -t lwk-builder .
+docker build -f web/Dockerfile --target lwk-builder -t lwk-builder .
 ```
 
 ## **2. Extract pkg_web to repo root:**
@@ -20,10 +20,10 @@ mkdir -p ./lwk_wasm
 mv ./pkg_web_from_docker ./lwk_wasm/pkg_web
 ```
 
-## **3. Install & run web-v2**:
+## **3. Install & run web**:
 
 ```bash
-cd web-v2
+cd web
 rm -rf node_modules
 pnpm install --force
 pnpm dev

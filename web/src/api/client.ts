@@ -1,229 +1,99 @@
-import type {
-  OfferParticipant,
-  OfferShort,
-  OfferStatus,
-  OfferUtxo,
-  OfferWithParticipants,
-  ParticipantDto,
-  ParticipantType,
-} from '../types/offers'
+import axios, { AxiosError, type AxiosRequestConfig } from 'axios'
+import type { z as zod } from 'zod'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import { ErrorHandler } from '@/utils/errorHandler'
 
-/** Parse u64 from JSON (number or string) to bigint; JSON has no native BigInt */
-function toBigInt(v: unknown): bigint {
-  if (v === null || v === undefined) return 0n
-  if (typeof v === 'bigint') return v
-  if (typeof v === 'string') return BigInt(v)
-  return BigInt(String(Math.floor(Number(v))))
+import { ApiAbortError, ApiError, ApiTimeoutError, ApiValidationError } from './errors'
+
+export const DEFAULT_TIMEOUT_MS = 30_000
+
+export interface RequestParams {
+  signal?: AbortSignal
 }
 
-function normalizeOffer(raw: Record<string, unknown>): OfferShort {
-  return {
-    id: String(raw.id ?? ''),
-    status: (raw.status as OfferStatus) ?? 'pending',
-    collateral_asset: String(raw.collateral_asset ?? ''),
-    principal_asset: String(raw.principal_asset ?? ''),
-    collateral_amount: toBigInt(raw.collateral_amount),
-    principal_amount: toBigInt(raw.principal_amount),
-    interest_rate: Number(raw.interest_rate) || 0,
-    loan_expiration_time: Number(raw.loan_expiration_time) || 0,
-    created_at_height: toBigInt(raw.created_at_height),
-    created_at_txid: String(raw.created_at_txid ?? ''),
+const apiClient = axios.create({ timeout: DEFAULT_TIMEOUT_MS })
+
+apiClient.interceptors.response.use(undefined, (error: AxiosError) =>
+  Promise.reject(toApiError(error)),
+)
+
+function toApiError(error: AxiosError): ApiError {
+  if (error.code === AxiosError.ECONNABORTED || error.code === AxiosError.ETIMEDOUT) {
+    return new ApiTimeoutError(undefined, { cause: error })
   }
+  if (error.code === AxiosError.ERR_CANCELED) {
+    return new ApiAbortError(undefined, { cause: error })
+  }
+  if (error.response) {
+    const { status, statusText, data } = error.response
+    const body = typeof data === 'string' ? data : safeStringify(data)
+    return new ApiError(`API error: ${status} ${statusText}`, { status, body, cause: error })
+  }
+  return new ApiError(error.message, { cause: error })
 }
 
-export async function fetchOffers(params?: {
-  status?: string
-  limit?: number
-  offset?: number
-}): Promise<OfferShort[]> {
-  const url = new URL(`${API_BASE}/offers`)
-  if (params?.status) url.searchParams.set('status', params.status)
-  if (params?.limit != null) url.searchParams.set('limit', String(params.limit))
-  if (params?.offset != null) url.searchParams.set('offset', String(params.offset))
-
-  const res = await fetch(url.toString())
-  await throwIfNotOk(res)
-  const data: unknown[] = await res.json()
-  return data.map((row) => normalizeOffer(row as Record<string, unknown>))
-}
-
-async function throwIfNotOk(res: Response): Promise<void> {
-  if (res.ok) return
-  const contentType = res.headers.get('content-type')
-  let body: string
+function safeStringify(data: unknown): string {
+  if (data === null || data === undefined) return ''
   try {
-    body = contentType?.includes('application/json')
-      ? JSON.stringify(await res.json())
-      : await res.text()
+    return JSON.stringify(data)
   } catch {
-    body = ''
-  }
-  throw new Error(
-    body
-      ? `API error: ${res.status} ${res.statusText} — ${body}`
-      : `API error: ${res.status} ${res.statusText}`
-  )
-}
-
-export async function fetchOfferIdsByScript(scriptPubkeyHex: string): Promise<string[]> {
-  const url = new URL(`${API_BASE}/offers/by-script`)
-  url.searchParams.set('script_pubkey', scriptPubkeyHex)
-  const res = await fetch(url.toString())
-  await throwIfNotOk(res)
-  const data: unknown = await res.json()
-  const arr = Array.isArray(data) ? data : []
-  return arr.map((id) => String(id))
-}
-
-/** Fetch offer IDs where the given key is the borrower (e.g. pending offers created by this user). Expects 32-byte hex (64 chars). */
-export async function fetchOfferIdsByBorrowerPubkey(borrowerPubkeyHex: string): Promise<string[]> {
-  const hex = borrowerPubkeyHex.trim().toLowerCase().replace(/^0x/, '')
-  const url = new URL(`${API_BASE}/offers/by-borrower-pubkey`)
-  url.searchParams.set('borrower_pubkey', hex)
-  const res = await fetch(url.toString())
-  await throwIfNotOk(res)
-  const data: unknown = await res.json()
-  const arr = Array.isArray(data) ? data : []
-  return arr.map((id) => String(id))
-}
-
-function normalizeParticipant(raw: Record<string, unknown>): ParticipantDto {
-  const pt = raw.participant_type
-  const participantType: ParticipantType =
-    pt === 'lender' ? 'lender' : pt === 'borrower' ? 'borrower' : 'borrower'
-  return {
-    offer_id: String(raw.offer_id ?? ''),
-    participant_type: participantType,
-    script_pubkey: String(raw.script_pubkey ?? ''),
+    return String(data)
   }
 }
 
-function normalizeOfferWithParticipants(raw: Record<string, unknown>): OfferWithParticipants {
-  const offer = normalizeOffer(raw)
-  const participantsRaw = raw.participants
-  const participantsArr = Array.isArray(participantsRaw) ? participantsRaw : []
-  const participants = participantsArr.map((p) =>
-    normalizeParticipant(p as Record<string, unknown>)
-  )
-  return { ...offer, participants }
-}
-
-export function filterOffersByParticipantRole(
-  offers: OfferWithParticipants[],
-  scriptPubkeyHex: string,
-  role: ParticipantType
-): OfferShort[] {
-  const scriptLower = scriptPubkeyHex.trim().toLowerCase()
-  return offers
-    .filter((o) =>
-      o.participants.some(
-        (p) => p.participant_type === role && p.script_pubkey.trim().toLowerCase() === scriptLower
-      )
+function parseWithSchema<Schema extends zod.ZodTypeAny>(
+  data: unknown,
+  schema: Schema,
+  url: string,
+): zod.output<Schema> {
+  const parsed = schema.safeParse(data)
+  if (!parsed.success) {
+    const validationError = new ApiValidationError(
+      `Response validation failed for ${url}: ${parsed.error.message}`,
+      parsed.error.issues,
     )
-    .map(
-      (o): OfferShort => ({
-        id: o.id,
-        status: o.status,
-        collateral_asset: o.collateral_asset,
-        principal_asset: o.principal_asset,
-        collateral_amount: o.collateral_amount,
-        principal_amount: o.principal_amount,
-        interest_rate: o.interest_rate,
-        loan_expiration_time: o.loan_expiration_time,
-        created_at_height: o.created_at_height,
-        created_at_txid: o.created_at_txid,
-      })
-    )
-}
-
-export async function fetchOfferDetailsBatch(ids: string[]): Promise<OfferShort[]> {
-  const res = await fetch(`${API_BASE}/offers/batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids }),
-  })
-  await throwIfNotOk(res)
-  const data: unknown[] = await res.json()
-  return data.map((row) => normalizeOffer(row as Record<string, unknown>))
-}
-
-export async function fetchOfferDetailsBatchWithParticipants(
-  ids: string[]
-): Promise<OfferWithParticipants[]> {
-  const res = await fetch(`${API_BASE}/offers/batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids }),
-  })
-  await throwIfNotOk(res)
-  const data: unknown[] = await res.json()
-  return data.map((row) => normalizeOfferWithParticipants(row as Record<string, unknown>))
-}
-
-function normalizeOfferUtxo(raw: Record<string, unknown>): OfferUtxo {
-  return {
-    offer_id: String(raw.offer_id ?? ''),
-    txid: String(raw.txid ?? ''),
-    vout: Number(raw.vout ?? 0),
-    utxo_type: (raw.utxo_type as OfferUtxo['utxo_type']) ?? 'pre_lock',
-    created_at_height: Number(raw.created_at_height ?? 0),
-    spent_txid: raw.spent_txid != null ? String(raw.spent_txid) : null,
-    spent_at_height: raw.spent_at_height != null ? Number(raw.spent_at_height) : null,
+    ErrorHandler.processWithoutFeedback(validationError)
+    throw validationError
   }
+  return parsed.data
 }
 
-/** Fetch UTXO history for an offer (GET /offers/:id/utxos). Used e.g. to get Lending UTXO for liquidation. */
-export async function fetchOfferUtxos(offerId: string): Promise<OfferUtxo[]> {
-  const res = await fetch(`${API_BASE}/offers/${encodeURIComponent(offerId)}/utxos`)
-  await throwIfNotOk(res)
-  const data: unknown[] = await res.json()
-  return data.map((row) => normalizeOfferUtxo(row as Record<string, unknown>))
+function isZodSchema(value: unknown): value is zod.ZodTypeAny {
+  return typeof (value as { safeParse?: unknown } | undefined)?.safeParse === 'function'
 }
 
-function normalizeOfferParticipant(raw: Record<string, unknown>): OfferParticipant {
-  const pt = raw.participant_type
-  const participantType: ParticipantType =
-    pt === 'lender' ? 'lender' : pt === 'borrower' ? 'borrower' : 'borrower'
-  return {
-    offer_id: String(raw.offer_id ?? ''),
-    participant_type: participantType,
-    script_pubkey: String(raw.script_pubkey ?? ''),
-    txid: String(raw.txid ?? ''),
-    vout: Number(raw.vout ?? 0),
-    created_at_height: Number(raw.created_at_height ?? 0),
-    spent_txid: raw.spent_txid != null ? String(raw.spent_txid) : null,
-    spent_at_height: raw.spent_at_height != null ? Number(raw.spent_at_height) : null,
-  }
+export async function requestJson<Schema extends zod.ZodTypeAny>(
+  url: string,
+  schema: Schema,
+  config?: AxiosRequestConfig,
+): Promise<zod.output<Schema>> {
+  const { data } = await apiClient.request<unknown>({ ...config, url })
+  return parseWithSchema(data, schema, url)
 }
 
-/** Fetch participant movement history (GET /offers/:id/participants/history). Used to get current Lender/Borrower NFT (txid, vout) from indexer. */
-export async function fetchOfferParticipantsHistory(offerId: string): Promise<OfferParticipant[]> {
-  const res = await fetch(`${API_BASE}/offers/${encodeURIComponent(offerId)}/participants/history`)
-  await throwIfNotOk(res)
-  const data: unknown[] = await res.json()
-  return data.map((row) => normalizeOfferParticipant(row as Record<string, unknown>))
+export function requestText(url: string, config?: AxiosRequestConfig): Promise<string>
+export function requestText<Schema extends zod.ZodTypeAny>(
+  url: string,
+  schema: Schema,
+  config?: AxiosRequestConfig,
+): Promise<zod.output<Schema>>
+export async function requestText<Schema extends zod.ZodTypeAny>(
+  url: string,
+  schemaOrConfig?: Schema | AxiosRequestConfig,
+  maybeConfig?: AxiosRequestConfig,
+): Promise<string | zod.output<Schema>> {
+  const schema = isZodSchema(schemaOrConfig) ? schemaOrConfig : undefined
+  const config = schema ? maybeConfig : (schemaOrConfig as AxiosRequestConfig | undefined)
+  const { data } = await apiClient.request<string>({ ...config, url, responseType: 'text' })
+  const text = typeof data === 'string' ? data.trim() : ''
+  return schema ? parseWithSchema(text, schema, url) : text
 }
 
-/** Current Lender NFT = unspent participant with participant_type 'lender', latest by created_at_height. */
-export function getCurrentLenderParticipant(history: OfferParticipant[]): OfferParticipant | null {
-  const unspentLenders = history.filter(
-    (p) => p.participant_type === 'lender' && p.spent_txid == null
-  )
-  if (unspentLenders.length === 0) return null
-  unspentLenders.sort((a, b) => b.created_at_height - a.created_at_height)
-  return unspentLenders[0] ?? null
-}
-
-/** Current Borrower NFT = unspent participant with participant_type 'borrower', latest by created_at_height. */
-export function getCurrentBorrowerParticipant(
-  history: OfferParticipant[]
-): OfferParticipant | null {
-  const unspentBorrowers = history.filter(
-    (p) => p.participant_type === 'borrower' && p.spent_txid == null
-  )
-  if (unspentBorrowers.length === 0) return null
-  unspentBorrowers.sort((a, b) => b.created_at_height - a.created_at_height)
-  return unspentBorrowers[0] ?? null
+export async function requestBytes(url: string, config?: AxiosRequestConfig): Promise<Uint8Array> {
+  const { data } = await apiClient.request<ArrayBuffer>({
+    ...config,
+    url,
+    responseType: 'arraybuffer',
+  })
+  return new Uint8Array(data)
 }
