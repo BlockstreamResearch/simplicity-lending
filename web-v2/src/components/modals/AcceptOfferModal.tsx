@@ -10,21 +10,20 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import {
   estimateFeeBudgetSats,
   selectAssetUtxos,
   selectFeeUtxos,
   utxoToOutpointString,
 } from '@/lwk/utxo'
-import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { truncateAddress } from '@/utils/format'
 import { bpsToPercent, calcInterest } from '@/utils/offers'
-import { formatPolicyAssetDisplay } from '@/utils/policyAssetDenomination'
 
 const ACCEPT_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance + SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY
@@ -42,12 +41,12 @@ export default function AcceptOfferModal({
   onClose,
   onSuccess,
 }: AcceptOfferModalProps) {
-  const { collateralAsset, principalAsset } = NETWORK_CONFIG
+  const { principalAsset } = NETWORK_CONFIG
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
   const { addPendingTx } = usePendingTransactions()
-  const { denomination } = useAssetDenomination()
+  const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
 
   const acceptBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -106,21 +105,15 @@ export default function AcceptOfferModal({
 
   const txSummary = useMemo(
     () => [
-      {
-        label: 'Collateral',
-        value: formatPolicyAssetDisplay(offer.collateral_amount, denomination, collateralAsset),
-      },
-      {
-        label: 'Principal Supplied',
-        value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
+      { label: 'Collateral', value: formatCollateralDisplay(offer.collateral_amount) },
+      { label: 'Principal Supplied', value: formatPrincipalAmount(offer.principal_amount) },
       {
         label: 'Earn',
-        value: `${formatAmount(calcInterest(offer.principal_amount, offer.interest_rate), principalAsset.decimals)} ${principalAsset.symbol}`,
+        value: formatPrincipalAmount(calcInterest(offer.principal_amount, offer.interest_rate)),
       },
       { label: 'APR', value: bpsToPercent(offer.interest_rate) },
     ],
-    [offer, collateralAsset, principalAsset, denomination],
+    [offer, formatCollateralDisplay, formatPrincipalAmount],
   )
 
   return (

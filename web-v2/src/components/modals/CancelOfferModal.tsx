@@ -8,22 +8,20 @@ import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
-import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useCancelOffer } from '@/hooks/useCancelOffer'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   selectFeeUtxos,
   utxoToOutpointString,
 } from '@/lwk/utxo'
-import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
 import { truncateAddress } from '@/utils/format'
-import { formatPolicyAssetDisplay } from '@/utils/policyAssetDenomination'
 
 const CANCEL_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.OfferCancellation +
@@ -43,12 +41,11 @@ export default function CancelOfferModal({
   onClose,
   onSuccess,
 }: CancelOfferModalProps) {
-  const { collateralAsset } = NETWORK_CONFIG
   const { syncWallet, getBlindedWalletUtxos, getReceiveAddress, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { cancelOffer } = useCancelOffer()
   const { addPendingTx } = usePendingTransactions()
-  const { denomination } = useAssetDenomination()
+  const { formatCollateralDisplay } = useFormatAmount()
 
   const cancelBorrowOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -100,12 +97,9 @@ export default function CancelOfferModal({
 
   const txSummary = useMemo(
     () => [
-      {
-        label: 'Collateral Returned',
-        value: formatPolicyAssetDisplay(offer.collateral_amount, denomination, collateralAsset),
-      },
+      { label: 'Collateral Returned', value: formatCollateralDisplay(offer.collateral_amount) },
     ],
-    [offer, collateralAsset, denomination],
+    [offer, formatCollateralDisplay],
   )
 
   return (

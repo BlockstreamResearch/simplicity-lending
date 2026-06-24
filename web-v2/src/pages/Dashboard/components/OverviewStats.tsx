@@ -3,14 +3,11 @@ import { useMemo } from 'react'
 
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useOverview } from '@/hooks/useOverview'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { formatAmount, formatUsd } from '@/utils/format'
-import {
-  formatPolicyAssetAmount,
-  getPolicyAssetUnit,
-  isPolicyAsset,
-} from '@/utils/policyAssetDenomination'
+import { getAssetUnit } from '@/utils/policyAssetDenomination'
 
 interface OverviewStat {
   label: string
@@ -23,6 +20,7 @@ export default function OverviewStats() {
   const { overview, isLoading } = useOverview()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
   const { denomination } = useAssetDenomination()
+  const { formatCollateralAmount } = useFormatAmount()
   const collateralPriceUsd = useAssetPriceUsd(collateralAsset.id)
   const principalPriceUsd = useAssetPriceUsd(principalAsset.id)
 
@@ -30,7 +28,7 @@ export default function OverviewStats() {
     () => [
       {
         label: 'Total Collateral Locked',
-        value: formatPolicyAssetAmount(overview.totalCollateral, denomination, collateralAsset),
+        value: formatCollateralAmount(overview.totalCollateral),
         usdValue: formatUsd(overview.totalCollateral, collateralAsset.decimals, collateralPriceUsd),
         asset: collateralAsset,
       },
@@ -50,7 +48,7 @@ export default function OverviewStats() {
       principalAsset,
       collateralPriceUsd,
       principalPriceUsd,
-      denomination,
+      formatCollateralAmount,
     ],
   )
 
@@ -58,10 +56,7 @@ export default function OverviewStats() {
     <div className='grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6'>
       {stats.map(stat => {
         const Icon = stat.asset?.icon
-        const unit =
-          stat.asset && isPolicyAsset(stat.asset)
-            ? getPolicyAssetUnit(denomination, stat.asset)
-            : stat.asset?.symbol
+        const unit = stat.asset ? getAssetUnit(denomination, stat.asset) : undefined
         return (
           <div
             key={stat.label}

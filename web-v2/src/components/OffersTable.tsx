@@ -23,7 +23,7 @@ import { bpsToPercent, calcInterest, formatOfferTermLeft } from '@/utils/offers'
 import { getOfferPendingTx } from '@/utils/pendingTransactions'
 import {
   formatPolicyAssetAmount,
-  getPolicyAssetUnit,
+  getAssetUnit,
   isPolicyAsset,
 } from '@/utils/policyAssetDenomination'
 
@@ -112,9 +112,7 @@ export default function OffersTable<T extends OfferShort>({
   const { scriptPubkey } = useWallet()
   const { pendingTxs } = usePendingTransactions()
   const { denomination } = useAssetDenomination()
-  const collateralUnit = isPolicyAsset(collateralAsset)
-    ? getPolicyAssetUnit(denomination, collateralAsset)
-    : collateralAsset.symbol
+  const collateralUnit = getAssetUnit(denomination, collateralAsset)
 
   const resolveOfferWarning = useCallback(
     (offer: OfferShort): { severity: keyof typeof SEVERITY_COLOR; message: string } | null => {

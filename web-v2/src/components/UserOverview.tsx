@@ -2,7 +2,7 @@ import { Skeleton } from '@heroui/react'
 
 import { type ConfigAsset } from '@/constants/network-config'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
-import { getPolicyAssetUnit, isPolicyAsset } from '@/utils/policyAssetDenomination'
+import { getAssetUnit } from '@/utils/policyAssetDenomination'
 
 export interface OverviewTile {
   label: string
@@ -32,10 +32,7 @@ export default function UserOverview({
       <div className={gridClassName}>
         {tiles.map(tile => {
           const Icon = tile.asset?.icon
-          const unit =
-            tile.asset && isPolicyAsset(tile.asset)
-              ? getPolicyAssetUnit(denomination, tile.asset)
-              : tile.asset?.symbol
+          const unit = tile.asset ? getAssetUnit(denomination, tile.asset) : undefined
           return (
             <div
               key={tile.label}

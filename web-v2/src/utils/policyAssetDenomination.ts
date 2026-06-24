@@ -1,5 +1,5 @@
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
-import type { PolicyAssetDenomination } from '@/providers/assetDenomination/types'
+import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { toBigintAmount } from '@/utils/bigint'
 import { formatAmount } from '@/utils/format'
 
@@ -19,7 +19,11 @@ export function getPolicyAssetUnit(
   denomination: PolicyAssetDenomination,
   asset: ConfigAsset = NETWORK_CONFIG.collateralAsset,
 ): string {
-  return denomination === 'sats' ? 'sats' : asset.symbol
+  return denomination === 'sats' ? 'Lsats' : asset.symbol
+}
+
+export function getAssetUnit(denomination: PolicyAssetDenomination, asset: ConfigAsset): string {
+  return isPolicyAsset(asset) ? getPolicyAssetUnit(denomination, asset) : asset.symbol
 }
 
 export function formatPolicyAssetAmount(

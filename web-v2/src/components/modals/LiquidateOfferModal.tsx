@@ -8,7 +8,7 @@ import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
-import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useLiquidateOffer } from '@/hooks/useLiquidateOffer'
 import {
   estimateFeeBudgetSats,
@@ -16,13 +16,11 @@ import {
   selectFeeUtxos,
   utxoToOutpointString,
 } from '@/lwk/utxo'
-import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { truncateAddress } from '@/utils/format'
-import { formatPolicyAssetDisplay } from '@/utils/policyAssetDenomination'
 
 const LIQUIDATE_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.Liquidation + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
@@ -40,12 +38,11 @@ export default function LiquidateOfferModal({
   onClose,
   onSuccess,
 }: LiquidateOfferModalProps) {
-  const { collateralAsset } = NETWORK_CONFIG
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { liquidateOffer } = useLiquidateOffer()
   const { addPendingTx } = usePendingTransactions()
-  const { denomination } = useAssetDenomination()
+  const { formatCollateralDisplay } = useFormatAmount()
 
   const liquidateExpiredOffer = async () => {
     const fullOffer = await fetchOffer(offer.id)
@@ -92,13 +89,10 @@ export default function LiquidateOfferModal({
 
   const txSummary = useMemo(
     () => [
-      {
-        label: 'Collateral',
-        value: formatPolicyAssetDisplay(offer.collateral_amount, denomination, collateralAsset),
-      },
+      { label: 'Collateral', value: formatCollateralDisplay(offer.collateral_amount) },
       { label: 'Expiration Block', value: `#${offer.loan_expiration_height}` },
     ],
-    [offer, collateralAsset, denomination],
+    [offer, formatCollateralDisplay],
   )
 
   return (

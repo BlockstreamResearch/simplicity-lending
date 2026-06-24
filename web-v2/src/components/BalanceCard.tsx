@@ -4,7 +4,7 @@ import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDeno
 import { formatAmount, formatUsd } from '@/utils/format'
 import {
   formatPolicyAssetAmount,
-  getPolicyAssetUnit,
+  getAssetUnit,
   isPolicyAsset,
 } from '@/utils/policyAssetDenomination'
 
@@ -15,11 +15,11 @@ interface BalanceCardProps {
 }
 
 export default function BalanceCard({ asset, amount, className = '' }: BalanceCardProps) {
-  const { id, icon: Icon, symbol, decimals } = asset
+  const { id, icon: Icon, decimals } = asset
   const { denomination } = useAssetDenomination()
   const priceUsd = useAssetPriceUsd(id)
   const usdValue = formatUsd(amount, decimals, priceUsd)
-  const displayedSymbol = isPolicyAsset(asset) ? getPolicyAssetUnit(denomination, asset) : symbol
+  const displayedSymbol = getAssetUnit(denomination, asset)
   const displayedAmount = isPolicyAsset(asset)
     ? formatPolicyAssetAmount(amount, denomination, asset)
     : formatAmount(amount, decimals)

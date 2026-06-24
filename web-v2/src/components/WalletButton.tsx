@@ -6,7 +6,7 @@ import CopyIcon from '@/components/icons/CopyIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
-import type { PolicyAssetDenomination } from '@/providers/assetDenomination/types'
+import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -106,7 +106,7 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
                     id='sats'
                     className='text-muted hover:text-foreground data-[selected]:bg-surface data-[selected]:text-foreground data-[selected]:shadow-sm justify-center rounded-lg px-3 py-2 text-sm font-semibold transition'
                   >
-                    sats
+                    Lsats
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.Root>

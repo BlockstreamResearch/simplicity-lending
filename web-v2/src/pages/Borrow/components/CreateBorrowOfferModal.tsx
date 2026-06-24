@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z as zod } from 'zod'
 
@@ -22,7 +22,7 @@ import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
 import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
-import type { PolicyAssetDenomination } from '@/providers/assetDenomination/types'
+import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -32,7 +32,6 @@ import { DECIMAL_AMOUNT_RE, formatAmount } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
 import {
   formatPolicyAssetDisplay,
-  formatPolicyAssetInputValue,
   getPolicyAssetUnit,
   parsePolicyAssetInput,
 } from '@/utils/policyAssetDenomination'
@@ -108,7 +107,7 @@ function parsePolicyAssetCollateral(
     ctx.addIssue({
       code: zod.ZodIssueCode.custom,
       path: ['collateral'],
-      message: denomination === 'sats' ? 'Enter a whole number of sats' : 'Enter a valid amount',
+      message: denomination === 'sats' ? `Enter a whole number of ${unit}` : 'Enter a valid amount',
     })
     return null
   }
@@ -290,7 +289,6 @@ export default function CreateBorrowOfferModal({
     control,
     handleSubmit,
     reset: resetForm,
-    setValue,
   } = useForm<CreateBorrowOfferValues>({
     resolver,
     mode: 'all',
@@ -298,36 +296,12 @@ export default function CreateBorrowOfferModal({
   })
 
   const values = useWatch({ control })
-  const previousDenominationRef = useRef(denomination)
   const collateralBase =
     parsePolicyAssetInput(values.collateral, denomination, collateralAsset) ?? 0n
   const principalBase = toBigintAmount(values.borrow, principalAsset.decimals)
   const feeBase = toBigintAmount(values.fee, principalAsset.decimals)
   const bps = feeToBps(feeBase, principalBase)
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
-
-  useEffect(() => {
-    const previousDenomination = previousDenominationRef.current
-    if (previousDenomination === denomination) return
-
-    const currentCollateral = values.collateral?.trim()
-    if (currentCollateral) {
-      const previousBase = parsePolicyAssetInput(
-        currentCollateral,
-        previousDenomination,
-        collateralAsset,
-      )
-      if (previousBase !== null) {
-        setValue(
-          'collateral',
-          formatPolicyAssetInputValue(previousBase, denomination, collateralAsset),
-          { shouldValidate: true },
-        )
-      }
-    }
-
-    previousDenominationRef.current = denomination
-  }, [collateralAsset, denomination, setValue, values.collateral])
 
   const createBorrowOffer = useCallback(async () => {
     if (!factoryState) throw new Error('No active factory found. Create a borrower account first.')
@@ -455,7 +429,7 @@ export default function CreateBorrowOfferModal({
           render={({ field, fieldState }) => (
             <UiTextField
               label={<UiFieldLabel required>Collateral</UiFieldLabel>}
-              placeholder={denomination === 'sats' ? '1000000' : '0.00'}
+              placeholder={denomination === 'sats' ? '0' : '0.00'}
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
