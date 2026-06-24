@@ -34,4 +34,3 @@ minreq = { version = "2.14", features = ["https"] }
 lending-contracts = { path = "../contracts" }
 
 [dev-dependencies]
-cargo-husky = { workspace = true }
