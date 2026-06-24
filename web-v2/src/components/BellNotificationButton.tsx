@@ -10,7 +10,7 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
 import { getConfirmationProgressText, PENDING_TX_KIND_LABEL } from '@/utils/pendingTransactions'
 
-function NotificationRow({ tx }: { tx: PendingTxRecord }) {
+function PendingTxRow({ tx }: { tx: PendingTxRecord }) {
   return (
     <div className='bg-surface-secondary flex flex-col gap-1 rounded-lg p-3'>
       <div className='flex items-center justify-between gap-2'>
@@ -77,7 +77,7 @@ export function BellNotificationButton() {
           {pendingTxs.length === 0 ? (
             <p className='text-muted text-sm'>No pending transactions.</p>
           ) : (
-            pendingTxs.map(tx => <NotificationRow key={tx.txid} tx={tx} />)
+            pendingTxs.map(tx => <PendingTxRow key={tx.txid} tx={tx} />)
           )}
         </div>
       </Dropdown.Popover>
