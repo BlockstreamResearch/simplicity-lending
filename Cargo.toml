@@ -19,5 +19,3 @@ sha2 = { version = "0.10.9", features = ["compress"] }
 serde = { version = "1.0.228", features = ["derive"]}
 thiserror = { version = "2.0.18" }
 tracing = { version = "0.1.41" }
-
-cargo-husky = { version = "1.5.0", default-features = false, features = ["user-hooks"] }
