@@ -1,7 +1,7 @@
 use utoipa::OpenApi;
 
 #[cfg(feature = "swagger-ui")]
-use utoipa_swagger_ui::SwaggerUi;
+use utoipa_swagger_ui::{Config, SwaggerUi};
 
 use crate::api::borrowers::dto::BorrowerOverview;
 use crate::api::borrowers::handlers as borrower_handlers;
@@ -29,6 +29,9 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         title = "Simplicity Lending Indexer",
         version = env!("CARGO_PKG_VERSION"),
         description = "REST API for the Simplicity Lending protocol indexer."
+    ),
+    servers(
+        (url = "/api", description = "Public API mount root")
     ),
     paths(
         offer_handlers::get_overview,
@@ -81,7 +84,9 @@ pub struct ApiDoc;
 
 #[cfg(feature = "swagger-ui")]
 pub fn swagger_routes() -> SwaggerUi {
-    SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi())
+    SwaggerUi::new("/swagger-ui")
+        .url("/api-docs/openapi.json", ApiDoc::openapi())
+        .config(Config::new(["../api-docs/openapi.json"]))
 }
 
 #[cfg(test)]
