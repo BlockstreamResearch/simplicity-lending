@@ -66,9 +66,4 @@ pnpm lint
 
 ## Docker
 
-Build and run from this directory:
-
-```bash
-docker build -t simplicity-web .
-docker run --rm -p 8080:80 simplicity-web
-```
+See [`deployment/`](../deployment/README.md) for the Docker build and compose stack.
