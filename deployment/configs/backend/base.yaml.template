@@ -10,9 +10,6 @@ esplora:
   base_url: "${INDEXER_ESPLORA_BASE_URL}"
   timeout: 10
 indexer:
-  # Liquid testnet protocol-fee keeper asset (matches crates/indexer/configuration/base.yaml).
-  # Required by IndexerSettings::protocol_fee_keeper_asset_id. Hardcoded (not an envsubst var)
-  # because the staging k8s ConfigMap does not supply it and envsubst has no default-value syntax.
-  protocol_fee_keeper_asset_id: "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49"
+  protocol_fee_keeper_asset_id: "38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5"
   interval: ${INDEXER_POLL_INTERVAL_MS}
-  last_indexed_height: ${INDEXER_LAST_INDEXED_HEIGHT}
+  last_indexed_height: 2497352

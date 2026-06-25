@@ -49,6 +49,7 @@ Set these values in `deployment/configs/compose.env`:
 - `INDEXER_ESPLORA_BASE_URL`: the Esplora API used by the backend indexer
 - `WEB_ESPLORA_API_UPSTREAM`: the Esplora API proxied by nginx, for example `https://blockstream.info/liquidtestnet/api`
 - `INDEXER_POLL_INTERVAL_MS`: background polling interval
+- `PROTOCOL_FEE_KEEPER_ASSET_ID`: protocol-fee keeper asset tracked by the indexer
 - `INDEXER_LAST_INDEXED_HEIGHT`: first height to index from
 - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: database connection settings
 
