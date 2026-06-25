@@ -10,7 +10,9 @@ import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useOfferListControls } from '@/hooks/useOfferListControls'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
+import { getBorrowerAccountPendingTx } from '@/utils/pendingTransactions'
 
 import CreateBorrowerAccountModal from './CreateBorrowerAccountModal'
 import CreateBorrowOfferModal from './CreateBorrowOfferModal'
@@ -23,6 +25,10 @@ export default function YourBorrows() {
 
   const { scriptPubkey } = useWallet()
   const { hasAccount } = useBorrowerAccount()
+  const { pendingTxs } = usePendingTransactions()
+
+  const isCreatingBorrowerAccount =
+    !hasAccount && !!getBorrowerAccountPendingTx(scriptPubkey ?? '', pendingTxs)
 
   const { page, setPage, params, sort, setSort, statusFilter, setStatusFilter } =
     useOfferListControls({ pageSize: BORROW_PAGE_SIZE })
@@ -77,10 +83,22 @@ export default function YourBorrows() {
         />
       )}
 
-      <UiButton variant='primary' className='self-start' onPress={handleCreateOffer}>
-        <PlusIcon className='size-4' />
-        Create Borrow Offer
-      </UiButton>
+      <div className='flex flex-col items-start gap-1'>
+        <UiButton
+          variant='primary'
+          className='self-start'
+          isDisabled={isCreatingBorrowerAccount}
+          onPress={handleCreateOffer}
+        >
+          <PlusIcon className='size-4' />
+          Create Borrow Offer
+        </UiButton>
+        {isCreatingBorrowerAccount && (
+          <span className='text-muted text-xs'>
+            Your borrower account is still being created — hang tight, this can take a minute.
+          </span>
+        )}
+      </div>
 
       <CreateBorrowerAccountModal
         isOpen={isAccountModalOpen}

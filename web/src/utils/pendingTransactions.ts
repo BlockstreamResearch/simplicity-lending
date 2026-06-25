@@ -7,6 +7,20 @@ export function getOfferPendingTx(
   return pendingTxs.find(tx => tx.offerId === offerId && tx.confirmationStatus !== 'failed') ?? null
 }
 
+export function getBorrowerAccountPendingTx(
+  walletScriptPubkey: string,
+  pendingTxs: PendingTxRecord[],
+): PendingTxRecord | null {
+  return (
+    pendingTxs.find(
+      tx =>
+        tx.kind === 'create_borrower_account' &&
+        tx.walletScriptPubkey === walletScriptPubkey &&
+        tx.confirmationStatus !== 'failed',
+    ) ?? null
+  )
+}
+
 export const PENDING_TX_KIND_LABEL: Record<PendingTxKind, string> = {
   create_borrower_account: 'Create borrower account',
   create_offer: 'Create offer',
