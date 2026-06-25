@@ -13,10 +13,9 @@ interface OffersPanelProps {
   title: string
   pageSize: number
   status?: OfferStatus
-  onSuccess?: () => void
 }
 
-export default function OffersPanel({ title, pageSize, status, onSuccess }: OffersPanelProps) {
+export default function OffersPanel({ title, pageSize, status }: OffersPanelProps) {
   const { page, setPage, params, sort, setSort } = useOfferListControls({ pageSize, status })
 
   const {
@@ -33,11 +32,6 @@ export default function OffersPanel({ title, pageSize, status, onSuccess }: Offe
 
   const handleRetry = () => {
     refetch()
-  }
-
-  const handleSuccess = () => {
-    refetch()
-    onSuccess?.()
   }
 
   return (
@@ -77,7 +71,6 @@ export default function OffersPanel({ title, pageSize, status, onSuccess }: Offe
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
-          onActionSuccess={handleSuccess}
           sort={sort}
           onSortChange={setSort}
         />

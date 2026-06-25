@@ -69,7 +69,6 @@ export function RecentOffers() {
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
-          onActionSuccess={handleRetry}
           sort={sort}
           onSortChange={setSort}
           statusFilter={statusFilter}

@@ -1,15 +1,14 @@
 import { Skeleton } from '@heroui/react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import type { OfferShort } from '@/api/indexer/schemas'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
-import OfferActionModal from '@/components/modals/OfferActionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
 import { useLenderStats } from '@/hooks/useLenderStats'
+import { useOpenOffer } from '@/hooks/useOfferModal'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { ErrorHandler } from '@/utils/errorHandler'
 import { formatAmount, formatUsd, truncateAddress } from '@/utils/format'
@@ -25,7 +24,7 @@ export function SupplyCard() {
   const principalPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.principalAsset.id)
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.principalAsset.decimals, principalPriceUsd)
   const { pendingTxs } = usePendingTransactions()
-  const [selectedOffer, setSelectedOffer] = useState<OfferShort | null>(null)
+  const { openOffer } = useOpenOffer()
 
   const claimableOffer =
     repaidOffer && !getOfferPendingTx(repaidOffer.id, pendingTxs) ? repaidOffer : null
@@ -87,23 +86,13 @@ export function SupplyCard() {
           title='Repayment Available'
           description={`Loan #${truncateAddress(claimableOffer.id)} has been repaid. You can now claim the repayment.`}
           actionLabel='Claim Now'
-          onAction={() => setSelectedOffer(claimableOffer)}
+          onAction={() => openOffer(claimableOffer)}
         />
       )}
 
       <UiButton className='self-start' variant='primary' onPress={() => navigate(RoutePath.Supply)}>
         Supply
       </UiButton>
-
-      <OfferActionModal
-        offer={selectedOffer}
-        isOpen={selectedOffer !== null}
-        onClose={() => setSelectedOffer(null)}
-        onSuccess={() => {
-          setSelectedOffer(null)
-          refetch()
-        }}
-      />
     </section>
   )
 }

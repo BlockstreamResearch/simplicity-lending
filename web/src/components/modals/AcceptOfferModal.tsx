@@ -22,7 +22,6 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
-import { truncateAddress } from '@/utils/format'
 import { bpsToPercent, calcInterest } from '@/utils/offers'
 
 const ACCEPT_WEIGHT_UNITS =
@@ -100,9 +99,6 @@ export default function AcceptOfferModal({
     },
   })
 
-  const borrower = offer.participants.find(p => p.participant_type === 'borrower')
-  const title = `${truncateAddress(borrower?.script_pubkey || '')} Supply Offers`
-
   const txSummary = useMemo(
     () => [
       { label: 'Collateral', value: formatCollateralDisplay(offer.collateral_amount) },
@@ -119,7 +115,7 @@ export default function AcceptOfferModal({
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={title}
+      title='Accept Offer'
       chip={<OfferStatusChip status={offer.status} />}
       action={{
         label: 'Accept & Supply',

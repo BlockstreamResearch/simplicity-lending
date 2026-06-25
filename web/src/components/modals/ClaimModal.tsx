@@ -20,7 +20,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth-vault/program'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { formatAmount } from '@/utils/format'
 import { calcInterest } from '@/utils/offers'
 
 const CLAIM_WEIGHT_UNITS =
@@ -103,7 +103,7 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={`#${truncateAddress(offer.id)} - Claim`}
+      title='Claim Offer'
       chip={
         <Chip color='accent' variant='soft' size='sm'>
           Claim

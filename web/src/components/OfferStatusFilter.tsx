@@ -26,7 +26,7 @@ export function OfferStatusFilter({ value, onChange }: OfferStatusFilterProps) {
         )}
         <ChevronDownIcon className='size-3 transition-transform group-aria-expanded:rotate-180' />
       </Popover.Trigger>
-      <Popover.Content>
+      <Popover.Content className='max-h-none!'>
         <Popover.Dialog className='flex flex-col gap-3 p-4 outline-none'>
           {offerStatusSchema.options.map(status => (
             <StatusOption

@@ -20,7 +20,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ASSET_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth/program'
-import { formatAmount, truncateAddress } from '@/utils/format'
+import { formatAmount } from '@/utils/format'
 
 const CLAIM_PRINCIPAL_WEIGHT_UNITS =
   ASSET_AUTH_MAX_WEIGHT_TO_SATISFY + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
@@ -100,7 +100,7 @@ export default function ClaimPrincipalModal({
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={`#${truncateAddress(offer.id)} - Claim Principal`}
+      title='Claim Principal Offer'
       chip={
         <Chip color='success' variant='soft' size='sm'>
           Claim

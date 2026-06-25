@@ -106,7 +106,7 @@ export default function OfferActionModal({
       return (
         <OfferActionShell
           isOpen={isOpen}
-          title={`#${truncateAddress(offer.id)}`}
+          title='Offer Details'
           chip={<OfferStatusChip status={offer.status} />}
           onClose={onClose}
         >

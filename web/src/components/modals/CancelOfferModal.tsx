@@ -21,7 +21,6 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
-import { truncateAddress } from '@/utils/format'
 
 const CANCEL_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.OfferCancellation +
@@ -105,7 +104,7 @@ export default function CancelOfferModal({
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={`#${truncateAddress(offer.id)} - Cancel`}
+      title='Cancel Offer'
       chip={
         <Chip color='danger' variant='soft' size='sm'>
           Cancel

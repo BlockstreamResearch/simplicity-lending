@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react'
 
+import CopyButton from '@/components/CopyButton'
+
 export interface DetailRow {
   label: string
   value: ReactNode
+  copyValue?: string
 }
 
 interface DetailsPanelProps {
@@ -28,7 +31,10 @@ export default function DetailsPanel({ title, rows, bordered }: DetailsPanelProp
             }`}
           >
             <span className='text-foreground font-medium'>{row.label}</span>
-            <span className='font-medium'>{row.value}</span>
+            <span className='flex items-center gap-1 font-medium'>
+              {row.value}
+              {row.copyValue && <CopyButton value={row.copyValue} />}
+            </span>
           </div>
         ))}
       </div>

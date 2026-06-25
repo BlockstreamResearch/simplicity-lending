@@ -1,19 +1,18 @@
 import { Skeleton } from '@heroui/react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useBorrowerOffers } from '@/api/indexer/hooks'
-import type { OfferShort } from '@/api/indexer/schemas'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import CoinsIcon from '@/components/icons/CoinsIcon'
-import OfferActionModal from '@/components/modals/OfferActionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/offers'
 import { RoutePath } from '@/constants/routes'
 import { useBorrowerStats } from '@/hooks/useBorrowerStats'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
+import { useOpenOffer } from '@/hooks/useOfferModal'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ErrorHandler } from '@/utils/errorHandler'
@@ -49,7 +48,7 @@ export function BorrowCard() {
       termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS
     )
   })
-  const [selectedOffer, setSelectedOffer] = useState<OfferShort | null>(null)
+  const { openOffer } = useOpenOffer()
 
   useEffect(() => {
     if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your borrows.')
@@ -103,24 +102,13 @@ export function BorrowCard() {
           title='Repayment Due Soon'
           description={`Loan #${truncateAddress(repayDueOffer.id)} Nearing Deadline. Repay to Avoid Liquidation.`}
           actionLabel='Repay Now'
-          onAction={() => setSelectedOffer(repayDueOffer)}
+          onAction={() => openOffer(repayDueOffer)}
         />
       )}
 
       <UiButton className='self-start' variant='primary' onPress={() => navigate(RoutePath.Borrow)}>
         Borrow
       </UiButton>
-
-      <OfferActionModal
-        offer={selectedOffer}
-        isOpen={selectedOffer !== null}
-        onClose={() => setSelectedOffer(null)}
-        onSuccess={() => {
-          setSelectedOffer(null)
-          refetch()
-          offersQuery.refetch()
-        }}
-      />
     </section>
   )
 }

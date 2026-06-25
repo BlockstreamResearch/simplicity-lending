@@ -27,6 +27,7 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
     const borrower = offer.participants.find(p => p.participant_type === 'borrower')
 
     const rows: DetailRow[] = [
+      { label: 'Offer ID', value: truncateAddress(offer.id), copyValue: offer.id },
       { label: 'Collateral Amount', value: formatCollateralDisplay(offer.collateral_amount) },
       { label: 'Loan Amount', value: formatPrincipalAmount(offer.principal_amount) },
       { label: 'Expected Earning', value: formatPrincipalAmount(interest) },

@@ -22,7 +22,6 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
-import { truncateAddress } from '@/utils/format'
 import { calcInterest } from '@/utils/offers'
 
 const REPAY_WEIGHT_UNITS =
@@ -118,7 +117,7 @@ export default function RepayOfferModal({
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={`#${truncateAddress(offer.id)} - Repay`}
+      title='Repay Offer'
       chip={
         <Chip color='warning' variant='soft' size='sm'>
           Repay

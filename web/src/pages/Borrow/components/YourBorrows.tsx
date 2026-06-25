@@ -75,7 +75,6 @@ export default function YourBorrows() {
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
-          onActionSuccess={() => refetch()}
           sort={sort}
           onSortChange={setSort}
           statusFilter={statusFilter}

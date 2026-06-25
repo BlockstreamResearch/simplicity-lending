@@ -17,11 +17,9 @@ export default function YourSupply() {
   const { page, setPage, params, sort, setSort, statusFilter, setStatusFilter } =
     useOfferListControls({ pageSize: SUPPLY_PAGE_SIZE })
 
-  const {
-    data: lenderData,
-    isLoading,
-    refetch,
-  } = useLenderOffers(scriptPubkey ?? '', params, { placeholderData: keepPreviousData })
+  const { data: lenderData, isLoading } = useLenderOffers(scriptPubkey ?? '', params, {
+    placeholderData: keepPreviousData,
+  })
 
   const offers = lenderData?.items ?? []
   const totalOffers = lenderData?.total ?? 0
@@ -51,7 +49,6 @@ export default function YourSupply() {
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}
-          onActionSuccess={() => refetch()}
           sort={sort}
           onSortChange={setSort}
           statusFilter={statusFilter}
