@@ -1,5 +1,5 @@
 import type { MutationStatus } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 
 import {
   TransactionBody,
@@ -8,7 +8,6 @@ import {
 } from '@/components/TransactionModal'
 import { UiButton, type UiButtonProps } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
-import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
@@ -43,8 +42,11 @@ interface ActionView {
   error?: string
 }
 
-// Stable reference so `deriveView(undefined)` doesn't hand back a fresh `[]` every call — that
-// would always compare unequal below and force a setState (hence a re-render) on every render.
+interface ClosingSnapshot {
+  view: ActionView
+  tx: ReturnType<typeof useTxStatus>
+}
+
 const EMPTY_SUMMARY: TransactionSummaryRow[] = []
 
 function deriveView(action: OfferAction | undefined): ActionView {
@@ -69,17 +71,24 @@ export default function OfferActionShell({
   children,
 }: OfferActionShellProps) {
   const { addSurfaceToast } = usePendingTransactions()
-  const view = useFreezeViewWhileOpen(isOpen, deriveView(action))
+  const liveView = deriveView(action)
+  const liveTx = useTxStatus(action?.status === 'success' ? action.txid : null)
+
+  const [closing, setClosing] = useState<ClosingSnapshot | null>(null)
+  const [wasOpen, setWasOpen] = useState(isOpen)
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen)
+    if (isOpen && closing) setClosing(null)
+  }
+
+  const view = closing?.view ?? liveView
+  const { status: txStatus, confirmations, isComplete } = closing?.tx ?? liveTx
 
   const isProcessing = action?.status === 'pending'
-  const {
-    status: txStatus,
-    confirmations,
-    isComplete,
-  } = useTxStatus(action?.status === 'success' ? action.txid : null)
 
   const handleOpenChange = (open: boolean) => {
     if (open) return
+    if (liveView.isTxActive) setClosing({ view: liveView, tx: liveTx })
     if (action?.status === 'success') onSuccess?.()
     if (action?.txid) addSurfaceToast(action.txid)
     onClose()
@@ -93,18 +102,20 @@ export default function OfferActionShell({
       showCloseButton={!isProcessing}
       size='lg'
       title={
-        view.isTxActive ? (
-          <TransactionStatusTitle
-            status={view.status}
-            eyebrow={view.eyebrow}
-            isComplete={isComplete}
-          />
-        ) : (
-          <span className='flex items-center gap-3'>
-            {title}
-            {chip}
-          </span>
-        )
+        <span key={view.isTxActive ? 'tx' : 'form'} className='animate-modal-view-in block'>
+          {view.isTxActive ? (
+            <TransactionStatusTitle
+              status={view.status}
+              eyebrow={view.eyebrow}
+              isComplete={isComplete}
+            />
+          ) : (
+            <span className='flex items-center gap-3'>
+              {title}
+              {chip}
+            </span>
+          )}
+        </span>
       }
       footer={
         view.isTxActive ? (
@@ -128,18 +139,20 @@ export default function OfferActionShell({
         ) : undefined
       }
     >
-      {view.isTxActive ? (
-        <TransactionBody
-          status={view.status}
-          summary={view.summary}
-          txid={view.txid}
-          errorMessage={view.error}
-          txStatus={txStatus}
-          confirmations={confirmations}
-        />
-      ) : (
-        children
-      )}
+      <div key={view.isTxActive ? 'tx' : 'form'} className='animate-modal-view-in block'>
+        {view.isTxActive ? (
+          <TransactionBody
+            status={view.status}
+            summary={view.summary}
+            txid={view.txid}
+            errorMessage={view.error}
+            txStatus={txStatus}
+            confirmations={confirmations}
+          />
+        ) : (
+          children
+        )}
+      </div>
     </UiModal>
   )
 }
