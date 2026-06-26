@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use simplex::provider::SimplicityNetwork;
 use sqlx::PgPool;
 use tokio::time::{Interval, interval};
 
@@ -26,11 +25,10 @@ impl Worker {
             .await
             .expect("Failed to get last indexed height");
 
-        // TODO: move network to the settings
         let tracker_registry = TrackerRegistry::load(
             &db_pool,
             settings.protocol_fee_keeper_asset_id,
-            SimplicityNetwork::LiquidTestnet,
+            client.network(),
         )
         .await?;
 

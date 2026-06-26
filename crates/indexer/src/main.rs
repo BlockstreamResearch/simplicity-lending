@@ -20,7 +20,9 @@ async fn main() -> Result<(), std::io::Error> {
 
     match run_mode.as_str() {
         "indexer" => {
-            let esplora_client = EsploraClient::with_base_url(&configuration.esplora.base_url);
+            let esplora_client = EsploraClient::with_base_url(&configuration.esplora.base_url)
+                .with_network(&configuration.esplora.network)
+                .expect("Invalid network configured");
 
             tracing::info!("Starting indexer service");
 

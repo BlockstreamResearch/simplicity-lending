@@ -6,6 +6,8 @@ use simplex::{
     simplicityhl::elements::{Transaction, Txid, encode},
 };
 
+use crate::configuration::Network;
+
 /// Default Esplora API base URL for Liquid testnet.
 pub const DEFAULT_BASE_URL: &str = "https://blockstream.info/liquidtestnet/api";
 
@@ -17,6 +19,7 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 10;
 pub struct EsploraClient {
     base_url: String,
     client: Client,
+    network: SimplicityNetwork,
 }
 
 impl Default for EsploraClient {
@@ -42,11 +45,25 @@ impl EsploraClient {
         Self {
             base_url: base_url.trim_end_matches('/').to_owned(),
             client,
+            network: SimplicityNetwork::LiquidTestnet,
         }
     }
 
+    pub fn with_network(self, network: &str) -> Result<Self, String> {
+        let simplicity_network = Network::try_from(network.to_string())?;
+        Ok(Self {
+            base_url: self.base_url,
+            client: self.client,
+            network: simplicity_network.into(),
+        })
+    }
+
     pub fn to_simplex_provider(&self) -> EsploraProvider {
-        EsploraProvider::new(self.base_url.clone(), SimplicityNetwork::LiquidTestnet)
+        EsploraProvider::new(self.base_url.clone(), self.network)
+    }
+
+    pub fn network(&self) -> SimplicityNetwork {
+        self.network
     }
 
     pub async fn get_latest_block_hash(&self) -> Result<String, EsploraClientError> {
@@ -176,5 +193,15 @@ mod tests {
         let provider = client.to_simplex_provider();
 
         assert_eq!(*provider.get_network(), SimplicityNetwork::LiquidTestnet);
+    }
+
+    #[test]
+    fn to_simplex_provider_returns_custom_network() {
+        let client = EsploraClient::with_base_url("https://example.com/api")
+            .with_network("liquid")
+            .unwrap();
+        let provider = client.to_simplex_provider();
+
+        assert_eq!(*provider.get_network(), SimplicityNetwork::Liquid);
     }
 }

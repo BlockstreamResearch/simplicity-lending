@@ -1,4 +1,4 @@
-use simplex::simplicityhl::elements::AssetId;
+use simplex::{provider::SimplicityNetwork, simplicityhl::elements::AssetId};
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
@@ -36,6 +36,7 @@ impl DatabaseSettings {
 pub struct EsploraSettings {
     pub base_url: String,
     pub timeout: u16,
+    pub network: String,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -99,9 +100,43 @@ impl TryFrom<String> for Environment {
     }
 }
 
+pub enum Network {
+    Liquid,
+    LiquidTestnet,
+    Regtest,
+}
+
+impl TryFrom<String> for Network {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "liquid" => Ok(Self::Liquid),
+            "liquidtestnet" => Ok(Self::LiquidTestnet),
+            "regtest" => Ok(Self::Regtest),
+            other => Err(format!(
+                "{} is not a supported network. \
+                Use `liquid`, `liquidtestnet` or `regtest`.",
+                other
+            )),
+        }
+    }
+}
+
+impl From<Network> for SimplicityNetwork {
+    fn from(value: Network) -> Self {
+        match value {
+            Network::Liquid => SimplicityNetwork::Liquid,
+            Network::LiquidTestnet => SimplicityNetwork::LiquidTestnet,
+            Network::Regtest => SimplicityNetwork::default_regtest(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DatabaseSettings, Environment};
+    use super::{DatabaseSettings, Environment, Network};
+    use simplex::provider::SimplicityNetwork;
 
     #[test]
     fn connection_string_builds_expected_postgres_url() {
@@ -143,5 +178,41 @@ mod tests {
     fn environment_as_str_returns_expected_values() {
         assert_eq!(Environment::Local.as_str(), "local");
         assert_eq!(Environment::Production.as_str(), "production");
+    }
+
+    #[test]
+    fn network_try_from_is_case_insensitive() {
+        assert!(matches!(
+            Network::try_from("Liquid".to_string()),
+            Ok(Network::Liquid)
+        ));
+        assert!(matches!(
+            Network::try_from("LIQUIDTESTNET".to_string()),
+            Ok(Network::LiquidTestnet)
+        ));
+        assert!(matches!(
+            Network::try_from("regtest".to_string()),
+            Ok(Network::Regtest)
+        ));
+    }
+
+    #[test]
+    fn network_try_from_invalid_returns_error() {
+        let result = Network::try_from("mainnet".to_string());
+        assert!(result.is_err());
+        let err = result.err().unwrap_or_default();
+        assert!(err.contains("not a supported network"));
+    }
+
+    #[test]
+    fn network_into_simplicity_network() {
+        let liquid: SimplicityNetwork = Network::Liquid.into();
+        assert_eq!(liquid, SimplicityNetwork::Liquid);
+
+        let testnet: SimplicityNetwork = Network::LiquidTestnet.into();
+        assert_eq!(testnet, SimplicityNetwork::LiquidTestnet);
+
+        let regtest: SimplicityNetwork = Network::Regtest.into();
+        assert_eq!(regtest, SimplicityNetwork::default_regtest());
     }
 }
