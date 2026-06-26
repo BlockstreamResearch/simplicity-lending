@@ -41,7 +41,7 @@ export default function RepayOfferModal({
   onSuccess,
 }: RepayOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { repayOffer } = useRepayOffer()
   const { addPendingTx } = usePendingTransactions()
@@ -101,6 +101,10 @@ export default function RepayOfferModal({
     },
   })
 
+  const totalToRepay =
+    offer.principal_amount + calcInterest(offer.principal_amount, offer.interest_rate)
+  const insufficientBalance = BigInt(balances[principalAsset.id] ?? 0) < totalToRepay
+
   const txSummary = useMemo(() => {
     const interest = calcInterest(offer.principal_amount, offer.interest_rate)
     return [
@@ -128,6 +132,7 @@ export default function RepayOfferModal({
         eyebrow: 'Repay Loan',
         summary: txSummary,
         status,
+        disabled: insufficientBalance,
         txid: data?.txid,
         error: error?.message,
         onConfirm: () => mutate(),
@@ -139,6 +144,11 @@ export default function RepayOfferModal({
       onSuccess={onSuccess}
     >
       <OfferDetailsBody offer={offer} />
+      {insufficientBalance && (
+        <div className='rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger'>
+          Insufficient {principalAsset.symbol} balance to repay this loan.
+        </div>
+      )}
     </OfferActionShell>
   )
 }

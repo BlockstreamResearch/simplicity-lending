@@ -41,7 +41,7 @@ export default function AcceptOfferModal({
   onSuccess,
 }: AcceptOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
   const { addPendingTx } = usePendingTransactions()
@@ -99,6 +99,8 @@ export default function AcceptOfferModal({
     },
   })
 
+  const insufficientBalance = BigInt(balances[principalAsset.id] ?? 0) < offer.principal_amount
+
   const txSummary = useMemo(
     () => [
       { label: 'Collateral', value: formatCollateralDisplay(offer.collateral_amount) },
@@ -122,6 +124,7 @@ export default function AcceptOfferModal({
         eyebrow: 'Accept Offer',
         summary: txSummary,
         status,
+        disabled: insufficientBalance,
         txid: data?.txid,
         error: error?.message,
         onConfirm: () => mutate(),
@@ -133,6 +136,11 @@ export default function AcceptOfferModal({
       onSuccess={onSuccess}
     >
       <OfferDetailsBody offer={offer} />
+      {insufficientBalance && (
+        <div className='rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger'>
+          Insufficient {principalAsset.symbol} balance to accept this offer.
+        </div>
+      )}
     </OfferActionShell>
   )
 }
