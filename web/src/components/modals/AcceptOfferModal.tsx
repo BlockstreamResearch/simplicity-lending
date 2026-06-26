@@ -1,7 +1,7 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
@@ -99,7 +99,16 @@ export default function AcceptOfferModal({
     },
   })
 
-  const insufficientBalance = BigInt(balances[principalAsset.id] ?? 0) < offer.principal_amount
+  const { data: feeRate = FALLBACK_FEE_RATE_SAT_PER_KVB } = useQuery({
+    queryKey: ['feeRate'],
+    queryFn: () => fetchFeeRateSatPerKvb(),
+  })
+  const feeBuffer =
+    principalAsset.id === lwkNetwork.policyAsset().toString()
+      ? estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
+      : 0n
+  const insufficientBalance =
+    BigInt(balances[principalAsset.id] ?? 0) < offer.principal_amount + feeBuffer
 
   const txSummary = useMemo(
     () => [
@@ -137,7 +146,7 @@ export default function AcceptOfferModal({
     >
       <OfferDetailsBody offer={offer} />
       {insufficientBalance && (
-        <div className='rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger'>
+        <div className='rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning'>
           Insufficient {principalAsset.symbol} balance to accept this offer.
         </div>
       )}

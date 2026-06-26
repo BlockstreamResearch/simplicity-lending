@@ -1,10 +1,8 @@
 import { buttonVariants, Chip, Dropdown, Tabs } from '@heroui/react'
 import { useState } from 'react'
 
-import CheckIcon from '@/components/icons/CheckIcon'
-import CopyIcon from '@/components/icons/CopyIcon'
+import CopyButton from '@/components/CopyButton'
 import { UiButton } from '@/components/ui/UiButton'
-import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
@@ -23,7 +21,6 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
   const { network, isMainnet } = useLwk()
   const [disconnecting, setDisconnecting] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [copied, copyToClipboard] = useCopyToClipboard()
   const { denomination, setDenomination } = useAssetDenomination()
 
   const handleDisconnect = async () => {
@@ -75,15 +72,7 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
             )}
             <div className='bg-surface-secondary flex items-center justify-between gap-2 rounded-lg p-1 px-2'>
               <span className='font-mono text-xs'>{truncateAddress(receiveAddress)}</span>
-              <UiButton
-                variant='ghost'
-                isIconOnly
-                size='sm'
-                aria-label='Copy address'
-                onPress={() => copyToClipboard(receiveAddress)}
-              >
-                {copied ? <CheckIcon className='size-4' /> : <CopyIcon className='size-4' />}
-              </UiButton>
+              <CopyButton value={receiveAddress} aria-label='Copy address' />
             </div>
             <div className='flex flex-col gap-1.5'>
               <span className='text-muted text-[11px] font-semibold tracking-wide'>

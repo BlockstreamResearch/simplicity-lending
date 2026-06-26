@@ -11,8 +11,7 @@ const OFFER_ID_PARAM = 'offer-id'
 
 function withOfferId(params: URLSearchParams, id: string | null) {
   const next = new URLSearchParams(params)
-  if (id) next.set(OFFER_ID_PARAM, id)
-  else next.delete(OFFER_ID_PARAM)
+  void (id ? next.set(OFFER_ID_PARAM, id) : next.delete(OFFER_ID_PARAM))
   return next
 }
 
