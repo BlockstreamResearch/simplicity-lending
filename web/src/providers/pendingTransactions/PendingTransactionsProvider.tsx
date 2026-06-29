@@ -133,8 +133,6 @@ function useOfferCleanupPolling({
       processedAtRef.current.set(offerId, result.dataUpdatedAt)
 
       for (const record of records) {
-        // TODO: drop the `confirmationStatus` half of this once the indexer fixes GET
-        // /offers/{id} always returning borrower_principal_utxo: null.
         const isCleaned =
           record.kind === 'claim_principal'
             ? !result.data.borrower_principal_utxo && record.confirmationStatus !== 'processing'

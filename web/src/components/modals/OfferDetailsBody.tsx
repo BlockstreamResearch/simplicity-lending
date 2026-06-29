@@ -17,7 +17,7 @@ interface OfferDetailsBodyProps {
 
 export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsBodyProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { balances } = useWallet()
+  const { balances, isReady } = useWallet()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
   const { data: currentBlockHeight } = useBlockHeight()
 
@@ -56,7 +56,9 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
 
   return (
     <div className='flex flex-col gap-6'>
-      <BalanceCard asset={principalAsset} amount={BigInt(balances[principalAsset.id] ?? 0)} />
+      {isReady && (
+        <BalanceCard asset={principalAsset} amount={BigInt(balances[principalAsset.id] ?? 0)} />
+      )}
       <DetailsPanel title='Loan info' rows={loanInfoRows} />
       <DetailsPanel title='Term' rows={termRows} bordered={highlightTerm} />
     </div>

@@ -35,12 +35,17 @@ export default function OfferActionModal({
   const { pendingTxs } = usePendingTransactions()
 
   const isProcessingNow = Boolean(offer && getOfferPendingTx(offer.id, pendingTxs))
+  const liveAction = offer ? resolveOfferAction(offer, scriptPubkey, currentBlockHeight) : 'none'
 
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
   const [isProcessingAtOpen, setIsProcessingAtOpen] = useState(isProcessingNow)
+  const [actionAtOpen, setActionAtOpen] = useState(liveAction)
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
-    if (isOpen) setIsProcessingAtOpen(isProcessingNow)
+    if (isOpen) {
+      setIsProcessingAtOpen(isProcessingNow)
+      setActionAtOpen(liveAction)
+    }
   }
 
   useEffect(() => {
@@ -67,9 +72,7 @@ export default function OfferActionModal({
     )
   }
 
-  const action = resolveOfferAction(offer, scriptPubkey, currentBlockHeight)
-
-  switch (action) {
+  switch (actionAtOpen) {
     case 'accept':
       return (
         <AcceptOfferModal isOpen={isOpen} offer={offer} onClose={onClose} onSuccess={onSuccess} />
