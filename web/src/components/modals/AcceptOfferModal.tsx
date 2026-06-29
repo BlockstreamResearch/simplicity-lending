@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { esploraQueryKeys } from '@/api/esplora/queryKeys'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
@@ -100,7 +101,7 @@ export default function AcceptOfferModal({
   })
 
   const { data: feeRate = FALLBACK_FEE_RATE_SAT_PER_KVB } = useQuery({
-    queryKey: ['feeRate'],
+    queryKey: esploraQueryKeys.feeRate,
     queryFn: () => fetchFeeRateSatPerKvb(),
   })
   const feeBuffer =
