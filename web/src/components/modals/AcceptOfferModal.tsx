@@ -23,7 +23,7 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
-import { bpsToPercent, calcInterest } from '@/utils/offers'
+import { calcInterest, computeApr } from '@/utils/offers'
 
 const ACCEPT_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance + SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY
@@ -119,7 +119,10 @@ export default function AcceptOfferModal({
         label: 'Earn',
         value: formatPrincipalAmount(calcInterest(offer.principal_amount, offer.interest_rate)),
       },
-      { label: 'APR', value: bpsToPercent(offer.interest_rate) },
+      {
+        label: 'APR',
+        value: `${computeApr(offer.interest_rate, offer.loan_expiration_height - offer.created_at_height).toFixed(2)}%`,
+      },
     ],
     [offer, formatCollateralDisplay, formatPrincipalAmount],
   )
