@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { type BorrowerAccountCreationSummary, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -18,7 +18,7 @@ const INITIAL_STATE = { busy: false, error: null, result: null }
 export default function CreateBorrowerAccountDemo() {
   const { connectionStatus } = useWallet()
   const { createBorrowerAccount, removeBorrowerAccount } = useBorrowerAccount()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
 
   const [createState, setCreateState] =
     useState<BroadcastState<{ txid: string; summary: BorrowerAccountCreationSummary }>>(
@@ -32,7 +32,7 @@ export default function CreateBorrowerAccountDemo() {
   const handleCreate = async () => {
     setCreateState({ busy: true, error: null, result: null })
     try {
-      const { txid, summary } = await runDefaultTransactionFlow(createBorrowerAccount)
+      const { txid, summary } = await runStandardTransactionFlow(createBorrowerAccount)
 
       setCreateState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {

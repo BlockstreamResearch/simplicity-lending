@@ -9,8 +9,8 @@ import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { useCancelOffer } from '@/hooks/useCancelOffer'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -44,12 +44,12 @@ export default function CancelOfferModal({
   const { syncWallet, getBlindedWalletUtxos, getReceiveAddress, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { cancelOffer } = useCancelOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay } = useFormatAmount()
 
   const cancelBorrowOffer = () =>
-    runDefaultTransactionFlow(async () => {
+    runStandardTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
       const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
       if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')

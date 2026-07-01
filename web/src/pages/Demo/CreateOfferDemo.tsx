@@ -7,7 +7,7 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type CreateOfferSummary, useCreateOffer } from '@/hooks/useCreateOffer'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -136,7 +136,7 @@ export default function CreateOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, syncing, syncWallet, getBlindedWalletUtxos } = useWallet()
   const { createOffer } = useCreateOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<CreateOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -203,7 +203,7 @@ export default function CreateOfferDemo() {
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-      const { txid, summary } = await runDefaultTransactionFlow(() => createOffer(result.data))
+      const { txid, summary } = await runStandardTransactionFlow(() => createOffer(result.data))
       setState({ busy: false, error: null, txid, summary })
     } catch (err) {
       setState(current => ({

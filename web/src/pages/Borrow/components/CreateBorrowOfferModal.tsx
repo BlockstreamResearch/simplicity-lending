@@ -18,10 +18,10 @@ import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
 import { BPS_DIVISOR } from '@/constants/offers'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
@@ -252,7 +252,7 @@ export default function CreateBorrowOfferModal({
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { factoryState, refetchFactory } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const feeRate = useFeeRateSatPerKvb(isOpen)
   const feeBudgetSats = useMemo(
@@ -306,7 +306,7 @@ export default function CreateBorrowOfferModal({
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
 
   const createBorrowOffer = useCallback(async () => {
-    const { txid } = await runDefaultTransactionFlow(async () => {
+    const { txid } = await runStandardTransactionFlow(async () => {
       if (!factoryState) {
         throw new Error('No active factory found. Create a borrower account first.')
       }
@@ -334,7 +334,7 @@ export default function CreateBorrowOfferModal({
     utxos,
     collateralBase,
     feeBudgetSats,
-    runDefaultTransactionFlow,
+    runStandardTransactionFlow,
     createOffer,
     principalBase,
     bps,

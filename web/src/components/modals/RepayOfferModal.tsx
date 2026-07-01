@@ -10,9 +10,9 @@ import { resolveActiveOutpoint, resolveBorrowerNftOutpoint } from '@/api/indexer
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useRepayOffer } from '@/hooks/useRepayOffer'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -46,12 +46,12 @@ export default function RepayOfferModal({
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { repayOffer } = useRepayOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
 
   const repayBorrowOffer = () =>
-    runDefaultTransactionFlow(async () => {
+    runStandardTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
       const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
       if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')

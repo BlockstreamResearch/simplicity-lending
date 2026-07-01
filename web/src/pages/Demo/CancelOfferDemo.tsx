@@ -6,7 +6,7 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type CancelOfferSummary, useCancelOffer } from '@/hooks/useCancelOffer'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -101,7 +101,7 @@ export default function CancelOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { cancelOffer } = useCancelOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<CancelOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -170,7 +170,7 @@ export default function CancelOfferDemo() {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
 
-      const { txid, summary } = await runDefaultTransactionFlow(() => cancelOffer(result.data))
+      const { txid, summary } = await runStandardTransactionFlow(() => cancelOffer(result.data))
 
       setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {

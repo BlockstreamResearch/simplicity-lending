@@ -9,8 +9,8 @@ import { resolveLenderNftOutpoint, resolveRepaymentOutpoint } from '@/api/indexe
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -39,11 +39,11 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { claimLenderVault } = useLenderVaultClaim()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
 
   const claimVault = () =>
-    runDefaultTransactionFlow(async () => {
+    runStandardTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
       const vaultOutpoint = resolveRepaymentOutpoint(fullOffer)
       if (!vaultOutpoint) throw new Error('Lender vault UTXO not found')

@@ -11,8 +11,8 @@ import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   selectAssetUtxos,
@@ -46,12 +46,12 @@ export default function AcceptOfferModal({
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
 
   const acceptBorrowOffer = () =>
-    runDefaultTransactionFlow(async () => {
+    runStandardTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
       const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
       if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')

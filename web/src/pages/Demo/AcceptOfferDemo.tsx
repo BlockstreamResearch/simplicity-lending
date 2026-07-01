@@ -7,7 +7,7 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type AcceptOfferSummary, useAcceptOffer } from '@/hooks/useAcceptOffer'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -97,7 +97,7 @@ export default function AcceptOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { acceptOffer } = useAcceptOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<AcceptOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -185,7 +185,7 @@ export default function AcceptOfferDemo() {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
 
-      const { txid, summary } = await runDefaultTransactionFlow(() => acceptOffer(result.data))
+      const { txid, summary } = await runStandardTransactionFlow(() => acceptOffer(result.data))
 
       setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {

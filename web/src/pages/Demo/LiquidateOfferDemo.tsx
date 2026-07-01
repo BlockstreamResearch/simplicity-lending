@@ -5,8 +5,8 @@ import { z as zod } from 'zod'
 
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { type LiquidateOfferSummary, useLiquidateOffer } from '@/hooks/useLiquidateOffer'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -100,7 +100,7 @@ export default function LiquidateOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { liquidateOffer } = useLiquidateOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit } = useForm<LiquidateOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -165,7 +165,7 @@ export default function LiquidateOfferDemo() {
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-      const { txid, summary } = await runDefaultTransactionFlow(() => liquidateOffer(result.data))
+      const { txid, summary } = await runStandardTransactionFlow(() => liquidateOffer(result.data))
 
       setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {

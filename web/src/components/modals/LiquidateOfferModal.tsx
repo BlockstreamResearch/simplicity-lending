@@ -8,9 +8,9 @@ import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useLiquidateOffer } from '@/hooks/useLiquidateOffer'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -41,12 +41,12 @@ export default function LiquidateOfferModal({
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { liquidateOffer } = useLiquidateOffer()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay } = useFormatAmount()
 
   const liquidateExpiredOffer = () =>
-    runDefaultTransactionFlow(async () => {
+    runStandardTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
       const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
       if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')

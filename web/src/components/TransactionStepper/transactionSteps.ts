@@ -1,12 +1,12 @@
 import type { TransactionStep } from '@/providers/txProgress/types'
 import type { WalletSignerType } from '@/providers/wallet/types'
 
-const DEFAULT_STAGE_ORDER = ['constructing', 'signing', 'finalizing', 'broadcasting'] as const
+const STANDARD_STAGE_ORDER = ['constructing', 'signing', 'finalizing', 'broadcasting'] as const
 
-type DefaultStage = (typeof DEFAULT_STAGE_ORDER)[number]
+type StandardStage = (typeof STANDARD_STAGE_ORDER)[number]
 
 function getStageLabel(
-  stage: DefaultStage,
+  stage: StandardStage,
   signerType: WalletSignerType | null,
 ): { title: string; subtitle: string } {
   switch (stage) {
@@ -23,9 +23,9 @@ function getStageLabel(
   }
 }
 
-/** Default constructing→signing→finalizing→broadcasting steps every flow uses today. */
-export function getDefaultTransactionSteps(
+/** Standard constructing→signing→finalizing→broadcasting steps every flow uses today. */
+export function getStandardTransactionSteps(
   signerType: WalletSignerType | null,
-): TransactionStep<DefaultStage>[] {
-  return DEFAULT_STAGE_ORDER.map(stage => ({ id: stage, ...getStageLabel(stage, signerType) }))
+): TransactionStep<StandardStage>[] {
+  return STANDARD_STAGE_ORDER.map(stage => ({ id: stage, ...getStageLabel(stage, signerType) }))
 }

@@ -10,7 +10,7 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useClaimPrincipal } from '@/hooks/useClaimPrincipal'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -43,11 +43,11 @@ export default function ClaimPrincipalModal({
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { claimPrincipal } = useClaimPrincipal()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
 
   const claimBorrowerPrincipal = () =>
-    runDefaultTransactionFlow(async () => {
+    runStandardTransactionFlow(async () => {
       if (!offer.borrower_principal_utxo) throw new Error('Borrower principal UTXO not found')
       const principalOutpoint = toOutpoint(offer.borrower_principal_utxo)
 

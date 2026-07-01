@@ -5,8 +5,8 @@ import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
-import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
+import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 
 interface CreateBorrowerAccountModalProps {
@@ -21,10 +21,10 @@ export default function CreateBorrowerAccountModal({
   onClose,
 }: CreateBorrowerAccountModalProps) {
   const { createBorrowerAccount, refetchFactory, scriptPubkey } = useBorrowerAccount()
-  const runDefaultTransactionFlow = useDefaultTransactionFlow()
+  const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const { mutate, reset, data, status } = useMutation({
-    mutationFn: () => runDefaultTransactionFlow(createBorrowerAccount),
+    mutationFn: () => runStandardTransactionFlow(createBorrowerAccount),
     onSuccess: result => {
       void addPendingTx({
         txid: result.txid,
