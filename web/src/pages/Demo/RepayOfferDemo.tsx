@@ -3,16 +3,14 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
-import { broadcastTx } from '@/api/esplora/methods'
-import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { type RepayOfferSummary, useRepayOffer } from '@/hooks/useRepayOffer'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
-import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { formatCollateralUtxoOption } from './helpers'
@@ -96,10 +94,9 @@ const INITIAL_STATE: BroadcastState = {
 
 export default function RepayOfferDemo() {
   const { lwkNetwork } = useLwk()
-  const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet, signPset, signerType } =
-    useWallet()
+  const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { repayOffer } = useRepayOffer()
-  const { start, fail } = useTxProgress()
+  const runDefaultTransactionFlow = useDefaultTransactionFlow()
   const { control, handleSubmit } = useForm<RepayOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -186,18 +183,10 @@ export default function RepayOfferDemo() {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
 
-      const advance = await start(getDefaultTransactionSteps(signerType))
-      const { pset, finalize } = await repayOffer(result.data)
-      await advance('signing')
-      const signedPset = await signPset(pset)
-      await advance('finalizing')
-      const { finalizedTx, summary } = finalize(signedPset)
-      await advance('broadcasting')
-      const txid = await broadcastTx(finalizedTx.toString())
+      const { txid, summary } = await runDefaultTransactionFlow(() => repayOffer(result.data))
 
       setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
-      fail(err)
       setState({
         busy: false,
         error: err instanceof Error ? err.message : String(err),

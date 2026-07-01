@@ -4,12 +4,10 @@ import { useCallback, useMemo } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z as zod } from 'zod'
 
-import { broadcastTx } from '@/api/esplora/methods'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import BalanceCard from '@/components/BalanceCard'
 import PlusIcon from '@/components/icons/PlusIcon'
 import TransactionModal from '@/components/TransactionModal'
-import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiFieldLabel } from '@/components/ui/UiFieldLabel'
 import { UiModal } from '@/components/ui/UiModal'
@@ -20,6 +18,7 @@ import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
 import { BPS_DIVISOR } from '@/constants/offers'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
+import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
@@ -27,7 +26,6 @@ import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from 
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
@@ -247,14 +245,14 @@ export default function CreateBorrowOfferModal({
   onClose,
 }: CreateBorrowOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
-  const { balances, signPset, signerType, scriptPubkey } = useWallet()
+  const { balances, scriptPubkey } = useWallet()
   const { denomination } = useAssetDenomination()
   const collateralUnit = getPolicyAssetUnit(denomination, collateralAsset)
   const collateralUsd = useAssetPriceUsd(collateralAsset.id)
   const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
   const { factoryState, refetchFactory } = useBorrowerAccount()
   const { createOffer } = useCreateOffer()
-  const { prepare, start, fail } = useTxProgress()
+  const runDefaultTransactionFlow = useDefaultTransactionFlow()
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const feeRate = useFeeRateSatPerKvb(isOpen)
   const feeBudgetSats = useMemo(
@@ -308,12 +306,14 @@ export default function CreateBorrowOfferModal({
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
 
   const createBorrowOffer = useCallback(async () => {
-    if (!factoryState) throw new Error('No active factory found. Create a borrower account first.')
-    const collateralUtxos = selectByLargestFirst(utxos, collateralBase + feeBudgetSats)
-    if (!collateralUtxos) throw new Error('No suitable collateral UTXOs found')
-    try {
-      const advance = await start(getDefaultTransactionSteps(signerType))
-      const { pset, finalize } = await createOffer({
+    const { txid } = await runDefaultTransactionFlow(async () => {
+      if (!factoryState) {
+        throw new Error('No active factory found. Create a borrower account first.')
+      }
+      const collateralUtxos = selectByLargestFirst(utxos, collateralBase + feeBudgetSats)
+      if (!collateralUtxos) throw new Error('No suitable collateral UTXOs found')
+
+      return createOffer({
         factoryAuthOutpoint: factoryState.factoryAuthOutpoint,
         issuanceFactoryOutpoint: factoryState.issuanceFactoryOutpoint,
         factoryAssetId: factoryState.factoryAssetId,
@@ -325,36 +325,21 @@ export default function CreateBorrowOfferModal({
         loanDurationBlocks,
         protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
       })
+    })
 
-      await advance('signing')
-      const signedPset = await signPset(pset)
-
-      await advance('finalizing')
-      const { finalizedTx } = finalize(signedPset)
-
-      await advance('broadcasting')
-      const txid = await broadcastTx(finalizedTx.toString())
-
-      refetchFactory()
-      return txid
-    } catch (err) {
-      fail(err)
-      throw err
-    }
+    refetchFactory()
+    return txid
   }, [
     factoryState,
     utxos,
     collateralBase,
     feeBudgetSats,
+    runDefaultTransactionFlow,
+    createOffer,
     principalBase,
     bps,
     loanDurationBlocks,
     refetchFactory,
-    createOffer,
-    signPset,
-    signerType,
-    start,
-    fail,
   ])
 
   const { mutate, reset, data, status } = useMutation({
@@ -401,10 +386,7 @@ export default function CreateBorrowOfferModal({
     onClose()
   }
 
-  const onSubmit = handleSubmit(() => {
-    prepare()
-    mutate()
-  })
+  const onSubmit = handleSubmit(() => mutate())
 
   if (view.status !== 'idle') {
     return (

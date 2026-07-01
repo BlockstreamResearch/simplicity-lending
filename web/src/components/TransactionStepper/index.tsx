@@ -6,6 +6,12 @@ import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 
 type StepState = 'done' | 'active' | 'error' | 'pending'
 
+function getStepState(index: number, activeIndex: number, hasError: boolean): StepState {
+  if (index < activeIndex) return 'done'
+  if (index > activeIndex) return 'pending'
+  return hasError ? 'error' : 'active'
+}
+
 function StepIcon({ state }: { state: StepState }) {
   if (state === 'done') {
     return (
@@ -42,15 +48,7 @@ export default function TransactionStepper() {
   return (
     <div className='flex flex-col'>
       {steps.map((step, index) => {
-        const isCurrent = index === activeIndex
-        const state: StepState =
-          index < activeIndex
-            ? 'done'
-            : isCurrent
-              ? errorMessage !== null
-                ? 'error'
-                : 'active'
-              : 'pending'
+        const state = getStepState(index, activeIndex, errorMessage !== null)
         const isLast = index === steps.length - 1
 
         return (

@@ -1,16 +1,13 @@
 import { useMutation } from '@tanstack/react-query'
 
-import { broadcastTx } from '@/api/esplora/methods'
 import CircleDashedIcon from '@/components/icons/CircleDashedIcon'
 import TransactionModal from '@/components/TransactionModal'
-import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useTxProgress } from '@/providers/txProgress/useTxProgress'
-import { useWallet } from '@/providers/wallet/useWallet'
 
 interface CreateBorrowerAccountModalProps {
   isOpen: boolean
@@ -24,30 +21,10 @@ export default function CreateBorrowerAccountModal({
   onClose,
 }: CreateBorrowerAccountModalProps) {
   const { createBorrowerAccount, refetchFactory, scriptPubkey } = useBorrowerAccount()
-  const { signPset, signerType } = useWallet()
-  const { prepare, start, fail } = useTxProgress()
+  const runDefaultTransactionFlow = useDefaultTransactionFlow()
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const { mutate, reset, data, status } = useMutation({
-    mutationFn: async () => {
-      try {
-        const advance = await start(getDefaultTransactionSteps(signerType))
-        const { pset, finalize } = await createBorrowerAccount()
-
-        await advance('signing')
-        const signedPset = await signPset(pset)
-
-        await advance('finalizing')
-        const { finalizedTx, summary } = finalize(signedPset)
-
-        await advance('broadcasting')
-        const txid = await broadcastTx(finalizedTx.toString())
-
-        return { txid, summary }
-      } catch (err) {
-        fail(err)
-        throw err
-      }
-    },
+    mutationFn: () => runDefaultTransactionFlow(createBorrowerAccount),
     onSuccess: result => {
       void addPendingTx({
         txid: result.txid,
@@ -105,7 +82,6 @@ export default function CreateBorrowerAccountModal({
           <UiButton
             variant='primary'
             onPress={() => {
-              prepare()
               mutate()
             }}
           >

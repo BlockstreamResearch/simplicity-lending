@@ -3,15 +3,14 @@ import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { broadcastTx } from '@/api/esplora/methods'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveNftOutpoints, toOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
-import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useClaimPrincipal } from '@/hooks/useClaimPrincipal'
+import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import {
   estimateFeeBudgetSats,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -20,7 +19,6 @@ import {
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ASSET_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth/program'
 import { formatAmount } from '@/utils/format'
@@ -42,15 +40,14 @@ export default function ClaimPrincipalModal({
   onSuccess,
 }: ClaimPrincipalModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, signPset, signerType, scriptPubkey } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { claimPrincipal } = useClaimPrincipal()
-  const { start, fail } = useTxProgress()
+  const runDefaultTransactionFlow = useDefaultTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
 
-  const claimBorrowerPrincipal = async () => {
-    try {
-      const advance = await start(getDefaultTransactionSteps(signerType))
+  const claimBorrowerPrincipal = () =>
+    runDefaultTransactionFlow(async () => {
       if (!offer.borrower_principal_utxo) throw new Error('Borrower principal UTXO not found')
       const principalOutpoint = toOutpoint(offer.borrower_principal_utxo)
 
@@ -72,27 +69,12 @@ export default function ClaimPrincipalModal({
         feeRate,
       )
 
-      const { pset, finalize } = await claimPrincipal({
+      return claimPrincipal({
         principalOutpoint,
         borrowerNftOutpoint: nftOutpoints.borrowerNft,
         feeOutpoints: feeUtxos.map(utxoToOutpointString),
       })
-
-      await advance('signing')
-      const signedPset = await signPset(pset)
-
-      await advance('finalizing')
-      const { finalizedTx, summary } = finalize(signedPset)
-
-      await advance('broadcasting')
-      const txid = await broadcastTx(finalizedTx.toString())
-
-      return { txid, summary }
-    } catch (err) {
-      fail(err)
-      throw err
-    }
-  }
+    })
 
   const { mutate, reset, data, status } = useMutation({
     mutationFn: claimBorrowerPrincipal,

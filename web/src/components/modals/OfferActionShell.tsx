@@ -10,7 +10,6 @@ import { UiButton, type UiButtonProps } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 
 export interface OfferAction {
   label: string
@@ -69,7 +68,6 @@ export default function OfferActionShell({
   children,
 }: OfferActionShellProps) {
   const { addSurfaceToast } = usePendingTransactions()
-  const { prepare } = useTxProgress()
   const liveView = deriveView(action)
   const liveTx = useTxStatus(action?.status === 'success' ? action.txid : null)
 
@@ -131,10 +129,7 @@ export default function OfferActionShell({
             className='w-full'
             variant={action.variant ?? 'primary'}
             isDisabled={action.disabled}
-            onPress={() => {
-              prepare()
-              action.onConfirm()
-            }}
+            onPress={action.onConfirm}
           >
             {action.label}
           </UiButton>

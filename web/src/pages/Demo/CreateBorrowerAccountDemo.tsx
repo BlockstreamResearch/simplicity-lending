@@ -1,10 +1,8 @@
 import { useState } from 'react'
 
-import { broadcastTx } from '@/api/esplora/methods'
-import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { type BorrowerAccountCreationSummary, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
-import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { TxResult } from './TxResult'
@@ -18,9 +16,9 @@ interface BroadcastState<TResult> {
 const INITIAL_STATE = { busy: false, error: null, result: null }
 
 export default function CreateBorrowerAccountDemo() {
-  const { connectionStatus, signPset, signerType } = useWallet()
+  const { connectionStatus } = useWallet()
   const { createBorrowerAccount, removeBorrowerAccount } = useBorrowerAccount()
-  const { start, fail } = useTxProgress()
+  const runDefaultTransactionFlow = useDefaultTransactionFlow()
 
   const [createState, setCreateState] =
     useState<BroadcastState<{ txid: string; summary: BorrowerAccountCreationSummary }>>(
@@ -34,18 +32,10 @@ export default function CreateBorrowerAccountDemo() {
   const handleCreate = async () => {
     setCreateState({ busy: true, error: null, result: null })
     try {
-      const advance = await start(getDefaultTransactionSteps(signerType))
-      const { pset, finalize } = await createBorrowerAccount()
-      await advance('signing')
-      const signedPset = await signPset(pset)
-      await advance('finalizing')
-      const { finalizedTx, summary } = finalize(signedPset)
-      await advance('broadcasting')
-      const txid = await broadcastTx(finalizedTx.toString())
+      const { txid, summary } = await runDefaultTransactionFlow(createBorrowerAccount)
 
       setCreateState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
-      fail(err)
       setCreateState({
         busy: false,
         error: err instanceof Error ? err.message : String(err),

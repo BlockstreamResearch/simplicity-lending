@@ -13,7 +13,6 @@ export function TxProgressProvider({ children }: { children: React.ReactNode }) 
   const [steps, setSteps] = useState<TransactionSteps>([])
   const [currentStepId, setCurrentStepId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [isReady, setIsReady] = useState(false)
   const lastChangeAtRef = useRef(0)
 
   const advance = useCallback(async (stepId: string) => {
@@ -25,12 +24,11 @@ export function TxProgressProvider({ children }: { children: React.ReactNode }) 
     setCurrentStepId(stepId)
   }, [])
 
-  const start = useCallback<StartTxProgress>(
-    async newSteps => {
+  const startTxProgress = useCallback<StartTxProgress>(
+    newSteps => {
       setErrorMessage(null)
       setSteps(newSteps)
       setCurrentStepId(newSteps[0]?.id ?? null)
-      setIsReady(true)
       lastChangeAtRef.current = Date.now()
 
       return stepId => advance(stepId)
@@ -38,14 +36,19 @@ export function TxProgressProvider({ children }: { children: React.ReactNode }) 
     [advance],
   )
 
-  const prepare = useCallback(() => setIsReady(false), [])
-  const fail = useCallback((error: unknown) => {
+  const setTxProgressError = useCallback((error: unknown) => {
     setErrorMessage(error instanceof Error ? error.message : String(error))
   }, [])
 
   const value = useMemo(
-    () => ({ steps, currentStepId, errorMessage, isReady, prepare, start, fail }),
-    [steps, currentStepId, errorMessage, isReady, prepare, start, fail],
+    () => ({
+      steps,
+      currentStepId,
+      errorMessage,
+      startTxProgress,
+      setTxProgressError,
+    }),
+    [steps, currentStepId, errorMessage, startTxProgress, setTxProgressError],
   )
 
   return <TxProgressContext.Provider value={value}>{children}</TxProgressContext.Provider>

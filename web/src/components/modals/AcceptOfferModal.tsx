@@ -2,7 +2,6 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { broadcastTx } from '@/api/esplora/methods'
 import { esploraQueryKeys } from '@/api/esplora/queryKeys'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
@@ -10,9 +9,9 @@ import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
-import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
+import { useDefaultTransactionFlow } from '@/hooks/useDefaultTransactionFlow'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import {
   estimateFeeBudgetSats,
@@ -22,7 +21,6 @@ import {
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
@@ -45,17 +43,15 @@ export default function AcceptOfferModal({
   onSuccess,
 }: AcceptOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, signPset, signerType, scriptPubkey, balances } =
-    useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
-  const { start, fail } = useTxProgress()
+  const runDefaultTransactionFlow = useDefaultTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
 
-  const acceptBorrowOffer = async () => {
-    try {
-      const advance = await start(getDefaultTransactionSteps(signerType))
+  const acceptBorrowOffer = () =>
+    runDefaultTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
       const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
       if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
@@ -84,29 +80,14 @@ export default function AcceptOfferModal({
       if (!nftOutpoints) throw new Error('Offer NFT participants not found')
       const { lenderNft, borrowerNft } = nftOutpoints
 
-      const { pset, finalize } = await acceptOffer({
+      return acceptOffer({
         pendingOfferOutpoint,
         lenderNftOutpoint: lenderNft,
         borrowerNftReferenceOutpoint: borrowerNft,
         principalOutpoints: principalUtxos.map(utxoToOutpointString),
         feeOutpoints: feeUtxos.map(utxoToOutpointString),
       })
-
-      await advance('signing')
-      const signedPset = await signPset(pset)
-
-      await advance('finalizing')
-      const { finalizedTx, summary } = finalize(signedPset)
-
-      await advance('broadcasting')
-      const txid = await broadcastTx(finalizedTx.toString())
-
-      return { txid, summary }
-    } catch (err) {
-      fail(err)
-      throw err
-    }
-  }
+    })
 
   const { mutate, reset, data, status } = useMutation({
     mutationFn: acceptBorrowOffer,

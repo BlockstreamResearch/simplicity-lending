@@ -100,7 +100,7 @@ export function TransactionBody({
   txStatus,
   confirmations,
 }: TransactionBodyProps) {
-  const { currentStepId, isReady } = useTxProgress()
+  const { currentStepId } = useTxProgress()
 
   useEffect(() => {
     if (txid && txStatus === 'finalized' && confirmations !== null) {
@@ -163,7 +163,7 @@ export function TransactionBody({
           ))}
         </div>
       )}
-      {(status === 'pending' || status === 'error') && isReady && currentStepId && (
+      {(status === 'pending' || status === 'error') && currentStepId && (
         <div className='bg-surface-secondary rounded-xl p-6'>
           <TransactionStepper />
         </div>
