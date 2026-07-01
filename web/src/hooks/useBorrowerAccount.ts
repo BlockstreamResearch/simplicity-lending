@@ -3,6 +3,7 @@ import {
   assetIdFromIssuance,
   ContractHash,
   IssuanceRecipient,
+  type Pset,
   Script,
   TxBuilder,
   XOnlyPublicKey,
@@ -11,10 +12,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { broadcastTx } from '@/api/esplora/methods'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
+import type { UpdatedPset } from '@/lwk/transaction'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -47,8 +48,7 @@ const REISSUANCE_TOKEN_AMOUNT = 0n
 const FACTORY_AUTH_AMOUNT = 1n
 const ISSUANCE_FACTORY_AMOUNT = 1n
 
-export interface BorrowerAccountCreationResult {
-  txid: string
+export interface BorrowerAccountCreationSummary {
   fundingOutpoint: string
   factoryAddress: string
   factoryAuthOutpoint: string
@@ -59,8 +59,7 @@ export interface BorrowerAccountCreationResult {
 
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, scriptPubkey } =
-    useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, scriptPubkey } = useWallet()
   const queryClient = useQueryClient()
   const factoriesQuery = useFactories(scriptPubkey || '')
   const activeFactory = factoriesQuery.data?.[0] ?? null
@@ -76,7 +75,7 @@ export function useBorrowerAccount() {
     queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey) })
   }, [scriptPubkey, queryClient])
 
-  const createBorrowerAccount = async (): Promise<BorrowerAccountCreationResult> => {
+  const createBorrowerAccount = async (): Promise<UpdatedPset<BorrowerAccountCreationSummary>> => {
     const receiveAddressString = await getReceiveAddress()
     if (!receiveAddressString) throw new Error('Missing receive address')
 
@@ -128,23 +127,25 @@ export function useBorrowerAccount() {
       .addPostIssuanceScriptOutput(Script.newOpReturn(metadata), 0n, policyAsset)
       .finish(wollet)
 
-    const signedPset = await signPset(pset)
-    const finalizedPset = wollet.finalize(signedPset)
-    const txid = await broadcastTx(finalizedPset.extractTx().toString())
+    return {
+      pset,
+      finalize: (signedPset: Pset) => {
+        const finalizedTx = wollet.finalize(signedPset).extractTx()
+        const txid = finalizedTx.txid().toString()
 
-    const result: BorrowerAccountCreationResult = {
-      txid,
-      fundingOutpoint,
-      factoryAddress: factoryAddress.toString(),
-      factoryAuthOutpoint: `${txid}:0`,
-      issuanceFactoryOutpoint: `${txid}:1`,
-      issuedAssetId: issuedAssetId.toString(),
-      metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
+        return {
+          finalizedTx,
+          summary: {
+            fundingOutpoint,
+            factoryAddress: factoryAddress.toString(),
+            factoryAuthOutpoint: `${txid}:0`,
+            issuanceFactoryOutpoint: `${txid}:1`,
+            issuedAssetId: issuedAssetId.toString(),
+            metadataOpReturnHex: bytesToHex(Script.newOpReturn(metadata).bytes()),
+          },
+        }
+      },
     }
-
-    queryClient.invalidateQueries({ queryKey: factoryQueryKeys.byScript(scriptPubkey ?? '') })
-
-    return result
   }
 
   const removeBorrowerAccount = async (): Promise<void> => {

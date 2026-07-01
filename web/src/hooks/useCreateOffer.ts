@@ -6,6 +6,7 @@ import {
   ExternalUtxo,
   IssuanceRecipient,
   OutPoint,
+  type Pset,
   Script,
   SimplicityLogLevel,
   TxBuilder,
@@ -14,12 +15,13 @@ import {
 } from '@lilbonekit/lwk-web'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { broadcastTx, fetchLatestBlockHeight } from '@/api/esplora/methods'
+import { fetchLatestBlockHeight } from '@/api/esplora/methods'
 import {
   assertExplicitAmount,
   fetchTransaction,
   requireExplicitAsset,
   requireTxOut,
+  type UpdatedPset,
 } from '@/lwk/transaction'
 import {
   assertWalletUtxoAssetAndMinimumAmount,
@@ -63,23 +65,22 @@ export interface CreateOfferParams {
   protocolFeeKeeperAssetId: string
 }
 
-export interface CreateOfferResult {
-  txid: string
-  summary: {
-    inputs: Record<string, string>
-    outputs: Record<string, string>
-    assetIds: Record<string, string>
-    scripts: Record<string, string>
-    offerParameters: Record<string, string>
-    metadataOpReturnHex: string
-  }
+export interface CreateOfferSummary {
+  inputs: Record<string, string>
+  outputs: Record<string, string>
+  assetIds: Record<string, string>
+  scripts: Record<string, string>
+  offerParameters: Record<string, string>
+  metadataOpReturnHex: string
 }
 
 export function useCreateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
 
-  const createOffer = async (params: CreateOfferParams): Promise<CreateOfferResult> => {
+  const createOffer = async (
+    params: CreateOfferParams,
+  ): Promise<UpdatedPset<CreateOfferSummary>> => {
     const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
     if (!receiveAddressString) throw new Error('Missing receive address')
     await syncWallet()
@@ -287,68 +288,74 @@ export function useCreateOffer() {
       AssetId.fromString(policyAssetString),
     )
     const pset = txBuilder.finish(wollet)
-    const signedPset = await signPset(pset)
-    const finalizedWalletPset = wollet.finalize(signedPset)
-    const txWithWalletWitnesses = finalizedWalletPset.extractTx()
-    const finalizedTx = issuanceFactoryProgram.finalizeTransactionWithSpendInfo(
-      txWithWalletWitnesses,
-      buildCovenantSpendInfo(issuanceFactoryProgram),
-      [factoryAuthTxOut, issuanceFactoryTxOut, ...collateralTxOuts],
-      1,
-      buildIssuanceFactoryWitness({
-        branch: 'IssueAssets',
-        outputIndex: toUint32(0, 'outputIndex'),
-      }),
-      lwkNetwork,
-      SimplicityLogLevel.Trace,
-    )
-    const txid = await broadcastTx(finalizedTx.toString())
 
     return {
-      txid,
-      // TODO: Remove debug summary before release
-      summary: {
-        inputs: {
-          '0 FactoryAuth': params.factoryAuthOutpoint,
-          '1 IssuanceFactory covenant': params.issuanceFactoryOutpoint,
-          '2+ Collateral LBTC': params.collateralOutpoints.join(', '),
-          lenderNftIssuanceOutpoint: lenderNftIssuanceOutpointString,
-        },
-        outputs: {
-          '0 FactoryAuth back to user': receiveAddressExplicitString,
-          '1 IssuanceFactory back to covenant': issuanceFactoryAddressString,
-          '2 Borrower NFT to user': receiveAddressExplicitString,
-          '3 Lender NFT to ScriptAuth': lenderNftScriptAuthAddressString,
-          '4 Metadata OP_RETURN': bytesToHex(pendingOfferMetadataScript.bytes()),
-          '5 Lending covenant': lendingScriptPubkeyHex,
-        },
-        assetIds: {
-          factoryAssetId: factoryAssetString,
-          collateralAssetId: policyAssetString,
-          principalAssetId: principalAssetString,
-          borrowerNftAssetId: borrowerNftAssetString,
-          lenderNftAssetId: lenderNftAssetString,
-          protocolFeeKeeperAssetId: protocolFeeKeeperAssetString,
-        },
-        scripts: {
-          lendingScriptHash: bytesToHex(lendingScriptHash),
-          lenderVaultCovHash: bytesToHex(derivedLendingParams.lenderVaultCovHash),
-          finalizedLenderVaultCovHash: bytesToHex(derivedLendingParams.finalizedLenderVaultCovHash),
-          protocolFeeVaultCovHash: bytesToHex(derivedLendingParams.protocolFeeVaultCovHash),
-          finalizedProtocolFeeVaultCovHash: bytesToHex(
-            derivedLendingParams.finalizedProtocolFeeVaultCovHash,
-          ),
-          principalOutputScriptHash: bytesToHex(derivedLendingParams.principalOutputScriptHash),
-        },
-        offerParameters: {
-          collateralAmount: offerParameters.collateralAmount.toString(),
-          principalAmount: offerParameters.principalAmount.toString(),
-          principalInterestRate: offerParameters.principalInterestRate.toString(),
-          currentBlockHeight: currentBlockHeight.toString(),
-          loanDurationBlocks: loanDurationBlocks.toString(),
-          loanExpirationTime: offerParameters.loanExpirationTime.toString(),
-        },
-        metadataOpReturnHex: bytesToHex(pendingOfferMetadataScript.bytes()),
+      pset,
+      finalize: (signedPset: Pset) => {
+        const finalizedWalletPset = wollet.finalize(signedPset)
+        const txWithWalletWitnesses = finalizedWalletPset.extractTx()
+        const finalizedTx = issuanceFactoryProgram.finalizeTransactionWithSpendInfo(
+          txWithWalletWitnesses,
+          buildCovenantSpendInfo(issuanceFactoryProgram),
+          [factoryAuthTxOut, issuanceFactoryTxOut, ...collateralTxOuts],
+          1,
+          buildIssuanceFactoryWitness({
+            branch: 'IssueAssets',
+            outputIndex: toUint32(0, 'outputIndex'),
+          }),
+          lwkNetwork,
+          SimplicityLogLevel.Trace,
+        )
+
+        return {
+          finalizedTx,
+          // TODO: Remove debug summary before release
+          summary: {
+            inputs: {
+              '0 FactoryAuth': params.factoryAuthOutpoint,
+              '1 IssuanceFactory covenant': params.issuanceFactoryOutpoint,
+              '2+ Collateral LBTC': params.collateralOutpoints.join(', '),
+              lenderNftIssuanceOutpoint: lenderNftIssuanceOutpointString,
+            },
+            outputs: {
+              '0 FactoryAuth back to user': receiveAddressExplicitString,
+              '1 IssuanceFactory back to covenant': issuanceFactoryAddressString,
+              '2 Borrower NFT to user': receiveAddressExplicitString,
+              '3 Lender NFT to ScriptAuth': lenderNftScriptAuthAddressString,
+              '4 Metadata OP_RETURN': bytesToHex(pendingOfferMetadataScript.bytes()),
+              '5 Lending covenant': lendingScriptPubkeyHex,
+            },
+            assetIds: {
+              factoryAssetId: factoryAssetString,
+              collateralAssetId: policyAssetString,
+              principalAssetId: principalAssetString,
+              borrowerNftAssetId: borrowerNftAssetString,
+              lenderNftAssetId: lenderNftAssetString,
+              protocolFeeKeeperAssetId: protocolFeeKeeperAssetString,
+            },
+            scripts: {
+              lendingScriptHash: bytesToHex(lendingScriptHash),
+              lenderVaultCovHash: bytesToHex(derivedLendingParams.lenderVaultCovHash),
+              finalizedLenderVaultCovHash: bytesToHex(
+                derivedLendingParams.finalizedLenderVaultCovHash,
+              ),
+              protocolFeeVaultCovHash: bytesToHex(derivedLendingParams.protocolFeeVaultCovHash),
+              finalizedProtocolFeeVaultCovHash: bytesToHex(
+                derivedLendingParams.finalizedProtocolFeeVaultCovHash,
+              ),
+              principalOutputScriptHash: bytesToHex(derivedLendingParams.principalOutputScriptHash),
+            },
+            offerParameters: {
+              collateralAmount: offerParameters.collateralAmount.toString(),
+              principalAmount: offerParameters.principalAmount.toString(),
+              principalInterestRate: offerParameters.principalInterestRate.toString(),
+              currentBlockHeight: currentBlockHeight.toString(),
+              loanDurationBlocks: loanDurationBlocks.toString(),
+              loanExpirationTime: offerParameters.loanExpirationTime.toString(),
+            },
+            metadataOpReturnHex: bytesToHex(pendingOfferMetadataScript.bytes()),
+          },
+        }
       },
     }
   }

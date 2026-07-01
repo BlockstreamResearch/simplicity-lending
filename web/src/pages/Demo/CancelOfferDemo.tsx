@@ -3,12 +3,15 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
+import { broadcastTx } from '@/api/esplora/methods'
+import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { type CancelOfferResult, useCancelOffer } from '@/hooks/useCancelOffer'
+import { type CancelOfferSummary, useCancelOffer } from '@/hooks/useCancelOffer'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { formatCollateralUtxoOption } from './helpers'
@@ -73,7 +76,7 @@ const cancelOfferFormResolver: Resolver<CancelOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: CancelOfferResult | null
+  result: { txid: string; summary: CancelOfferSummary } | null
 }
 
 interface WalletUtxosState {
@@ -98,8 +101,10 @@ const INITIAL_STATE: BroadcastState = {
 
 export default function CancelOfferDemo() {
   const { lwkNetwork } = useLwk()
-  const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
+  const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet, signPset, signerType } =
+    useWallet()
   const { cancelOffer } = useCancelOffer()
+  const { start, fail } = useTxProgress()
   const { control, handleSubmit } = useForm<CancelOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -168,12 +173,18 @@ export default function CancelOfferDemo() {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
 
-      setState({
-        busy: false,
-        error: null,
-        result: await cancelOffer(result.data),
-      })
+      const advance = await start(getDefaultTransactionSteps(signerType))
+      const { pset, finalize } = await cancelOffer(result.data)
+      await advance('signing')
+      const signedPset = await signPset(pset)
+      await advance('finalizing')
+      const { finalizedTx, summary } = finalize(signedPset)
+      await advance('broadcasting')
+      const txid = await broadcastTx(finalizedTx.toString())
+
+      setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
+      fail(err)
       setState({
         busy: false,
         error: err instanceof Error ? err.message : String(err),

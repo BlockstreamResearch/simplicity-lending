@@ -3,13 +3,16 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
+import { broadcastTx } from '@/api/esplora/methods'
+import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type CreateOfferResult, useCreateOffer } from '@/hooks/useCreateOffer'
+import { type CreateOfferSummary, useCreateOffer } from '@/hooks/useCreateOffer'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { isHexStringOfByteLength, normalizeHex } from '@/utils/hex'
 
@@ -94,7 +97,7 @@ const createOfferFormResolver: Resolver<CreateOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  summary: CreateOfferResult['summary'] | null
+  summary: CreateOfferSummary | null
   txid: string | null
 }
 
@@ -133,8 +136,10 @@ const EMPTY_FORM: CreateOfferForm = {
 
 export default function CreateOfferDemo() {
   const { lwkNetwork } = useLwk()
-  const { connectionStatus, syncing, syncWallet, getBlindedWalletUtxos } = useWallet()
+  const { connectionStatus, syncing, syncWallet, getBlindedWalletUtxos, signPset, signerType } =
+    useWallet()
   const { createOffer } = useCreateOffer()
+  const { start, fail } = useTxProgress()
   const { control, handleSubmit } = useForm<CreateOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
@@ -201,9 +206,17 @@ export default function CreateOfferDemo() {
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-      const { txid, summary } = await createOffer(result.data)
+      const advance = await start(getDefaultTransactionSteps(signerType))
+      const { pset, finalize } = await createOffer(result.data)
+      await advance('signing')
+      const signedPset = await signPset(pset)
+      await advance('finalizing')
+      const { finalizedTx, summary } = finalize(signedPset)
+      await advance('broadcasting')
+      const txid = await broadcastTx(finalizedTx.toString())
       setState({ busy: false, error: null, txid, summary })
     } catch (err) {
+      fail(err)
       setState(current => ({
         ...current,
         busy: false,

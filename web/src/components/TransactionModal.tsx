@@ -8,7 +8,10 @@ import CircleExclamationIcon from '@/components/icons/CircleExclamationIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { type TxStatus, useTxStatus } from '@/hooks/useTxStatus'
+import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { truncateAddress } from '@/utils/format'
+
+import TransactionStepper from './TransactionStepper'
 
 export interface TransactionSummaryRow {
   label: string
@@ -21,7 +24,6 @@ interface TransactionModalProps {
   status: MutationStatus
   summary?: TransactionSummaryRow[]
   txid?: string | null
-  errorMessage?: string | null
   onClose: () => void
 }
 
@@ -77,7 +79,6 @@ interface TransactionBodyProps {
   status: MutationStatus
   summary?: TransactionSummaryRow[]
   txid?: string | null
-  errorMessage?: string | null
   txStatus: TxStatus | null
   confirmations: number | null
 }
@@ -96,10 +97,11 @@ export function TransactionBody({
   status,
   summary = [],
   txid,
-  errorMessage,
   txStatus,
   confirmations,
 }: TransactionBodyProps) {
+  const { currentStepId, isReady } = useTxProgress()
+
   useEffect(() => {
     if (txid && txStatus === 'finalized' && confirmations !== null) {
       notifyTxConfirmed(txid, confirmations)
@@ -161,8 +163,10 @@ export function TransactionBody({
           ))}
         </div>
       )}
-      {status === 'error' && errorMessage && (
-        <p className='text-danger text-sm wrap-break-word'>{errorMessage}</p>
+      {(status === 'pending' || status === 'error') && isReady && currentStepId && (
+        <div className='bg-surface-secondary rounded-xl p-6'>
+          <TransactionStepper />
+        </div>
       )}
     </div>
   )
@@ -174,7 +178,6 @@ export default function TransactionModal({
   status,
   summary = [],
   txid,
-  errorMessage,
   onClose,
 }: TransactionModalProps) {
   const {
@@ -204,7 +207,6 @@ export default function TransactionModal({
         status={status}
         summary={summary}
         txid={txid}
-        errorMessage={errorMessage}
         txStatus={txStatus}
         confirmations={confirmations}
       />

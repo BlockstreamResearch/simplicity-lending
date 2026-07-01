@@ -10,6 +10,7 @@ import { UiButton, type UiButtonProps } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
+import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 
 export interface OfferAction {
   label: string
@@ -19,7 +20,6 @@ export interface OfferAction {
   status: MutationStatus
   disabled?: boolean
   txid?: string
-  error?: string
   onConfirm: () => void
 }
 
@@ -39,7 +39,6 @@ interface ActionView {
   eyebrow: string
   summary: TransactionSummaryRow[]
   txid?: string
-  error?: string
 }
 
 interface ClosingSnapshot {
@@ -56,7 +55,6 @@ function deriveView(action: OfferAction | undefined): ActionView {
     eyebrow: action?.eyebrow ?? '',
     summary: action?.summary ?? EMPTY_SUMMARY,
     txid: action?.txid,
-    error: action?.error,
   }
 }
 
@@ -71,6 +69,7 @@ export default function OfferActionShell({
   children,
 }: OfferActionShellProps) {
   const { addSurfaceToast } = usePendingTransactions()
+  const { prepare } = useTxProgress()
   const liveView = deriveView(action)
   const liveTx = useTxStatus(action?.status === 'success' ? action.txid : null)
 
@@ -132,7 +131,10 @@ export default function OfferActionShell({
             className='w-full'
             variant={action.variant ?? 'primary'}
             isDisabled={action.disabled}
-            onPress={action.onConfirm}
+            onPress={() => {
+              prepare()
+              action.onConfirm()
+            }}
           >
             {action.label}
           </UiButton>
@@ -145,7 +147,6 @@ export default function OfferActionShell({
             status={view.status}
             summary={view.summary}
             txid={view.txid}
-            errorMessage={view.error}
             txStatus={txStatus}
             confirmations={confirmations}
           />

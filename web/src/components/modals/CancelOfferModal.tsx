@@ -3,11 +3,13 @@ import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { broadcastTx } from '@/api/esplora/methods'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
+import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { useCancelOffer } from '@/hooks/useCancelOffer'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import {
@@ -18,6 +20,7 @@ import {
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
+import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
@@ -40,47 +43,72 @@ export default function CancelOfferModal({
   onClose,
   onSuccess,
 }: CancelOfferModalProps) {
-  const { syncWallet, getBlindedWalletUtxos, getReceiveAddress, scriptPubkey } = useWallet()
+  const {
+    syncWallet,
+    getBlindedWalletUtxos,
+    getReceiveAddress,
+    signPset,
+    signerType,
+    scriptPubkey,
+  } = useWallet()
   const { lwkNetwork } = useLwk()
   const { cancelOffer } = useCancelOffer()
+  const { start, fail } = useTxProgress()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay } = useFormatAmount()
 
   const cancelBorrowOffer = async () => {
-    const fullOffer = await fetchOffer(offer.id)
-    const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
-    if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
+    try {
+      const advance = await start(getDefaultTransactionSteps(signerType))
+      const fullOffer = await fetchOffer(offer.id)
+      const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
+      if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
 
-    const nftOutpoints = resolveNftOutpoints(fullOffer)
-    if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+      const nftOutpoints = resolveNftOutpoints(fullOffer)
+      if (!nftOutpoints) throw new Error('Offer NFT participants not found')
 
-    const collateralRecipientAddress = await getReceiveAddress()
-    if (!collateralRecipientAddress) throw new Error('Missing wallet receive address')
+      const collateralRecipientAddress = await getReceiveAddress()
+      if (!collateralRecipientAddress) throw new Error('Missing wallet receive address')
 
-    await syncWallet()
-    const [blindedWalletUtxos, feeRate] = await Promise.all([
-      getBlindedWalletUtxos(),
-      fetchFeeRateSatPerKvb(),
-    ])
+      await syncWallet()
+      const [blindedWalletUtxos, feeRate] = await Promise.all([
+        getBlindedWalletUtxos(),
+        fetchFeeRateSatPerKvb(),
+      ])
 
-    const feeBudgetSats = estimateFeeBudgetSats(CANCEL_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(
-      blindedWalletUtxos,
-      lwkNetwork.policyAsset(),
-      feeBudgetSats,
-      feeRate,
-    )
+      const feeBudgetSats = estimateFeeBudgetSats(CANCEL_WEIGHT_UNITS, feeRate)
+      const feeUtxos = selectFeeUtxos(
+        blindedWalletUtxos,
+        lwkNetwork.policyAsset(),
+        feeBudgetSats,
+        feeRate,
+      )
 
-    return cancelOffer({
-      pendingOfferOutpoint,
-      lenderNftOutpoint: nftOutpoints.lenderNft,
-      borrowerNftOutpoint: nftOutpoints.borrowerNft,
-      collateralRecipientAddress,
-      feeOutpoints: feeUtxos.map(utxoToOutpointString),
-    })
+      const { pset, finalize } = await cancelOffer({
+        pendingOfferOutpoint,
+        lenderNftOutpoint: nftOutpoints.lenderNft,
+        borrowerNftOutpoint: nftOutpoints.borrowerNft,
+        collateralRecipientAddress,
+        feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      })
+
+      await advance('signing')
+      const signedPset = await signPset(pset)
+
+      await advance('finalizing')
+      const { finalizedTx, summary } = finalize(signedPset)
+
+      await advance('broadcasting')
+      const txid = await broadcastTx(finalizedTx.toString())
+
+      return { txid, summary }
+    } catch (err) {
+      fail(err)
+      throw err
+    }
   }
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: cancelBorrowOffer,
     onSuccess: result => {
       void addPendingTx({
@@ -117,7 +145,6 @@ export default function CancelOfferModal({
         summary: txSummary,
         status,
         txid: data?.txid,
-        error: error?.message,
         onConfirm: () => mutate(),
       }}
       onClose={() => {

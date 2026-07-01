@@ -1,7 +1,10 @@
 import { useState } from 'react'
 
-import { type BorrowerAccountCreationResult, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { broadcastTx } from '@/api/esplora/methods'
+import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
+import { type BorrowerAccountCreationSummary, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useTxStatus } from '@/hooks/useTxStatus'
+import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { TxResult } from './TxResult'
@@ -15,11 +18,14 @@ interface BroadcastState<TResult> {
 const INITIAL_STATE = { busy: false, error: null, result: null }
 
 export default function CreateBorrowerAccountDemo() {
-  const { connectionStatus } = useWallet()
+  const { connectionStatus, signPset, signerType } = useWallet()
   const { createBorrowerAccount, removeBorrowerAccount } = useBorrowerAccount()
+  const { start, fail } = useTxProgress()
 
   const [createState, setCreateState] =
-    useState<BroadcastState<BorrowerAccountCreationResult>>(INITIAL_STATE)
+    useState<BroadcastState<{ txid: string; summary: BorrowerAccountCreationSummary }>>(
+      INITIAL_STATE,
+    )
   const [removeState, setRemoveState] = useState<BroadcastState<null>>(INITIAL_STATE)
 
   const { status: createTxStatus } = useTxStatus(createState.result?.txid ?? null)
@@ -28,9 +34,18 @@ export default function CreateBorrowerAccountDemo() {
   const handleCreate = async () => {
     setCreateState({ busy: true, error: null, result: null })
     try {
-      const result = await createBorrowerAccount()
-      setCreateState({ busy: false, error: null, result })
+      const advance = await start(getDefaultTransactionSteps(signerType))
+      const { pset, finalize } = await createBorrowerAccount()
+      await advance('signing')
+      const signedPset = await signPset(pset)
+      await advance('finalizing')
+      const { finalizedTx, summary } = finalize(signedPset)
+      await advance('broadcasting')
+      const txid = await broadcastTx(finalizedTx.toString())
+
+      setCreateState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
+      fail(err)
       setCreateState({
         busy: false,
         error: err instanceof Error ? err.message : String(err),
@@ -97,7 +112,7 @@ export default function CreateBorrowerAccountDemo() {
               title='Borrower Account Created'
               txid={createState.result.txid}
               txStatus={createTxStatus}
-              detail={createState.result}
+              detail={createState.result.summary}
             />
           )}
           {removeState.result !== undefined && removeState.error && (

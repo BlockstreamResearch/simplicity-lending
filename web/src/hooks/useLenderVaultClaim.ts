@@ -2,6 +2,7 @@ import {
   Address,
   ExternalUtxo,
   OutPoint,
+  type Pset,
   Script,
   SimplicityLogLevel,
   TxBuilder,
@@ -9,7 +10,6 @@ import {
 } from '@lilbonekit/lwk-web'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { broadcastTx } from '@/api/esplora/methods'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -18,6 +18,7 @@ import {
   requireExplicitAmount,
   requireExplicitAsset,
   requireTxOut,
+  type UpdatedPset,
 } from '@/lwk/transaction'
 import {
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -48,24 +49,21 @@ export interface LenderVaultClaimParams {
   principalRecipientAddress?: string
 }
 
-export interface LenderVaultClaimResult {
-  txid: string
-  summary: {
-    inputs: Record<string, string>
-    outputs: Record<string, string>
-    assetIds: Record<string, string>
-    amounts: Record<string, string>
-    scripts: Record<string, string>
-  }
+export interface LenderVaultClaimSummary {
+  inputs: Record<string, string>
+  outputs: Record<string, string>
+  assetIds: Record<string, string>
+  amounts: Record<string, string>
+  scripts: Record<string, string>
 }
 
 export function useLenderVaultClaim() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
 
   const claimLenderVault = async (
     params: LenderVaultClaimParams,
-  ): Promise<LenderVaultClaimResult> => {
+  ): Promise<UpdatedPset<LenderVaultClaimSummary>> => {
     const lenderVaultOutpoint = new OutPoint(params.lenderVaultOutpoint)
     const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
     const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
@@ -162,52 +160,57 @@ export function useLenderVaultClaim() {
       .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
       .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
       .finish(wollet)
-    const txWithWalletWitnesses = wollet.finalize(await signPset(pset)).extractTx()
-
-    const prevouts = [lenderVaultTxOut, lenderNftTxOut, ...feeTxOuts]
-    const finalizedTx = lenderVaultProgram.finalizeTransactionWithSpendInfo(
-      txWithWalletWitnesses,
-      lenderVaultSpendInfo,
-      prevouts,
-      0,
-      buildAssetAuthVaultWitness({
-        branch: 'WithdrawAll',
-        inputKeeperIndex: toUint32(LENDER_NFT_INPUT_INDEX, 'lenderNftInputIndex'),
-        outputKeeperIndex: toUint32(LENDER_NFT_BURN_OUTPUT_INDEX, 'lenderNftBurnOutputIndex'),
-      }),
-      lwkNetwork,
-      SimplicityLogLevel.Trace,
-    )
-    const txid = await broadcastTx(finalizedTx.toString())
 
     return {
-      txid,
-      // TODO: Remove debug summary before release
-      summary: {
-        inputs: {
-          '0 Finalized lender vault AssetAuthVault': params.lenderVaultOutpoint,
-          '1 Lender NFT (wallet)': params.lenderNftOutpoint,
-          '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
-        },
-        outputs: {
-          '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
-          '1 Unlocked principal to recipient': principalRecipient.toString(),
-          'L-BTC change': 'Managed by LWK',
-        },
-        assetIds: {
-          principalAssetId: principalAsset.toString(),
-          lenderNftAssetId: lenderNftAsset.toString(),
-          borrowerNftAssetId: borrowerNftAsset.toString(),
-        },
-        amounts: {
-          principalAmount: principalAmount.toString(),
-          lenderNftAmount: NFT_AMOUNT.toString(),
-        },
-        scripts: {
-          lenderVaultScript: bytesToHex(lenderVaultSpendInfo.scriptPubkey.bytes()),
-          burnScript: bytesToHex(burnScript.bytes()),
-          principalRecipientScript: bytesToHex(principalRecipient.scriptPubkey().bytes()),
-        },
+      pset,
+      finalize: (signedPset: Pset) => {
+        const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
+
+        const prevouts = [lenderVaultTxOut, lenderNftTxOut, ...feeTxOuts]
+        const finalizedTx = lenderVaultProgram.finalizeTransactionWithSpendInfo(
+          txWithWalletWitnesses,
+          lenderVaultSpendInfo,
+          prevouts,
+          0,
+          buildAssetAuthVaultWitness({
+            branch: 'WithdrawAll',
+            inputKeeperIndex: toUint32(LENDER_NFT_INPUT_INDEX, 'lenderNftInputIndex'),
+            outputKeeperIndex: toUint32(LENDER_NFT_BURN_OUTPUT_INDEX, 'lenderNftBurnOutputIndex'),
+          }),
+          lwkNetwork,
+          SimplicityLogLevel.Trace,
+        )
+
+        return {
+          finalizedTx,
+          // TODO: Remove debug summary before release
+          summary: {
+            inputs: {
+              '0 Finalized lender vault AssetAuthVault': params.lenderVaultOutpoint,
+              '1 Lender NFT (wallet)': params.lenderNftOutpoint,
+              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+            },
+            outputs: {
+              '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
+              '1 Unlocked principal to recipient': principalRecipient.toString(),
+              'L-BTC change': 'Managed by LWK',
+            },
+            assetIds: {
+              principalAssetId: principalAsset.toString(),
+              lenderNftAssetId: lenderNftAsset.toString(),
+              borrowerNftAssetId: borrowerNftAsset.toString(),
+            },
+            amounts: {
+              principalAmount: principalAmount.toString(),
+              lenderNftAmount: NFT_AMOUNT.toString(),
+            },
+            scripts: {
+              lenderVaultScript: bytesToHex(lenderVaultSpendInfo.scriptPubkey.bytes()),
+              burnScript: bytesToHex(burnScript.bytes()),
+              principalRecipientScript: bytesToHex(principalRecipient.scriptPubkey().bytes()),
+            },
+          },
+        }
       },
     }
   }

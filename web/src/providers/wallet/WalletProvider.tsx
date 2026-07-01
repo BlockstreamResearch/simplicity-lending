@@ -145,7 +145,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         await connector.connect()
         // The native 'connect' event only fires for a device that was already paired and
         // got replugged — a fresh pick-and-connect never triggers it.
-        setState(s => ({ ...s, usbDeviceDetected: isJade }))
+        setState(s => ({ ...s, usbDeviceDetected: isJade, signerType: isJade ? 'jade' : 'seed' }))
         const connectionStatus = await connector.getConnectionStatus()
 
         if (attempt !== connectionChangeCounterRef.current) {

@@ -2,13 +2,13 @@ import {
   Address,
   ExternalUtxo,
   OutPoint,
+  type Pset,
   SimplicityLogLevel,
   TxBuilder,
   TxOutSecrets,
 } from '@lilbonekit/lwk-web'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { broadcastTx } from '@/api/esplora/methods'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -17,6 +17,7 @@ import {
   requireExplicitAmount,
   requireExplicitAsset,
   requireTxOut,
+  type UpdatedPset,
 } from '@/lwk/transaction'
 import {
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -47,22 +48,21 @@ export interface ClaimPrincipalParams {
   principalRecipientAddress?: string
 }
 
-export interface ClaimPrincipalResult {
-  txid: string
-  summary: {
-    inputs: Record<string, string>
-    outputs: Record<string, string>
-    assetIds: Record<string, string>
-    amounts: Record<string, string>
-    scripts: Record<string, string>
-  }
+export interface ClaimPrincipalSummary {
+  inputs: Record<string, string>
+  outputs: Record<string, string>
+  assetIds: Record<string, string>
+  amounts: Record<string, string>
+  scripts: Record<string, string>
 }
 
 export function useClaimPrincipal() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
 
-  const claimPrincipal = async (params: ClaimPrincipalParams): Promise<ClaimPrincipalResult> => {
+  const claimPrincipal = async (
+    params: ClaimPrincipalParams,
+  ): Promise<UpdatedPset<ClaimPrincipalSummary>> => {
     const principalOutpoint = new OutPoint(params.principalOutpoint)
     const borrowerNftOutpoint = new OutPoint(params.borrowerNftOutpoint)
     const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
@@ -150,49 +150,54 @@ export function useClaimPrincipal() {
       )
       .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
       .finish(wollet)
-    const txWithWalletWitnesses = wollet.finalize(await signPset(pset)).extractTx()
-
-    const prevouts = [principalTxOut, borrowerNftTxOut, ...feeTxOuts]
-    const finalizedTx = assetAuthProgram.finalizeTransactionWithSpendInfo(
-      txWithWalletWitnesses,
-      assetAuthSpendInfo,
-      prevouts,
-      0,
-      buildAssetAuthWitness({
-        inputAssetIndex: toUint32(BORROWER_NFT_INPUT_INDEX, 'borrowerNftInputIndex'),
-        outputAssetIndex: toUint32(BORROWER_NFT_OUTPUT_INDEX, 'borrowerNftOutputIndex'),
-      }),
-      lwkNetwork,
-      SimplicityLogLevel.Trace,
-    )
-    const txid = await broadcastTx(finalizedTx.toString())
 
     return {
-      txid,
-      // TODO: Remove debug summary before release
-      summary: {
-        inputs: {
-          '0 Principal AssetAuth': params.principalOutpoint,
-          '1 Borrower NFT (wallet)': params.borrowerNftOutpoint,
-          '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
-        },
-        outputs: {
-          '0 Borrower NFT to recipient': borrowerNftRecipient.toString(),
-          '1 Unlocked principal to recipient': principalRecipient.toString(),
-          'L-BTC change': 'Managed by LWK',
-        },
-        assetIds: {
-          principalAssetId: principalAsset.toString(),
-          borrowerNftAssetId: borrowerNftAsset.toString(),
-        },
-        amounts: {
-          principalAmount: principalAmount.toString(),
-          borrowerNftAmount: NFT_AMOUNT.toString(),
-        },
-        scripts: {
-          assetAuthScript: bytesToHex(assetAuthSpendInfo.scriptPubkey.bytes()),
-          borrowerNftRecipientScript: bytesToHex(borrowerNftRecipient.scriptPubkey().bytes()),
-        },
+      pset,
+      finalize: (signedPset: Pset) => {
+        const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
+
+        const prevouts = [principalTxOut, borrowerNftTxOut, ...feeTxOuts]
+        const finalizedTx = assetAuthProgram.finalizeTransactionWithSpendInfo(
+          txWithWalletWitnesses,
+          assetAuthSpendInfo,
+          prevouts,
+          0,
+          buildAssetAuthWitness({
+            inputAssetIndex: toUint32(BORROWER_NFT_INPUT_INDEX, 'borrowerNftInputIndex'),
+            outputAssetIndex: toUint32(BORROWER_NFT_OUTPUT_INDEX, 'borrowerNftOutputIndex'),
+          }),
+          lwkNetwork,
+          SimplicityLogLevel.Trace,
+        )
+
+        return {
+          finalizedTx,
+          // TODO: Remove debug summary before release
+          summary: {
+            inputs: {
+              '0 Principal AssetAuth': params.principalOutpoint,
+              '1 Borrower NFT (wallet)': params.borrowerNftOutpoint,
+              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+            },
+            outputs: {
+              '0 Borrower NFT to recipient': borrowerNftRecipient.toString(),
+              '1 Unlocked principal to recipient': principalRecipient.toString(),
+              'L-BTC change': 'Managed by LWK',
+            },
+            assetIds: {
+              principalAssetId: principalAsset.toString(),
+              borrowerNftAssetId: borrowerNftAsset.toString(),
+            },
+            amounts: {
+              principalAmount: principalAmount.toString(),
+              borrowerNftAmount: NFT_AMOUNT.toString(),
+            },
+            scripts: {
+              assetAuthScript: bytesToHex(assetAuthSpendInfo.scriptPubkey.bytes()),
+              borrowerNftRecipientScript: bytesToHex(borrowerNftRecipient.scriptPubkey().bytes()),
+            },
+          },
+        }
       },
     }
   }

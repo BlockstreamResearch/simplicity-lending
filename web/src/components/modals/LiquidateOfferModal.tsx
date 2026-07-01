@@ -3,11 +3,13 @@ import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { broadcastTx } from '@/api/esplora/methods'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
 import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
+import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useLiquidateOffer } from '@/hooks/useLiquidateOffer'
 import {
@@ -18,6 +20,7 @@ import {
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
+import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 
@@ -37,42 +40,60 @@ export default function LiquidateOfferModal({
   onClose,
   onSuccess,
 }: LiquidateOfferModalProps) {
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, signPset, signerType, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { liquidateOffer } = useLiquidateOffer()
+  const { start, fail } = useTxProgress()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay } = useFormatAmount()
 
   const liquidateExpiredOffer = async () => {
-    const fullOffer = await fetchOffer(offer.id)
-    const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
-    if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
+    try {
+      const advance = await start(getDefaultTransactionSteps(signerType))
+      const fullOffer = await fetchOffer(offer.id)
+      const activeOfferOutpoint = resolveActiveOutpoint(fullOffer)
+      if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
 
-    const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
-    if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
+      const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
+      if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
 
-    await syncWallet()
-    const [blindedWalletUtxos, feeRate] = await Promise.all([
-      getBlindedWalletUtxos(),
-      fetchFeeRateSatPerKvb(),
-    ])
-    const feeBudgetSats = estimateFeeBudgetSats(LIQUIDATE_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(
-      blindedWalletUtxos,
-      lwkNetwork.policyAsset(),
-      feeBudgetSats,
-      feeRate,
-    )
+      await syncWallet()
+      const [blindedWalletUtxos, feeRate] = await Promise.all([
+        getBlindedWalletUtxos(),
+        fetchFeeRateSatPerKvb(),
+      ])
+      const feeBudgetSats = estimateFeeBudgetSats(LIQUIDATE_WEIGHT_UNITS, feeRate)
+      const feeUtxos = selectFeeUtxos(
+        blindedWalletUtxos,
+        lwkNetwork.policyAsset(),
+        feeBudgetSats,
+        feeRate,
+      )
 
-    return liquidateOffer({
-      activeOfferOutpoint,
-      createOfferTxid: offer.created_at_txid,
-      lenderNftOutpoint,
-      feeOutpoints: feeUtxos.map(utxoToOutpointString),
-    })
+      const { pset, finalize } = await liquidateOffer({
+        activeOfferOutpoint,
+        createOfferTxid: offer.created_at_txid,
+        lenderNftOutpoint,
+        feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      })
+
+      await advance('signing')
+      const signedPset = await signPset(pset)
+
+      await advance('finalizing')
+      const { finalizedTx, summary } = finalize(signedPset)
+
+      await advance('broadcasting')
+      const txid = await broadcastTx(finalizedTx.toString())
+
+      return { txid, summary }
+    } catch (err) {
+      fail(err)
+      throw err
+    }
   }
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: liquidateExpiredOffer,
     onSuccess: result => {
       void addPendingTx({
@@ -110,7 +131,6 @@ export default function LiquidateOfferModal({
         summary: txSummary,
         status,
         txid: data?.txid,
-        error: error?.message,
         onConfirm: () => mutate(),
       }}
       onClose={() => {

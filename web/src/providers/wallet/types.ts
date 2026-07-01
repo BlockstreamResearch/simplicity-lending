@@ -34,10 +34,13 @@ export interface SavedSession {
   descriptorStr: string
 }
 
+export type WalletSignerType = 'jade' | 'seed'
+
 export interface WalletState {
   connectionStatus: ConnectionStatus
   connectorId: string | null
   walletType: WalletType | null
+  signerType: WalletSignerType | null
   balances: Record<string, string>
   // Resolved once on connect; null until ready.
   receiveAddress: string | null
@@ -55,6 +58,7 @@ export const INITIAL_WALLET_STATE: WalletState = {
   connectionStatus: 'disconnected',
   connectorId: null,
   walletType: null,
+  signerType: null,
   balances: {},
   receiveAddress: null,
   scriptPubkey: null,

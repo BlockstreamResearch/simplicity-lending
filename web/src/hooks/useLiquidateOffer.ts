@@ -3,6 +3,7 @@ import {
   AssetId,
   ExternalUtxo,
   OutPoint,
+  type Pset,
   Script,
   SimplicityLogLevel,
   TxBuilder,
@@ -10,7 +11,6 @@ import {
 } from '@lilbonekit/lwk-web'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import {
   assertDistinctOutpoints,
@@ -20,6 +20,7 @@ import {
   requireExplicitAmount,
   requireExplicitAsset,
   requireTxOut,
+  type UpdatedPset,
 } from '@/lwk/transaction'
 import {
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
@@ -51,21 +52,20 @@ export interface LiquidateOfferParams {
   feeOutpoints: string[]
 }
 
-export interface LiquidateOfferResult {
-  txid: string
-  summary: {
-    inputs: Record<string, string>
-    outputs: Record<string, string>
-    assetIds: Record<string, string>
-    offerParameters: Record<string, string>
-  }
+export interface LiquidateOfferSummary {
+  inputs: Record<string, string>
+  outputs: Record<string, string>
+  assetIds: Record<string, string>
+  offerParameters: Record<string, string>
 }
 
 export function useLiquidateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
 
-  const liquidateOffer = async (params: LiquidateOfferParams): Promise<LiquidateOfferResult> => {
+  const liquidateOffer = async (
+    params: LiquidateOfferParams,
+  ): Promise<UpdatedPset<LiquidateOfferSummary>> => {
     const activeOfferOutpoint = new OutPoint(params.activeOfferOutpoint)
     const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
     const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
@@ -173,48 +173,53 @@ export function useLiquidateOffer() {
       .setFallbackLocktimeHeight(metadata.loanExpirationTime)
       .setInputSequence(new OutPoint(params.activeOfferOutpoint), MAX_SEQUENCE_NON_RBF)
       .finish(wollet)
-    const txWithWalletWitnesses = wollet.finalize(await signPset(pset)).extractTx()
 
-    const prevouts = [activeOfferTxOut, lenderNftTxOut, ...feeTxOuts]
-    const finalizedTx = lendingProgram.finalizeTransactionWithSpendInfo(
-      txWithWalletWitnesses,
-      activeLendingSpendInfo,
-      prevouts,
-      0,
-      buildLendingWitness({ branch: 'Liquidation', currentDebt }),
-      lwkNetwork,
-      SimplicityLogLevel.Trace,
-    )
-    const txid = await broadcastTx(finalizedTx.toString())
-
-    // TODO: Remove debug summary before release
     return {
-      txid,
-      summary: {
-        inputs: {
-          '0 Active offer Lending': params.activeOfferOutpoint,
-          '1 Lender NFT (wallet)': params.lenderNftOutpoint,
-          '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
-          'Create-offer tx (metadata)': params.createOfferTxid,
-        },
-        outputs: {
-          '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
-          '1 Unlocked collateral': collateralRecipient.toString(),
-          'L-BTC change': 'Managed by LWK',
-        },
-        assetIds: {
-          collateralAssetId: collateralAsset.toString(),
-          principalAssetId: AssetId.fromBytes(metadata.principalAssetId).toString(),
-          borrowerNftAssetId: borrowerNftAsset.toString(),
-          lenderNftAssetId: lenderNftAsset.toString(),
-        },
-        offerParameters: {
-          collateralAmount: collateralAmount.toString(),
-          principalAmount: metadata.principalAmount.toString(),
-          principalInterestRate: metadata.principalInterestRate.toString(),
-          loanExpirationTime: metadata.loanExpirationTime.toString(),
-          currentDebt: currentDebt.toString(),
-        },
+      pset,
+      finalize: (signedPset: Pset) => {
+        const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
+
+        const prevouts = [activeOfferTxOut, lenderNftTxOut, ...feeTxOuts]
+        const finalizedTx = lendingProgram.finalizeTransactionWithSpendInfo(
+          txWithWalletWitnesses,
+          activeLendingSpendInfo,
+          prevouts,
+          0,
+          buildLendingWitness({ branch: 'Liquidation', currentDebt }),
+          lwkNetwork,
+          SimplicityLogLevel.Trace,
+        )
+
+        // TODO: Remove debug summary before release
+        return {
+          finalizedTx,
+          summary: {
+            inputs: {
+              '0 Active offer Lending': params.activeOfferOutpoint,
+              '1 Lender NFT (wallet)': params.lenderNftOutpoint,
+              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              'Create-offer tx (metadata)': params.createOfferTxid,
+            },
+            outputs: {
+              '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
+              '1 Unlocked collateral': collateralRecipient.toString(),
+              'L-BTC change': 'Managed by LWK',
+            },
+            assetIds: {
+              collateralAssetId: collateralAsset.toString(),
+              principalAssetId: AssetId.fromBytes(metadata.principalAssetId).toString(),
+              borrowerNftAssetId: borrowerNftAsset.toString(),
+              lenderNftAssetId: lenderNftAsset.toString(),
+            },
+            offerParameters: {
+              collateralAmount: collateralAmount.toString(),
+              principalAmount: metadata.principalAmount.toString(),
+              principalInterestRate: metadata.principalInterestRate.toString(),
+              loanExpirationTime: metadata.loanExpirationTime.toString(),
+              currentDebt: currentDebt.toString(),
+            },
+          },
+        }
       },
     }
   }

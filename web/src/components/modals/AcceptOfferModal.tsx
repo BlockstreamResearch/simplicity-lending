@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { broadcastTx } from '@/api/esplora/methods'
 import { esploraQueryKeys } from '@/api/esplora/queryKeys'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
@@ -9,6 +10,7 @@ import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
+import { getDefaultTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAcceptOffer } from '@/hooks/useAcceptOffer'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
@@ -20,6 +22,7 @@ import {
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
+import { useTxProgress } from '@/providers/txProgress/useTxProgress'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
 import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
@@ -42,51 +45,70 @@ export default function AcceptOfferModal({
   onSuccess,
 }: AcceptOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, signPset, signerType, scriptPubkey, balances } =
+    useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
+  const { start, fail } = useTxProgress()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
 
   const acceptBorrowOffer = async () => {
-    const fullOffer = await fetchOffer(offer.id)
-    const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
-    if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
+    try {
+      const advance = await start(getDefaultTransactionSteps(signerType))
+      const fullOffer = await fetchOffer(offer.id)
+      const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
+      if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
 
-    await syncWallet()
-    const [blindedWalletUtxos, feeRate] = await Promise.all([
-      getBlindedWalletUtxos(),
-      fetchFeeRateSatPerKvb(),
-    ])
+      await syncWallet()
+      const [blindedWalletUtxos, feeRate] = await Promise.all([
+        getBlindedWalletUtxos(),
+        fetchFeeRateSatPerKvb(),
+      ])
 
-    const principalUtxos = selectAssetUtxos(
-      blindedWalletUtxos,
-      principalAsset.id,
-      offer.principal_amount,
-      principalAsset.symbol,
-    )
+      const principalUtxos = selectAssetUtxos(
+        blindedWalletUtxos,
+        principalAsset.id,
+        offer.principal_amount,
+        principalAsset.symbol,
+      )
 
-    const feeBudgetSats = estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
-    const feeUtxos = selectFeeUtxos(
-      blindedWalletUtxos,
-      lwkNetwork.policyAsset(),
-      feeBudgetSats,
-      feeRate,
-    )
-    const nftOutpoints = resolveNftOutpoints(fullOffer)
-    if (!nftOutpoints) throw new Error('Offer NFT participants not found')
-    const { lenderNft, borrowerNft } = nftOutpoints
+      const feeBudgetSats = estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
+      const feeUtxos = selectFeeUtxos(
+        blindedWalletUtxos,
+        lwkNetwork.policyAsset(),
+        feeBudgetSats,
+        feeRate,
+      )
+      const nftOutpoints = resolveNftOutpoints(fullOffer)
+      if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+      const { lenderNft, borrowerNft } = nftOutpoints
 
-    return acceptOffer({
-      pendingOfferOutpoint,
-      lenderNftOutpoint: lenderNft,
-      borrowerNftReferenceOutpoint: borrowerNft,
-      principalOutpoints: principalUtxos.map(utxoToOutpointString),
-      feeOutpoints: feeUtxos.map(utxoToOutpointString),
-    })
+      const { pset, finalize } = await acceptOffer({
+        pendingOfferOutpoint,
+        lenderNftOutpoint: lenderNft,
+        borrowerNftReferenceOutpoint: borrowerNft,
+        principalOutpoints: principalUtxos.map(utxoToOutpointString),
+        feeOutpoints: feeUtxos.map(utxoToOutpointString),
+      })
+
+      await advance('signing')
+      const signedPset = await signPset(pset)
+
+      await advance('finalizing')
+      const { finalizedTx, summary } = finalize(signedPset)
+
+      await advance('broadcasting')
+      const txid = await broadcastTx(finalizedTx.toString())
+
+      return { txid, summary }
+    } catch (err) {
+      fail(err)
+      throw err
+    }
   }
 
-  const { mutate, reset, data, error, status } = useMutation({
+  const { mutate, reset, data, status } = useMutation({
     mutationFn: acceptBorrowOffer,
     onSuccess: result => {
       void addPendingTx({
@@ -139,7 +161,6 @@ export default function AcceptOfferModal({
         status,
         disabled: insufficientBalance,
         txid: data?.txid,
-        error: error?.message,
         onConfirm: () => mutate(),
       }}
       onClose={() => {
