@@ -20,6 +20,5 @@ uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
 anyhow = "1"
-cargo-husky = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6"
