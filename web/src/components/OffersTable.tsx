@@ -1,7 +1,7 @@
 import { Table, Tooltip } from '@heroui/react'
 import type { SortDescriptor } from '@heroui/react/rac'
 import type { Key } from 'react'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { SortField } from '@/api/indexer/methods'
 import type { OfferShort, OfferStatus } from '@/api/indexer/schemas'
@@ -76,10 +76,6 @@ function StatusColumn({
   )
 }
 
-function EmptyOffers() {
-  return <div className='text-muted py-10 text-center text-sm'>No matching offers</div>
-}
-
 interface OffersTableProps<T extends OfferShort> {
   offers: T[]
   currentBlockHeight: number
@@ -87,6 +83,7 @@ interface OffersTableProps<T extends OfferShort> {
   principalAsset?: ConfigAsset
   page?: number
   pageCount?: number
+  emptyMessage?: string
   onPageChange?: (page: number) => void
   sort?: SortDescriptor
   onSortChange?: (sort?: SortDescriptor) => void
@@ -101,6 +98,7 @@ export default function OffersTable<T extends OfferShort>({
   principalAsset = NETWORK_CONFIG.principalAsset,
   page,
   pageCount,
+  emptyMessage = 'No offers found',
   onPageChange,
   sort,
   onSortChange,
@@ -154,94 +152,121 @@ export default function OffersTable<T extends OfferShort>({
     }
   }
 
+  const scrollWrapperRef = useRef<HTMLDivElement>(null)
+  const [reservedHeight, setReservedHeight] = useState<number>()
+
+  const reservesHeight = pageCount !== undefined && pageCount > 1
+
+  useEffect(() => {
+    const el = scrollWrapperRef.current
+    if (!el || !reservesHeight) return
+    const observer = new ResizeObserver(() => {
+      setReservedHeight(prev => Math.max(prev ?? 0, el.offsetHeight))
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [reservesHeight])
+
   return (
     <Table variant='secondary'>
-      <Table.ScrollContainer>
-        <Table.Content
-          aria-label='Offers'
-          onRowAction={handleRowAction}
-          sortDescriptor={sort}
-          onSortChange={onSortChange ? handleSortChange : undefined}
-        >
-          <Table.Header>
-            <Table.Column id='collateral' isRowHeader className='w-44 min-w-44'>
-              Collateral ({collateralUnit})
-            </Table.Column>
-            <Table.Column id='loan_amount'>Loan Amount ({principalAsset.symbol})</Table.Column>
-            <Table.Column id='earn'>Earn ({principalAsset.symbol})</Table.Column>
-            <SortableColumn id='interest_rate' label='APR (%)' sortable={!!onSortChange} />
-            <SortableColumn
-              id='loan_expiration_height'
-              label='Term Left'
-              sortable={!!onSortChange}
-            />
-            <StatusColumn filter={statusFilter} onChange={onStatusFilterChange} />
-          </Table.Header>
-          <Table.Body
-            items={offers}
-            dependencies={[
-              currentBlockHeight,
-              scriptPubkey,
-              resolveOfferWarning,
-              pendingTxs,
-              denomination,
-              collateralAsset,
-            ]}
-            renderEmptyState={EmptyOffers}
+      <div
+        ref={scrollWrapperRef}
+        className='min-w-0'
+        style={reservesHeight && reservedHeight ? { minHeight: reservedHeight } : undefined}
+      >
+        <Table.ScrollContainer>
+          <Table.Content
+            aria-label='Offers'
+            onRowAction={handleRowAction}
+            sortDescriptor={sort}
+            onSortChange={onSortChange ? handleSortChange : undefined}
           >
-            {offer => {
-              const isProcessing = Boolean(getOfferPendingTx(offer.id, pendingTxs))
-              const warning = isProcessing ? null : resolveOfferWarning(offer)
-              return (
-                <Table.Row id={offer.id}>
-                  <Table.Cell className='w-44 min-w-44'>
-                    <span className='inline-flex items-center gap-1.5 tabular-nums'>
-                      {isPolicyAsset(collateralAsset)
-                        ? formatPolicyAssetAmount(
-                            offer.collateral_amount,
-                            denomination,
-                            collateralAsset,
-                          )
-                        : formatAmount(offer.collateral_amount, collateralAsset.decimals)}
-                      {warning && (
-                        <Tooltip>
-                          <Tooltip.Trigger
-                            className={`inline-flex ${SEVERITY_COLOR[warning.severity]}`}
-                          >
-                            <TriangleExclamationIcon className='size-3.5' />
-                          </Tooltip.Trigger>
-                          <Tooltip.Content>{warning.message}</Tooltip.Content>
-                        </Tooltip>
+            <Table.Header>
+              <Table.Column id='collateral' isRowHeader className='w-44 min-w-44'>
+                Collateral ({collateralUnit})
+              </Table.Column>
+              <Table.Column id='loan_amount'>Loan Amount ({principalAsset.symbol})</Table.Column>
+              <Table.Column id='earn'>Earn ({principalAsset.symbol})</Table.Column>
+              <SortableColumn id='interest_rate' label='APR (%)' sortable={!!onSortChange} />
+              <SortableColumn
+                id='loan_expiration_height'
+                label='Term Left'
+                sortable={!!onSortChange}
+              />
+              <StatusColumn filter={statusFilter} onChange={onStatusFilterChange} />
+            </Table.Header>
+            <Table.Body
+              items={offers}
+              dependencies={[
+                currentBlockHeight,
+                scriptPubkey,
+                resolveOfferWarning,
+                pendingTxs,
+                denomination,
+                collateralAsset,
+              ]}
+              renderEmptyState={() => (
+                <div className='bg-surface border-muted flex h-14 items-center rounded border border-dashed px-4 opacity-50'>
+                  <span className='text-foreground text-sm font-medium'>
+                    {statusFilter?.length ? 'No matching offers' : emptyMessage}
+                  </span>
+                </div>
+              )}
+            >
+              {offer => {
+                const isProcessing = Boolean(getOfferPendingTx(offer.id, pendingTxs))
+                const warning = isProcessing ? null : resolveOfferWarning(offer)
+                return (
+                  <Table.Row id={offer.id}>
+                    <Table.Cell className='w-44 min-w-44'>
+                      <span className='inline-flex items-center gap-1.5 tabular-nums'>
+                        {isPolicyAsset(collateralAsset)
+                          ? formatPolicyAssetAmount(
+                              offer.collateral_amount,
+                              denomination,
+                              collateralAsset,
+                            )
+                          : formatAmount(offer.collateral_amount, collateralAsset.decimals)}
+                        {warning && (
+                          <Tooltip>
+                            <Tooltip.Trigger
+                              className={`inline-flex ${SEVERITY_COLOR[warning.severity]}`}
+                            >
+                              <TriangleExclamationIcon className='size-3.5' />
+                            </Tooltip.Trigger>
+                            <Tooltip.Content>{warning.message}</Tooltip.Content>
+                          </Tooltip>
+                        )}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell>
+                      {formatAmount(offer.principal_amount, principalAsset.decimals)}
+                    </Table.Cell>
+                    <Table.Cell>
+                      {formatAmount(
+                        calcInterest(offer.principal_amount, offer.interest_rate),
+                        principalAsset.decimals,
                       )}
-                    </span>
-                  </Table.Cell>
-                  <Table.Cell>
-                    {formatAmount(offer.principal_amount, principalAsset.decimals)}
-                  </Table.Cell>
-                  <Table.Cell>
-                    {formatAmount(
-                      calcInterest(offer.principal_amount, offer.interest_rate),
-                      principalAsset.decimals,
-                    )}
-                  </Table.Cell>
-                  <Table.Cell>
-                    {computeApr(
-                      offer.interest_rate,
-                      offer.loan_expiration_height - offer.created_at_height,
-                    ).toFixed(2)}
-                    %
-                  </Table.Cell>
-                  <Table.Cell>{formatOfferTermLeft(offer, currentBlockHeight)}</Table.Cell>
-                  <Table.Cell className='min-w-36'>
-                    <OfferStatusChip status={offer.status} isProcessing={isProcessing} />
-                  </Table.Cell>
-                </Table.Row>
-              )
-            }}
-          </Table.Body>
-        </Table.Content>
-      </Table.ScrollContainer>
-      {page && pageCount && pageCount > 1 && onPageChange && (
+                    </Table.Cell>
+                    <Table.Cell>
+                      {computeApr(
+                        offer.interest_rate,
+                        offer.loan_expiration_height - offer.created_at_height,
+                      ).toFixed(2)}
+                      %
+                    </Table.Cell>
+                    <Table.Cell>{formatOfferTermLeft(offer, currentBlockHeight)}</Table.Cell>
+                    <Table.Cell className='min-w-36'>
+                      <OfferStatusChip status={offer.status} isProcessing={isProcessing} />
+                    </Table.Cell>
+                  </Table.Row>
+                )
+              }}
+            </Table.Body>
+          </Table.Content>
+        </Table.ScrollContainer>
+      </div>
+      {onPageChange && !!page && !!pageCount && pageCount > 1 && (
         <Table.Footer className='pr-2 pl-4'>
           <UiPagination currentPage={page} onPageChange={onPageChange} pageCount={pageCount} />
         </Table.Footer>

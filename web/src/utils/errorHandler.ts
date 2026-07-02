@@ -38,6 +38,12 @@ export class ErrorHandler {
     console.error(error)
   }
 
+  static describe(error: unknown): string {
+    if (error instanceof Error) return ErrorHandler.getErrorMessage(error)
+    if (typeof error === 'string' && error.trim()) return error
+    return 'Unexpected error occurred.'
+  }
+
   private static getErrorMessage(error: Error): string {
     if (error instanceof ApiTimeoutError) {
       return 'Request timed out. Please try again.'

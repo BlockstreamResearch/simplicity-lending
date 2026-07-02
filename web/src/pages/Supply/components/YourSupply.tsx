@@ -4,6 +4,7 @@ import { keepPreviousData } from '@tanstack/react-query'
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useLenderOffers } from '@/api/indexer/hooks'
 import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
+import { OffersLoadError } from '@/components/OffersLoadError'
 import OffersTable from '@/components/OffersTable'
 import { useOfferListControls } from '@/hooks/useOfferListControls'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -17,7 +18,12 @@ export default function YourSupply() {
   const { page, setPage, params, sort, setSort, statusFilter, setStatusFilter } =
     useOfferListControls({ pageSize: SUPPLY_PAGE_SIZE })
 
-  const { data: lenderData, isLoading } = useLenderOffers(scriptPubkey ?? '', params, {
+  const {
+    data: lenderData,
+    isLoading,
+    error,
+    refetch,
+  } = useLenderOffers(scriptPubkey ?? '', params, {
     placeholderData: keepPreviousData,
   })
 
@@ -40,14 +46,15 @@ export default function YourSupply() {
             <Skeleton key={i} className='h-14 w-full' />
           ))}
         </div>
-      ) : !offers.length && !statusFilter.length ? (
-        <p className='text-muted py-6 text-center text-sm'>No active loans</p>
+      ) : error ? (
+        <OffersLoadError error={error} onRetry={refetch} />
       ) : (
         <OffersTable
           offers={offers}
           currentBlockHeight={currentBlockHeight}
           page={page}
           pageCount={pageCount}
+          emptyMessage='No active loans'
           onPageChange={setPage}
           sort={sort}
           onSortChange={setSort}

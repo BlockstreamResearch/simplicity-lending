@@ -6,6 +6,7 @@ import { useBlockHeight } from '@/api/esplora/hooks'
 import { useBorrowerOffers } from '@/api/indexer/hooks'
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import PlusIcon from '@/components/icons/PlusIcon'
+import { OffersLoadError } from '@/components/OffersLoadError'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
@@ -36,6 +37,7 @@ export default function YourBorrows() {
   const {
     data: borrowerData,
     isLoading,
+    error,
     refetch,
   } = useBorrowerOffers(scriptPubkey ?? '', params, { placeholderData: keepPreviousData })
   const { data: currentBlockHeight } = useBlockHeight()
@@ -64,16 +66,15 @@ export default function YourBorrows() {
             <Skeleton key={i} className='h-14 w-full rounded' />
           ))}
         </div>
-      ) : offers.length === 0 && !statusFilter.length ? (
-        <div className='bg-surface border-muted flex h-14 items-center rounded border border-dashed px-4 opacity-50'>
-          <span className='text-foreground text-sm font-medium'>No borrow offers yet.</span>
-        </div>
+      ) : error ? (
+        <OffersLoadError error={error} onRetry={refetch} />
       ) : (
         <OffersTable
           offers={offers}
           currentBlockHeight={currentBlockHeight}
           page={page}
           pageCount={pageCount}
+          emptyMessage='No borrow offers yet.'
           onPageChange={setPage}
           sort={sort}
           onSortChange={setSort}

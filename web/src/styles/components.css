@@ -18,6 +18,11 @@
     @apply rounded-3xl;
   }
 
+  /* Secondary has no card bg — its overflow-clip must not round (would clip header/rows to 24px). */
+  .table-root--secondary {
+    @apply rounded-none;
+  }
+
   /* Figma dropdown option radius 20px (concentric inside 24px popover, 4px padding); HeroUI default 16px. */
   .list-box-item {
     @apply rounded-[1.25rem];
@@ -37,46 +42,6 @@
     @apply h-14;
   }
 
-  .table-root--secondary .table__header {
-    @apply border-b-0 bg-transparent;
-  }
-
-  .table-root--secondary .table__column {
-    @apply rounded-none border-b-4 border-[var(--surface-secondary)] bg-[var(--surface)];
-  }
-
-  .table-root--secondary .table__column:first-child {
-    @apply rounded-l-sm;
-  }
-
-  .table-root--secondary .table__column:last-child {
-    @apply rounded-r-sm;
-  }
-
-  .table-root--secondary .table__row .table__cell {
-    @apply border-b-4 border-[var(--surface-secondary)] bg-[var(--surface)];
-  }
-
-  .table-root--secondary .table__row .table__cell:first-child {
-    @apply rounded-l-sm;
-  }
-
-  .table-root--secondary .table__row .table__cell:last-child {
-    @apply rounded-r-sm;
-  }
-
-  .table-root--secondary .table__row[data-hovered='true'] .table__cell {
-    @apply bg-[var(--accent-soft-hover)];
-  }
-
-  .table-root--secondary .table__row[data-selected='true'] .table__cell {
-    @apply bg-[var(--accent-soft)];
-  }
-
-  .table-root--secondary .table__footer {
-    @apply rounded-sm bg-[var(--surface)];
-  }
-
   .pagination__link {
     @apply rounded-sm;
   }
@@ -84,4 +49,59 @@
   .pagination__summary {
     @apply gap-3;
   }
+}
+
+/* Unlayered on purpose: HeroUI ships table styles in @layer components, so
+   same-specificity selectors would tie. Unlayered CSS beats any @layer, letting
+   these overrides win without !important. */
+.table-root--secondary .table__content {
+  @apply [border-spacing:0_0.25rem];
+}
+
+.table-root--secondary .table__header {
+  @apply border-b-0 bg-transparent;
+}
+
+.table-root--secondary .table__column {
+  @apply rounded-none border-b-0 bg-[var(--surface)];
+}
+
+.table-root--secondary .table__header .table__column:first-child {
+  @apply rounded-l-sm;
+}
+
+.table-root--secondary .table__header .table__column:last-child {
+  @apply rounded-r-sm;
+}
+
+.table-root--secondary .table__row {
+  @apply border-b-0;
+}
+
+.table-root--secondary .table__row .table__cell {
+  @apply border-b-0 bg-[var(--surface)];
+}
+
+.table-root--secondary .table__row .table__cell:first-child {
+  @apply rounded-l-sm;
+}
+
+.table-root--secondary .table__row .table__cell:last-child {
+  @apply rounded-r-sm;
+}
+
+.table-root--secondary .table__row[data-hovered='true'] .table__cell {
+  @apply bg-[var(--accent-soft-hover)];
+}
+
+.table-root--secondary .table__row[data-selected='true'] .table__cell {
+  @apply bg-[var(--accent-soft)];
+}
+
+.table-root--secondary .table__row[data-pressed='true'] .table__cell {
+  @apply bg-[var(--accent-soft)];
+}
+
+.table-root--secondary .table__footer {
+  @apply rounded-sm bg-[var(--surface)];
 }
