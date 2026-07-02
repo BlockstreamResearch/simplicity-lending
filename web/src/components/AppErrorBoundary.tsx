@@ -29,6 +29,10 @@ export class AppErrorBoundary extends Component<PropsWithChildren, AppErrorBound
       <ErrorScreen
         title='Application error'
         description={ErrorHandler.describe(this.state.error)}
+        actionLabel='Reload page'
+        onAction={() => {
+          window.location.reload()
+        }}
       />
     )
   }
