@@ -7,6 +7,10 @@ export function getOfferPendingTx(
   return pendingTxs.find(tx => tx.offerId === offerId && tx.confirmationStatus !== 'failed') ?? null
 }
 
+export function getMempoolBlockingTx(pendingTxs: PendingTxRecord[]): PendingTxRecord | null {
+  return pendingTxs.find(tx => tx.confirmationStatus === 'processing') ?? null
+}
+
 export function getBorrowerAccountPendingTx(
   walletScriptPubkey: string,
   pendingTxs: PendingTxRecord[],

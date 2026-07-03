@@ -15,7 +15,7 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
 import { resolveOfferAction } from '@/utils/offerActions'
-import { getOfferPendingTx } from '@/utils/pendingTransactions'
+import { getMempoolBlockingTx, getOfferPendingTx } from '@/utils/pendingTransactions'
 
 interface OfferActionModalProps {
   offer: OfferShort | null
@@ -34,16 +34,22 @@ export default function OfferActionModal({
   const { data: currentBlockHeight } = useBlockHeight()
   const { pendingTxs } = usePendingTransactions()
 
-  const isProcessingNow = Boolean(offer && getOfferPendingTx(offer.id, pendingTxs))
+  const sameOfferPendingTx = offer ? getOfferPendingTx(offer.id, pendingTxs) : null
   const liveAction = offer ? resolveOfferAction(offer, scriptPubkey, currentBlockHeight) : 'none'
+
+  const isBlockedByOtherTx =
+    !sameOfferPendingTx && liveAction !== 'none' && Boolean(getMempoolBlockingTx(pendingTxs))
+  const isProcessingNow = Boolean(sameOfferPendingTx) || isBlockedByOtherTx
 
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
   const [isProcessingAtOpen, setIsProcessingAtOpen] = useState(isProcessingNow)
+  const [isBlockedByOtherTxAtOpen, setIsBlockedByOtherTxAtOpen] = useState(isBlockedByOtherTx)
   const [actionAtOpen, setActionAtOpen] = useState(liveAction)
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
     if (isOpen) {
       setIsProcessingAtOpen(isProcessingNow)
+      setIsBlockedByOtherTxAtOpen(isBlockedByOtherTx)
       setActionAtOpen(liveAction)
     }
   }
@@ -61,12 +67,19 @@ export default function OfferActionModal({
       <OfferActionShell
         isOpen={isOpen}
         title={`#${truncateAddress(offer.id)}`}
-        chip={<OfferStatusChip status={offer.status} isProcessing />}
+        chip={<OfferStatusChip status={offer.status} isProcessing={!isBlockedByOtherTxAtOpen} />}
         onClose={onClose}
       >
-        <p className='text-muted mb-4 text-sm'>
-          Transaction is processing. Actions are temporarily disabled.
-        </p>
+        {isBlockedByOtherTxAtOpen ? (
+          <div className='border-warning/30 bg-warning/10 text-warning mb-4 rounded-2xl border px-4 py-3 text-sm'>
+            You have another transaction that still needs at least 1 confirmation. Please wait
+            before starting a new one.
+          </div>
+        ) : (
+          <p className='text-muted mb-4 text-sm'>
+            Transaction is processing. Actions are temporarily disabled.
+          </p>
+        )}
         <OfferDetailsBody offer={offer} />
       </OfferActionShell>
     )
@@ -113,7 +126,7 @@ export default function OfferActionModal({
           chip={<OfferStatusChip status={offer.status} />}
           onClose={onClose}
         >
-          <OfferDetailsBody offer={offer} />
+          <OfferDetailsBody offer={offer} showBalance={false} />
         </OfferActionShell>
       )
   }

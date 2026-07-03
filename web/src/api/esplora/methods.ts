@@ -82,7 +82,10 @@ const BROADCAST_ERROR_PATTERNS: [RegExp, string][] = [
     /missingorspent/i,
     'One of the inputs has already been spent. Please refresh your balance and try again.',
   ],
-  [/txn-mempool-conflict|txn-already-in-mempool/i, 'This transaction was already submitted.'],
+  [
+    /txn-mempool-conflict|txn-already-in-mempool/i,
+    'Your previous transaction still needs at least 1 confirmation. Please wait before submitting another.',
+  ],
   [/dust/i, 'One of the outputs is below the minimum allowed amount.'],
   [/non-final|non-bip68-final/i, 'Transaction is not yet final. Please wait and try again.'],
 ]

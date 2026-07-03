@@ -31,6 +31,7 @@ const CONFIRMED_THRESHOLD = 1
 const FINALIZED_THRESHOLD = 2
 /** Defensive cap on how long a pending record can sit untracked before we give up on it. */
 const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000
+const FINALIZED_CLEANUP_GRACE_MS = 10 * 60 * 1000
 const SWEEP_INTERVAL_MS = 15_000
 
 type OfferRecordGroup = [offerId: string, records: PendingTxRecord[]]
@@ -345,8 +346,7 @@ function PendingTransactionsStore({
     setSurfacedTxids(prev => (prev.has(txid) ? prev : new Set(prev).add(txid)))
   }, [])
 
-  // Finalized txs stay active until the indexer reflects the expected state and cleanup removes
-  // them. That keeps duplicate actions disabled during indexer lag.
+  // If indexer-based cleanup never catches up, fall back to trusting on-chain finality.
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now()
@@ -360,11 +360,17 @@ function PendingTransactionsStore({
             confirmationStatus: 'failed',
             errorMessage: 'Transaction tracking timed out.',
           })
+        } else if (
+          record.confirmationStatus === 'finalized' &&
+          record.finalizedAt &&
+          now - record.finalizedAt > FINALIZED_CLEANUP_GRACE_MS
+        ) {
+          removeByTxid(record.txid)
         }
       }
     }, SWEEP_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [pendingTxs, updatePendingTx])
+  }, [pendingTxs, updatePendingTx, removeByTxid])
 
   const activeRecords = useMemo(
     () => pendingTxs.filter(record => record.confirmationStatus !== 'failed'),

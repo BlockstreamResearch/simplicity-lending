@@ -13,9 +13,14 @@ import { calcInterest, computeApr, formatOfferTermLeft } from '@/utils/offers'
 interface OfferDetailsBodyProps {
   offer: OfferShort
   highlightTerm?: boolean
+  showBalance?: boolean
 }
 
-export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsBodyProps) {
+export default function OfferDetailsBody({
+  offer,
+  highlightTerm,
+  showBalance = true,
+}: OfferDetailsBodyProps) {
   const { principalAsset } = NETWORK_CONFIG
   const { balances, isReady } = useWallet()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
@@ -56,7 +61,7 @@ export default function OfferDetailsBody({ offer, highlightTerm }: OfferDetailsB
 
   return (
     <div className='flex flex-col gap-6'>
-      {isReady && (
+      {showBalance && isReady && (
         <BalanceCard asset={principalAsset} amount={BigInt(balances[principalAsset.id] ?? 0)} />
       )}
       <DetailsPanel title='Loan info' rows={loanInfoRows} />
