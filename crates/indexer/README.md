@@ -183,6 +183,37 @@ Swagger UI is enabled by default (`swagger-ui` feature). Build without it for pr
 cargo build -p lending-indexer --no-default-features
 ```
 
+> [!TIP]
+> When running the API **directly** on port 8000, use paths without the `/api` prefix (e.g. `http://localhost:8000/offers`). The OpenAPI `servers` entry uses `/api` for deployments where nginx proxies `/api/*` to the backend. Swagger UI on a direct run still lists `/api/...` in "Try it out" unless you select or override the server URL.
+
+### Identifiers
+
+- **Offer `id`**: internal auto-increment integer (`BIGINT`), serialized in JSON responses as a **decimal string** (e.g. `"1"`). Assigned by PostgreSQL on insert. Used in nested `offer_id` fields and `GET /offers/by-script` responses. Not present on-chain. The path parameter in `GET /offers/{id}` is a numeric ID (e.g. `/offers/42`).
+- **`issuance_factory_id`**: UUID of the issuance factory that created the offer.
+- **`created_at_txid`**: on-chain unique key (hex) of the offer creation transaction.
+
+Example short offer item:
+
+```json
+{
+  "id": "1",
+  "issuance_factory_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "pending",
+  "collateral_asset": "010101…",
+  "principal_asset": "020202…",
+  "collateral_amount": "1000",
+  "principal_amount": "500",
+  "interest_rate": 120,
+  "loan_expiration_height": 1234567,
+  "created_at_height": 42,
+  "created_at_txid": "aabbcc…",
+  "participants": [],
+  "borrower_principal_utxo": null
+}
+```
+
+`GET /offers/by-script` returns a JSON array of decimal strings, e.g. `["1", "2", "5"]`.
+
 ### Filtering Parameters (Query Params)
 
 The following parameters are available for `GET /offers`, `GET /borrowers/offers`, and `GET /lenders/offers`:
@@ -200,7 +231,7 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 
 **Short offer** (`OfferListItemShort`) — used in `GET /offers`, `GET /borrowers/offers`, and `GET /lenders/offers`:
 
-- `id`, `issuance_factory_id`, `status`
+- `id` (decimal string, auto-increment offer ID), `issuance_factory_id` (UUID), `status`
 - `collateral_asset`, `principal_asset` (hex)
 - `collateral_amount`, `principal_amount` (decimal strings, satoshi)
 - `interest_rate` (basis points, e.g. 1000 = 10%)
@@ -220,11 +251,11 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 }
 ```
 
-**Offer details** (`GET /offers/{id}`) — full offer fields (short + NFT asset ids) plus:
+**Offer details** (`GET /offers/{id}`) — `{id}` in the path is a numeric offer ID (e.g. `/offers/42`); the response `id` and nested `offer_id` fields are decimal strings. Full offer fields (short + NFT asset ids) plus:
 
 - `borrower_principal_utxo`: unspent `borrower_principal` UTXO outpoint (`txid`, `vout`), or omitted when none
-- `participants`: latest participant UTXO per role (`borrower`, `lender`)
-- `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
+- `participants`: latest participant UTXO per role (`borrower`, `lender`); each entry includes `offer_id` (decimal string)
+- `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`); each entry includes `offer_id` (decimal string). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
 
 **Offers overview** (`GET /offers/overview`):
 
@@ -291,5 +322,5 @@ Overview sums (`collateral_locked`, `borrowings`) are per asset across the borro
 | :--- | :--- | :--- | :--- |
 | `GET` | `/offers/overview` | Protocol-wide active loan totals | — |
 | `GET` | `/offers` | Paginated short offer list | offer list filters (see above) |
-| `GET` | `/offers/by-script` | Offer IDs where `script_pubkey` matches an unspent participant UTXO (borrower or lender) | `script_pubkey` (query param, hex) |
-| `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and unspent offer UTXOs | — |
+| `GET` | `/offers/by-script` | Offer IDs (decimal strings) where `script_pubkey` matches an unspent participant UTXO (borrower or lender); response body is `["1", "2", …]` | `script_pubkey` (query param, hex) |
+| `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and unspent offer UTXOs; `{id}` is the numeric offer ID in the path | — |

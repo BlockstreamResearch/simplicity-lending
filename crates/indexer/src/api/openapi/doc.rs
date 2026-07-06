@@ -124,6 +124,10 @@ mod tests {
         let json = serde_json::to_string(&ApiDoc::openapi()).expect("serialize openapi");
         assert!(json.contains("Simplicity Lending Indexer"));
         assert!(json.contains("collateral_amount"));
+        assert!(
+            json.contains("auto-increment") || json.contains(r#""type":"string""#),
+            "offer id should be documented as string in OpenAPI"
+        );
     }
 
     #[test]

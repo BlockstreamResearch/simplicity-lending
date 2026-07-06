@@ -6,7 +6,7 @@
       {
         "ordinal": 0,
         "name": "offer_id",
-        "type_info": "Uuid"
+        "type_info": "Int8"
       },
       {
         "ordinal": 1,
@@ -56,7 +56,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Int8"
       ]
     },
     "nullable": [

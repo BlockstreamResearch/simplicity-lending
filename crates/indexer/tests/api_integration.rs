@@ -29,7 +29,11 @@ fn participant_script<'a>(item: &'a Value, role: &str) -> Option<&'a str> {
 }
 
 fn offer_id_from_json(value: &Value) -> Option<i64> {
-    value.get("id").and_then(Value::as_i64)
+    value
+        .get("id")?
+        .as_str()?
+        .parse()
+        .ok()
 }
 
 fn find_list_item(items: &Value, offer_id: i64) -> Option<&Value> {
@@ -93,8 +97,7 @@ fn offer_ids_from_array(value: &Value) -> Vec<String> {
         .map(|items| {
             items
                 .iter()
-                .filter_map(Value::as_i64)
-                .map(|id| id.to_string())
+                .filter_map(|v| v.as_str().map(ToOwned::to_owned))
                 .collect()
         })
         .unwrap_or_default();
@@ -289,9 +292,9 @@ async fn get_offers_returns_all_seeded_offers_with_correct_status() -> anyhow::R
     assert_ids_match_unordered(items, &[pending_offer, active_offer]);
 
     // Pins default `ORDER BY created_at_height DESC` (active_offer's height > pending's).
-    assert_eq!(items[0]["id"].as_i64(), Some(active_offer));
+    assert_eq!(items[0]["id"], active_offer.to_string());
     assert_eq!(items[0]["status"], "active");
-    assert_eq!(items[1]["id"].as_i64(), Some(pending_offer));
+    assert_eq!(items[1]["id"], pending_offer.to_string());
     assert_eq!(items[1]["status"], "pending");
 
     let active_item = find_list_item(items, active_offer).expect("active offer in list");
@@ -430,9 +433,9 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     let pending_items = offer_list_items(&pending);
     assert_eq!(pending["total"], 3);
     assert_eq!(pending_items.as_array().map_or(0, Vec::len), 3);
-    assert_eq!(pending_items[0]["id"].as_i64(), Some(offer_c));
-    assert_eq!(pending_items[1]["id"].as_i64(), Some(offer_d));
-    assert_eq!(pending_items[2]["id"].as_i64(), Some(offer_a));
+    assert_eq!(pending_items[0]["id"], offer_c.to_string());
+    assert_eq!(pending_items[1]["id"], offer_d.to_string());
+    assert_eq!(pending_items[2]["id"], offer_a.to_string());
 
     // Multi-status filter: pending + active -> all four except none (b is active).
     let multi_status = get_json(&http, format!("{base_url}/offers?status=pending,active")).await?;
@@ -455,7 +458,7 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     let by_pair_items = offer_list_items(&by_pair);
     assert_eq!(by_pair["total"], 1);
     assert_eq!(by_pair_items.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(by_pair_items[0]["id"].as_i64(), Some(offer_a));
+    assert_eq!(by_pair_items[0]["id"], offer_a.to_string());
 
     // collateral_asset alone: a and d (collat=aa), ordered by height DESC.
     let by_collateral = get_json(
@@ -465,8 +468,8 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     .await?;
     let by_collateral_items = offer_list_items(&by_collateral);
     assert_eq!(by_collateral["total"], 2);
-    assert_eq!(by_collateral_items[0]["id"].as_i64(), Some(offer_d));
-    assert_eq!(by_collateral_items[1]["id"].as_i64(), Some(offer_a));
+    assert_eq!(by_collateral_items[0]["id"], offer_d.to_string());
+    assert_eq!(by_collateral_items[1]["id"], offer_a.to_string());
 
     let paged = get_json(&http, format!("{base_url}/offers?limit=1&offset=1")).await?;
     let paged_items = offer_list_items(&paged);
@@ -474,7 +477,7 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     assert_eq!(paged["limit"], 1);
     assert_eq!(paged["offset"], 1);
     assert_eq!(paged_items.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(paged_items[0]["id"].as_i64(), Some(offer_d));
+    assert_eq!(paged_items[0]["id"], offer_d.to_string());
 
     let sorted = get_json(
         &http,
@@ -482,10 +485,10 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     )
     .await?;
     let sorted_items = offer_list_items(&sorted);
-    assert_eq!(sorted_items[0]["id"].as_i64(), Some(offer_a));
-    assert_eq!(sorted_items[1]["id"].as_i64(), Some(offer_d));
-    assert_eq!(sorted_items[2]["id"].as_i64(), Some(offer_b));
-    assert_eq!(sorted_items[3]["id"].as_i64(), Some(offer_c));
+    assert_eq!(sorted_items[0]["id"], offer_a.to_string());
+    assert_eq!(sorted_items[1]["id"], offer_d.to_string());
+    assert_eq!(sorted_items[2]["id"], offer_b.to_string());
+    assert_eq!(sorted_items[3]["id"], offer_c.to_string());
 
     // Filter using API display hex (format_hex byte order), non-uniform asset id bytes.
     let varied_collateral: Vec<u8> = (1_u8..=32).collect();
@@ -502,8 +505,8 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     .await?;
     assert_eq!(by_display_hex["total"], 1);
     assert_eq!(
-        offer_list_items(&by_display_hex)[0]["id"].as_i64(),
-        Some(offer_e)
+        offer_list_items(&by_display_hex)[0]["id"],
+        offer_e.to_string()
     );
 
     server_handle.abort();
@@ -621,7 +624,7 @@ async fn offers_endpoint_returns_400_on_invalid_path_id() -> anyhow::Result<()> 
 #[derive(serde::Deserialize, Debug)]
 #[allow(dead_code)]
 struct ExpectedOfferDetailsDto {
-    id: i64,
+    id: String,
     issuance_factory_id: Uuid,
     status: String,
     collateral_asset: String,
@@ -650,7 +653,7 @@ struct ExpectedOfferUtxoOutpointShort {
 #[derive(serde::Deserialize, Debug)]
 #[allow(dead_code)]
 struct ExpectedOfferUtxoDto {
-    offer_id: i64,
+    offer_id: String,
     utxo_type: String,
     spent_txid: Option<String>,
 }
@@ -658,7 +661,7 @@ struct ExpectedOfferUtxoDto {
 #[derive(serde::Deserialize, Debug)]
 #[allow(dead_code)]
 struct ExpectedParticipantDto {
-    offer_id: i64,
+    offer_id: String,
     participant_type: String,
     script_pubkey: String,
     txid: String,
@@ -700,7 +703,7 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     let dto: ExpectedOfferDetailsDto =
         serde_json::from_value(raw.clone()).expect("response must match full DTO shape");
 
-    assert_eq!(dto.id, pending_offer);
+    assert_eq!(dto.id, pending_offer.to_string());
     assert_eq!(dto.status, "pending");
     assert_eq!(dto.collateral_amount, "1000");
     assert_eq!(dto.principal_amount, "500");
@@ -743,7 +746,7 @@ async fn active_offer_details_includes_borrower_principal_utxo() -> anyhow::Resu
     let dto: ExpectedOfferDetailsDto =
         serde_json::from_value(raw).expect("response must match full DTO shape");
 
-    assert_eq!(dto.id, active_offer);
+    assert_eq!(dto.id, active_offer.to_string());
     assert_eq!(dto.status, "active");
     assert_eq!(dto.utxos.len(), 2);
 
@@ -843,7 +846,7 @@ async fn borrower_offers_returns_paginated_list_for_script() -> anyhow::Result<(
     )
     .await?;
     assert_eq!(pending_only["total"], 1);
-    assert_eq!(pending_only["items"][0]["id"].as_i64(), Some(pending_offer));
+    assert_eq!(pending_only["items"][0]["id"], pending_offer.to_string());
 
     let unknown_wallet = get_json(
         &http,
@@ -959,8 +962,8 @@ async fn lender_offers_excludes_pending_without_matching_lender_script() -> anyh
     .await?;
 
     assert_eq!(offers["total"], 1);
-    assert_eq!(offers["items"][0]["id"].as_i64(), Some(active_offer));
-    assert_ne!(offers["items"][0]["id"].as_i64(), Some(pending_offer));
+    assert_eq!(offers["items"][0]["id"], active_offer.to_string());
+    assert_ne!(offers["items"][0]["id"], pending_offer.to_string());
     assert_eq!(
         participant_script(&offers["items"][0], "lender"),
         Some("53ac")
@@ -1019,7 +1022,7 @@ async fn lender_offers_returns_paginated_list_for_script() -> anyhow::Result<()>
     )
     .await?;
     assert_eq!(active_only["total"], 1);
-    assert_eq!(active_only["items"][0]["id"].as_i64(), Some(active_offer));
+    assert_eq!(active_only["items"][0]["id"], active_offer.to_string());
 
     server_handle.abort();
     Ok(())

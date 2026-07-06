@@ -4,6 +4,11 @@ pub fn format_hex(mut bytes_vec: Vec<u8>) -> String {
     hex::encode(bytes_vec)
 }
 
+/// Formats an internal database ID for API responses (decimal string).
+pub fn format_offer_id(id: i64) -> String {
+    id.to_string()
+}
+
 /// Formats a satoshi amount for API responses (decimal string).
 pub fn format_satoshis(amount: i64) -> String {
     amount.to_string()
@@ -24,7 +29,12 @@ pub fn parse_script_pubkey(hex_str: &str) -> Result<Vec<u8>, crate::api::ApiErro
 
 #[cfg(test)]
 mod tests {
-    use super::{format_hex, format_satoshis, parse_filter_hex, parse_script_pubkey};
+    use super::{format_hex, format_offer_id, format_satoshis, parse_filter_hex, parse_script_pubkey};
+
+    #[test]
+    fn format_offer_id_serializes_as_decimal_string() {
+        assert_eq!(format_offer_id(42), "42");
+    }
 
     #[test]
     fn format_hex_reverses_then_encodes() {
