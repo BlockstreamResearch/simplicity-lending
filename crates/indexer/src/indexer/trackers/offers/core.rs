@@ -1,5 +1,4 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
 
@@ -14,7 +13,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct OffersWatchEntry {
-    pub offer_id: Uuid,
+    pub offer_id: i64,
     pub utxo_type: UtxoType,
 }
 
@@ -71,7 +70,7 @@ impl OffersTracker {
     pub async fn seed_creation_pending_offer_utxo(
         &mut self,
         sql_tx: &mut DbTx<'_>,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         vout: u32,
         block_height: u64,
@@ -101,7 +100,7 @@ impl OffersTracker {
     }
 
     fn new_offer_utxo_model(
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         vout: u32,
         utxo_type: UtxoType,
@@ -123,7 +122,7 @@ impl OffersTracker {
         sql_tx: &mut DbTx<'_>,
         tx: &Transaction,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         utxo_type: UtxoType,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -185,7 +184,7 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -225,7 +224,7 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -288,7 +287,7 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -309,7 +308,7 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -351,7 +350,7 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -390,7 +389,7 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {

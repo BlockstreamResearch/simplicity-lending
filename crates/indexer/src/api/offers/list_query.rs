@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use sqlx::{PgPool, Postgres, QueryBuilder};
-use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
 
@@ -112,14 +111,14 @@ fn attach_offer_list_where<'a>(
 
 #[derive(sqlx::FromRow)]
 struct ParticipantListRow {
-    offer_id: Uuid,
+    offer_id: i64,
     participant_type: ParticipantType,
     script_pubkey: Vec<u8>,
 }
 
 #[derive(sqlx::FromRow)]
 struct BorrowerPrincipalListRow {
-    offer_id: Uuid,
+    offer_id: i64,
     txid: Vec<u8>,
     vout: i32,
 }
@@ -132,7 +131,7 @@ async fn enrich_offer_list_items(
         return Ok(());
     }
 
-    let offer_ids: Vec<Uuid> = items.iter().map(|item| item.id).collect();
+    let offer_ids: Vec<i64> = items.iter().map(|item| item.id).collect();
 
     let participant_rows = sqlx::query_as::<_, ParticipantListRow>(
         r#"
@@ -163,7 +162,7 @@ async fn enrich_offer_list_items(
     .fetch_all(db)
     .await?;
 
-    let mut participants_by_offer: HashMap<Uuid, Vec<ParticipantShort>> = HashMap::new();
+    let mut participants_by_offer: HashMap<i64, Vec<ParticipantShort>> = HashMap::new();
     for row in participant_rows {
         participants_by_offer
             .entry(row.offer_id)
@@ -178,7 +177,7 @@ async fn enrich_offer_list_items(
         participants.sort_by_key(|participant| participant.participant_type);
     }
 
-    let mut principal_by_offer: HashMap<Uuid, OfferUtxoOutpointShort> = HashMap::new();
+    let mut principal_by_offer: HashMap<i64, OfferUtxoOutpointShort> = HashMap::new();
     for row in principal_rows {
         principal_by_offer.insert(
             row.offer_id,

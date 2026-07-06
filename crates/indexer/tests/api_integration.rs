@@ -14,7 +14,7 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::common::{
-    factory_model, offer_model, outpoint_from_uuid_vout, seed_factory_row, seed_offer_row,
+    factory_model, offer_model, outpoint_from_offer_id, seed_factory_row, seed_offer_row,
     seed_offer_utxo_row, seed_participant_utxo_row, spent_offer_utxo, spent_participant, test_pool,
     unique_32_bytes_from_uuid, unspent_offer_utxo, unspent_participant,
 };
@@ -28,12 +28,15 @@ fn participant_script<'a>(item: &'a Value, role: &str) -> Option<&'a str> {
         .as_str()
 }
 
-fn find_list_item(items: &Value, offer_id: Uuid) -> Option<&Value> {
-    items.as_array()?.iter().find(|item| {
-        item.get("id")
-            .and_then(Value::as_str)
-            .is_some_and(|id| id == offer_id.to_string())
-    })
+fn offer_id_from_json(value: &Value) -> Option<i64> {
+    value.get("id").and_then(Value::as_i64)
+}
+
+fn find_list_item(items: &Value, offer_id: i64) -> Option<&Value> {
+    items
+        .as_array()?
+        .iter()
+        .find(|item| offer_id_from_json(item) == Some(offer_id))
 }
 
 async fn start_api(pool: PgPool) -> anyhow::Result<(String, tokio::task::JoinHandle<()>)> {
@@ -69,8 +72,8 @@ fn ids_from_objects(value: &Value) -> Vec<String> {
         .map(|items| {
             items
                 .iter()
-                .filter_map(|item| item.get("id").and_then(Value::as_str))
-                .map(ToOwned::to_owned)
+                .filter_map(offer_id_from_json)
+                .map(|id| id.to_string())
                 .collect()
         })
         .unwrap_or_default();
@@ -84,19 +87,31 @@ fn offer_list_items(value: &Value) -> &Value {
         .expect("offer list response must include items")
 }
 
-fn uuid_strings_from_array(value: &Value) -> Vec<String> {
+fn offer_ids_from_array(value: &Value) -> Vec<String> {
     let mut ids: Vec<String> = value
         .as_array()
         .map(|items| {
             items
                 .iter()
-                .filter_map(Value::as_str)
-                .map(ToOwned::to_owned)
+                .filter_map(Value::as_i64)
+                .map(|id| id.to_string())
                 .collect()
         })
         .unwrap_or_default();
     ids.sort();
     ids
+}
+
+fn assert_ids_match_unordered(value: &Value, expected: &[i64]) {
+    let mut expected_ids: Vec<String> = expected.iter().map(|id| id.to_string()).collect();
+    expected_ids.sort();
+    assert_eq!(ids_from_objects(value), expected_ids);
+}
+
+fn assert_offer_ids_match_unordered(value: &Value, expected: &[i64]) {
+    let mut expected_ids: Vec<String> = expected.iter().map(|id| id.to_string()).collect();
+    expected_ids.sort();
+    assert_eq!(offer_ids_from_array(value), expected_ids);
 }
 
 #[tokio::test]
@@ -119,42 +134,18 @@ async fn health_endpoints_report_liveness_and_readiness() -> anyhow::Result<()> 
     Ok(())
 }
 
-fn assert_ids_match_unordered(value: &Value, expected: &[Uuid]) {
-    let mut expected_ids: Vec<String> = expected.iter().map(Uuid::to_string).collect();
-    expected_ids.sort();
-    assert_eq!(ids_from_objects(value), expected_ids);
-}
-
-fn assert_uuid_values_match_unordered(value: &Value, expected: &[Uuid]) {
-    let mut expected_ids: Vec<String> = expected.iter().map(Uuid::to_string).collect();
-    expected_ids.sort();
-    assert_eq!(uuid_strings_from_array(value), expected_ids);
-}
-
-/// Canonical offer graph used across most list/detail tests:
-/// - spent pre-lock UTXO (vout 0) + current unspent lending UTXO (vout 2);
-/// - for active offers, unspent borrower principal AssetAuth (vout 1);
-/// - historical borrower participant (vout 1, `51ac`) + current
-///   unspent borrower participant (vout 3, `52ac`);
-/// - historical lender participant (vout 2, `51ad`) + current
-///   unspent lender participant (vout 4, `53ac` for active/repaid, `50ac` for pending).
 async fn seed_offer_graph(
     pool: &PgPool,
     factory_id: Uuid,
-    offer_id: Uuid,
+    txid_seed: i64,
     status: OfferStatus,
     created_at_height: i64,
-) -> anyhow::Result<()> {
-    let mut offer = offer_model(
-        offer_id,
-        factory_id,
-        created_at_height,
-        unique_32_bytes_from_uuid(offer_id),
-    );
+) -> anyhow::Result<i64> {
+    let mut offer = offer_model(txid_seed, factory_id, created_at_height);
     offer.current_status = status;
-    seed_offer_row(pool, &offer).await?;
+    let offer_id = seed_offer_row(pool, &mut offer).await?;
 
-    let outpoint = outpoint_from_uuid_vout(offer_id, 0);
+    let outpoint = outpoint_from_offer_id(txid_seed, 0);
     let pre_lock = spent_offer_utxo(
         offer_id,
         outpoint,
@@ -242,19 +233,17 @@ async fn seed_offer_graph(
     seed_participant_utxo_row(pool, &old_lender).await?;
     seed_participant_utxo_row(pool, &current_lender).await?;
 
-    Ok(())
+    Ok(offer_id)
 }
 
 const FACTORY_CREATION_HEIGHT: i64 = 41;
 const PENDING_OFFER_HEIGHT: i64 = 42;
 const ACTIVE_OFFER_HEIGHT: i64 = 43;
 
-async fn setup_seeded_api() -> anyhow::Result<(String, tokio::task::JoinHandle<()>, Uuid, Uuid)> {
+async fn setup_seeded_api() -> anyhow::Result<(String, tokio::task::JoinHandle<()>, i64, i64)> {
     let pool = test_pool().await?;
 
     let factory_id = Uuid::new_v4();
-    let pending_offer = Uuid::new_v4();
-    let active_offer = Uuid::new_v4();
 
     let factory = factory_model(
         factory_id,
@@ -263,18 +252,18 @@ async fn setup_seeded_api() -> anyhow::Result<(String, tokio::task::JoinHandle<(
     );
     seed_factory_row(&pool, &factory).await?;
 
-    seed_offer_graph(
+    let pending_offer = seed_offer_graph(
         &pool,
         factory_id,
-        pending_offer,
+        1,
         OfferStatus::Pending,
         PENDING_OFFER_HEIGHT,
     )
     .await?;
-    seed_offer_graph(
+    let active_offer = seed_offer_graph(
         &pool,
         factory_id,
-        active_offer,
+        2,
         OfferStatus::Active,
         ACTIVE_OFFER_HEIGHT,
     )
@@ -300,9 +289,9 @@ async fn get_offers_returns_all_seeded_offers_with_correct_status() -> anyhow::R
     assert_ids_match_unordered(items, &[pending_offer, active_offer]);
 
     // Pins default `ORDER BY created_at_height DESC` (active_offer's height > pending's).
-    assert_eq!(items[0]["id"], active_offer.to_string());
+    assert_eq!(items[0]["id"].as_i64(), Some(active_offer));
     assert_eq!(items[0]["status"], "active");
-    assert_eq!(items[1]["id"], pending_offer.to_string());
+    assert_eq!(items[1]["id"].as_i64(), Some(pending_offer));
     assert_eq!(items[1]["status"], "pending");
 
     let active_item = find_list_item(items, active_offer).expect("active offer in list");
@@ -359,7 +348,7 @@ async fn get_offers_by_script_returns_only_owners_of_unspent_match() -> anyhow::
     )
     .await?;
     assert_eq!(current.as_array().map_or(0, Vec::len), 2);
-    assert_uuid_values_match_unordered(&current, &[pending_offer, active_offer]);
+    assert_offer_ids_match_unordered(&current, &[pending_offer, active_offer]);
 
     let historical = get_json(
         &http,
@@ -377,28 +366,60 @@ async fn get_offers_by_script_returns_only_owners_of_unspent_match() -> anyhow::
 async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Result<()> {
     let pool = test_pool().await?;
 
-    let offer_a = Uuid::new_v4();
-    let offer_b = Uuid::new_v4();
-    let offer_c = Uuid::new_v4();
-    let offer_d = Uuid::new_v4();
-
     let factory_id = Uuid::new_v4();
 
     let factory = factory_model(factory_id, 30, unique_32_bytes_from_uuid(factory_id));
     seed_factory_row(&pool, &factory).await?;
 
-    for (id, status, height, collat, princ, interest_rate) in [
-        (offer_a, OfferStatus::Pending, 40, 0xaa_u8, 0x10_u8, 100),
-        (offer_b, OfferStatus::Active, 60, 0xbb, 0xaa, 300),
-        (offer_c, OfferStatus::Pending, 80, 0xcc, 0xdd, 400),
-        (offer_d, OfferStatus::Pending, 70, 0xaa, 0xee, 200),
+    let mut offer_a = 0_i64;
+    let mut offer_b = 0_i64;
+    let mut offer_c = 0_i64;
+    let mut offer_d = 0_i64;
+
+    for (txid_seed, status, height, collat, princ, interest_rate, offer_id_out) in [
+        (
+            10_i64,
+            OfferStatus::Pending,
+            40,
+            0xaa_u8,
+            0x10_u8,
+            100,
+            &mut offer_a,
+        ),
+        (
+            20_i64,
+            OfferStatus::Active,
+            60,
+            0xbb,
+            0xaa,
+            300,
+            &mut offer_b,
+        ),
+        (
+            30_i64,
+            OfferStatus::Pending,
+            80,
+            0xcc,
+            0xdd,
+            400,
+            &mut offer_c,
+        ),
+        (
+            40_i64,
+            OfferStatus::Pending,
+            70,
+            0xaa,
+            0xee,
+            200,
+            &mut offer_d,
+        ),
     ] {
-        let mut offer = offer_model(id, factory_id, height, unique_32_bytes_from_uuid(id));
+        let mut offer = offer_model(txid_seed, factory_id, height);
         offer.current_status = status;
         offer.collateral_asset_id = vec![collat; 32];
         offer.principal_asset_id = vec![princ; 32];
         offer.interest_rate = interest_rate;
-        seed_offer_row(&pool, &offer).await?;
+        *offer_id_out = seed_offer_row(&pool, &mut offer).await?;
     }
 
     let (base_url, server_handle) = start_api(pool.clone()).await?;
@@ -409,9 +430,9 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     let pending_items = offer_list_items(&pending);
     assert_eq!(pending["total"], 3);
     assert_eq!(pending_items.as_array().map_or(0, Vec::len), 3);
-    assert_eq!(pending_items[0]["id"], offer_c.to_string());
-    assert_eq!(pending_items[1]["id"], offer_d.to_string());
-    assert_eq!(pending_items[2]["id"], offer_a.to_string());
+    assert_eq!(pending_items[0]["id"].as_i64(), Some(offer_c));
+    assert_eq!(pending_items[1]["id"].as_i64(), Some(offer_d));
+    assert_eq!(pending_items[2]["id"].as_i64(), Some(offer_a));
 
     // Multi-status filter: pending + active -> all four except none (b is active).
     let multi_status = get_json(&http, format!("{base_url}/offers?status=pending,active")).await?;
@@ -434,7 +455,7 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     let by_pair_items = offer_list_items(&by_pair);
     assert_eq!(by_pair["total"], 1);
     assert_eq!(by_pair_items.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(by_pair_items[0]["id"], offer_a.to_string());
+    assert_eq!(by_pair_items[0]["id"].as_i64(), Some(offer_a));
 
     // collateral_asset alone: a and d (collat=aa), ordered by height DESC.
     let by_collateral = get_json(
@@ -444,8 +465,8 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     .await?;
     let by_collateral_items = offer_list_items(&by_collateral);
     assert_eq!(by_collateral["total"], 2);
-    assert_eq!(by_collateral_items[0]["id"], offer_d.to_string());
-    assert_eq!(by_collateral_items[1]["id"], offer_a.to_string());
+    assert_eq!(by_collateral_items[0]["id"].as_i64(), Some(offer_d));
+    assert_eq!(by_collateral_items[1]["id"].as_i64(), Some(offer_a));
 
     let paged = get_json(&http, format!("{base_url}/offers?limit=1&offset=1")).await?;
     let paged_items = offer_list_items(&paged);
@@ -453,7 +474,7 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     assert_eq!(paged["limit"], 1);
     assert_eq!(paged["offset"], 1);
     assert_eq!(paged_items.as_array().map_or(0, Vec::len), 1);
-    assert_eq!(paged_items[0]["id"], offer_d.to_string());
+    assert_eq!(paged_items[0]["id"].as_i64(), Some(offer_d));
 
     let sorted = get_json(
         &http,
@@ -461,19 +482,17 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     )
     .await?;
     let sorted_items = offer_list_items(&sorted);
-    assert_eq!(sorted_items[0]["id"], offer_a.to_string());
-    assert_eq!(sorted_items[1]["id"], offer_d.to_string());
-    assert_eq!(sorted_items[2]["id"], offer_b.to_string());
-    assert_eq!(sorted_items[3]["id"], offer_c.to_string());
+    assert_eq!(sorted_items[0]["id"].as_i64(), Some(offer_a));
+    assert_eq!(sorted_items[1]["id"].as_i64(), Some(offer_d));
+    assert_eq!(sorted_items[2]["id"].as_i64(), Some(offer_b));
+    assert_eq!(sorted_items[3]["id"].as_i64(), Some(offer_c));
 
     // Filter using API display hex (format_hex byte order), non-uniform asset id bytes.
-    let offer_e = Uuid::new_v4();
     let varied_collateral: Vec<u8> = (1_u8..=32).collect();
-    let mut offer_e_model =
-        offer_model(offer_e, factory_id, 90, unique_32_bytes_from_uuid(offer_e));
+    let mut offer_e_model = offer_model(50, factory_id, 90);
     offer_e_model.collateral_asset_id = varied_collateral.clone();
     offer_e_model.principal_asset_id = vec![0xee; 32];
-    seed_offer_row(&pool, &offer_e_model).await?;
+    let offer_e = seed_offer_row(&pool, &mut offer_e_model).await?;
 
     let varied_collateral_hex = lending_indexer::api::utils::format_hex(varied_collateral);
     let by_display_hex = get_json(
@@ -483,8 +502,8 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     .await?;
     assert_eq!(by_display_hex["total"], 1);
     assert_eq!(
-        offer_list_items(&by_display_hex)[0]["id"],
-        offer_e.to_string()
+        offer_list_items(&by_display_hex)[0]["id"].as_i64(),
+        Some(offer_e)
     );
 
     server_handle.abort();
@@ -516,10 +535,7 @@ async fn validation_errors_match_error_contract() -> anyhow::Result<()> {
     let (base_url, server_handle) = start_api(pool).await?;
     let http = reqwest::Client::new();
 
-    let not_found = http
-        .get(format!("{base_url}/offers/{}", Uuid::new_v4()))
-        .send()
-        .await?;
+    let not_found = http.get(format!("{base_url}/offers/999999")).send().await?;
     assert_eq!(not_found.status(), StatusCode::NOT_FOUND);
     assert_eq!(
         response_json(not_found).await?["error"]["code"],
@@ -584,13 +600,13 @@ async fn offers_endpoint_returns_400_on_invalid_status_enum() -> anyhow::Result<
 
 #[tokio::test]
 #[serial]
-async fn offers_endpoint_returns_400_on_non_uuid_path() -> anyhow::Result<()> {
+async fn offers_endpoint_returns_400_on_invalid_path_id() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let (base_url, server_handle) = start_api(pool).await?;
     let http = reqwest::Client::new();
 
     let response = http
-        .get(format!("{base_url}/offers/not-a-uuid"))
+        .get(format!("{base_url}/offers/not-an-id"))
         .send()
         .await?;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -605,7 +621,7 @@ async fn offers_endpoint_returns_400_on_non_uuid_path() -> anyhow::Result<()> {
 #[derive(serde::Deserialize, Debug)]
 #[allow(dead_code)]
 struct ExpectedOfferDetailsDto {
-    id: Uuid,
+    id: i64,
     issuance_factory_id: Uuid,
     status: String,
     collateral_asset: String,
@@ -634,7 +650,7 @@ struct ExpectedOfferUtxoOutpointShort {
 #[derive(serde::Deserialize, Debug)]
 #[allow(dead_code)]
 struct ExpectedOfferUtxoDto {
-    offer_id: Uuid,
+    offer_id: i64,
     utxo_type: String,
     spent_txid: Option<String>,
 }
@@ -642,7 +658,7 @@ struct ExpectedOfferUtxoDto {
 #[derive(serde::Deserialize, Debug)]
 #[allow(dead_code)]
 struct ExpectedParticipantDto {
-    offer_id: Uuid,
+    offer_id: i64,
     participant_type: String,
     script_pubkey: String,
     txid: String,
@@ -827,7 +843,7 @@ async fn borrower_offers_returns_paginated_list_for_script() -> anyhow::Result<(
     )
     .await?;
     assert_eq!(pending_only["total"], 1);
-    assert_eq!(pending_only["items"][0]["id"], pending_offer.to_string());
+    assert_eq!(pending_only["items"][0]["id"].as_i64(), Some(pending_offer));
 
     let unknown_wallet = get_json(
         &http,
@@ -860,13 +876,11 @@ async fn borrower_overview_is_not_filtered_by_offer_list_params() -> anyhow::Res
 
 const REPAID_OFFER_HEIGHT: i64 = 44;
 
-async fn setup_seeded_lender_api()
--> anyhow::Result<(String, tokio::task::JoinHandle<()>, Uuid, Uuid)> {
+async fn setup_seeded_lender_api() -> anyhow::Result<(String, tokio::task::JoinHandle<()>, i64, i64)>
+{
     let pool = test_pool().await?;
 
     let factory_id = Uuid::new_v4();
-    let active_offer = Uuid::new_v4();
-    let repaid_offer = Uuid::new_v4();
 
     let factory = factory_model(
         factory_id,
@@ -875,18 +889,18 @@ async fn setup_seeded_lender_api()
     );
     seed_factory_row(&pool, &factory).await?;
 
-    seed_offer_graph(
+    let active_offer = seed_offer_graph(
         &pool,
         factory_id,
-        active_offer,
+        3,
         OfferStatus::Active,
         ACTIVE_OFFER_HEIGHT,
     )
     .await?;
-    seed_offer_graph(
+    let repaid_offer = seed_offer_graph(
         &pool,
         factory_id,
-        repaid_offer,
+        4,
         OfferStatus::Repaid,
         REPAID_OFFER_HEIGHT,
     )
@@ -945,8 +959,8 @@ async fn lender_offers_excludes_pending_without_matching_lender_script() -> anyh
     .await?;
 
     assert_eq!(offers["total"], 1);
-    assert_eq!(offers["items"][0]["id"], active_offer.to_string());
-    assert_ne!(offers["items"][0]["id"], pending_offer.to_string());
+    assert_eq!(offers["items"][0]["id"].as_i64(), Some(active_offer));
+    assert_ne!(offers["items"][0]["id"].as_i64(), Some(pending_offer));
     assert_eq!(
         participant_script(&offers["items"][0], "lender"),
         Some("53ac")
@@ -1005,7 +1019,7 @@ async fn lender_offers_returns_paginated_list_for_script() -> anyhow::Result<()>
     )
     .await?;
     assert_eq!(active_only["total"], 1);
-    assert_eq!(active_only["items"][0]["id"], active_offer.to_string());
+    assert_eq!(active_only["items"][0]["id"].as_i64(), Some(active_offer));
 
     server_handle.abort();
     Ok(())

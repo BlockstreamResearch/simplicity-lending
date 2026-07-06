@@ -21,7 +21,7 @@ pub struct ErrorResponse {
 /// Flat OpenAPI schema for `OfferDetailsResponse` (`#[serde(flatten)]` is not supported by utoipa).
 #[derive(ToSchema)]
 pub struct OfferDetailsResponseSchema {
-    pub id: Uuid,
+    pub id: i64,
     pub issuance_factory_id: Uuid,
     pub status: OfferStatus,
     pub collateral_asset: String,
