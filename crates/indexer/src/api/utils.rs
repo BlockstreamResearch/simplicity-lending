@@ -29,7 +29,9 @@ pub fn parse_script_pubkey(hex_str: &str) -> Result<Vec<u8>, crate::api::ApiErro
 
 #[cfg(test)]
 mod tests {
-    use super::{format_hex, format_offer_id, format_satoshis, parse_filter_hex, parse_script_pubkey};
+    use super::{
+        format_hex, format_offer_id, format_satoshis, parse_filter_hex, parse_script_pubkey,
+    };
 
     #[test]
     fn format_offer_id_serializes_as_decimal_string() {

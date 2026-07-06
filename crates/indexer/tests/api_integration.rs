@@ -29,11 +29,7 @@ fn participant_script<'a>(item: &'a Value, role: &str) -> Option<&'a str> {
 }
 
 fn offer_id_from_json(value: &Value) -> Option<i64> {
-    value
-        .get("id")?
-        .as_str()?
-        .parse()
-        .ok()
+    value.get("id")?.as_str()?.parse().ok()
 }
 
 fn find_list_item(items: &Value, offer_id: i64) -> Option<&Value> {
