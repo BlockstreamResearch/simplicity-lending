@@ -37,6 +37,8 @@
     --accent-soft-foreground: var(--accent);
     --accent-soft-hover: rgba(39, 6, 207, 0.2);
 
+    --table-row-hover: rgba(39, 6, 207, 0.03);
+
     --default-hover: #e1e1e2;
 
     --success: #17c964;

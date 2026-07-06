@@ -7,7 +7,7 @@ type ChipColor = 'success' | 'warning' | 'accent' | 'danger' | 'default'
 
 const OFFER_STATUS_CHIP_CONFIG: Record<OfferStatus, { color: ChipColor; label: string }> = {
   active: { color: 'success', label: 'Active' },
-  pending: { color: 'warning', label: 'Pending' },
+  pending: { color: 'warning', label: 'Open Offer' },
   repaid: { color: 'accent', label: 'Repaid' },
   liquidated: { color: 'danger', label: 'Liquidated' },
   cancelled: { color: 'default', label: 'Cancelled' },
@@ -32,7 +32,7 @@ export function OfferStatusChip({ status, size = 'sm', isProcessing }: OfferStat
   const { color, label } = OFFER_STATUS_CHIP_CONFIG[status]
   return (
     <Chip color={color} variant='soft' size={size}>
-      <CircleDashedIcon className='size-3.5' />
+      <span className='mr-1 size-1.5 shrink-0 rounded-full bg-current' aria-hidden='true' />
       {label}
     </Chip>
   )

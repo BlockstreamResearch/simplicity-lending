@@ -33,6 +33,7 @@ const FINALIZED_THRESHOLD = 2
 const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000
 const FINALIZED_CLEANUP_GRACE_MS = 10 * 60 * 1000
 const SWEEP_INTERVAL_MS = 15_000
+const CREATED_OFFER_HIGHLIGHT_MS = 8_000
 
 type OfferRecordGroup = [offerId: string, records: PendingTxRecord[]]
 type TrackedTxStatus = 'processing' | 'confirmed' | 'finalized'
@@ -160,16 +161,16 @@ function useOfferCleanupPolling({
 function useCreateOfferCleanupPolling({
   scriptPubkey,
   records,
-  onRemove,
+  onCreated,
   onChecked,
 }: {
   scriptPubkey: string | null
   records: PendingTxRecord[]
-  onRemove: (txid: string) => void
+  onCreated: (txid: string, offerId: string) => void
   onChecked: (txid: string) => void
 }) {
   const recordsRef = useLatestRef(records)
-  const onRemoveRef = useLatestRef(onRemove)
+  const onCreatedRef = useLatestRef(onCreated)
   const onCheckedRef = useLatestRef(onChecked)
   const processedAtRef = useRef<number | null>(null)
   const { data, dataUpdatedAt, isSuccess } = useQuery({
@@ -188,12 +189,12 @@ function useCreateOfferCleanupPolling({
     for (const record of recordsRef.current) {
       const matched = data.find(offer => offer.created_at_txid === record.txid)
       if (matched) {
-        onRemoveRef.current(record.txid)
+        onCreatedRef.current(record.txid, matched.id)
       } else {
         onCheckedRef.current(record.txid)
       }
     }
-  }, [data, dataUpdatedAt, isSuccess, onCheckedRef, onRemoveRef, recordsRef])
+  }, [data, dataUpdatedAt, isSuccess, onCheckedRef, onCreatedRef, recordsRef])
 }
 
 function useCreateBorrowerAccountCleanupPolling({
@@ -250,6 +251,20 @@ function PendingTransactionsStore({
   const [pendingTxs, setPendingTxs] = useState<PendingTxRecord[]>([])
   const [isLoading, setIsLoading] = useState(Boolean(scriptPubkey))
   const [surfacedTxids, setSurfacedTxids] = useState<Set<string>>(new Set())
+  const [newlyCreatedOfferIds, setNewlyCreatedOfferIds] = useState<Set<string>>(new Set())
+  const [highlightedCreatedOfferIds, setHighlightedCreatedOfferIds] = useState<Set<string>>(
+    new Set(),
+  )
+  const createdOfferHighlightTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+
+  useEffect(() => {
+    const timers = createdOfferHighlightTimersRef.current
+
+    return () => {
+      timers.forEach(timer => clearTimeout(timer))
+      timers.clear()
+    }
+  }, [])
 
   useEffect(() => {
     if (!scriptPubkey) return
@@ -342,6 +357,40 @@ function PendingTransactionsStore({
     [removePendingTx],
   )
 
+  const handleCreatedOffer = useCallback(
+    (txid: string, offerId: string) => {
+      setNewlyCreatedOfferIds(prev => {
+        if (prev.has(offerId)) return prev
+        const next = new Set(prev)
+        next.add(offerId)
+        return next
+      })
+      removeByTxid(txid)
+    },
+    [removeByTxid],
+  )
+
+  const startCreatedOfferHighlight = useCallback((offerId: string) => {
+    if (createdOfferHighlightTimersRef.current.has(offerId)) return
+
+    setNewlyCreatedOfferIds(prev => {
+      const next = new Set(prev)
+      next.delete(offerId)
+      return next
+    })
+    setHighlightedCreatedOfferIds(prev => new Set(prev).add(offerId))
+
+    const timer = setTimeout(() => {
+      createdOfferHighlightTimersRef.current.delete(offerId)
+      setHighlightedCreatedOfferIds(prev => {
+        const next = new Set(prev)
+        next.delete(offerId)
+        return next
+      })
+    }, CREATED_OFFER_HIGHLIGHT_MS)
+    createdOfferHighlightTimersRef.current.set(offerId, timer)
+  }, [])
+
   const addSurfaceToast = useCallback((txid: string) => {
     setSurfacedTxids(prev => (prev.has(txid) ? prev : new Set(prev).add(txid)))
   }, [])
@@ -411,7 +460,7 @@ function PendingTransactionsStore({
   useCreateOfferCleanupPolling({
     scriptPubkey,
     records: createOfferRecords,
-    onRemove: removeByTxid,
+    onCreated: handleCreatedOffer,
     onChecked: markChecked,
   })
   useCreateBorrowerAccountCleanupPolling({
@@ -425,13 +474,26 @@ function PendingTransactionsStore({
   const contextValue = useMemo(
     () => ({
       pendingTxs,
+      newlyCreatedOfferIds,
+      highlightedCreatedOfferIds,
       isLoading,
       addPendingTx,
       updatePendingTx,
       removePendingTx,
       addSurfaceToast,
+      startCreatedOfferHighlight,
     }),
-    [pendingTxs, isLoading, addPendingTx, updatePendingTx, removePendingTx, addSurfaceToast],
+    [
+      pendingTxs,
+      newlyCreatedOfferIds,
+      highlightedCreatedOfferIds,
+      isLoading,
+      addPendingTx,
+      updatePendingTx,
+      removePendingTx,
+      addSurfaceToast,
+      startCreatedOfferHighlight,
+    ],
   )
 
   return (

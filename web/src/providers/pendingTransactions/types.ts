@@ -41,6 +41,8 @@ export interface AddPendingTxInput {
 export interface PendingTransactionsContextValue {
   /** Pending tx records scoped to the currently connected wallet. */
   pendingTxs: PendingTxRecord[]
+  newlyCreatedOfferIds: ReadonlySet<string>
+  highlightedCreatedOfferIds: ReadonlySet<string>
   isLoading: boolean
   addPendingTx: (input: AddPendingTxInput) => Promise<void>
   updatePendingTx: (txid: string, patch: Partial<PendingTxRecord>) => Promise<void>
@@ -51,4 +53,5 @@ export interface PendingTransactionsContextValue {
    * stayed open the whole time never calls this.
    */
   addSurfaceToast: (txid: string) => void
+  startCreatedOfferHighlight: (offerId: string) => void
 }
