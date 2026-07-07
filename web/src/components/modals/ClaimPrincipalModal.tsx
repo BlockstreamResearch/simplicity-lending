@@ -84,8 +84,8 @@ export default function ClaimPrincipalModal({
         kind: 'claim_principal',
         walletScriptPubkey: scriptPubkey ?? '',
         offerId: offer.id,
-        previousOfferStatus: 'active',
-        expectedOfferStatus: 'active',
+        previousOfferStatus: offer.status,
+        expectedOfferStatus: offer.status,
       })
     },
   })

@@ -45,6 +45,8 @@ function resolveBorrowerAction(offer: OfferShort): OfferAction {
       return 'cancel'
     case 'active':
       return offer.borrower_principal_utxo ? 'claim-principal' : 'repay'
+    case 'liquidated':
+      return offer.borrower_principal_utxo ? 'claim-principal' : 'none'
     default:
       return 'none'
   }

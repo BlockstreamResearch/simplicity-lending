@@ -2,6 +2,7 @@
   --shadow-focus-ring: var(--focus-ring);
   --shadow-focus-ring-field: var(--focus-ring-field);
   --color-field-hover: var(--field-hover);
+  --color-table-row-hover: var(--table-row-hover);
 
   --color-accent-hover: var(--accent-hover);
   --color-default-hover: var(--default-hover);

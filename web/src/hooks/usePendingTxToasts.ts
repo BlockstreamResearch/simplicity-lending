@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react'
 
 import { pendingTxToastQueue } from '@/providers/pendingTransactions/pendingTxToastQueue'
-import type { PendingTxRecord } from '@/providers/pendingTransactions/types'
+import type { PendingTxKind, PendingTxRecord } from '@/providers/pendingTransactions/types'
 import { PENDING_TX_KIND_LABEL } from '@/utils/pendingTransactions'
 
 interface TrackedEntry {
   toastKey: string | null
   label: string
+  kind: PendingTxKind
 }
 
 /**
@@ -35,7 +36,7 @@ export function usePendingTxToasts(pendingTxs: PendingTxRecord[], surfacedTxids:
           { title: label, description: "Couldn't confirm - check your wallet", variant: 'danger' },
           { timeout: 0 },
         )
-        trackedRef.current.set(record.txid, { toastKey: null, label })
+        trackedRef.current.set(record.txid, { toastKey: null, label, kind: record.kind })
         continue
       }
 
@@ -45,7 +46,7 @@ export function usePendingTxToasts(pendingTxs: PendingTxRecord[], surfacedTxids:
         { title: label, description: 'Waiting for transaction...', isLoading: true },
         { timeout: 0 },
       )
-      trackedRef.current.set(record.txid, { toastKey, label })
+      trackedRef.current.set(record.txid, { toastKey, label, kind: record.kind })
     }
 
     for (const [txid, entry] of trackedRef.current) {
@@ -53,8 +54,15 @@ export function usePendingTxToasts(pendingTxs: PendingTxRecord[], surfacedTxids:
 
       if (entry.toastKey) {
         pendingTxToastQueue.close(entry.toastKey)
+        const isCreatedOffer = entry.kind === 'create_offer'
         pendingTxToastQueue.add(
-          { title: entry.label, description: 'Transaction confirmed', variant: 'success' },
+          {
+            title: isCreatedOffer ? 'Offer created' : entry.label,
+            description: isCreatedOffer
+              ? 'Your offer is now visible in the table.'
+              : 'Transaction confirmed',
+            variant: 'success',
+          },
           { timeout: 6_000 },
         )
       }

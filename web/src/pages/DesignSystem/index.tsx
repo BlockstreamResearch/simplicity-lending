@@ -190,11 +190,16 @@ const COLOR_FAMILIES: Family[] = [
   },
   {
     name: 'Surface',
-    description: 'Cards, panels, modals.',
+    description: 'Cards, panels, modals and interactive table rows.',
     swatches: [
       { label: 'Surface', className: 'bg-surface', note: '#FFFFFF' },
       { label: 'Secondary', className: 'bg-surface-secondary', note: '#FAFAFA' },
       { label: 'Tertiary', className: 'bg-surface-tertiary', note: '#EFEFF0' },
+      {
+        label: 'Table Row Hover',
+        className: 'bg-table-row-hover',
+        note: 'accent · 10% × 30% opacity',
+      },
     ],
   },
   {

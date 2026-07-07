@@ -83,6 +83,7 @@ export default function YourBorrows() {
           onSortChange={setSort}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
+          allowCreatedOfferHighlight={!isOfferModalOpen}
         />
       )}
 
