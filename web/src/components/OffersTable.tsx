@@ -154,12 +154,22 @@ export default function OffersTable<T extends OfferShort>({
             severity: 'danger',
             message: 'Offer expired. Cancel to reclaim your collateral.',
           }
-        if (offer.status === 'active' && offer.borrower_principal_utxo)
-          return { severity: 'warning', message: 'Claim your loan principal.' }
+        if (offer.status === 'active' && expired && offer.borrower_principal_utxo)
+          return {
+            severity: 'danger',
+            message: 'Loan expired. Claim your loan principal before repaying.',
+          }
         if (offer.status === 'active' && expired)
           return {
             severity: 'danger',
             message: 'Loan expired. The collateral can now be liquidated.',
+          }
+        if (offer.status === 'active' && offer.borrower_principal_utxo)
+          return { severity: 'warning', message: 'Claim your loan principal.' }
+        if (offer.status === 'liquidated' && offer.borrower_principal_utxo)
+          return {
+            severity: 'danger',
+            message: 'Your collateral was liquidated. Claim your loan principal.',
           }
       }
       return null
