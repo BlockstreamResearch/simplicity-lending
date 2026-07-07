@@ -1,4 +1,4 @@
-import { type Pset, type Wollet, WolletBuilder } from '@lilbonekit/lwk-web'
+import { type Pset, type Transaction, type Wollet, WolletBuilder } from '@lilbonekit/lwk-web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -8,7 +8,12 @@ import { JadeConnector } from '@/lib/wallet-core/connector/jade'
 import { SeedConnector } from '@/lib/wallet-core/connector/seed'
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import { DEFAULT_WALLET_TYPE, type WalletType } from '@/lib/wallet-core/types'
-import { syncBalances } from '@/lib/wallet-core/wallet/sync'
+import {
+  applyBroadcastTransaction,
+  readWalletBalances,
+  reconcilePendingBroadcasts,
+  syncBalances,
+} from '@/lib/wallet-core/wallet/sync'
 import { createEsploraClient } from '@/lwk'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { ErrorHandler } from '@/utils/errorHandler'
@@ -28,6 +33,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const sessionRef = useRef<WalletSession | null>(null)
   const connectingRef = useRef(false)
+  // Self-broadcast txs not yet confirmed per the indexer — reconciled after every full
+  // scan so a stale scan can't silently undo their locally-applied effect.
+  const pendingBroadcastsRef = useRef<Map<string, Transaction>>(new Map())
   // Invalidates stale connect() attempts and prevents duplicate disconnect handling.
   const connectionChangeCounterRef = useRef(0)
 
@@ -116,8 +124,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const session = sessionRef.current
       if (!session) return
       syncBalances(session.wollet, session.esploraClient)
-        .then(rawBalances => {
-          setState(s => ({ ...s, balances: rawBalances }))
+        .then(() => {
+          const confirmedTxids = reconcilePendingBroadcasts(
+            session.wollet,
+            pendingBroadcastsRef.current,
+          )
+          confirmedTxids.forEach(txid => pendingBroadcastsRef.current.delete(txid))
+
+          const { total, confirmed, pending } = readWalletBalances(session.wollet)
+          setState(s => ({
+            ...s,
+            balances: total,
+            confirmedBalances: confirmed,
+            pendingBalances: pending,
+          }))
         })
         .catch(console.warn)
     }, 60_000)
@@ -186,7 +206,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
         setSavedSession(saved)
 
-        const balances = await syncBalances(wollet, esploraClient)
+        const {
+          total: balances,
+          confirmed: confirmedBalances,
+          pending: pendingBalances,
+        } = await syncBalances(wollet, esploraClient)
         if (attempt !== connectionChangeCounterRef.current) return
 
         const address = wollet.address(0).address()
@@ -200,6 +224,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           error: null,
           isError: false,
           balances,
+          confirmedBalances,
+          pendingBalances,
           receiveAddress,
           scriptPubkey,
         }))
@@ -249,12 +275,44 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, syncing: true, error: null }))
 
     try {
-      const balances = await syncBalances(session.wollet, session.esploraClient)
-      setState(s => ({ ...s, syncing: false, balances }))
+      await syncBalances(session.wollet, session.esploraClient)
+
+      const confirmedTxids = reconcilePendingBroadcasts(
+        session.wollet,
+        pendingBroadcastsRef.current,
+      )
+      confirmedTxids.forEach(txid => pendingBroadcastsRef.current.delete(txid))
+
+      const {
+        total: balances,
+        confirmed: confirmedBalances,
+        pending: pendingBalances,
+      } = readWalletBalances(session.wollet)
+      setState(s => ({ ...s, syncing: false, balances, confirmedBalances, pendingBalances }))
     } catch (err) {
       ErrorHandler.process(err)
       const error = err instanceof Error ? err.message : String(err)
       setState(s => ({ ...s, syncing: false, error, isError: true }))
+    }
+  }, [])
+
+  // Best-effort local UI update — the tx already broadcast successfully regardless of
+  // this outcome, so failures here (e.g. a full scan racing this call) must not throw.
+  const applyBroadcastTx = useCallback((tx: Transaction) => {
+    const session = sessionRef.current
+    if (!session) return
+
+    try {
+      const { total, confirmed, pending } = applyBroadcastTransaction(session.wollet, tx)
+      pendingBroadcastsRef.current.set(tx.txid().toString(), tx)
+      setState(s => ({
+        ...s,
+        balances: total,
+        confirmedBalances: confirmed,
+        pendingBalances: pending,
+      }))
+    } catch (err) {
+      console.warn(err)
     }
   }, [])
 
@@ -310,6 +368,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connect,
         disconnect,
         syncWallet: sync,
+        applyBroadcastTransaction: applyBroadcastTx,
         signPset,
         getReceiveAddress,
         verifyReceiveAddress,

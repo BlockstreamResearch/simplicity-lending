@@ -43,7 +43,7 @@ export default function AcceptOfferModal({
   onSuccess,
 }: AcceptOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, confirmedBalances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { acceptOffer } = useAcceptOffer()
   const runStandardTransactionFlow = useStandardTransactionFlow()
@@ -112,7 +112,7 @@ export default function AcceptOfferModal({
       ? estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
       : 0n
   const insufficientBalance =
-    BigInt(balances[principalAsset.id] ?? 0) < offer.principal_amount + feeBuffer
+    BigInt(confirmedBalances[principalAsset.id] ?? 0) < offer.principal_amount + feeBuffer
 
   const txSummary = useMemo(
     () => [

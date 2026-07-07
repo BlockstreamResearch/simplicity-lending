@@ -10,7 +10,7 @@ import { env } from '@/constants/env'
 import { RoutePath } from '@/constants/routes'
 import { useOfferModal } from '@/hooks/useOfferModal'
 
-const ABOUT_SIMPLICITY_URL = 'https://github.com/BlockstreamResearch/simplicity'
+const ABOUT_SIMPLICITY_URL = 'https://simplicity-lang.org/'
 
 const NAV = [
   { to: RoutePath.Dashboard, label: 'Dashboard' },

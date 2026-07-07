@@ -1,5 +1,6 @@
 import type { AssetId, WalletTxOut } from '@lilbonekit/lwk-web'
 
+import { formatFeeReserve } from '@/utils/format'
 import { selectByLargestFirst } from '@/utils/utxo'
 
 // ExternalUtxo max-weight-to-satisfy for an explicit-address UTXO spent with a plain
@@ -110,6 +111,10 @@ export function selectFeeUtxos(
   const selected = selectByLargestFirst(candidates, budgetSats, {
     perItemReserve: weightUnitsToSats(FEE_WALLET_INPUT_WEIGHT_UNITS, feeRateSatPerKvb),
   })
-  if (!selected) throw new Error('Insufficient confirmed L-BTC balance to cover fees')
+  if (!selected) {
+    throw new Error(
+      `Insufficient confirmed L-BTC balance. This transaction requires a fee reserve of ${formatFeeReserve(budgetSats)}.`,
+    )
+  }
   return selected.map(item => item.utxo)
 }

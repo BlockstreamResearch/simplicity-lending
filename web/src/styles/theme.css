@@ -39,6 +39,7 @@
   --text-h4--font-weight: 600;
 
   --animate-modal-view-in: modal-view-in 200ms ease-out;
+  --animate-shake: shake 400ms ease-in-out;
 
   @keyframes modal-view-in {
     from {
@@ -48,6 +49,21 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20%,
+    60% {
+      transform: translateX(-4px);
+    }
+    40%,
+    80% {
+      transform: translateX(4px);
     }
   }
 }

@@ -4,7 +4,7 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import BalanceCard from './BalanceCard'
 
 export default function UserBalances() {
-  const { balances } = useWallet()
+  const { confirmedBalances, pendingBalances } = useWallet()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
 
   return (
@@ -17,7 +17,8 @@ export default function UserBalances() {
           <BalanceCard
             key={asset.id}
             asset={asset}
-            amount={BigInt(balances[asset.id] ?? 0)}
+            amount={BigInt(confirmedBalances[asset.id] ?? 0)}
+            pendingAmount={BigInt(pendingBalances[asset.id] ?? 0)}
             className='sm:w-65.5'
           />
         ))}

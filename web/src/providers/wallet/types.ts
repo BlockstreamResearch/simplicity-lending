@@ -1,6 +1,7 @@
 import type {
   EsploraClient,
   Pset,
+  Transaction,
   WalletTxOut,
   Wollet,
   WolletDescriptor,
@@ -14,6 +15,8 @@ export interface WalletContextValue extends WalletState {
   connect(variant: WalletType): Promise<void>
   disconnect(): Promise<void>
   syncWallet(): Promise<void>
+  /** Applies a just-broadcast tx to local wallet state instantly, without a network scan. */
+  applyBroadcastTransaction(tx: Transaction): void
   signPset(pset: Pset): Promise<Pset>
   getBlindedWalletUtxos(): Promise<WalletTxOut[]>
   getWollet(): Promise<Wollet>
@@ -42,6 +45,8 @@ export interface WalletState {
   walletType: WalletType | null
   signerType: WalletSignerType | null
   balances: Record<string, string>
+  confirmedBalances: Record<string, string>
+  pendingBalances: Record<string, string>
   // Resolved once on connect; null until ready.
   receiveAddress: string | null
   scriptPubkey: string | null
@@ -60,6 +65,8 @@ export const INITIAL_WALLET_STATE: WalletState = {
   walletType: null,
   signerType: null,
   balances: {},
+  confirmedBalances: {},
+  pendingBalances: {},
   receiveAddress: null,
   scriptPubkey: null,
   syncing: false,

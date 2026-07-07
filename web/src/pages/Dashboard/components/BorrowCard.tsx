@@ -10,6 +10,7 @@ import ClockIcon from '@/components/icons/ClockIcon'
 import CoinsIcon from '@/components/icons/CoinsIcon'
 import FileTextIcon from '@/components/icons/FileTextIcon'
 import LockIcon from '@/components/icons/LockIcon'
+import PendingBalanceBadge from '@/components/PendingBalanceBadge'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
@@ -28,7 +29,7 @@ import { DataRow } from './DataRow'
 
 export function BorrowCard() {
   const navigate = useNavigate()
-  const { balances, scriptPubkey } = useWallet()
+  const { confirmedBalances, pendingBalances, scriptPubkey } = useWallet()
   const { stats, isLoading, error, refetch } = useBorrowerStats()
   const { collateralUnit, formatCollateralAmount, formatCollateralDisplay, formatPrincipalAmount } =
     useFormatAmount()
@@ -41,7 +42,8 @@ export function BorrowCard() {
   const { pendingTxs } = usePendingTransactions()
   const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)
 
-  const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
+  const balance = BigInt(confirmedBalances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
+  const pendingBalance = BigInt(pendingBalances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.collateralAsset.decimals, collateralPriceUsd)
   const notifications = buildOfferNotifications(
     offersQuery.data ?? [],
@@ -62,16 +64,24 @@ export function BorrowCard() {
           </span>
           <h3 className='text-h3'>Your Borrows</h3>
         </div>
-        <p className='text-muted text-h4'>Complete Balance {collateralUnit}</p>
+        <p className='text-muted text-h4'>Available Balance {collateralUnit}</p>
       </header>
 
       {isLoading ? (
         <Skeleton className='h-8 w-32 rounded-lg' />
       ) : (
         <div className='flex flex-col gap-1'>
-          <p className='text-display'>
-            <AssetAmount value={formatCollateralAmount(balance)} unit={collateralUnit} />
-          </p>
+          <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+            <p className='text-display'>
+              <AssetAmount value={formatCollateralAmount(balance)} unit={collateralUnit} />
+            </p>
+            {pendingBalance > 0n && (
+              <PendingBalanceBadge
+                label={formatCollateralAmount(pendingBalance)}
+                tooltip={`${formatCollateralAmount(pendingBalance)} ${collateralUnit} is unconfirmed and on the way. It will be spendable once the transaction confirms.`}
+              />
+            )}
+          </div>
           <span className='text-muted text-xs'>{balanceUsd ?? '—'}</span>
         </div>
       )}

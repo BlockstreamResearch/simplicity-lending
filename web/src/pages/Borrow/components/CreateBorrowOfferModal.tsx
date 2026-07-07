@@ -30,7 +30,7 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
-import { formatAmount, formatUsd } from '@/utils/format'
+import { formatAmount, formatFeeReserve, formatUsd } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
 import {
   formatPolicyAssetDisplay,
@@ -253,7 +253,7 @@ export default function CreateBorrowOfferModal({
   onClose,
 }: CreateBorrowOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
-  const { balances, scriptPubkey } = useWallet()
+  const { confirmedBalances, pendingBalances, scriptPubkey } = useWallet()
   const { denomination } = useAssetDenomination()
   const collateralUnit = getPolicyAssetUnit(denomination, collateralAsset)
   const collateralUsd = useAssetPriceUsd(collateralAsset.id)
@@ -328,7 +328,11 @@ export default function CreateBorrowOfferModal({
         throw new Error('No active factory found. Create a borrower account first.')
       }
       const collateralUtxos = selectByLargestFirst(utxos, collateralBase + feeBudgetSats)
-      if (!collateralUtxos) throw new Error('No suitable collateral UTXOs found')
+      if (!collateralUtxos) {
+        throw new Error(
+          `Insufficient confirmed L-BTC balance for the collateral and a fee reserve of ${formatFeeReserve(feeBudgetSats)}.`,
+        )
+      }
 
       return createOffer({
         factoryAuthOutpoint: factoryState.factoryAuthOutpoint,
@@ -447,7 +451,8 @@ export default function CreateBorrowOfferModal({
       <div className='flex flex-col gap-5'>
         <BalanceCard
           asset={collateralAsset}
-          amount={BigInt(balances[collateralAsset.id] ?? 0)}
+          amount={BigInt(confirmedBalances[collateralAsset.id] ?? 0)}
+          pendingAmount={BigInt(pendingBalances[collateralAsset.id] ?? 0)}
           className='bg-surface-secondary'
         />
         <Controller

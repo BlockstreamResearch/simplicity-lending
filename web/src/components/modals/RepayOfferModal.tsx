@@ -43,7 +43,7 @@ export default function RepayOfferModal({
   onSuccess,
 }: RepayOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, balances } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, confirmedBalances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { repayOffer } = useRepayOffer()
   const runStandardTransactionFlow = useStandardTransactionFlow()
@@ -115,7 +115,8 @@ export default function RepayOfferModal({
     principalAsset.id === lwkNetwork.policyAsset().toString()
       ? estimateFeeBudgetSats(REPAY_WEIGHT_UNITS, feeRate)
       : 0n
-  const insufficientBalance = BigInt(balances[principalAsset.id] ?? 0) < totalToRepay + feeBuffer
+  const insufficientBalance =
+    BigInt(confirmedBalances[principalAsset.id] ?? 0) < totalToRepay + feeBuffer
 
   const txSummary = useMemo(() => {
     const interest = calcInterest(offer.principal_amount, offer.interest_rate)
