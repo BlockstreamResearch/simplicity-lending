@@ -4,11 +4,10 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use uuid::Uuid;
 
 use crate::api::openapi::{ErrorResponse, OfferDetailsResponseSchema, OfferListParams};
 use crate::api::params::ScriptQuery;
-use crate::api::utils::parse_script_pubkey;
+use crate::api::utils::{format_offer_id, parse_script_pubkey};
 use crate::api::{ApiError, AppState, OfferListQuery};
 
 use super::dto::{OfferDetailsResponse, OfferListResponse, OffersOverview};
@@ -57,7 +56,7 @@ pub async fn list_offers(
     get,
     path = "/offers/{id}",
     tag = "offers",
-    params(("id" = Uuid, Path, description = "Offer UUID")),
+    params(("id" = i64, Path, description = "Integer offer ID (auto-increment)")),
     responses(
         (status = 200, description = "Full offer details with participants and unspent UTXOs", body = OfferDetailsResponseSchema),
         (status = 404, description = "Offer not found", body = ErrorResponse),
@@ -67,7 +66,7 @@ pub async fn list_offers(
 #[tracing::instrument(name = "Getting offer details", skip(state, offer_id))]
 pub async fn get_details(
     State(state): State<Arc<AppState>>,
-    Path(offer_id): Path<Uuid>,
+    Path(offer_id): Path<i64>,
 ) -> Result<Json<OfferDetailsResponse>, ApiError> {
     let details = super::db::fetch_details_by_id(&state.db, offer_id)
         .await?
@@ -82,7 +81,7 @@ pub async fn get_details(
     tag = "offers",
     params(ScriptQuery),
     responses(
-        (status = 200, description = "Offer IDs with an unspent participant UTXO for the script", body = Vec<Uuid>),
+        (status = 200, description = "Offer IDs (decimal strings) with an unspent participant UTXO for the script", body = Vec<String>),
         (status = 400, description = "Invalid script_pubkey hex", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     )
@@ -91,10 +90,14 @@ pub async fn get_details(
 pub async fn get_ids_by_script(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ScriptQuery>,
-) -> Result<Json<Vec<Uuid>>, ApiError> {
+) -> Result<Json<Vec<String>>, ApiError> {
     let script_bytes = parse_script_pubkey(&query.script_pubkey)?;
 
-    let ids = super::db::fetch_ids_by_script(&state.db, &script_bytes).await?;
+    let ids = super::db::fetch_ids_by_script(&state.db, &script_bytes)
+        .await?
+        .into_iter()
+        .map(format_offer_id)
+        .collect();
 
     Ok(Json(ids))
 }

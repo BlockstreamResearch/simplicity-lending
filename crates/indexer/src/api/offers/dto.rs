@@ -5,7 +5,7 @@ use uuid::Uuid;
 use simplex::simplicityhl::elements::hex::ToHex;
 
 use crate::api::dto::AssetAmount;
-use crate::api::utils::{format_hex, format_satoshis};
+use crate::api::utils::{format_hex, format_offer_id, format_satoshis};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
     ParticipantType, UtxoType,
@@ -55,7 +55,9 @@ pub fn borrower_principal_outpoint_from_utxos(
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OfferListItemShort {
-    pub id: Uuid,
+    /// Internal database offer ID (auto-increment), as a decimal string.
+    #[schema(example = "1")]
+    pub id: String,
     pub issuance_factory_id: Uuid,
     pub status: OfferStatus,
     pub collateral_asset: String,
@@ -96,7 +98,7 @@ pub struct OffersOverview {
 impl From<OfferModelShort> for OfferListItemShort {
     fn from(value: OfferModelShort) -> Self {
         Self {
-            id: value.id,
+            id: format_offer_id(value.id),
             issuance_factory_id: value.issuance_factory_id,
             status: value.current_status,
             collateral_asset: format_hex(value.collateral_asset_id),
@@ -127,7 +129,7 @@ impl From<OfferModel> for OfferListItemFull {
     fn from(value: OfferModel) -> Self {
         Self {
             base: OfferListItemShort {
-                id: value.id,
+                id: format_offer_id(value.id),
                 issuance_factory_id: value.issuance_factory_id,
                 status: value.current_status,
                 collateral_asset: format_hex(value.collateral_asset_id),
@@ -150,7 +152,9 @@ impl From<OfferModel> for OfferListItemFull {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ParticipantDto {
-    pub offer_id: Uuid,
+    /// Internal database offer ID (auto-increment), as a decimal string.
+    #[schema(example = "1")]
+    pub offer_id: String,
     pub participant_type: ParticipantType,
     pub script_pubkey: String,
     pub txid: String,
@@ -163,7 +167,7 @@ pub struct ParticipantDto {
 impl From<OfferParticipantModel> for ParticipantDto {
     fn from(value: OfferParticipantModel) -> Self {
         Self {
-            offer_id: value.offer_id,
+            offer_id: format_offer_id(value.offer_id),
             participant_type: value.participant_type,
             script_pubkey: value.script_pubkey.to_hex(),
             txid: format_hex(value.txid),
@@ -177,7 +181,9 @@ impl From<OfferParticipantModel> for ParticipantDto {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OfferUtxoDto {
-    pub offer_id: Uuid,
+    /// Internal database offer ID (auto-increment), as a decimal string.
+    #[schema(example = "1")]
+    pub offer_id: String,
     pub txid: String,
     pub vout: u32,
     pub utxo_type: UtxoType,
@@ -189,7 +195,7 @@ pub struct OfferUtxoDto {
 impl From<OfferUtxoModel> for OfferUtxoDto {
     fn from(value: OfferUtxoModel) -> Self {
         Self {
-            offer_id: value.offer_id,
+            offer_id: format_offer_id(value.offer_id),
             txid: format_hex(value.txid),
             vout: value.vout as u32,
             utxo_type: value.utxo_type,
@@ -222,7 +228,7 @@ mod tests {
 
     #[test]
     fn offer_list_item_short_from_model_short_maps_and_formats_fields() {
-        let id = Uuid::new_v4();
+        let id = 42_i64;
         let model = OfferModelShort {
             id,
             issuance_factory_id: Uuid::new_v4(),
@@ -239,7 +245,7 @@ mod tests {
 
         let dto = OfferListItemShort::from(model);
 
-        assert_eq!(dto.id, id);
+        assert_eq!(dto.id, "42");
         assert_eq!(dto.status, OfferStatus::Active);
         assert_eq!(dto.collateral_asset, "030201");
         assert_eq!(dto.principal_asset, "060504");
@@ -256,7 +262,7 @@ mod tests {
     #[test]
     fn participant_short_from_model_maps_type_and_script() {
         let model = OfferParticipantModel {
-            offer_id: Uuid::new_v4(),
+            offer_id: 7,
             participant_type: ParticipantType::Borrower,
             script_pubkey: vec![0x52, 0xac],
             txid: vec![0x01],
@@ -275,7 +281,7 @@ mod tests {
     #[test]
     fn offer_utxo_outpoint_short_from_model_maps_txid_and_vout() {
         let model = OfferUtxoModel {
-            offer_id: Uuid::new_v4(),
+            offer_id: 7,
             txid: vec![0xab, 0xcd],
             vout: 1,
             utxo_type: UtxoType::BorrowerPrincipal,
@@ -292,7 +298,7 @@ mod tests {
 
     #[test]
     fn offer_list_item_full_from_model_maps_nested_and_extra_fields() {
-        let id = Uuid::new_v4();
+        let id = 99_i64;
         let model = OfferModel {
             id,
             issuance_factory_id: Uuid::new_v4(),
@@ -312,7 +318,7 @@ mod tests {
 
         let dto = OfferListItemFull::from(model);
 
-        assert_eq!(dto.base.id, id);
+        assert_eq!(dto.base.id, "99");
         assert_eq!(dto.base.status, OfferStatus::Pending);
         assert_eq!(dto.base.collateral_asset, "0201");
         assert_eq!(dto.base.principal_asset, "0403");
@@ -324,7 +330,7 @@ mod tests {
 
     #[test]
     fn participant_dto_from_model_maps_hex_and_spent_fields() {
-        let offer_id = Uuid::new_v4();
+        let offer_id = 123_i64;
         let model = OfferParticipantModel {
             offer_id,
             participant_type: ParticipantType::Borrower,
@@ -338,7 +344,7 @@ mod tests {
 
         let dto = ParticipantDto::from(model);
 
-        assert_eq!(dto.offer_id, offer_id);
+        assert_eq!(dto.offer_id, "123");
         assert_eq!(dto.participant_type, ParticipantType::Borrower);
         assert_eq!(dto.script_pubkey, "51ac");
         assert_eq!(dto.txid, "030201");
@@ -351,7 +357,7 @@ mod tests {
     #[test]
     fn participant_dto_from_model_handles_unspent_participant_utxo() {
         let model = OfferParticipantModel {
-            offer_id: Uuid::new_v4(),
+            offer_id: 7,
             participant_type: ParticipantType::Lender,
             script_pubkey: vec![0x00],
             txid: vec![0x10],
@@ -369,7 +375,7 @@ mod tests {
 
     #[test]
     fn offer_utxo_dto_from_model_maps_optional_spent_fields() {
-        let offer_id = Uuid::new_v4();
+        let offer_id = 123_i64;
         let model = OfferUtxoModel {
             offer_id,
             txid: vec![0x01, 0x02, 0x03],
@@ -382,7 +388,7 @@ mod tests {
 
         let dto = OfferUtxoDto::from(model);
 
-        assert_eq!(dto.offer_id, offer_id);
+        assert_eq!(dto.offer_id, "123");
         assert_eq!(dto.txid, "030201");
         assert_eq!(dto.vout, 7);
         assert_eq!(dto.utxo_type, UtxoType::Repayment);
@@ -393,10 +399,10 @@ mod tests {
 
     #[test]
     fn borrower_principal_outpoint_from_utxos_picks_borrower_principal_type() {
-        let offer_id = Uuid::new_v4();
+        let offer_id = "123".to_string();
         let utxos = vec![
             OfferUtxoDto {
-                offer_id,
+                offer_id: offer_id.clone(),
                 txid: "aa".to_string(),
                 vout: 0,
                 utxo_type: UtxoType::ActiveOffer,
@@ -424,7 +430,7 @@ mod tests {
 
     #[test]
     fn borrower_principal_outpoint_from_utxos_returns_none_when_missing() {
-        let offer_id = Uuid::new_v4();
+        let offer_id = "123".to_string();
         let utxos = vec![OfferUtxoDto {
             offer_id,
             txid: "aa".to_string(),
@@ -441,7 +447,7 @@ mod tests {
     #[test]
     fn offer_utxo_dto_from_model_handles_unspent_borrower_principal() {
         let model = OfferUtxoModel {
-            offer_id: Uuid::new_v4(),
+            offer_id: 7,
             txid: vec![0x22],
             vout: 1,
             utxo_type: UtxoType::BorrowerPrincipal,
@@ -461,7 +467,7 @@ mod tests {
     #[test]
     fn offer_utxo_dto_from_model_handles_unspent_utxo() {
         let model = OfferUtxoModel {
-            offer_id: Uuid::new_v4(),
+            offer_id: 7,
             txid: vec![0x11],
             vout: 0,
             utxo_type: UtxoType::ActiveOffer,

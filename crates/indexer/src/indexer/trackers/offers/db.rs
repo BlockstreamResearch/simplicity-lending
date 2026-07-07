@@ -1,5 +1,4 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 
@@ -100,7 +99,7 @@ pub async fn spend_offer_utxo(
 )]
 pub async fn update_offer_status(
     sql_tx: &mut DbTx<'_>,
-    offer_id: Uuid,
+    offer_id: i64,
     new_status: OfferStatus,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
