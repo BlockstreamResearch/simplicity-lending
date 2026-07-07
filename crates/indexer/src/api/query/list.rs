@@ -12,6 +12,7 @@ pub fn attach_offer_list_order_by(
         SortDir::Asc => " ASC",
         SortDir::Desc => " DESC",
     });
+    query_builder.push(", id DESC");
 }
 
 pub fn attach_paginate(query_builder: &mut QueryBuilder<Postgres>, limit: i64, offset: i64) {

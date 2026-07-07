@@ -72,6 +72,8 @@ pub struct OfferListItemShort {
     #[schema(example = 120)]
     pub interest_rate: u32,
     pub loan_expiration_height: u32,
+    /// Block height of the latest offer status update.
+    pub updated_at_height: u64,
     pub created_at_height: u64,
     pub created_at_txid: String,
     pub participants: Vec<ParticipantShort>,
@@ -106,6 +108,7 @@ impl From<OfferModelShort> for OfferListItemShort {
             principal_amount: format_satoshis(value.principal_amount),
             interest_rate: value.interest_rate as u32,
             loan_expiration_height: value.loan_expiration_time as u32,
+            updated_at_height: value.updated_at_height as u64,
             created_at_height: value.created_at_height as u64,
             created_at_txid: format_hex(value.created_at_txid),
             participants: Vec::new(),
@@ -137,6 +140,7 @@ impl From<OfferModel> for OfferListItemFull {
                 principal_amount: format_satoshis(value.principal_amount),
                 interest_rate: value.interest_rate as u32,
                 loan_expiration_height: value.loan_expiration_time as u32,
+                updated_at_height: value.updated_at_height as u64,
                 created_at_height: value.created_at_height as u64,
                 created_at_txid: format_hex(value.created_at_txid),
                 participants: Vec::new(),
@@ -238,6 +242,7 @@ mod tests {
             interest_rate: 250,
             loan_expiration_time: 123,
             current_status: OfferStatus::Active,
+            updated_at_height: 456,
             created_at_height: 456,
             created_at_txid: vec![0xaa, 0xbb, 0xcc],
         };
@@ -311,6 +316,7 @@ mod tests {
             interest_rate: 12,
             loan_expiration_time: 321,
             current_status: OfferStatus::Pending,
+            updated_at_height: 55,
             created_at_height: 55,
             created_at_txid: vec![0xde, 0xad],
         };
