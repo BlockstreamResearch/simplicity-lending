@@ -81,9 +81,12 @@ CREATE TABLE offers (
     interest_rate INTEGER NOT NULL,
     loan_expiration_time INTEGER NOT NULL,
     current_status offer_status NOT NULL DEFAULT 'pending',
+    updated_at_height BIGINT NOT NULL,
     created_at_height BIGINT NOT NULL,
     created_at_txid BYTEA NOT NULL UNIQUE
 );
+
+CREATE INDEX idx_offers_updated_at_height ON offers (updated_at_height DESC);
 
 CREATE TYPE utxo_type AS ENUM (
     'pending_offer',

@@ -26,6 +26,7 @@ pub enum SortDir {
 #[serde(rename_all = "snake_case")]
 pub enum OfferSortBy {
     #[default]
+    UpdatedAtHeight,
     CreatedAtHeight,
     CollateralAmount,
     PrincipalAmount,
@@ -36,6 +37,7 @@ pub enum OfferSortBy {
 impl OfferSortBy {
     pub fn sql_column(self) -> &'static str {
         match self {
+            Self::UpdatedAtHeight => "updated_at_height",
             Self::CreatedAtHeight => "created_at_height",
             Self::CollateralAmount => "collateral_amount",
             Self::PrincipalAmount => "principal_amount",
@@ -154,6 +156,15 @@ mod tests {
         assert!(matches!(
             parsed.sort_by,
             super::OfferSortBy::LoanExpirationHeight
+        ));
+    }
+
+    #[test]
+    fn offer_list_query_defaults_to_updated_at_height_sort() {
+        let parsed: OfferListQuery = serde_urlencoded::from_str("").expect("parse empty query");
+        assert!(matches!(
+            parsed.sort_by,
+            super::OfferSortBy::UpdatedAtHeight
         ));
     }
 }

@@ -26,6 +26,7 @@ const OFFERS_SHORT_LIST_SELECT: &str = r#"
         principal_amount,
         interest_rate,
         loan_expiration_time,
+        updated_at_height,
         created_at_height,
         created_at_txid
     FROM offers

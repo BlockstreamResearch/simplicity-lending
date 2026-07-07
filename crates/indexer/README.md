@@ -205,6 +205,7 @@ Example short offer item:
   "principal_amount": "500",
   "interest_rate": 120,
   "loan_expiration_height": 1234567,
+  "updated_at_height": 42,
   "created_at_height": 42,
   "created_at_txid": "aabbcc…",
   "participants": [],
@@ -224,7 +225,7 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 - `principal_asset`: Hex identifier of the principal asset (same byte order as in API responses). Filters by `principal_asset_id` when set alone. When both `collateral_asset` and `principal_asset` are set, offers must match the asset pair (collateral **and** principal).
 - `limit`: Maximum number of records to return (default: 50, max: 100).
 - `offset`: Pagination offset (default: 0).
-- `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_height` (default: `created_at_height`).
+- `sort_by`: `updated_at_height`, `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_height` (default: `updated_at_height`).
 - `sort_dir`: `asc` or `desc` (default: `desc`).
 
 ### Response Shapes
@@ -236,6 +237,7 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 - `collateral_amount`, `principal_amount` (decimal strings, satoshi)
 - `interest_rate` (basis points, e.g. 1000 = 10%)
 - `loan_expiration_height` (block height)
+- `updated_at_height` (block height of the latest offer status update)
 - `created_at_height`, `created_at_txid` (hex)
 - `participants`: latest participant per role (`borrower`, `lender`) — script pubkey only
 - `borrower_principal_utxo`: unspent `borrower_principal` UTXO outpoint (`txid`, `vout`), or omitted when none

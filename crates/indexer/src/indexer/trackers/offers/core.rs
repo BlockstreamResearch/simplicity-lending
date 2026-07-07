@@ -191,7 +191,7 @@ impl OffersTracker {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Cancelled).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Cancelled, block_height).await?;
 
         let cancellation_outpoint = OutPoint { txid, vout: 0 };
 
@@ -231,7 +231,7 @@ impl OffersTracker {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Active).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Active, block_height).await?;
 
         let lending_outpoint = OutPoint { txid, vout: 0 };
         let lending_offer_utxo = OfferUtxoModel {
@@ -315,7 +315,7 @@ impl OffersTracker {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Repaid).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
 
         let repayment_outpoint = OutPoint { txid, vout: 1 };
         let repayment_utxo = OfferUtxoModel {
@@ -357,7 +357,7 @@ impl OffersTracker {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Liquidated).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Liquidated, block_height).await?;
 
         let repayment_outpoint = OutPoint { txid, vout: 0 };
         let repayment_utxo = OfferUtxoModel {
@@ -396,7 +396,7 @@ impl OffersTracker {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Claimed).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Claimed, block_height).await?;
 
         let claim_outpoint = OutPoint { txid, vout: 1 };
 

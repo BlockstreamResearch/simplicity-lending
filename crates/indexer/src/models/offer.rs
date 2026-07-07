@@ -87,6 +87,7 @@ pub struct OfferModel {
     pub interest_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
+    pub updated_at_height: i64,
     pub created_at_height: i64,
     pub created_at_txid: Vec<u8>,
 }
@@ -119,6 +120,7 @@ impl OfferModel {
             interest_rate: offer_parameters.offer_parameters.principal_interest_rate as i32,
             loan_expiration_time: offer_parameters.offer_parameters.loan_expiration_time as i32,
             current_status: OfferStatus::Pending,
+            updated_at_height: block_height as i64,
             created_at_height: block_height as i64,
             created_at_txid: txid.as_byte_array().to_vec(),
         }
@@ -136,6 +138,7 @@ pub struct OfferModelShort {
     pub interest_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
+    pub updated_at_height: i64,
     pub created_at_height: i64,
     pub created_at_txid: Vec<u8>,
 }
@@ -202,6 +205,7 @@ mod tests {
         assert_eq!(model.interest_rate, 250);
         assert_eq!(model.loan_expiration_time, 12_345);
         assert_eq!(model.current_status, OfferStatus::Pending);
+        assert_eq!(model.updated_at_height, block_height as i64);
         assert_eq!(model.created_at_height, block_height as i64);
         assert_eq!(model.created_at_txid, txid.as_byte_array().to_vec());
     }

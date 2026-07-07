@@ -98,6 +98,7 @@ async fn fetch_full_info_by_id(
             principal_amount,
             interest_rate,
             loan_expiration_time,
+            updated_at_height,
             created_at_height,
             created_at_txid
         FROM offers
