@@ -287,7 +287,7 @@ async fn get_offers_returns_all_seeded_offers_with_correct_status() -> anyhow::R
     assert_eq!(items.as_array().map_or(0, Vec::len), 2);
     assert_ids_match_unordered(items, &[pending_offer, active_offer]);
 
-    // Pins default `ORDER BY created_at_height DESC` (active_offer's height > pending's).
+    // Pins default `ORDER BY updated_at_height DESC` (active is updated after insertion).
     assert_eq!(items[0]["id"], active_offer.to_string());
     assert_eq!(items[0]["status"], "active");
     assert_eq!(items[1]["id"], pending_offer.to_string());
@@ -424,7 +424,7 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     let (base_url, server_handle) = start_api(pool.clone()).await?;
     let http = reqwest::Client::new();
 
-    // status=pending -> 3 offers, ordered by height DESC: c(80) -> d(70) -> a(40).
+    // status=pending -> 3 offers, ordered by updated_at_height DESC: c(80) -> d(70) -> a(40).
     let pending = get_json(&http, format!("{base_url}/offers?status=pending")).await?;
     let pending_items = offer_list_items(&pending);
     assert_eq!(pending["total"], 3);
@@ -456,7 +456,7 @@ async fn offers_filters_apply_status_asset_pagination_and_order() -> anyhow::Res
     assert_eq!(by_pair_items.as_array().map_or(0, Vec::len), 1);
     assert_eq!(by_pair_items[0]["id"], offer_a.to_string());
 
-    // collateral_asset alone: a and d (collat=aa), ordered by height DESC.
+    // collateral_asset alone: a and d (collat=aa), ordered by updated_at_height DESC.
     let by_collateral = get_json(
         &http,
         format!("{base_url}/offers?collateral_asset={collateral_aa}"),
@@ -629,6 +629,7 @@ struct ExpectedOfferDetailsDto {
     principal_amount: String,
     interest_rate: u32,
     loan_expiration_height: u32,
+    updated_at_height: u64,
     created_at_height: u64,
     created_at_txid: String,
     borrower_nft_asset: String,
@@ -705,6 +706,7 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.principal_amount, "500");
     assert_eq!(dto.interest_rate, 120);
     assert_eq!(dto.loan_expiration_height, 1_234_567);
+    assert_eq!(dto.updated_at_height, PENDING_OFFER_HEIGHT as u64);
     assert_eq!(dto.created_at_height, PENDING_OFFER_HEIGHT as u64);
     // 32-byte seeded values serialize as 64-char hex strings.
     assert_eq!(dto.collateral_asset.len(), 64);

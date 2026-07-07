@@ -94,6 +94,7 @@ pub fn offer_model(
         interest_rate: 120,
         loan_expiration_time: 1_234_567,
         current_status: OfferStatus::Pending,
+        updated_at_height: created_at_height,
         created_at_height,
         created_at_txid: unique_32_bytes_from_i64(txid_seed),
     }
@@ -116,7 +117,19 @@ pub async fn seed_offer_row(pool: &PgPool, offer: &mut OfferModel) -> anyhow::Re
     };
     offer.id = id;
     if !matches!(offer.current_status, OfferStatus::Pending) {
-        update_offer_status(&mut sql_tx, offer.id, offer.current_status).await?;
+        let update_height = if offer.updated_at_height > offer.created_at_height {
+            offer.updated_at_height
+        } else {
+            offer.created_at_height + 1
+        };
+        update_offer_status(
+            &mut sql_tx,
+            offer.id,
+            offer.current_status,
+            update_height as u64,
+        )
+        .await?;
+        offer.updated_at_height = update_height;
     }
     sql_tx.commit().await?;
     Ok(id)

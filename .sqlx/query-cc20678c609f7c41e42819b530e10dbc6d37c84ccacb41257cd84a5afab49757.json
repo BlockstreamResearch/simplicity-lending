@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id,\n            issuance_factory_id,\n            current_status AS \"current_status: OfferStatus\",\n            collateral_asset_id,\n            principal_asset_id,\n            borrower_nft_asset_id,\n            lender_nft_asset_id,\n            protocol_fee_keeper_asset_id,\n            collateral_amount,\n            principal_amount,\n            interest_rate,\n            loan_expiration_time,\n            created_at_height,\n            created_at_txid\n        FROM offers\n        WHERE id = $1\n        ",
+  "query": "\n        SELECT\n            id,\n            issuance_factory_id,\n            current_status AS \"current_status: OfferStatus\",\n            collateral_asset_id,\n            principal_asset_id,\n            borrower_nft_asset_id,\n            lender_nft_asset_id,\n            protocol_fee_keeper_asset_id,\n            collateral_amount,\n            principal_amount,\n            interest_rate,\n            loan_expiration_time,\n            updated_at_height,\n            created_at_height,\n            created_at_txid\n        FROM offers\n        WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -79,11 +79,16 @@
       },
       {
         "ordinal": 12,
-        "name": "created_at_height",
+        "name": "updated_at_height",
         "type_info": "Int8"
       },
       {
         "ordinal": 13,
+        "name": "created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 14,
         "name": "created_at_txid",
         "type_info": "Bytea"
       }
@@ -107,8 +112,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "ea431dcf2ddce830b89ef60b7ecc864eb197de449137419748df530102010224"
+  "hash": "cc20678c609f7c41e42819b530e10dbc6d37c84ccacb41257cd84a5afab49757"
 }
