@@ -1,4 +1,4 @@
-import { type Pset, type Wollet, WolletBuilder } from '@lilbonekit/lwk-web'
+import { type Pset, type Transaction, type Wollet, WolletBuilder } from '@lilbonekit/lwk-web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -8,7 +8,7 @@ import { JadeConnector } from '@/lib/wallet-core/connector/jade'
 import { SeedConnector } from '@/lib/wallet-core/connector/seed'
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import { DEFAULT_WALLET_TYPE, type WalletType } from '@/lib/wallet-core/types'
-import { syncBalances } from '@/lib/wallet-core/wallet/sync'
+import { applyBroadcastTransaction, syncBalances } from '@/lib/wallet-core/wallet/sync'
 import { createEsploraClient } from '@/lwk'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { ErrorHandler } from '@/utils/errorHandler'
@@ -273,6 +273,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Best-effort local UI update — the tx already broadcast successfully regardless of
+  // this outcome, so failures here (e.g. a full scan racing this call) must not throw.
+  const applyBroadcastTx = useCallback((tx: Transaction) => {
+    const session = sessionRef.current
+    if (!session) return
+
+    try {
+      const { total, confirmed, pending } = applyBroadcastTransaction(session.wollet, tx)
+      setState(s => ({
+        ...s,
+        balances: total,
+        confirmedBalances: confirmed,
+        pendingBalances: pending,
+      }))
+    } catch (err) {
+      console.warn(err)
+    }
+  }, [])
+
   const signPset = useCallback(async (pset: Pset): Promise<Pset> => {
     const session = sessionRef.current
     if (!session) throw new Error('WalletProvider: not connected')
@@ -325,6 +344,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connect,
         disconnect,
         syncWallet: sync,
+        applyBroadcastTransaction: applyBroadcastTx,
         signPset,
         getReceiveAddress,
         verifyReceiveAddress,

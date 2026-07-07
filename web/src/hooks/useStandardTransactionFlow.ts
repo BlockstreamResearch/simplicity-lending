@@ -16,7 +16,7 @@ type RunStandardTransactionFlow = <TSummary>(
 ) => Promise<TransactionFlowResult<TSummary>>
 
 export function useStandardTransactionFlow(): RunStandardTransactionFlow {
-  const { signPset, signerType, syncWallet } = useWallet()
+  const { signPset, signerType, applyBroadcastTransaction } = useWallet()
   const { startTxProgress, setTxProgressError } = useTxProgress()
 
   return useCallback<RunStandardTransactionFlow>(
@@ -34,7 +34,7 @@ export function useStandardTransactionFlow(): RunStandardTransactionFlow {
         await advance('broadcasting')
         const txid = await broadcastTx(finalizedTx.toString())
 
-        syncWallet().catch(console.warn)
+        applyBroadcastTransaction(finalizedTx)
 
         return { txid, summary }
       } catch (error) {
@@ -42,6 +42,6 @@ export function useStandardTransactionFlow(): RunStandardTransactionFlow {
         throw error
       }
     },
-    [setTxProgressError, signPset, signerType, syncWallet, startTxProgress],
+    [setTxProgressError, signPset, signerType, applyBroadcastTransaction, startTxProgress],
   )
 }

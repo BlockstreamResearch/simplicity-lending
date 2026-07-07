@@ -1,4 +1,4 @@
-import type { EsploraClient, Wollet } from '@lilbonekit/lwk-web'
+import type { EsploraClient, Transaction, Wollet } from '@lilbonekit/lwk-web'
 
 import { isConfirmedWalletUtxo } from '@/lwk/utxo'
 
@@ -10,18 +10,10 @@ export interface WalletBalances {
 }
 
 /**
- * Syncs wallet state via waterfalls fullScan and applies the update.
- * Returns the updated total and confirmed-only balance maps.
+ * Derives total/confirmed/pending balances from the wollet's current in-memory state.
+ * No network calls — safe to call right after a local mutation like applyTransaction().
  */
-export async function syncBalances(
-  wollet: Wollet,
-  esploraClient: EsploraClient,
-): Promise<WalletBalances> {
-  const update = await esploraClient.fullScanToIndex(wollet, 0)
-  if (update) {
-    wollet.applyUpdate(update)
-  }
-
+function readWalletBalances(wollet: Wollet): WalletBalances {
   const total: Record<string, string> = {}
   for (const [assetId, amount] of wollet.balance().entries() as [string, bigint][]) {
     total[assetId] = amount.toString()
@@ -46,4 +38,29 @@ export async function syncBalances(
   }
 
   return { total, confirmed, pending }
+}
+
+/**
+ * Syncs wallet state via waterfalls fullScan and applies the update.
+ * Returns the updated total and confirmed-only balance maps.
+ */
+export async function syncBalances(
+  wollet: Wollet,
+  esploraClient: EsploraClient,
+): Promise<WalletBalances> {
+  const update = await esploraClient.fullScanToIndex(wollet, 0)
+  if (update) {
+    wollet.applyUpdate(update)
+  }
+  return readWalletBalances(wollet)
+}
+
+/**
+ * Applies a just-broadcast transaction to the wallet's local state and returns the
+ * updated balances immediately — no network round trip, so it can't race the indexer.
+ * A later full scan (syncBalances) still reconciles confirmations over time.
+ */
+export function applyBroadcastTransaction(wollet: Wollet, tx: Transaction): WalletBalances {
+  wollet.applyTransaction(tx)
+  return readWalletBalances(wollet)
 }
