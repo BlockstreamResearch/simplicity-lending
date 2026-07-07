@@ -12,7 +12,7 @@ const OFFER_ID: &str = "11111111-1111-1111-1111-111111111111";
 const FACTORY_ID: &str = "22222222-2222-2222-2222-222222222222";
 
 async fn client_for(server: &MockServer) -> IndexerClient {
-    IndexerClient::new(server.uri()).expect("build client")
+    IndexerClient::new(&server.uri()).expect("build client")
 }
 
 fn offer_list_body() -> String {
@@ -357,7 +357,7 @@ async fn slow_response_maps_to_timeout_error() {
         .mount(&server)
         .await;
 
-    let config = IndexerClientConfig::new(server.uri()).with_timeout(Duration::from_millis(50));
+    let config = IndexerClientConfig::new(&server.uri()).with_timeout(Duration::from_millis(50));
     let client = IndexerClient::with_config(config).expect("build client");
 
     let error = client

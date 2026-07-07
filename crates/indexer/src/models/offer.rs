@@ -52,6 +52,17 @@ impl FromStr for OfferStatus {
 }
 
 impl OfferStatus {
+    pub fn as_query_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Active => "active",
+            Self::Repaid => "repaid",
+            Self::Liquidated => "liquidated",
+            Self::Cancelled => "cancelled",
+            Self::Claimed => "claimed",
+        }
+    }
+
     pub fn parse_csv(segment: &str) -> Result<Vec<Self>, &'static str> {
         segment
             .split(',')

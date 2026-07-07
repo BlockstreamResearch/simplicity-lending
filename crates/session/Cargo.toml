@@ -11,6 +11,7 @@ publish = false
 workspace = true
 
 [dependencies]
+lending-indexer = { path = "../indexer" }
 smplx-std = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

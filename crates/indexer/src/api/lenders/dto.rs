@@ -1,9 +1,9 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::api::dto::AssetAmount;
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct LenderOverview {
     pub supplied_loans: Vec<AssetAmount>,
     pub interest_outstanding: Vec<AssetAmount>,

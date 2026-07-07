@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -11,7 +11,7 @@ use crate::models::{
     ParticipantType, UtxoType,
 };
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ParticipantShort {
     pub participant_type: ParticipantType,
     pub script_pubkey: String,
@@ -26,7 +26,7 @@ impl From<&OfferParticipantModel> for ParticipantShort {
     }
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OfferUtxoOutpointShort {
     pub txid: String,
     pub vout: u32,
@@ -53,7 +53,7 @@ pub fn borrower_principal_outpoint_from_utxos(
         })
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OfferListItemShort {
     pub id: Uuid,
     pub issuance_factory_id: Uuid,
@@ -72,12 +72,13 @@ pub struct OfferListItemShort {
     pub loan_expiration_height: u32,
     pub created_at_height: u64,
     pub created_at_txid: String,
+    #[serde(default)]
     pub participants: Vec<ParticipantShort>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub borrower_principal_utxo: Option<OfferUtxoOutpointShort>,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OfferListResponse {
     pub items: Vec<OfferListItemShort>,
     pub total: u64,
@@ -85,7 +86,7 @@ pub struct OfferListResponse {
     pub offset: u64,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OffersOverview {
     pub collateral_locked: Vec<AssetAmount>,
     pub active_loan_principal: Vec<AssetAmount>,
@@ -112,7 +113,7 @@ impl From<OfferModelShort> for OfferListItemShort {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfferListItemFull {
     #[serde(flatten)]
     pub base: OfferListItemShort,
@@ -147,7 +148,7 @@ impl From<OfferModel> for OfferListItemFull {
     }
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ParticipantDto {
     pub offer_id: Uuid,
     pub participant_type: ParticipantType,
@@ -174,7 +175,7 @@ impl From<OfferParticipantModel> for ParticipantDto {
     }
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OfferUtxoDto {
     pub offer_id: Uuid,
     pub txid: String,
@@ -199,7 +200,7 @@ impl From<OfferUtxoModel> for OfferUtxoDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfferDetailsResponse {
     #[serde(flatten)]
     pub info: OfferListItemFull,

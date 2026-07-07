@@ -20,9 +20,9 @@ pub struct IndexerClientConfig {
 }
 
 impl IndexerClientConfig {
-    pub fn new(base_url: impl Into<String>) -> Self {
+    pub fn new(base_url: &str) -> Self {
         Self {
-            base_url: base_url.into(),
+            base_url: base_url.to_owned(),
             timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECS),
         }
     }
@@ -40,7 +40,7 @@ pub struct IndexerClient {
 }
 
 impl IndexerClient {
-    pub fn new(base_url: impl Into<String>) -> Result<Self, IndexerClientError> {
+    pub fn new(base_url: &str) -> Result<Self, IndexerClientError> {
         Self::with_config(IndexerClientConfig::new(base_url))
     }
 
@@ -93,6 +93,7 @@ impl IndexerClient {
     ) -> Result<OfferListResponse, IndexerClientError> {
         let mut query = params.to_query_pairs();
         query.push(("script_pubkey", script_pubkey.to_string()));
+
         self.get("/borrowers/offers", &query).await
     }
 
@@ -114,6 +115,7 @@ impl IndexerClient {
     ) -> Result<OfferListResponse, IndexerClientError> {
         let mut query = params.to_query_pairs();
         query.push(("script_pubkey", script_pubkey.to_string()));
+
         self.get("/lenders/offers", &query).await
     }
 
