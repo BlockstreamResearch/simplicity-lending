@@ -1,4 +1,5 @@
 import { useAssetPriceUsd } from '@/api/prices/hooks'
+import PendingBalanceBadge from '@/components/PendingBalanceBadge'
 import { type ConfigAsset } from '@/constants/network-config'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { formatAmount, formatUsd } from '@/utils/format'
@@ -11,18 +12,27 @@ import {
 interface BalanceCardProps {
   asset: ConfigAsset
   amount: bigint
+  pendingAmount?: bigint
   className?: string
 }
 
-export default function BalanceCard({ asset, amount, className = '' }: BalanceCardProps) {
+export default function BalanceCard({
+  asset,
+  amount,
+  pendingAmount,
+  className = '',
+}: BalanceCardProps) {
   const { id, icon: Icon, decimals } = asset
   const { denomination } = useAssetDenomination()
   const priceUsd = useAssetPriceUsd(id)
   const usdValue = formatUsd(amount, decimals, priceUsd)
   const displayedSymbol = getAssetUnit(denomination, asset)
-  const displayedAmount = isPolicyAsset(asset)
-    ? formatPolicyAssetAmount(amount, denomination, asset)
-    : formatAmount(amount, decimals)
+  const formatAssetAmount = (value: bigint) =>
+    isPolicyAsset(asset)
+      ? formatPolicyAssetAmount(value, denomination, asset)
+      : formatAmount(value, decimals)
+  const displayedAmount = formatAssetAmount(amount)
+  const hasPending = pendingAmount !== undefined && pendingAmount > 0n
 
   return (
     <div className={`bg-surface-secondary flex flex-col gap-1 rounded-3xl p-4 sm:p-6 ${className}`}>
@@ -32,9 +42,20 @@ export default function BalanceCard({ asset, amount, className = '' }: BalanceCa
       </span>
       <h3 className='text-muted text-h4'>Complete Balance {displayedSymbol}</h3>
       <div className='flex flex-col gap-1'>
-        <span title={displayedAmount} className='text-foreground truncate text-xl font-semibold'>
-          {displayedAmount}
-        </span>
+        <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+          <span
+            title={displayedAmount}
+            className='text-foreground min-w-0 truncate text-xl font-semibold'
+          >
+            {displayedAmount}
+          </span>
+          {hasPending && (
+            <PendingBalanceBadge
+              label={formatAssetAmount(pendingAmount)}
+              tooltip={`${formatAssetAmount(pendingAmount)} ${displayedSymbol} is unconfirmed and on the way. It will be spendable once the transaction confirms.`}
+            />
+          )}
+        </div>
         <span title={usdValue ?? undefined} className='text-muted truncate text-xs'>
           {usdValue ?? '—'}
         </span>

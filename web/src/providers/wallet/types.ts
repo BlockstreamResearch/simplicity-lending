@@ -42,6 +42,7 @@ export interface WalletState {
   walletType: WalletType | null
   signerType: WalletSignerType | null
   balances: Record<string, string>
+  confirmedBalances: Record<string, string>
   // Resolved once on connect; null until ready.
   receiveAddress: string | null
   scriptPubkey: string | null
@@ -60,6 +61,7 @@ export const INITIAL_WALLET_STATE: WalletState = {
   walletType: null,
   signerType: null,
   balances: {},
+  confirmedBalances: {},
   receiveAddress: null,
   scriptPubkey: null,
   syncing: false,

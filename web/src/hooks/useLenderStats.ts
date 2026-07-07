@@ -15,6 +15,7 @@ export interface LenderStats {
 
 export interface UseLenderStatsResult {
   balance: bigint
+  pendingBalance: bigint
   stats: LenderStats
   repaidOffer: OfferShort | null
   isLoading: boolean
@@ -25,7 +26,7 @@ export interface UseLenderStatsResult {
 export function useLenderStats({
   pollIntervalMs = 30_000,
 }: { pollIntervalMs?: number } = {}): UseLenderStatsResult {
-  const { isReady, balances, scriptPubkey } = useWallet()
+  const { isReady, balances, confirmedBalances, scriptPubkey } = useWallet()
   const script = scriptPubkey ?? ''
 
   const {
@@ -47,10 +48,12 @@ export function useLenderStats({
     refetchOffers()
   }, [refetchOverview, refetchOffers])
 
-  const balance = BigInt(balances[NETWORK_CONFIG.principalAsset.id] ?? 0)
+  const totalBalance = BigInt(balances[NETWORK_CONFIG.principalAsset.id] ?? 0)
+  const balance = BigInt(confirmedBalances[NETWORK_CONFIG.principalAsset.id] ?? 0)
 
   return {
     balance,
+    pendingBalance: totalBalance - balance,
     stats: {
       suppliedLoans: overview
         ? findAssetAmount(overview.supplied_loans, NETWORK_CONFIG.principalAsset.id)

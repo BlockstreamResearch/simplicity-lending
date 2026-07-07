@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { delay } from '@/utils/async'
+import { ErrorHandler } from '@/utils/errorHandler'
 
 import { TxProgressContext } from './TxProgressContext'
 import type { StartTxProgress, TransactionSteps } from './types'
@@ -37,7 +38,7 @@ export function TxProgressProvider({ children }: { children: React.ReactNode }) 
   )
 
   const setTxProgressError = useCallback((error: unknown) => {
-    setErrorMessage(error instanceof Error ? error.message : String(error))
+    setErrorMessage(ErrorHandler.describe(error))
   }, [])
 
   const value = useMemo(

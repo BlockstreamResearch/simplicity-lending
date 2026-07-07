@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
+import PendingBalanceBadge from '@/components/PendingBalanceBadge'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
@@ -20,7 +21,8 @@ import { DataRow } from './DataRow'
 
 export function SupplyCard() {
   const navigate = useNavigate()
-  const { balance, stats, repaidOffer, isLoading, error, refetch } = useLenderStats()
+  const { balance, pendingBalance, stats, repaidOffer, isLoading, error, refetch } =
+    useLenderStats()
   const principalPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.principalAsset.id)
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.principalAsset.decimals, principalPriceUsd)
   const { pendingTxs } = usePendingTransactions()
@@ -51,12 +53,20 @@ export function SupplyCard() {
         <Skeleton className='h-8 w-32 rounded-lg' />
       ) : (
         <div className='flex flex-col gap-1'>
-          <p className='text-display'>
-            <AssetAmount
-              value={formatAmount(balance, NETWORK_CONFIG.principalAsset.decimals)}
-              unit={NETWORK_CONFIG.principalAsset.symbol}
-            />
-          </p>
+          <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+            <p className='text-display'>
+              <AssetAmount
+                value={formatAmount(balance, NETWORK_CONFIG.principalAsset.decimals)}
+                unit={NETWORK_CONFIG.principalAsset.symbol}
+              />
+            </p>
+            {pendingBalance > 0n && (
+              <PendingBalanceBadge
+                label={`${formatAmount(pendingBalance, NETWORK_CONFIG.principalAsset.decimals)} ${NETWORK_CONFIG.principalAsset.symbol}`}
+                tooltip={`${formatAmount(pendingBalance, NETWORK_CONFIG.principalAsset.decimals)} ${NETWORK_CONFIG.principalAsset.symbol} is unconfirmed and on the way. It will be spendable once the transaction confirms.`}
+              />
+            )}
+          </div>
           <span className='text-muted text-xs'>{balanceUsd ?? '—'}</span>
         </div>
       )}

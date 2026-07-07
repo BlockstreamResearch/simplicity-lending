@@ -57,9 +57,9 @@ export default function TransactionStepper() {
               <StepIcon state={state} />
               {!isLast && <span className='bg-separator my-1 w-px flex-1' />}
             </div>
-            <div className={isLast ? '' : 'pb-4'}>
+            <div className={`min-w-0 flex-1 ${isLast ? '' : 'pb-4'}`}>
               <p
-                className={`flex items-center gap-2 text-sm font-medium ${
+                className={`flex flex-wrap items-center gap-2 text-sm font-medium ${
                   state === 'pending' ? 'text-muted' : ''
                 }`}
               >
@@ -70,7 +70,7 @@ export default function TransactionStepper() {
                   </span>
                 )}
               </p>
-              <p className='text-muted wrap-break-word text-sm'>
+              <p className='text-muted text-sm [overflow-wrap:anywhere]'>
                 {state === 'error' ? errorMessage : step.subtitle}
               </p>
             </div>

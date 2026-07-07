@@ -1,6 +1,7 @@
 import { Spinner } from '@heroui/react'
 import { useState } from 'react'
 
+import CircleExclamationIcon from '@/components/icons/CircleExclamationIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
@@ -43,7 +44,12 @@ export function JadeUnlockModal() {
     >
       {failed ? (
         <div className='flex flex-col items-center gap-4 py-2 text-center'>
-          <p className='text-danger text-sm'>{error}</p>
+          <span className='bg-danger/10 flex size-14 items-center justify-center rounded-full'>
+            <span className='bg-danger/15 text-danger animate-shake flex size-10 items-center justify-center rounded-full'>
+              <CircleExclamationIcon className='size-5' />
+            </span>
+          </span>
+          <p className='text-muted text-sm'>{error}</p>
           <div className='flex gap-2'>
             <UiButton variant='secondary' onPress={handleDismiss}>
               Dismiss

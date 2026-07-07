@@ -7,6 +7,31 @@ import {
   ApiValidationError,
   BroadcastError,
 } from '@/api/errors'
+import { NETWORK_CONFIG } from '@/constants/network-config'
+import { formatAmount, formatFeeReserve } from '@/utils/format'
+
+const INSUFFICIENT_ASSET_RE =
+  /Insufficient funds:\s*missing\s+([\d,]+)\s+units\s+for asset\s+([0-9a-f]{64})/i
+
+function describeInsufficientAsset(message: string): string | null {
+  const match = message.match(INSUFFICIENT_ASSET_RE)
+  if (!match) return null
+
+  const amount = BigInt(match[1].replaceAll(',', ''))
+  const assetId = match[2].toLowerCase()
+  if (assetId === NETWORK_CONFIG.collateralAsset.id.toLowerCase()) {
+    return `Insufficient L-BTC balance: missing ${formatFeeReserve(amount)}.`
+  }
+
+  const asset = [NETWORK_CONFIG.principalAsset, NETWORK_CONFIG.protocolFeeAsset].find(
+    candidate => candidate.id.toLowerCase() === assetId,
+  )
+  if (asset) {
+    return `Insufficient ${asset.symbol} balance: missing ${formatAmount(amount, asset.decimals)} ${asset.symbol}.`
+  }
+
+  return null
+}
 
 export class ErrorHandler {
   static process(error: unknown, message?: string): void {
@@ -57,7 +82,8 @@ export class ErrorHandler {
     if (error instanceof ApiError) {
       return ErrorHandler.getApiErrorMessage(error)
     }
-    return error.message || 'Unexpected error occurred.'
+    const message = error.message || 'Unexpected error occurred.'
+    return describeInsufficientAsset(message) ?? message
   }
 
   private static getApiErrorMessage(error: ApiError): string {

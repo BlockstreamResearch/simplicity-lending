@@ -116,8 +116,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const session = sessionRef.current
       if (!session) return
       syncBalances(session.wollet, session.esploraClient)
-        .then(rawBalances => {
-          setState(s => ({ ...s, balances: rawBalances }))
+        .then(({ total, confirmed }) => {
+          setState(s => ({ ...s, balances: total, confirmedBalances: confirmed }))
         })
         .catch(console.warn)
     }, 60_000)
@@ -186,7 +186,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
         setSavedSession(saved)
 
-        const balances = await syncBalances(wollet, esploraClient)
+        const { total: balances, confirmed: confirmedBalances } = await syncBalances(
+          wollet,
+          esploraClient,
+        )
         if (attempt !== connectionChangeCounterRef.current) return
 
         const address = wollet.address(0).address()
@@ -200,6 +203,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           error: null,
           isError: false,
           balances,
+          confirmedBalances,
           receiveAddress,
           scriptPubkey,
         }))
@@ -249,8 +253,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, syncing: true, error: null }))
 
     try {
-      const balances = await syncBalances(session.wollet, session.esploraClient)
-      setState(s => ({ ...s, syncing: false, balances }))
+      const { total: balances, confirmed: confirmedBalances } = await syncBalances(
+        session.wollet,
+        session.esploraClient,
+      )
+      setState(s => ({ ...s, syncing: false, balances, confirmedBalances }))
     } catch (err) {
       ErrorHandler.process(err)
       const error = err instanceof Error ? err.message : String(err)

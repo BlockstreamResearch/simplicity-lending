@@ -21,6 +21,10 @@ export function formatAmount(amount: bigint, decimals: number): string {
   return formatDecimalParts(whole, frac.toString().padStart(decimals, '0'), negative)
 }
 
+export function formatFeeReserve(amountSats: bigint): string {
+  return `${amountSats.toLocaleString(GROUP_LOCALE)} Lsats`
+}
+
 // blocks remaining → "Expired" / "~Xm" / "~Xh" / ">Xd".
 export function formatTermLeft(blocksLeft: number): string {
   if (blocksLeft <= 0) return 'Expired'

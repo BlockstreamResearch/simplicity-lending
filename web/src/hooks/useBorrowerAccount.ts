@@ -21,6 +21,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
 import { UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
+import { formatFeeReserve } from '@/utils/format'
 import { bytesToHex } from '@/utils/hex'
 import { sha256 } from '@/utils/sha256'
 import { toUint8, toUint64 } from '@/utils/uint'
@@ -40,7 +41,7 @@ function prepareFactory(factory: FactoryDetails): FactoryState | null {
   }
 }
 
-const MIN_BORROWER_ACCOUNT_FEE_UTXO_AMOUNT_SATS = 250n
+const BORROWER_ACCOUNT_FEE_RESERVE_SATS = 250n
 const ISSUING_UTXOS_COUNT = 2
 const REISSUANCE_FLAGS = 0n
 const ISSUANCE_AMOUNT = 2n
@@ -85,12 +86,12 @@ export function useBorrowerAccount() {
 
     const feeUtxo = blindedWalletUtxos
       .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAsset))
-      .filter(utxo => utxo.unblinded().value() > MIN_BORROWER_ACCOUNT_FEE_UTXO_AMOUNT_SATS)
+      .filter(utxo => utxo.unblinded().value() > BORROWER_ACCOUNT_FEE_RESERVE_SATS)
       .sort((a, b) => Number(a.unblinded().value() - b.unblinded().value()))[0]
 
     if (!feeUtxo) {
       throw new Error(
-        'Need a confirmed wallet L-BTC UTXO larger than the borrower account fee reserve',
+        `Need a confirmed wallet L-BTC UTXO larger than ${formatFeeReserve(BORROWER_ACCOUNT_FEE_RESERVE_SATS)} to cover the borrower account fee reserve.`,
       )
     }
 

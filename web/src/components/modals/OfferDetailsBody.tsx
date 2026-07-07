@@ -22,7 +22,7 @@ export default function OfferDetailsBody({
   showBalance = true,
 }: OfferDetailsBodyProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { balances, isReady } = useWallet()
+  const { balances, confirmedBalances, isReady } = useWallet()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
   const { data: currentBlockHeight } = useBlockHeight()
 
@@ -62,7 +62,14 @@ export default function OfferDetailsBody({
   return (
     <div className='flex flex-col gap-6'>
       {showBalance && isReady && (
-        <BalanceCard asset={principalAsset} amount={BigInt(balances[principalAsset.id] ?? 0)} />
+        <BalanceCard
+          asset={principalAsset}
+          amount={BigInt(confirmedBalances[principalAsset.id] ?? 0)}
+          pendingAmount={
+            BigInt(balances[principalAsset.id] ?? 0) -
+            BigInt(confirmedBalances[principalAsset.id] ?? 0)
+          }
+        />
       )}
       <DetailsPanel title='Loan info' rows={loanInfoRows} />
       <DetailsPanel title='Term' rows={termRows} bordered={highlightTerm} />
