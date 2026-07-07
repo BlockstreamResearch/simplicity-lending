@@ -40,7 +40,9 @@ export default function DetailsPanel({ title, rows, bordered }: DetailsPanelProp
                   <Tooltip.Trigger className='text-muted inline-flex shrink-0 cursor-help'>
                     <CircleInfoIcon className='size-3' />
                   </Tooltip.Trigger>
-                  <Tooltip.Content>{row.tooltip}</Tooltip.Content>
+                  <Tooltip.Content className='max-w-64 break-normal!'>
+                    {row.tooltip}
+                  </Tooltip.Content>
                 </Tooltip>
               )}
             </span>

@@ -291,7 +291,9 @@ export default function OffersTable<T extends OfferShort>({
                               >
                                 <TriangleExclamationIcon className='size-3.5' />
                               </Tooltip.Trigger>
-                              <Tooltip.Content>{warning.message}</Tooltip.Content>
+                              <Tooltip.Content className='max-w-64 break-normal!'>
+                                {warning.message}
+                              </Tooltip.Content>
                             </Tooltip>
                           )}
                         </span>

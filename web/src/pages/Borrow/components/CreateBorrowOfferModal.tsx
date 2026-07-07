@@ -30,7 +30,7 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
-import { DECIMAL_AMOUNT_RE, formatAmount, formatUsd } from '@/utils/format'
+import { formatAmount, formatUsd } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
 import {
   formatPolicyAssetDisplay,
@@ -76,7 +76,8 @@ function parseAmount(
   belowUnitMessage: string,
 ) {
   const value = raw.trim()
-  if (!DECIMAL_AMOUNT_RE.test(value)) {
+  const decimalRe = new RegExp(`^\\d+(\\.\\d{0,${decimals}})?$`)
+  if (!decimalRe.test(value)) {
     ctx.addIssue({ code: zod.ZodIssueCode.custom, path: [path], message: 'Enter a valid amount' })
     return null
   }
@@ -482,7 +483,7 @@ export default function CreateBorrowOfferModal({
               label={
                 <UiFieldLabel
                   required
-                  tooltip={`The amount you want to borrow in ${principalAsset.symbol}, sent to you once a lender funds the offer. Must stay within the range below.`}
+                  tooltip={`The amount you want to borrow in ${principalAsset.symbol}, sent to you once a lender funds the offer.`}
                 >
                   Loan Amount
                 </UiFieldLabel>

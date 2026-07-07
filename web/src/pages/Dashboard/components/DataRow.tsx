@@ -13,7 +13,7 @@ export function DataRow({
   isLoading?: boolean
 }) {
   return (
-    <div className='flex flex-col gap-2'>
+    <div className='flex flex-col gap-2 [&:last-child>.border-t]:hidden'>
       <div className='text-muted flex items-center justify-between gap-3 text-base'>
         <span className='flex min-w-0 items-center gap-1.5'>
           {icon}

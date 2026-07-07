@@ -9,6 +9,7 @@ import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
 import ChecksIcon from '@/components/icons/ChecksIcon'
 import HandCoinsIcon from '@/components/icons/HandCoinsIcon'
 import LockIcon from '@/components/icons/LockIcon'
+import PercentIcon from '@/components/icons/PercentIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
@@ -84,7 +85,7 @@ export function SupplyCard() {
           isLoading={isLoading}
         />
         <DataRow
-          icon={<LockIcon className='size-5 shrink-0' />}
+          icon={<PercentIcon className='size-5 shrink-0' />}
           label='Interest Outstanding:'
           value={`${formatAmount(stats.interestOutstanding, NETWORK_CONFIG.principalAsset.decimals)} ${NETWORK_CONFIG.principalAsset.symbol}`}
           isLoading={isLoading}

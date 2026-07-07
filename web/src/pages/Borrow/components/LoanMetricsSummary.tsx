@@ -40,7 +40,7 @@ export default function LoanMetricsSummary({ apr, ltv }: LoanMetricsSummaryProps
               <Tooltip.Trigger className='text-muted inline-flex cursor-help'>
                 <CircleInfoIcon className='size-3' />
               </Tooltip.Trigger>
-              <Tooltip.Content>{APR_TOOLTIP}</Tooltip.Content>
+              <Tooltip.Content className='max-w-64 break-normal!'>{APR_TOOLTIP}</Tooltip.Content>
             </Tooltip>
           </span>
           <span>{apr.toFixed(2)}%</span>
@@ -59,7 +59,7 @@ export default function LoanMetricsSummary({ apr, ltv }: LoanMetricsSummaryProps
               >
                 <CircleInfoIcon className='size-3' />
               </Tooltip.Trigger>
-              <Tooltip.Content>{LTV_TOOLTIP}</Tooltip.Content>
+              <Tooltip.Content className='max-w-64 break-normal!'>{LTV_TOOLTIP}</Tooltip.Content>
             </Tooltip>
           </span>
           <span>{ltv === null ? '—' : `${(ltv * 100).toFixed(2)}%`}</span>
@@ -73,17 +73,17 @@ export default function LoanMetricsSummary({ apr, ltv }: LoanMetricsSummaryProps
           <div className='relative mt-2 h-2'>
             <div className='bg-default h-full w-full rounded-full' />
             <div
-              className={`absolute inset-y-0 left-0 rounded-full ${risk.fill}`}
+              className={`absolute inset-y-0 left-0 rounded-full transition-[width,background-color] duration-300 ease-out ${risk.fill}`}
               style={{ width: `${position * 100}%` }}
             />
             {ltv !== null && (
               <>
                 <div
-                  className={`border-surface absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${risk.fill}`}
+                  className={`border-surface absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-[left,background-color] duration-300 ease-out ${risk.fill}`}
                   style={{ left: `${position * 100}%` }}
                 />
                 <div
-                  className='absolute bottom-full mb-2 -translate-x-1/2'
+                  className='absolute bottom-full mb-2 -translate-x-1/2 transition-[left] duration-300 ease-out'
                   style={{ left: `${position * 100}%` }}
                 >
                   <div className='bg-surface text-foreground relative rounded-lg px-2.5 py-1 text-sm font-medium shadow-md'>
