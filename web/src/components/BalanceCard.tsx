@@ -30,7 +30,7 @@ export default function BalanceCard({ asset, amount, className = '' }: BalanceCa
         <Icon className='size-4' />
         {displayedSymbol}
       </span>
-      <h3 className='text-muted text-h4'>Complete Balance {displayedSymbol}</h3>
+      <h3 className='text-muted text-h4'>Available Amount</h3>
       <div className='flex flex-col gap-1'>
         <span title={displayedAmount} className='text-foreground truncate text-xl font-semibold'>
           {displayedAmount}

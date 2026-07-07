@@ -2,32 +2,48 @@ import { Skeleton } from '@heroui/react'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { useBlockHeight } from '@/api/esplora/hooks'
+import { useAllLenderOffers } from '@/api/indexer/hooks'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
+import ChecksIcon from '@/components/icons/ChecksIcon'
+import HandCoinsIcon from '@/components/icons/HandCoinsIcon'
+import LockIcon from '@/components/icons/LockIcon'
+import PercentIcon from '@/components/icons/PercentIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { RoutePath } from '@/constants/routes'
 import { useLenderStats } from '@/hooks/useLenderStats'
-import { useOpenOffer } from '@/hooks/useOfferModal'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
+import { useWallet } from '@/providers/wallet/useWallet'
 import { ErrorHandler } from '@/utils/errorHandler'
-import { formatAmount, formatUsd, truncateAddress } from '@/utils/format'
+import { formatAmount, formatUsd } from '@/utils/format'
+import { buildOfferNotifications } from '@/utils/notifications'
 import { getOfferPendingTx } from '@/utils/pendingTransactions'
 
 import { AssetAmount } from './AssetAmount'
-import CardAlert from './CardAlert'
+import CardNotifications from './CardNotifications'
 import { DataRow } from './DataRow'
 
 export function SupplyCard() {
   const navigate = useNavigate()
-  const { balance, stats, repaidOffer, isLoading, error, refetch } = useLenderStats()
+  const { scriptPubkey } = useWallet()
+  const { balance, stats, isLoading, error, refetch } = useLenderStats()
   const principalPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.principalAsset.id)
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.principalAsset.decimals, principalPriceUsd)
   const { pendingTxs } = usePendingTransactions()
-  const { openOffer } = useOpenOffer()
+  const { data: currentBlockHeight } = useBlockHeight()
+  const offersQuery = useAllLenderOffers(
+    scriptPubkey ?? '',
+    { status: ['active', 'repaid'] },
+    { refetchInterval: 30_000 },
+  )
 
-  const claimableOffer =
-    repaidOffer && !getOfferPendingTx(repaidOffer.id, pendingTxs) ? repaidOffer : null
+  const notifications = buildOfferNotifications(
+    offersQuery.data ?? [],
+    scriptPubkey,
+    currentBlockHeight,
+  ).filter(n => !getOfferPendingTx(n.offer.id, pendingTxs))
 
   useEffect(() => {
     if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your supply.')
@@ -61,34 +77,34 @@ export function SupplyCard() {
         </div>
       )}
 
-      <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>
+      <div className='bg-surface flex flex-col gap-2 rounded-lg p-4 sm:p-6'>
         <DataRow
+          icon={<LockIcon className='size-5 shrink-0' />}
           label='Supplied Loans:'
           value={`${formatAmount(stats.suppliedLoans, NETWORK_CONFIG.principalAsset.decimals)} ${NETWORK_CONFIG.principalAsset.symbol}`}
           isLoading={isLoading}
         />
         <DataRow
+          icon={<PercentIcon className='size-5 shrink-0' />}
           label='Interest Outstanding:'
           value={`${formatAmount(stats.interestOutstanding, NETWORK_CONFIG.principalAsset.decimals)} ${NETWORK_CONFIG.principalAsset.symbol}`}
           isLoading={isLoading}
         />
-        <DataRow label='Number of Active Loans:' value={stats.activeLoans} isLoading={isLoading} />
         <DataRow
-          label='Number of Repaid to be Claimed Loans:'
+          icon={<ChecksIcon className='size-5 shrink-0' />}
+          label='Active Loans:'
+          value={stats.activeLoans}
+          isLoading={isLoading}
+        />
+        <DataRow
+          icon={<HandCoinsIcon className='size-5 shrink-0' />}
+          label='Claimable Loans:'
           value={stats.repaidToClaim}
           isLoading={isLoading}
         />
       </div>
 
-      {claimableOffer && (
-        <CardAlert
-          variant='accent'
-          title='Repayment Available'
-          description={`Loan #${truncateAddress(claimableOffer.id)} has been repaid. You can now claim the repayment.`}
-          actionLabel='Claim Now'
-          onAction={() => openOffer(claimableOffer)}
-        />
-      )}
+      <CardNotifications notifications={notifications} title='Lender Notifications' />
 
       <UiButton className='self-start' variant='primary' onPress={() => navigate(RoutePath.Supply)}>
         Supply

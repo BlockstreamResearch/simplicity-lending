@@ -3,26 +3,27 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
-import { useBorrowerOffers } from '@/api/indexer/hooks'
+import { useAllBorrowerOffers } from '@/api/indexer/hooks'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
+import ChecksIcon from '@/components/icons/ChecksIcon'
+import ClockIcon from '@/components/icons/ClockIcon'
 import CoinsIcon from '@/components/icons/CoinsIcon'
+import FileTextIcon from '@/components/icons/FileTextIcon'
+import LockIcon from '@/components/icons/LockIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { REPAYMENT_DUE_THRESHOLD_BLOCKS } from '@/constants/offers'
 import { RoutePath } from '@/constants/routes'
 import { useBorrowerStats } from '@/hooks/useBorrowerStats'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
-import { useOpenOffer } from '@/hooks/useOfferModal'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ErrorHandler } from '@/utils/errorHandler'
-import { formatUsd, truncateAddress } from '@/utils/format'
-import { resolveOfferAction } from '@/utils/offerActions'
-import { getOfferTermLeft } from '@/utils/offers'
+import { formatUsd } from '@/utils/format'
+import { buildOfferNotifications } from '@/utils/notifications'
 import { getOfferPendingTx } from '@/utils/pendingTransactions'
 
 import { AssetAmount } from './AssetAmount'
-import CardAlert from './CardAlert'
+import CardNotifications from './CardNotifications'
 import { DataRow } from './DataRow'
 
 export function BorrowCard() {
@@ -31,24 +32,22 @@ export function BorrowCard() {
   const { stats, isLoading, error, refetch } = useBorrowerStats()
   const { collateralUnit, formatCollateralAmount, formatCollateralDisplay, formatPrincipalAmount } =
     useFormatAmount()
-  const offersQuery = useBorrowerOffers(scriptPubkey ?? '', { status: 'active', limit: 50 })
+  const offersQuery = useAllBorrowerOffers(
+    scriptPubkey ?? '',
+    { status: ['active', 'pending', 'liquidated'] },
+    { refetchInterval: 30_000 },
+  )
   const { data: currentBlockHeight } = useBlockHeight()
   const { pendingTxs } = usePendingTransactions()
   const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)
 
   const balance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.collateralAsset.decimals, collateralPriceUsd)
-  const activeOffers = offersQuery.data?.items ?? []
-  const repayDueOffer = activeOffers.find(o => {
-    const termLeft = getOfferTermLeft(o, currentBlockHeight)
-    return (
-      !getOfferPendingTx(o.id, pendingTxs) &&
-      resolveOfferAction(o, scriptPubkey, currentBlockHeight) === 'repay' &&
-      termLeft > 0 &&
-      termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS
-    )
-  })
-  const { openOffer } = useOpenOffer()
+  const notifications = buildOfferNotifications(
+    offersQuery.data ?? [],
+    scriptPubkey,
+    currentBlockHeight,
+  ).filter(n => !getOfferPendingTx(n.offer.id, pendingTxs))
 
   useEffect(() => {
     if (error) ErrorHandler.processWithRetry(error, refetch, 'Failed to load your borrows.')
@@ -77,34 +76,34 @@ export function BorrowCard() {
         </div>
       )}
 
-      <div className='bg-surface flex flex-col gap-3 rounded-lg p-4 sm:p-6'>
+      <div className='bg-surface flex flex-col gap-2 rounded-lg p-4 sm:p-6'>
         <DataRow
-          label='User Total Locked Collateral:'
+          icon={<LockIcon className='size-5 shrink-0' />}
+          label='Total Locked Collateral:'
           value={formatCollateralDisplay(stats.lockedCollateral)}
           isLoading={isLoading}
         />
         <DataRow
+          icon={<FileTextIcon className='size-5 shrink-0' />}
           label='Borrowings:'
           value={formatPrincipalAmount(stats.borrowings)}
           isLoading={isLoading}
         />
-        <DataRow label='Number of active loans:' value={stats.activeLoans} isLoading={isLoading} />
         <DataRow
-          label='Number of pending offers:'
+          icon={<ChecksIcon className='size-5 shrink-0' />}
+          label='Active Loans:'
+          value={stats.activeLoans}
+          isLoading={isLoading}
+        />
+        <DataRow
+          icon={<ClockIcon className='size-5 shrink-0' />}
+          label='Pending Offers:'
           value={stats.pendingOffers}
           isLoading={isLoading}
         />
       </div>
 
-      {repayDueOffer && (
-        <CardAlert
-          variant='warning'
-          title='Repayment Due Soon'
-          description={`Loan #${truncateAddress(repayDueOffer.id)} Nearing Deadline. Repay to Avoid Liquidation.`}
-          actionLabel='Repay Now'
-          onAction={() => openOffer(repayDueOffer)}
-        />
-      )}
+      <CardNotifications notifications={notifications} title='Borrower Notifications' />
 
       <UiButton className='self-start' variant='primary' onPress={() => navigate(RoutePath.Borrow)}>
         Borrow
