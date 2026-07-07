@@ -79,7 +79,7 @@ export function BorrowCard() {
       <div className='bg-surface flex flex-col gap-2 rounded-lg p-4 sm:p-6'>
         <DataRow
           icon={<LockIcon className='size-5 shrink-0' />}
-          label='User Total Locked Collateral:'
+          label='Total Locked Collateral:'
           value={formatCollateralDisplay(stats.lockedCollateral)}
           isLoading={isLoading}
         />
@@ -91,13 +91,13 @@ export function BorrowCard() {
         />
         <DataRow
           icon={<ChecksIcon className='size-5 shrink-0' />}
-          label='Number of active loans:'
+          label='Active Loans:'
           value={stats.activeLoans}
           isLoading={isLoading}
         />
         <DataRow
           icon={<ClockIcon className='size-5 shrink-0' />}
-          label='Number of pending offers:'
+          label='Pending Offers:'
           value={stats.pendingOffers}
           isLoading={isLoading}
         />

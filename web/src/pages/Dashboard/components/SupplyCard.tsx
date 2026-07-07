@@ -92,13 +92,13 @@ export function SupplyCard() {
         />
         <DataRow
           icon={<ChecksIcon className='size-5 shrink-0' />}
-          label='Number of Active Loans:'
+          label='Active Loans:'
           value={stats.activeLoans}
           isLoading={isLoading}
         />
         <DataRow
           icon={<HandCoinsIcon className='size-5 shrink-0' />}
-          label='Number of Repaid to be Claimed Loans:'
+          label='Claimable Loans:'
           value={stats.repaidToClaim}
           isLoading={isLoading}
         />
