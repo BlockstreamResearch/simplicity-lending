@@ -309,6 +309,67 @@ async fn get_offers_returns_all_seeded_offers_with_correct_status() -> anyhow::R
 
 #[tokio::test]
 #[serial]
+async fn offers_expose_and_sort_by_updated_at_height() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+
+    let factory_id = Uuid::new_v4();
+    seed_factory_row(
+        &pool,
+        &factory_model(factory_id, 1, unique_32_bytes_from_uuid(factory_id)),
+    )
+    .await?;
+
+    let mut pending = offer_model(1, factory_id, 100);
+    let pending_id = seed_offer_row(&pool, &mut pending).await?;
+
+    let mut active = offer_model(2, factory_id, 50);
+    active.current_status = OfferStatus::Active;
+    active.updated_at_height = 200;
+    let active_id = seed_offer_row(&pool, &mut active).await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let list = get_json(&http, format!("{base_url}/offers")).await?;
+    let items = offer_list_items(&list);
+
+    let pending_item = find_list_item(items, pending_id).expect("pending offer");
+    let active_item = find_list_item(items, active_id).expect("active offer");
+
+    assert_eq!(pending_item["updated_at_height"], 100);
+    assert_eq!(pending_item["created_at_height"], 100);
+    assert_eq!(active_item["updated_at_height"], 200);
+    assert_eq!(active_item["created_at_height"], 50);
+
+    assert_eq!(items[0]["id"], active_id.to_string());
+    assert_eq!(items[1]["id"], pending_id.to_string());
+
+    let by_updated = get_json(
+        &http,
+        format!("{base_url}/offers?sort_by=updated_at_height"),
+    )
+    .await?;
+    assert_eq!(
+        offer_list_items(&by_updated)[0]["id"],
+        active_id.to_string()
+    );
+
+    let by_created = get_json(
+        &http,
+        format!("{base_url}/offers?sort_by=created_at_height"),
+    )
+    .await?;
+    assert_eq!(
+        offer_list_items(&by_created)[0]["id"],
+        pending_id.to_string()
+    );
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
 async fn get_offers_overview_returns_active_totals_only() -> anyhow::Result<()> {
     let (base_url, server_handle, _pending_offer, _active_offer) = setup_seeded_api().await?;
     let http = reqwest::Client::new();
