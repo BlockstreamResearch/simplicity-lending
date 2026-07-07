@@ -14,6 +14,7 @@ export interface UiModalProps extends ModalProps {
   placement?: ModalContainerProps['placement']
   isDismissable?: ModalBackdropProps['isDismissable']
   showCloseButton?: boolean
+  dialogClassName?: string
 }
 
 export function UiModal({
@@ -22,17 +23,21 @@ export function UiModal({
   footer,
   trigger,
   size,
-  placement,
+  placement = 'center',
   isDismissable = true,
   showCloseButton = true,
+  dialogClassName,
   ...rootProps
 }: UiModalProps) {
+  const useDefaultWidth = !size && !dialogClassName
+  const dialogClass = [useDefaultWidth ? 'max-w-120' : dialogClassName].filter(Boolean).join(' ')
+
   return (
     <Modal.Root {...rootProps}>
       {trigger ? <Modal.Trigger>{trigger}</Modal.Trigger> : null}
       <Modal.Backdrop isDismissable={isDismissable}>
         <Modal.Container size={size} placement={placement}>
-          <Modal.Dialog>
+          <Modal.Dialog className={dialogClass || undefined}>
             {title || showCloseButton ? (
               <Modal.Header>
                 {title ? <Modal.Heading>{title}</Modal.Heading> : null}

@@ -1,11 +1,14 @@
+import { Tooltip } from '@heroui/react'
 import type { ReactNode } from 'react'
 
 import CopyButton from '@/components/CopyButton'
+import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
 
 export interface DetailRow {
   label: string
   value: ReactNode
   copyValue?: string
+  tooltip?: string
 }
 
 interface DetailsPanelProps {
@@ -26,12 +29,22 @@ export default function DetailsPanel({ title, rows, bordered }: DetailsPanelProp
         {rows.map((row, i) => (
           <div
             key={row.label}
-            className={`flex items-center justify-between py-3 text-sm ${
+            className={`flex items-center justify-between gap-3 py-3 text-sm ${
               i > 0 ? 'border-separator border-t' : ''
             }`}
           >
-            <span className='text-foreground font-medium'>{row.label}</span>
-            <span className='flex items-center gap-1 font-medium'>
+            <span className='text-foreground inline-flex min-w-0 items-center gap-1 font-medium'>
+              {row.label}
+              {row.tooltip && (
+                <Tooltip delay={0}>
+                  <Tooltip.Trigger className='text-muted inline-flex shrink-0 cursor-help'>
+                    <CircleInfoIcon className='size-3' />
+                  </Tooltip.Trigger>
+                  <Tooltip.Content>{row.tooltip}</Tooltip.Content>
+                </Tooltip>
+              )}
+            </span>
+            <span className='flex shrink-0 items-center gap-1 font-medium'>
               {row.value}
               {row.copyValue && <CopyButton value={row.copyValue} />}
             </span>

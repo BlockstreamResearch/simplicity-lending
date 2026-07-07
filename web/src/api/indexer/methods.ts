@@ -14,6 +14,7 @@ import {
   offerDetailsSchema,
   type OfferListResponse,
   offerListResponseSchema,
+  type OfferShort,
   type OffersOverview,
   offersOverviewSchema,
   type OfferStatus,
@@ -46,6 +47,22 @@ export interface ListOffersParams {
   offset?: number
   sortBy?: SortField
   sortDir?: SortDir
+}
+
+export const OFFERS_PAGE_LIMIT = 100
+
+export async function fetchAllOfferPages(
+  fetchPage: (params: ListOffersParams) => Promise<OfferListResponse>,
+  baseParams: ListOffersParams = {},
+): Promise<OfferShort[]> {
+  const first = await fetchPage({ ...baseParams, limit: OFFERS_PAGE_LIMIT, offset: 0 })
+  const items = [...first.items]
+  while (items.length < first.total) {
+    const next = await fetchPage({ ...baseParams, limit: OFFERS_PAGE_LIMIT, offset: items.length })
+    if (next.items.length === 0) break
+    items.push(...next.items)
+  }
+  return items
 }
 
 function toQueryParams(params: ListOffersParams): Record<string, string> {

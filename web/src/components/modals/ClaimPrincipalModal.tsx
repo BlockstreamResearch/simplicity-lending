@@ -105,12 +105,13 @@ export default function ClaimPrincipalModal({
       isOpen={isOpen}
       title='Claim Principal Offer'
       chip={
-        <Chip color='success' variant='soft' size='sm'>
+        <Chip color='accent' variant='soft' size='sm'>
           Claim
         </Chip>
       }
       action={{
         label: 'Claim Principal',
+        variant: 'primary',
         eyebrow: 'Claim Principal',
         summary: txSummary,
         status,

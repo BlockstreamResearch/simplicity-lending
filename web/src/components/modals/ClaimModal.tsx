@@ -114,6 +114,7 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
       }
       action={{
         label: 'Claim',
+        variant: 'primary',
         eyebrow: 'Claim Vault',
         summary: txSummary,
         status,

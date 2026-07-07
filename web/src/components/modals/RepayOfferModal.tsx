@@ -135,12 +135,13 @@ export default function RepayOfferModal({
       isOpen={isOpen}
       title='Repay Offer'
       chip={
-        <Chip color='warning' variant='soft' size='sm'>
+        <Chip color='accent' variant='soft' size='sm'>
           Repay
         </Chip>
       }
       action={{
         label: 'Repay Loan',
+        variant: 'primary',
         eyebrow: 'Repay Loan',
         summary: txSummary,
         status,

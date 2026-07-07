@@ -16,6 +16,8 @@ export interface UiTextFieldProps extends Omit<TextFieldProps, 'children'> {
   errorMessage?: ReactNode
   startContent?: ReactNode
   endContent?: ReactNode
+  onMax?: () => void
+  isMaxDisabled?: boolean
 }
 
 export function UiTextField({
@@ -26,10 +28,12 @@ export function UiTextField({
   isInvalid,
   startContent,
   endContent,
+  onMax,
+  isMaxDisabled,
   ...props
 }: UiTextFieldProps) {
   const invalid = isInvalid ?? Boolean(errorMessage)
-  const hasGroup = Boolean(startContent || endContent)
+  const hasGroup = Boolean(startContent || endContent || onMax)
 
   return (
     <TextField isInvalid={invalid} {...props}>
@@ -38,7 +42,22 @@ export function UiTextField({
         <InputGroup>
           {startContent && <InputGroup.Prefix>{startContent}</InputGroup.Prefix>}
           <InputGroup.Input placeholder={placeholder} />
-          {endContent && <InputGroup.Suffix>{endContent}</InputGroup.Suffix>}
+          {onMax && (
+            <button
+              type='button'
+              onClick={onMax}
+              disabled={isMaxDisabled}
+              className='text-muted cursor-pointer pr-3 text-sm font-medium underline disabled:cursor-default disabled:opacity-50'
+            >
+              MAX
+            </button>
+          )}
+          {endContent && (
+            <>
+              <div className='w-px shrink-0 self-stretch bg-separator' />
+              <InputGroup.Suffix>{endContent}</InputGroup.Suffix>
+            </>
+          )}
         </InputGroup>
       ) : (
         <Input placeholder={placeholder} />
