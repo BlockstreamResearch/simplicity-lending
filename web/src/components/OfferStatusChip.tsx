@@ -1,7 +1,6 @@
-import { Chip } from '@heroui/react'
+import { Chip, Spinner } from '@heroui/react'
 
 import type { OfferStatus } from '@/api/indexer/schemas'
-import CircleDashedIcon from '@/components/icons/CircleDashedIcon'
 
 type ChipColor = 'success' | 'warning' | 'accent' | 'danger' | 'default'
 
@@ -24,7 +23,7 @@ export function OfferStatusChip({ status, size = 'sm', isProcessing }: OfferStat
   if (isProcessing) {
     return (
       <Chip color='default' variant='soft' size={size}>
-        <CircleDashedIcon className='size-3.5 animate-spin' />
+        <Spinner size='sm' color='current' className='mr-1 size-3' />
         Processing...
       </Chip>
     )
