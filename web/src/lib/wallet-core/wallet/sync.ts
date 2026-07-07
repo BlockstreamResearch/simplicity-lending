@@ -1,4 +1,4 @@
-import type { EsploraClient, Transaction, Wollet } from '@lilbonekit/lwk-web'
+import { type EsploraClient, type Transaction, TxOpt, type Wollet } from '@lilbonekit/lwk-web'
 
 import { isConfirmedWalletUtxo } from '@/lwk/utxo'
 
@@ -13,7 +13,7 @@ export interface WalletBalances {
  * Derives total/confirmed/pending balances from the wollet's current in-memory state.
  * No network calls — safe to call right after a local mutation like applyTransaction().
  */
-function readWalletBalances(wollet: Wollet): WalletBalances {
+export function readWalletBalances(wollet: Wollet): WalletBalances {
   const total: Record<string, string> = {}
   for (const [assetId, amount] of wollet.balance().entries() as [string, bigint][]) {
     total[assetId] = amount.toString()
@@ -63,4 +63,29 @@ export async function syncBalances(
 export function applyBroadcastTransaction(wollet: Wollet, tx: Transaction): WalletBalances {
   wollet.applyTransaction(tx)
   return readWalletBalances(wollet)
+}
+
+/**
+ * Re-applies still-untracked self-broadcast txs after a full scan, in case that scan
+ * was a stale snapshot that undid their local effect. Returns txids the indexer now
+ * genuinely confirms, so the caller can stop tracking them.
+ */
+export function reconcilePendingBroadcasts(
+  wollet: Wollet,
+  pending: Map<string, Transaction>,
+): string[] {
+  const confirmedTxids: string[] = []
+  for (const [txid, tx] of pending) {
+    const height = wollet.txDetails(tx.txid(), TxOpt.default())?.height()
+    if (height !== undefined) {
+      confirmedTxids.push(txid)
+      continue
+    }
+    try {
+      wollet.applyTransaction(tx)
+    } catch (err) {
+      console.warn(err)
+    }
+  }
+  return confirmedTxids
 }
