@@ -116,8 +116,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const session = sessionRef.current
       if (!session) return
       syncBalances(session.wollet, session.esploraClient)
-        .then(({ total, confirmed }) => {
-          setState(s => ({ ...s, balances: total, confirmedBalances: confirmed }))
+        .then(({ total, confirmed, pending }) => {
+          setState(s => ({
+            ...s,
+            balances: total,
+            confirmedBalances: confirmed,
+            pendingBalances: pending,
+          }))
         })
         .catch(console.warn)
     }, 60_000)
@@ -186,10 +191,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
         setSavedSession(saved)
 
-        const { total: balances, confirmed: confirmedBalances } = await syncBalances(
-          wollet,
-          esploraClient,
-        )
+        const {
+          total: balances,
+          confirmed: confirmedBalances,
+          pending: pendingBalances,
+        } = await syncBalances(wollet, esploraClient)
         if (attempt !== connectionChangeCounterRef.current) return
 
         const address = wollet.address(0).address()
@@ -204,6 +210,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           isError: false,
           balances,
           confirmedBalances,
+          pendingBalances,
           receiveAddress,
           scriptPubkey,
         }))
@@ -253,11 +260,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, syncing: true, error: null }))
 
     try {
-      const { total: balances, confirmed: confirmedBalances } = await syncBalances(
-        session.wollet,
-        session.esploraClient,
-      )
-      setState(s => ({ ...s, syncing: false, balances, confirmedBalances }))
+      const {
+        total: balances,
+        confirmed: confirmedBalances,
+        pending: pendingBalances,
+      } = await syncBalances(session.wollet, session.esploraClient)
+      setState(s => ({ ...s, syncing: false, balances, confirmedBalances, pendingBalances }))
     } catch (err) {
       ErrorHandler.process(err)
       const error = err instanceof Error ? err.message : String(err)

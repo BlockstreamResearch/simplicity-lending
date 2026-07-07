@@ -60,7 +60,7 @@ export function SupplyCard() {
           <h3 className='text-h3'>Your Supply</h3>
         </div>
         <p className='text-muted text-h4'>
-          Complete Balance {NETWORK_CONFIG.principalAsset.symbol}
+          Available Balance {NETWORK_CONFIG.principalAsset.symbol}
         </p>
       </header>
 

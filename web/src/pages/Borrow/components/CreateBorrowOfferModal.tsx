@@ -253,7 +253,7 @@ export default function CreateBorrowOfferModal({
   onClose,
 }: CreateBorrowOfferModalProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
-  const { balances, confirmedBalances, scriptPubkey } = useWallet()
+  const { confirmedBalances, pendingBalances, scriptPubkey } = useWallet()
   const { denomination } = useAssetDenomination()
   const collateralUnit = getPolicyAssetUnit(denomination, collateralAsset)
   const collateralUsd = useAssetPriceUsd(collateralAsset.id)
@@ -452,10 +452,7 @@ export default function CreateBorrowOfferModal({
         <BalanceCard
           asset={collateralAsset}
           amount={BigInt(confirmedBalances[collateralAsset.id] ?? 0)}
-          pendingAmount={
-            BigInt(balances[collateralAsset.id] ?? 0) -
-            BigInt(confirmedBalances[collateralAsset.id] ?? 0)
-          }
+          pendingAmount={BigInt(pendingBalances[collateralAsset.id] ?? 0)}
           className='bg-surface-secondary'
         />
         <Controller

@@ -23,7 +23,7 @@ export default function OfferDetailsBody({
   showBalance = true,
 }: OfferDetailsBodyProps) {
   const { principalAsset, collateralAsset } = NETWORK_CONFIG
-  const { balances, confirmedBalances, isReady } = useWallet()
+  const { confirmedBalances, pendingBalances, isReady } = useWallet()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
   const { data: currentBlockHeight } = useBlockHeight()
   const collateralUsd = useAssetPriceUsd(collateralAsset.id)
@@ -125,10 +125,7 @@ export default function OfferDetailsBody({
         <BalanceCard
           asset={principalAsset}
           amount={BigInt(confirmedBalances[principalAsset.id] ?? 0)}
-          pendingAmount={
-            BigInt(balances[principalAsset.id] ?? 0) -
-            BigInt(confirmedBalances[principalAsset.id] ?? 0)
-          }
+          pendingAmount={BigInt(pendingBalances[principalAsset.id] ?? 0)}
         />
       )}
       <DetailsPanel title='Loan info' rows={loanInfoRows} />

@@ -5,6 +5,8 @@ import { isConfirmedWalletUtxo } from '@/lwk/utxo'
 export interface WalletBalances {
   total: Record<string, string>
   confirmed: Record<string, string>
+  /** total - confirmed per assetId. Only present for assets with a nonzero pending amount. */
+  pending: Record<string, string>
 }
 
 /**
@@ -37,5 +39,11 @@ export async function syncBalances(
     confirmed[assetId] = amount.toString()
   }
 
-  return { total, confirmed }
+  const pending: Record<string, string> = {}
+  for (const [assetId, totalAmount] of Object.entries(total)) {
+    const pendingAmount = BigInt(totalAmount) - (confirmedAmounts.get(assetId) ?? 0n)
+    if (pendingAmount !== 0n) pending[assetId] = pendingAmount.toString()
+  }
+
+  return { total, confirmed, pending }
 }

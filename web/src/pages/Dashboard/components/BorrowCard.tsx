@@ -29,7 +29,7 @@ import { DataRow } from './DataRow'
 
 export function BorrowCard() {
   const navigate = useNavigate()
-  const { balances, confirmedBalances, scriptPubkey } = useWallet()
+  const { confirmedBalances, pendingBalances, scriptPubkey } = useWallet()
   const { stats, isLoading, error, refetch } = useBorrowerStats()
   const { collateralUnit, formatCollateralAmount, formatCollateralDisplay, formatPrincipalAmount } =
     useFormatAmount()
@@ -42,9 +42,8 @@ export function BorrowCard() {
   const { pendingTxs } = usePendingTransactions()
   const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)
 
-  const totalBalance = BigInt(balances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
   const balance = BigInt(confirmedBalances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
-  const pendingBalance = totalBalance - balance
+  const pendingBalance = BigInt(pendingBalances[NETWORK_CONFIG.collateralAsset.id] ?? 0)
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.collateralAsset.decimals, collateralPriceUsd)
   const notifications = buildOfferNotifications(
     offersQuery.data ?? [],
@@ -65,7 +64,7 @@ export function BorrowCard() {
           </span>
           <h3 className='text-h3'>Your Borrows</h3>
         </div>
-        <p className='text-muted text-h4'>Complete Balance {collateralUnit}</p>
+        <p className='text-muted text-h4'>Available Balance {collateralUnit}</p>
       </header>
 
       {isLoading ? (

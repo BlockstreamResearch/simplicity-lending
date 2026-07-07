@@ -75,11 +75,14 @@
 }
 
 .table-root--secondary .table__row {
-  @apply border-b-0;
+  @apply border-b-0 cursor-pointer;
 }
 
 .table-root--secondary .table__row .table__cell {
   @apply border-b-0 bg-[var(--surface)];
+  transition:
+    background-color 150ms ease-out,
+    box-shadow 150ms ease-out;
 }
 
 .table-root--secondary .table__row .table__cell:first-child {

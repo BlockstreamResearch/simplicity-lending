@@ -4,7 +4,7 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import BalanceCard from './BalanceCard'
 
 export default function UserBalances() {
-  const { balances, confirmedBalances } = useWallet()
+  const { confirmedBalances, pendingBalances } = useWallet()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
 
   return (
@@ -13,19 +13,15 @@ export default function UserBalances() {
         User Balances
       </h2>
       <div className='flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-6'>
-        {[collateralAsset, principalAsset].map(asset => {
-          const total = BigInt(balances[asset.id] ?? 0)
-          const confirmed = BigInt(confirmedBalances[asset.id] ?? 0)
-          return (
-            <BalanceCard
-              key={asset.id}
-              asset={asset}
-              amount={confirmed}
-              pendingAmount={total - confirmed}
-              className='sm:w-65.5'
-            />
-          )
-        })}
+        {[collateralAsset, principalAsset].map(asset => (
+          <BalanceCard
+            key={asset.id}
+            asset={asset}
+            amount={BigInt(confirmedBalances[asset.id] ?? 0)}
+            pendingAmount={BigInt(pendingBalances[asset.id] ?? 0)}
+            className='sm:w-65.5'
+          />
+        ))}
       </div>
     </section>
   )
