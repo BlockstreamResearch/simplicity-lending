@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(
     Debug,
@@ -27,7 +26,7 @@ pub enum UtxoType {
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct OfferUtxoModel {
-    pub offer_id: Uuid,
+    pub offer_id: i64,
     pub txid: Vec<u8>,
     pub vout: i32,
     pub utxo_type: UtxoType,

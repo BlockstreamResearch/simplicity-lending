@@ -1,5 +1,4 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 
@@ -69,7 +68,7 @@ pub async fn load_participants_utxo_cache(
 )]
 pub async fn get_offer_participant_asset_id(
     sql_tx: &mut DbTx<'_>,
-    offer_id: Uuid,
+    offer_id: i64,
     participant_type: ParticipantType,
 ) -> Result<Vec<u8>, sqlx::Error> {
     let offer_row = sqlx::query!(

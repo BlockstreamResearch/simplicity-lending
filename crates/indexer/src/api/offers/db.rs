@@ -1,5 +1,4 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
 
@@ -81,7 +80,7 @@ pub async fn fetch_list(
 
 async fn fetch_full_info_by_id(
     db: &PgPool,
-    offer_id: Uuid,
+    offer_id: i64,
 ) -> Result<Option<OfferListItemFull>, sqlx::Error> {
     let model = sqlx::query_as!(
         OfferModel,
@@ -114,7 +113,7 @@ async fn fetch_full_info_by_id(
 
 async fn fetch_latest_participants(
     db: &PgPool,
-    offer_id: Uuid,
+    offer_id: i64,
 ) -> Result<Vec<ParticipantDto>, sqlx::Error> {
     let rows = sqlx::query_as!(
         OfferParticipantModel,
@@ -140,10 +139,7 @@ async fn fetch_latest_participants(
     Ok(rows.into_iter().map(ParticipantDto::from).collect())
 }
 
-async fn fetch_unspent_utxos(
-    db: &PgPool,
-    offer_id: Uuid,
-) -> Result<Vec<OfferUtxoDto>, sqlx::Error> {
+async fn fetch_unspent_utxos(db: &PgPool, offer_id: i64) -> Result<Vec<OfferUtxoDto>, sqlx::Error> {
     let rows = sqlx::query_as!(
         OfferUtxoModel,
         r#"
@@ -175,7 +171,7 @@ async fn fetch_unspent_utxos(
 )]
 pub async fn fetch_details_by_id(
     db: &PgPool,
-    offer_id: Uuid,
+    offer_id: i64,
 ) -> Result<Option<OfferDetailsResponse>, sqlx::Error> {
     let Some(info) = fetch_full_info_by_id(db, offer_id).await? else {
         return Ok(None);
@@ -204,7 +200,7 @@ pub async fn fetch_details_by_id(
 pub async fn fetch_ids_by_script(
     db: &PgPool,
     script_pubkey: &[u8],
-) -> Result<Vec<Uuid>, sqlx::Error> {
+) -> Result<Vec<i64>, sqlx::Error> {
     let rows = sqlx::query!(
         r#"
         SELECT DISTINCT offer_id

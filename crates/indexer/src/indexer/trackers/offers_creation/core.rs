@@ -75,15 +75,15 @@ impl OfferCreationsTracker {
 
         let offer_model = OfferModel::new(&creation.parameters, factory_id, block_height, txid);
 
-        if insert_offer(sql_tx, &offer_model).await?.is_none() {
+        let Some(offer_id) = insert_offer(sql_tx, &offer_model).await? else {
             tracing::debug!(%txid, "Offer already indexed, skipping");
             return Ok(());
-        }
+        };
 
         offers
             .seed_creation_pending_offer_utxo(
                 sql_tx,
-                offer_model.id,
+                offer_id,
                 txid,
                 creation.outputs.pending_offer_vout,
                 block_height,
@@ -93,7 +93,7 @@ impl OfferCreationsTracker {
         participants
             .seed_creation_participant_utxo(
                 sql_tx,
-                offer_model.id,
+                offer_id,
                 ParticipantType::Borrower,
                 ParticipantCreationUtxo {
                     txid,
@@ -107,7 +107,7 @@ impl OfferCreationsTracker {
         participants
             .seed_creation_participant_utxo(
                 sql_tx,
-                offer_model.id,
+                offer_id,
                 ParticipantType::Lender,
                 ParticipantCreationUtxo {
                     txid,

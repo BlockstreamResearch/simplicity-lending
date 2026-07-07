@@ -20,7 +20,7 @@
             }
           }
         },
-        "Uuid"
+        "Int8"
       ]
     },
     "nullable": []
