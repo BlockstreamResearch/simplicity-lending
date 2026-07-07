@@ -7,6 +7,7 @@ import { z as zod } from 'zod'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import BalanceCard from '@/components/BalanceCard'
 import PlusIcon from '@/components/icons/PlusIcon'
+import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiFieldLabel } from '@/components/ui/UiFieldLabel'
@@ -29,18 +30,19 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
-import { DECIMAL_AMOUNT_RE, formatAmount, formatFeeReserve } from '@/utils/format'
+import { formatAmount, formatFeeReserve, formatUsd } from '@/utils/format'
 import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
 import {
   formatPolicyAssetDisplay,
+  formatPolicyAssetInputValue,
   getPolicyAssetUnit,
   parsePolicyAssetInput,
 } from '@/utils/policyAssetDenomination'
 import { selectByLargestFirst } from '@/utils/utxo'
 
+import { MAX_LTV } from '../helpers'
 import LoanMetricsSummary from './LoanMetricsSummary'
 
-const MAX_LTV = 0.55
 const MINUTES_PER_DAY = 1440
 const TERM_OPTIONS = [
   ...(env.DEV ? [{ id: 10 / MINUTES_PER_DAY, textValue: '10 minutes' }] : []),
@@ -55,14 +57,13 @@ const CREATE_OFFER_WEIGHT_UNITS =
 
 interface BorrowOfferContext {
   collateralAsset: ConfigAsset
-  collateralDecimals: number
   collateralDenomination: PolicyAssetDenomination
   collateralUnit: string
   principalDecimals: number
   principalSymbol: string
-  collateralUsd: number | null
   utxos: PolicyAssetUtxo[]
   feeBudgetSats: bigint
+  collateralUsd: number | null
 }
 const MAX_INTEREST_RATE_BPS = 65_535
 const MIN_PAYMENT_AMOUNT = 0.1
@@ -75,7 +76,8 @@ function parseAmount(
   belowUnitMessage: string,
 ) {
   const value = raw.trim()
-  if (!DECIMAL_AMOUNT_RE.test(value)) {
+  const decimalRe = new RegExp(`^\\d+(\\.\\d{0,${decimals}})?$`)
+  if (!decimalRe.test(value)) {
     ctx.addIssue({ code: zod.ZodIssueCode.custom, path: [path], message: 'Enter a valid amount' })
     return null
   }
@@ -125,14 +127,13 @@ function parsePolicyAssetCollateral(
 
 function createBorrowOfferSchema({
   collateralAsset,
-  collateralDecimals,
   collateralDenomination,
   collateralUnit,
   principalDecimals,
   principalSymbol,
-  collateralUsd,
   utxos,
   feeBudgetSats,
+  collateralUsd,
 }: BorrowOfferContext) {
   const minPaymentBase = toBigintAmount(String(MIN_PAYMENT_AMOUNT), principalDecimals)
 
@@ -170,13 +171,20 @@ function createBorrowOfferSchema({
         `Fee is below the minimum ${principalSymbol} unit`,
       )
 
-      if (collateralBase !== null) {
+      if (collateralBase !== null && utxos.length > 0) {
         const collateralBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
-        if (utxos.length > 0 && collateralBalance < collateralBase + feeBudgetSats) {
+        const maxCollateral =
+          collateralBalance > feeBudgetSats ? collateralBalance - feeBudgetSats : 0n
+        if (collateralBase > maxCollateral) {
+          const maxDisplay = formatPolicyAssetDisplay(
+            maxCollateral,
+            collateralDenomination,
+            collateralAsset,
+          )
           ctx.addIssue({
             code: zod.ZodIssueCode.custom,
             path: ['collateral'],
-            message: 'Not enough confirmed Policy Asset UTXO balance for collateral and fees',
+            message: `Amount exceeds max spendable (${maxDisplay}). The rest is reserved for network fees.`,
           })
         }
       }
@@ -201,6 +209,21 @@ function createBorrowOfferSchema({
       if (collateralBase === null || principalBase === null || feeBase === null) return
       if (borrowTooSmall || feeTooSmall) return
 
+      const ltv = computeLtv({
+        principal: principalBase,
+        principalDecimals,
+        collateral: collateralBase,
+        collateralDecimals: collateralAsset.decimals,
+        collateralUsd,
+      })
+      if (ltv !== null && ltv > MAX_LTV) {
+        ctx.addIssue({
+          code: zod.ZodIssueCode.custom,
+          path: ['borrow'],
+          message: `LTV exceeds the ${(MAX_LTV * 100).toFixed(0)}% maximum. Reduce the loan amount or add collateral.`,
+        })
+      }
+
       const feeBps = feeToBps(feeBase, principalBase)
       if (feeBps > MAX_INTEREST_RATE_BPS) {
         const maxFeeBase = (principalBase * BigInt(MAX_INTEREST_RATE_BPS + 1) - 1n) / BPS_DIVISOR
@@ -211,21 +234,6 @@ function createBorrowOfferSchema({
           message:
             `Fee is too high. Max fee for this borrow amount is ${maxFee} ` +
             `(${(MAX_INTEREST_RATE_BPS / 100).toFixed(2)}%).`,
-        })
-      }
-
-      const ltv = computeLtv({
-        principal: principalBase,
-        principalDecimals,
-        collateral: collateralBase,
-        collateralDecimals,
-        collateralUsd,
-      })
-      if (ltv !== null && ltv > MAX_LTV) {
-        ctx.addIssue({
-          code: zod.ZodIssueCode.custom,
-          path: ['borrow'],
-          message: `LTV ${(ltv * 100).toFixed(1)}% exceeds maximum ${(MAX_LTV * 100).toFixed(0)}%`,
         })
       }
     })
@@ -256,21 +264,20 @@ export default function CreateBorrowOfferModal({
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const feeRate = useFeeRateSatPerKvb(isOpen)
   const feeBudgetSats = useMemo(
-    () => estimateFeeBudgetSats(CREATE_OFFER_WEIGHT_UNITS, feeRate),
-    [feeRate],
+    () => estimateFeeBudgetSats(CREATE_OFFER_WEIGHT_UNITS, feeRate, Math.max(utxos.length, 1)),
+    [feeRate, utxos.length],
   )
 
   const formContext = useMemo<BorrowOfferContext>(
     () => ({
       collateralAsset,
-      collateralDecimals: collateralAsset.decimals,
       collateralDenomination: denomination,
       collateralUnit,
       principalDecimals: principalAsset.decimals,
       principalSymbol: principalAsset.symbol,
-      collateralUsd,
       utxos: isLoadingUtxos ? [] : utxos,
       feeBudgetSats,
+      collateralUsd,
     }),
     [
       collateralAsset,
@@ -278,10 +285,10 @@ export default function CreateBorrowOfferModal({
       collateralUnit,
       principalAsset.decimals,
       principalAsset.symbol,
-      collateralUsd,
       utxos,
       isLoadingUtxos,
       feeBudgetSats,
+      collateralUsd,
     ],
   )
 
@@ -304,6 +311,16 @@ export default function CreateBorrowOfferModal({
   const feeBase = toBigintAmount(values.fee, principalAsset.decimals)
   const bps = feeToBps(feeBase, principalBase)
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
+
+  const confirmedBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
+  const collateralFiat = formatUsd(collateralBase, collateralAsset.decimals, collateralUsd)
+  const applyMaxCollateral = useCallback(
+    (onChange: (value: string) => void) => {
+      const maxBase = confirmedBalance > feeBudgetSats ? confirmedBalance - feeBudgetSats : 0n
+      onChange(formatPolicyAssetInputValue(maxBase, denomination, collateralAsset))
+    },
+    [confirmedBalance, feeBudgetSats, denomination, collateralAsset],
+  )
 
   const createBorrowOffer = useCallback(async () => {
     const { txid } = await runStandardTransactionFlow(async () => {
@@ -364,6 +381,7 @@ export default function CreateBorrowOfferModal({
     collateralDecimals: collateralAsset.decimals,
     collateralUsd,
   })
+  const exceedsMaxLtv = ltv !== null && ltv > MAX_LTV
 
   const txSummary = useMemo(
     () => [
@@ -412,20 +430,25 @@ export default function CreateBorrowOfferModal({
         if (!open) handleClose()
       }}
       title='Create Borrow Offer'
-      size='lg'
+      dialogClassName='max-w-162 sm:max-w-[min(40.5rem,calc(100vw_-_5rem))]'
       footer={
         <div className='flex w-full gap-2'>
           <UiButton className='flex-1' variant='secondary' onPress={handleClose}>
             Cancel
           </UiButton>
-          <UiButton className='flex-1' variant='primary' onPress={() => void onSubmit()}>
+          <UiButton
+            className='flex-1'
+            variant='primary'
+            isDisabled={exceedsMaxLtv}
+            onPress={() => void onSubmit()}
+          >
             <PlusIcon className='size-4' />
             Create Borrow Offer
           </UiButton>
         </div>
       }
     >
-      <div className='flex flex-col gap-6'>
+      <div className='flex flex-col gap-5'>
         <BalanceCard
           asset={collateralAsset}
           amount={BigInt(confirmedBalances[collateralAsset.id] ?? 0)}
@@ -440,12 +463,22 @@ export default function CreateBorrowOfferModal({
           name='collateral'
           render={({ field, fieldState }) => (
             <UiTextField
-              label={<UiFieldLabel required>Collateral</UiFieldLabel>}
+              label={
+                <UiFieldLabel
+                  required
+                  tooltip={`The ${collateralAsset.symbol} you lock to back the loan. It stays locked until you repay the loan or cancel the offer.`}
+                >
+                  Collateral to Lock
+                </UiFieldLabel>
+              }
               placeholder={denomination === 'sats' ? '0' : '0.00'}
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
               endContent={collateralUnit}
+              onMax={() => applyMaxCollateral(field.onChange)}
+              isMaxDisabled={isLoadingUtxos || confirmedBalance <= feeBudgetSats}
+              description={collateralFiat ? `Collateral Value = ${collateralFiat} USD` : undefined}
               errorMessage={fieldState.error?.message}
             />
           )}
@@ -455,7 +488,14 @@ export default function CreateBorrowOfferModal({
           name='borrow'
           render={({ field, fieldState }) => (
             <UiTextField
-              label={<UiFieldLabel required>Borrow</UiFieldLabel>}
+              label={
+                <UiFieldLabel
+                  required
+                  tooltip={`The amount you want to borrow in ${principalAsset.symbol}, sent to you once a lender funds the offer.`}
+                >
+                  Loan Amount
+                </UiFieldLabel>
+              }
               placeholder='0.00'
               value={field.value}
               onChange={field.onChange}
@@ -465,14 +505,21 @@ export default function CreateBorrowOfferModal({
             />
           )}
         />
-        <div className='flex flex-col gap-8 sm:flex-row'>
+        <div className='flex flex-col gap-5 sm:flex-row'>
           <div className='flex-1'>
             <Controller
               control={control}
               name='fee'
               render={({ field, fieldState }) => (
                 <UiTextField
-                  label={<UiFieldLabel required>Fee</UiFieldLabel>}
+                  label={
+                    <UiFieldLabel
+                      required
+                      tooltip={`The interest you pay the lender on top of the borrowed amount, in ${principalAsset.symbol}.`}
+                    >
+                      Fee
+                    </UiFieldLabel>
+                  }
                   placeholder='0.00'
                   value={field.value}
                   onChange={field.onChange}
@@ -489,7 +536,14 @@ export default function CreateBorrowOfferModal({
               name='termDays'
               render={({ field, fieldState }) => (
                 <UiSelect
-                  label={<UiFieldLabel required>Duration/Term</UiFieldLabel>}
+                  label={
+                    <UiFieldLabel
+                      required
+                      tooltip="How long the loan runs. Repay in full before it ends to unlock your collateral; if you don't, the lender can claim it."
+                    >
+                      Term
+                    </UiFieldLabel>
+                  }
                   placeholder='Select one'
                   options={TERM_OPTIONS}
                   value={field.value}
@@ -502,6 +556,11 @@ export default function CreateBorrowOfferModal({
         </div>
 
         <LoanMetricsSummary apr={apr} ltv={ltv} />
+
+        <div className='border-warning bg-warning/15 text-muted flex items-center gap-3 rounded-xl border-2 p-3 text-sm font-medium'>
+          <TriangleExclamationIcon className='text-warning size-6 shrink-0' />
+          Your collateral will be locked until the offer is repaid or cancelled.
+        </div>
       </div>
     </UiModal>
   )

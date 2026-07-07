@@ -40,7 +40,7 @@ export default function BalanceCard({
         <Icon className='size-4' />
         {displayedSymbol}
       </span>
-      <h3 className='text-muted text-h4'>Complete Balance {displayedSymbol}</h3>
+      <h3 className='text-muted text-h4'>Available Amount</h3>
       <div className='flex flex-col gap-1'>
         <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
           <span

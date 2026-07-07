@@ -285,13 +285,15 @@ export default function OffersTable<T extends OfferShort>({
                       <span className={`${COLLATERAL_COLUMN_LAYOUT} tabular-nums`}>
                         <span className='inline-flex size-3.5 shrink-0 items-center justify-center'>
                           {warning && (
-                            <Tooltip>
+                            <Tooltip delay={0}>
                               <Tooltip.Trigger
                                 className={`inline-flex ${SEVERITY_STYLES[warning.severity].icon}`}
                               >
                                 <TriangleExclamationIcon className='size-3.5' />
                               </Tooltip.Trigger>
-                              <Tooltip.Content>{warning.message}</Tooltip.Content>
+                              <Tooltip.Content className='max-w-64 break-normal!'>
+                                {warning.message}
+                              </Tooltip.Content>
                             </Tooltip>
                           )}
                         </span>

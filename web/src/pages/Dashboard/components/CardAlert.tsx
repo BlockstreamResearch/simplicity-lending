@@ -1,3 +1,5 @@
+import CircleExclamationIcon from '@/components/icons/CircleExclamationIcon'
+import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
 import { UiButton } from '@/components/ui/UiButton'
 
 export default function CardAlert({
@@ -6,6 +8,7 @@ export default function CardAlert({
   description,
   actionLabel,
   isDisabled,
+  clampDescription = true,
   onAction,
 }: {
   variant: 'warning' | 'accent'
@@ -13,19 +16,26 @@ export default function CardAlert({
   description: string
   actionLabel: string
   isDisabled?: boolean
+  clampDescription?: boolean
   onAction?: () => void
 }) {
-  const titleColor = variant === 'warning' ? 'text-warning' : 'text-foreground'
+  const isWarning = variant === 'warning'
+  const Icon = isWarning ? CircleExclamationIcon : CircleInfoIcon
   return (
-    <div className='bg-surface shadow-surface flex items-center justify-between gap-4 rounded-lg p-4'>
-      <div>
-        <p className={`text-sm font-medium ${titleColor}`}>{title}</p>
-        <p className='text-muted mt-1 text-sm'>{description}</p>
+    <div className='bg-surface shadow-surface flex min-h-21 gap-2.5 rounded-xl px-4 pb-3'>
+      <Icon className={`mt-3 size-5 shrink-0 ${isWarning ? 'text-warning' : 'text-accent'}`} />
+      <div className='min-w-0 flex-1 pt-3'>
+        <p className={`text-sm font-medium ${isWarning ? 'text-warning' : 'text-foreground'}`}>
+          {title}
+        </p>
+        <p className={`text-muted text-sm ${clampDescription ? 'line-clamp-2' : ''}`}>
+          {description}
+        </p>
       </div>
       <UiButton
         size='sm'
-        variant='primary'
-        className='shrink-0'
+        variant='secondary'
+        className='shrink-0 self-center'
         onPress={onAction}
         isDisabled={isDisabled}
       >

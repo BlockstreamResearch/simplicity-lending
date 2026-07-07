@@ -7,6 +7,7 @@ import {
 
 import { STALE_TIME_MS } from '../staleTime'
 import {
+  fetchAllOfferPages,
   fetchBorrowerOffers,
   fetchBorrowerOverview,
   fetchFactoriesByScript,
@@ -25,6 +26,7 @@ import type {
   LenderOverview,
   OfferDetails,
   OfferListResponse,
+  OfferShort,
   OffersOverview,
 } from './schemas'
 
@@ -96,6 +98,25 @@ export function useBorrowerOffers(
   })
 }
 
+export function useAllBorrowerOffers(
+  scriptPubkeyHex: string,
+  params: ListOffersParams = {},
+  options: ExtraQueryOptions<OfferShort[]> = {},
+): UseQueryResult<OfferShort[]> {
+  return useQuery({
+    queryKey: borrowerQueryKeys.offers(scriptPubkeyHex, params),
+    queryFn: ({ signal }) =>
+      fetchAllOfferPages(
+        pageParams => fetchBorrowerOffers(scriptPubkeyHex, pageParams, { signal }),
+        params,
+      ),
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
+    refetchInterval: options.refetchInterval,
+    placeholderData: options.placeholderData,
+    enabled: !!scriptPubkeyHex,
+  })
+}
+
 export function useLenderOverview(
   scriptPubkeyHex: string,
   options: ExtraQueryOptions<LenderOverview> = {},
@@ -117,6 +138,25 @@ export function useLenderOffers(
   return useQuery({
     queryKey: lenderQueryKeys.offers(scriptPubkeyHex, params),
     queryFn: ({ signal }) => fetchLenderOffers(scriptPubkeyHex, params, { signal }),
+    staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
+    refetchInterval: options.refetchInterval,
+    placeholderData: options.placeholderData,
+    enabled: !!scriptPubkeyHex,
+  })
+}
+
+export function useAllLenderOffers(
+  scriptPubkeyHex: string,
+  params: ListOffersParams = {},
+  options: ExtraQueryOptions<OfferShort[]> = {},
+): UseQueryResult<OfferShort[]> {
+  return useQuery({
+    queryKey: lenderQueryKeys.offers(scriptPubkeyHex, params),
+    queryFn: ({ signal }) =>
+      fetchAllOfferPages(
+        pageParams => fetchLenderOffers(scriptPubkeyHex, pageParams, { signal }),
+        params,
+      ),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
     refetchInterval: options.refetchInterval,
     placeholderData: options.placeholderData,

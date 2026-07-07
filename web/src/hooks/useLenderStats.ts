@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 
-import { useLenderOffers, useLenderOverview } from '@/api/indexer/hooks'
-import type { OfferShort } from '@/api/indexer/schemas'
+import { useLenderOverview } from '@/api/indexer/hooks'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { findAssetAmount } from '@/utils/offers'
@@ -17,7 +16,6 @@ export interface UseLenderStatsResult {
   balance: bigint
   pendingBalance: bigint
   stats: LenderStats
-  repaidOffer: OfferShort | null
   isLoading: boolean
   error: Error | null
   refetch: () => void
@@ -36,17 +34,9 @@ export function useLenderStats({
     refetch: refetchOverview,
   } = useLenderOverview(script, { refetchInterval: pollIntervalMs })
 
-  const {
-    data: offersData,
-    isLoading: offersLoading,
-    error: offersError,
-    refetch: refetchOffers,
-  } = useLenderOffers(script, { status: 'repaid', limit: 1 }, { refetchInterval: pollIntervalMs })
-
   const refetch = useCallback(() => {
     refetchOverview()
-    refetchOffers()
-  }, [refetchOverview, refetchOffers])
+  }, [refetchOverview])
 
   const totalBalance = BigInt(balances[NETWORK_CONFIG.principalAsset.id] ?? 0)
   const balance = BigInt(confirmedBalances[NETWORK_CONFIG.principalAsset.id] ?? 0)
@@ -64,9 +54,8 @@ export function useLenderStats({
       activeLoans: overview?.active_loans ?? 0,
       repaidToClaim: overview?.to_be_claimed ?? 0,
     },
-    repaidOffer: offersData?.items[0] ?? null,
-    isLoading: isReady && (overviewLoading || offersLoading),
-    error: overviewError ?? offersError ?? null,
+    isLoading: isReady && overviewLoading,
+    error: overviewError ?? null,
     refetch,
   }
 }
