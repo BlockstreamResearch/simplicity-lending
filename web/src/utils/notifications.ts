@@ -10,7 +10,7 @@ type OfferActionKey = Exclude<OfferAction, 'accept' | 'none'>
 export interface OfferNotification {
   offer: OfferShort
   kind: OfferActionKey
-  variant: 'accent' | 'warning'
+  variant: 'accent' | 'warning' | 'danger'
   title: string
   description: string
   actionLabel: string
@@ -77,19 +77,30 @@ function shouldNotify(
     case 'repay': {
       if (currentBlockHeight === undefined) return false
       const termLeft = getOfferTermLeft(offer, currentBlockHeight)
-      return termLeft > 0 && termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS
+      return termLeft < REPAYMENT_DUE_THRESHOLD_BLOCKS
     }
   }
 }
 
-function toNotification(offer: OfferShort, action: OfferActionKey): OfferNotification {
+function toNotification(
+  offer: OfferShort,
+  action: OfferActionKey,
+  currentBlockHeight: number | undefined,
+): OfferNotification {
   const meta = NOTIFICATION_META[action]
+  const isOverdue =
+    action === 'repay' &&
+    currentBlockHeight !== undefined &&
+    currentBlockHeight > offer.loan_expiration_height
+
   return {
     offer,
     kind: action,
-    variant: meta.variant,
-    title: meta.title,
-    description: meta.describe(truncateAddress(offer.id)),
+    variant: isOverdue ? 'danger' : meta.variant,
+    title: isOverdue ? 'Repayment Overdue' : meta.title,
+    description: isOverdue
+      ? `Loan #${truncateAddress(offer.id)} has expired, but you can still repay and reclaim your collateral before the lender liquidates it.`
+      : meta.describe(truncateAddress(offer.id)),
     actionLabel: meta.actionLabel,
   }
 }
@@ -104,7 +115,7 @@ export function buildOfferNotifications(
     const action = resolveOfferAction(offer, scriptPubkey, currentBlockHeight ?? 0)
     if (action === 'accept' || action === 'none') continue
     if (shouldNotify(action, offer, currentBlockHeight)) {
-      list.push(toNotification(offer, action))
+      list.push(toNotification(offer, action, currentBlockHeight))
     }
   }
   return list.sort(
