@@ -11,7 +11,7 @@ export default function CardAlert({
   clampDescription = true,
   onAction,
 }: {
-  variant: 'warning' | 'accent'
+  variant: 'warning' | 'accent' | 'danger'
   title: string
   description: string
   actionLabel: string
@@ -20,12 +20,16 @@ export default function CardAlert({
   onAction?: () => void
 }) {
   const isWarning = variant === 'warning'
-  const Icon = isWarning ? CircleExclamationIcon : CircleInfoIcon
+  const isDanger = variant === 'danger'
+  const Icon = isWarning || isDanger ? CircleExclamationIcon : CircleInfoIcon
+  const severityClass = isDanger ? 'text-danger' : isWarning ? 'text-warning' : 'text-accent'
   return (
     <div className='bg-surface shadow-surface flex min-h-21 gap-2.5 rounded-xl px-4 pb-3'>
-      <Icon className={`mt-3 size-5 shrink-0 ${isWarning ? 'text-warning' : 'text-accent'}`} />
+      <Icon className={`mt-3 size-5 shrink-0 ${severityClass}`} />
       <div className='min-w-0 flex-1 pt-3'>
-        <p className={`text-sm font-medium ${isWarning ? 'text-warning' : 'text-foreground'}`}>
+        <p
+          className={`text-sm font-medium ${isDanger ? 'text-danger' : isWarning ? 'text-warning' : 'text-foreground'}`}
+        >
           {title}
         </p>
         <p className={`text-muted text-sm ${clampDescription ? 'line-clamp-2' : ''}`}>
