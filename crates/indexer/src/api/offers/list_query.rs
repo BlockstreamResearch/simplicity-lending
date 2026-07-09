@@ -59,6 +59,7 @@ pub async fn fetch_participant_offers_list(
         collateral_asset = ?query.collateral_asset,
         principal_asset = ?query.principal_asset,
         factory_id = ?query.factory_id,
+        exclude_participant = query.exclude_participant_for_sql().is_some(),
         sort_by = ?query.sort_by,
         sort_dir = ?query.sort_dir,
         participant_role = ?participant.map(|(role, _)| role),

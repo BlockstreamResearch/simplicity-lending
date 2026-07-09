@@ -368,6 +368,163 @@ async fn offers_expose_and_sort_by_updated_at_height() -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn seed_pending_offer_with_participant_script(
+    pool: &PgPool,
+    factory_id: Uuid,
+    txid_seed: i64,
+    created_at_height: i64,
+    participant_type: ParticipantType,
+    script_pubkey: Vec<u8>,
+) -> anyhow::Result<i64> {
+    let mut offer = offer_model(txid_seed, factory_id, created_at_height);
+    let offer_id = seed_offer_row(pool, &mut offer).await?;
+
+    let outpoint = outpoint_from_offer_id(txid_seed, 0);
+    seed_participant_utxo_row(
+        pool,
+        &unspent_participant(
+            offer_id,
+            participant_type,
+            outpoint,
+            script_pubkey,
+            created_at_height,
+        ),
+    )
+    .await?;
+
+    Ok(offer_id)
+}
+
+#[tokio::test]
+#[serial]
+async fn offers_exclude_participant_script_filters_own_pending_offers() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+
+    let factory_id = Uuid::new_v4();
+    seed_factory_row(
+        &pool,
+        &factory_model(factory_id, 1, unique_32_bytes_from_uuid(factory_id)),
+    )
+    .await?;
+
+    let offer_a = seed_pending_offer_with_participant_script(
+        &pool,
+        factory_id,
+        10,
+        100,
+        ParticipantType::Borrower,
+        vec![0x52, 0xac],
+    )
+    .await?;
+    let offer_b = seed_pending_offer_with_participant_script(
+        &pool,
+        factory_id,
+        20,
+        200,
+        ParticipantType::Borrower,
+        vec![0x53, 0xac],
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let all = get_json(&http, format!("{base_url}/offers?status=pending")).await?;
+    assert_eq!(all["total"], 2);
+    assert_ids_match_unordered(offer_list_items(&all), &[offer_a, offer_b]);
+
+    let exclude_a = get_json(
+        &http,
+        format!("{base_url}/offers?status=pending&exclude_participant_script=52ac"),
+    )
+    .await?;
+    assert_eq!(exclude_a["total"], 1);
+    assert_eq!(offer_list_items(&exclude_a)[0]["id"], offer_b.to_string());
+
+    let exclude_b = get_json(
+        &http,
+        format!("{base_url}/offers?status=pending&exclude_participant_script=53ac"),
+    )
+    .await?;
+    assert_eq!(exclude_b["total"], 1);
+    assert_eq!(offer_list_items(&exclude_b)[0]["id"], offer_a.to_string());
+
+    let invalid = http
+        .get(format!(
+            "{base_url}/offers?status=pending&exclude_participant_script=zzzz"
+        ))
+        .send()
+        .await?;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn offers_exclude_participant_script_honors_role() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+
+    let factory_id = Uuid::new_v4();
+    seed_factory_row(
+        &pool,
+        &factory_model(factory_id, 1, unique_32_bytes_from_uuid(factory_id)),
+    )
+    .await?;
+
+    let offer_a = seed_pending_offer_with_participant_script(
+        &pool,
+        factory_id,
+        10,
+        100,
+        ParticipantType::Borrower,
+        vec![0x52, 0xac],
+    )
+    .await?;
+    let offer_b = seed_pending_offer_with_participant_script(
+        &pool,
+        factory_id,
+        20,
+        200,
+        ParticipantType::Lender,
+        vec![0x52, 0xac],
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let exclude_borrower = get_json(
+        &http,
+        format!(
+            "{base_url}/offers?status=pending&exclude_participant_script=52ac&exclude_participant_role=borrower"
+        ),
+    )
+    .await?;
+    assert_eq!(exclude_borrower["total"], 1);
+    assert_eq!(
+        offer_list_items(&exclude_borrower)[0]["id"],
+        offer_b.to_string()
+    );
+
+    let exclude_lender = get_json(
+        &http,
+        format!(
+            "{base_url}/offers?status=pending&exclude_participant_script=52ac&exclude_participant_role=lender"
+        ),
+    )
+    .await?;
+    assert_eq!(exclude_lender["total"], 1);
+    assert_eq!(
+        offer_list_items(&exclude_lender)[0]["id"],
+        offer_a.to_string()
+    );
+
+    server_handle.abort();
+    Ok(())
+}
+
 #[tokio::test]
 #[serial]
 async fn get_offers_overview_returns_active_totals_only() -> anyhow::Result<()> {
