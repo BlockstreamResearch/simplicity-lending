@@ -12,7 +12,7 @@ import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
 
 export interface WalletContextValue extends WalletState {
   isReady: boolean
-  connect(variant: WalletType): Promise<void>
+  connect(variant: WalletType, seedMnemonic?: string): Promise<void>
   disconnect(): Promise<void>
   syncWallet(): Promise<void>
   /** Applies a just-broadcast tx to local wallet state instantly, without a network scan. */
@@ -35,6 +35,8 @@ export interface SavedSession {
   connectorId: string | null
   walletType: WalletType
   descriptorStr: string
+  /** Set only for seed-signer sessions — needed to silently reconnect the software signer on reload. */
+  seedMnemonic?: string
 }
 
 export type WalletSignerType = 'jade' | 'seed'

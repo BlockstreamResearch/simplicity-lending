@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 
-import CircleDashedIcon from '@/components/icons/CircleDashedIcon'
+import UserIcon from '@/components/icons/UserIcon'
 import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
@@ -68,8 +68,8 @@ export default function CreateBorrowerAccountModal({
       }}
       title={
         <span className='flex items-center gap-3'>
-          <span className='bg-default flex size-10 items-center justify-center rounded-full'>
-            <CircleDashedIcon className='size-5' />
+          <span className='bg-accent-soft text-accent-soft-foreground flex size-10 items-center justify-center rounded-full'>
+            <UserIcon className='size-5' />
           </span>
           Create Borrower Account
         </span>

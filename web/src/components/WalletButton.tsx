@@ -2,7 +2,9 @@ import { buttonVariants, Chip, Dropdown, Tabs } from '@heroui/react'
 import { useState } from 'react'
 
 import CopyButton from '@/components/CopyButton'
+import { ConnectWalletModal } from '@/components/modals/ConnectWalletModal'
 import { UiButton } from '@/components/ui/UiButton'
+import { env } from '@/constants/env'
 import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
@@ -21,6 +23,7 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
   const { network, isMainnet } = useLwk()
   const [disconnecting, setDisconnecting] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
   const { denomination, setDenomination } = useAssetDenomination()
 
   const handleDisconnect = async () => {
@@ -117,12 +120,19 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
   }
 
   return (
-    <UiButton
-      variant='primary'
-      isDisabled={isDisabled}
-      onPress={() => connect(DEFAULT_WALLET_TYPE)}
-    >
-      Connect Wallet
-    </UiButton>
+    <>
+      <UiButton
+        variant='primary'
+        isDisabled={isDisabled}
+        onPress={() =>
+          env.VITE_DEMO_MODE ? setIsConnectModalOpen(true) : connect(DEFAULT_WALLET_TYPE)
+        }
+      >
+        Connect Wallet
+      </UiButton>
+      {env.VITE_DEMO_MODE && (
+        <ConnectWalletModal isOpen={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
+      )}
+    </>
   )
 }

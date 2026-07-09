@@ -1,3 +1,4 @@
+import { Chip } from '@heroui/react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
@@ -45,6 +46,32 @@ import LoanMetricsSummary from './LoanMetricsSummary'
 
 const MINUTES_PER_DAY = 1440
 const TERM_OPTIONS = [
+  ...(env.VITE_DEMO_MODE
+    ? [
+        {
+          id: 3 / MINUTES_PER_DAY,
+          textValue: '3 minutes',
+          badge: (
+            <Chip color='warning' variant='soft' size='sm'>
+              Demo only
+            </Chip>
+          ),
+        },
+      ]
+    : []),
+  ...(env.VITE_DEMO_MODE
+    ? [
+        {
+          id: 5 / MINUTES_PER_DAY,
+          textValue: '5 minutes',
+          badge: (
+            <Chip color='warning' variant='soft' size='sm'>
+              Demo only
+            </Chip>
+          ),
+        },
+      ]
+    : []),
   ...(env.DEV ? [{ id: 10 / MINUTES_PER_DAY, textValue: '10 minutes' }] : []),
   { id: 7, textValue: '7 days' },
   { id: 14, textValue: '14 days' },

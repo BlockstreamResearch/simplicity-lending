@@ -65,6 +65,17 @@ export default function AppLayout() {
                 {label}
               </Link>
             ))}
+            {env.VITE_NETWORK === 'liquidtestnet' && (
+              <a
+                className='text-accent inline-flex items-center gap-1 hover:underline'
+                href='https://liquidtestnet.com/faucet'
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                Faucet
+                <ArrowSquareOutIcon className='size-3' />
+              </a>
+            )}
           </nav>
           <div>
             <p>Network: {env.VITE_NETWORK}</p>

@@ -1,6 +1,5 @@
 import type { ComponentType, SVGProps } from 'react'
 
-import CoinsIcon from '@/components/icons/CoinsIcon'
 import LbtcIcon from '@/components/icons/LbtcIcon'
 import UsdtIcon from '@/components/icons/UsdtIcon'
 import { env, type NetworkName } from '@/constants/env'
@@ -52,17 +51,19 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
       icon: LbtcIcon,
     },
     // TEST asset used as the principal on testnet (in place of USDT) — see the offer demos.
+    // Labeled TEST-USDT and given the USDT icon so it reads clearly as "this is what USDT
+    // looks like here" instead of an unfamiliar token.
     principalAsset: {
       id: '38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5',
       decimals: 3,
-      symbol: 'TEST',
-      icon: CoinsIcon,
+      symbol: 'TEST-USDT',
+      icon: UsdtIcon,
     },
     protocolFeeAsset: {
       id: '38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5',
       decimals: 3,
-      symbol: 'TEST',
-      icon: CoinsIcon,
+      symbol: 'TEST-USDT',
+      icon: UsdtIcon,
     },
   },
   regtest: {

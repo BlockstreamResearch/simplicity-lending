@@ -10,11 +10,16 @@ import {
 } from '@heroui/react'
 import type { ReactNode } from 'react'
 
+export interface UiSelectOption extends ListBoxItemRootProps {
+  /** Extra content rendered after the label, e.g. a "Demo only" chip. */
+  badge?: ReactNode
+}
+
 export interface UiSelectProps extends Omit<
-  SelectProps<ListBoxItemRootProps, 'single'>,
+  SelectProps<UiSelectOption, 'single'>,
   'children' | 'items'
 > {
-  options: ListBoxItemRootProps[]
+  options: UiSelectOption[]
   label?: ReactNode
   placeholder?: string
   description?: ReactNode
@@ -45,8 +50,13 @@ export function UiSelect({
       {invalid && errorMessage && <FieldError>{errorMessage}</FieldError>}
       <Select.Popover>
         <ListBox items={options}>
-          {(option: ListBoxItemRootProps) => (
-            <ListBoxItem {...option}>{option.textValue}</ListBoxItem>
+          {({ badge, ...option }: UiSelectOption) => (
+            <ListBoxItem {...option}>
+              <span className='flex items-center gap-2'>
+                {option.textValue}
+                {badge}
+              </span>
+            </ListBoxItem>
           )}
         </ListBox>
       </Select.Popover>
