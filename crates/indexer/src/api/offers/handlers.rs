@@ -45,8 +45,10 @@ pub async fn get_overview(
 #[tracing::instrument(name = "Getting offers list", skip(state, query))]
 pub async fn list_offers(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<OfferListQuery>,
+    Query(mut query): Query<OfferListQuery>,
 ) -> Result<Json<OfferListResponse>, ApiError> {
+    query.prepare_exclude_participant()?;
+
     let offers = super::db::fetch_list(&state.db, query).await?;
 
     Ok(Json(offers))
