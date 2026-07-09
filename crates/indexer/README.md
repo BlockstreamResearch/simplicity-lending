@@ -225,6 +225,7 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 - `principal_asset`: Hex identifier of the principal asset (same byte order as in API responses). Filters by `principal_asset_id` when set alone. When both `collateral_asset` and `principal_asset` are set, offers must match the asset pair (collateral **and** principal).
 - `exclude_participant_script`: Hex script pubkey. Excludes offers where this script is the latest participant for the given role (e.g. hide a user's own pending offers from the lender marketplace list).
 - `exclude_participant_role`: `borrower` or `lender` (default: `borrower`). Used together with `exclude_participant_script`; ignored when the script parameter is omitted.
+- `not_expired`: When `true`, only returns offers with `loan_expiration_height >= last_indexed_height` from the indexer sync state (i.e. not yet expired at the indexer's current chain height).
 - `limit`: Maximum number of records to return (default: 50, max: 100).
 - `offset`: Pagination offset (default: 0).
 - `sort_by`: `updated_at_height`, `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_height` (default: `updated_at_height`).
