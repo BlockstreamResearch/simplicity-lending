@@ -11,6 +11,7 @@ publish = false
 workspace = true
 
 [dependencies]
+lending-contracts = { path = "../contracts" }
 lending-indexer = { path = "../indexer" }
 smplx-std = { workspace = true }
 thiserror = { workspace = true }

@@ -1,8 +1,10 @@
 mod error;
+mod factory;
 pub mod indexer;
 mod session;
 
 pub use error::SessionError;
+pub use factory::CreateFactoryTx;
 pub use indexer::{
     IndexerClient, IndexerClientConfig, IndexerClientError, OfferListParams, OfferSortBy, SortDir,
 };
