@@ -1,6 +1,7 @@
 use sqlx::{Postgres, QueryBuilder};
 
 use crate::api::OfferListQuery;
+use crate::api::query::attach_exclude_participant_script_scope;
 use crate::api::utils::parse_filter_hex;
 use crate::models::OfferStatus;
 
@@ -51,5 +52,9 @@ pub fn attach_offer_list_filters<'a>(
                 "Failed to decode principal_asset hex filter"
             );
         }
+    }
+
+    if let Some((participant_type, script_pubkey)) = query.exclude_participant_for_sql() {
+        attach_exclude_participant_script_scope(query_builder, participant_type, script_pubkey);
     }
 }
