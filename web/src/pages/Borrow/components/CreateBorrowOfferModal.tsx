@@ -57,10 +57,6 @@ const TERM_OPTIONS = [
             </Chip>
           ),
         },
-      ]
-    : []),
-  ...(env.VITE_DEMO_MODE
-    ? [
         {
           id: 5 / MINUTES_PER_DAY,
           textValue: '5 minutes',
