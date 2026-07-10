@@ -1,6 +1,6 @@
 import { Skeleton } from '@heroui/react'
 import { keepPreviousData } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useBorrowerOffers } from '@/api/indexer/hooks'
@@ -10,6 +10,7 @@ import { OffersLoadError } from '@/components/OffersLoadError'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useNow } from '@/hooks/useNow'
 import { useOfferListControls } from '@/hooks/useOfferListControls'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -28,16 +29,11 @@ const STUCK_CHECK_INTERVAL_MS = 1_000
 export default function YourBorrows() {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false)
-  const [now, setNow] = useState(() => Date.now())
+  const now = useNow(STUCK_CHECK_INTERVAL_MS)
 
   const { scriptPubkey } = useWallet()
   const { hasAccount } = useBorrowerAccount()
   const { pendingTxs } = usePendingTransactions()
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), STUCK_CHECK_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [])
 
   const isCreatingBorrowerAccount =
     !hasAccount && !!getBorrowerAccountPendingTx(scriptPubkey ?? '', pendingTxs)

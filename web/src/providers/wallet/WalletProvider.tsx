@@ -150,17 +150,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const handleFocus = () => {
-      refreshBalances()
-    }
-
     document.addEventListener('visibilitychange', handleVisibility)
-    window.addEventListener('focus', handleFocus)
+    window.addEventListener('focus', refreshBalances)
 
     return () => {
       clearInterval(id)
       document.removeEventListener('visibilitychange', handleVisibility)
-      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('focus', refreshBalances)
     }
   }, [state.connectionStatus])
 
