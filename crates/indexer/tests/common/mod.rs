@@ -42,6 +42,24 @@ pub async fn test_pool() -> anyhow::Result<PgPool> {
     Ok(pool)
 }
 
+pub async fn seed_sync_state(pool: &PgPool, last_indexed_height: i64) -> anyhow::Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO sync_state (id, last_indexed_height, last_indexed_hash)
+        VALUES (1, $1, $2)
+        ON CONFLICT (id) DO UPDATE SET
+            last_indexed_height = EXCLUDED.last_indexed_height,
+            last_indexed_hash = EXCLUDED.last_indexed_hash
+        "#,
+    )
+    .bind(last_indexed_height)
+    .bind("test_hash")
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 /// Produces a deterministic 32-byte blob unique per integer seed. Handy for
 /// `created_at_txid` (which has a UNIQUE constraint) when seeding several
 /// offers in the same test.

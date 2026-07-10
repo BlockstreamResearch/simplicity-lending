@@ -15,8 +15,9 @@ use uuid::Uuid;
 
 use crate::common::{
     factory_model, offer_model, outpoint_from_offer_id, seed_factory_row, seed_offer_row,
-    seed_offer_utxo_row, seed_participant_utxo_row, spent_offer_utxo, spent_participant, test_pool,
-    unique_32_bytes_from_uuid, unspent_offer_utxo, unspent_participant,
+    seed_offer_utxo_row, seed_participant_utxo_row, seed_sync_state, spent_offer_utxo,
+    spent_participant, test_pool, unique_32_bytes_from_uuid, unspent_offer_utxo,
+    unspent_participant,
 };
 
 fn participant_script<'a>(item: &'a Value, role: &str) -> Option<&'a str> {
@@ -363,6 +364,71 @@ async fn offers_expose_and_sort_by_updated_at_height() -> anyhow::Result<()> {
         offer_list_items(&by_created)[0]["id"],
         pending_id.to_string()
     );
+
+    server_handle.abort();
+    Ok(())
+}
+
+async fn seed_pending_offer_with_expiration(
+    pool: &PgPool,
+    factory_id: Uuid,
+    txid_seed: i64,
+    created_at_height: i64,
+    loan_expiration_time: i32,
+) -> anyhow::Result<i64> {
+    let mut offer = offer_model(txid_seed, factory_id, created_at_height);
+    offer.loan_expiration_time = loan_expiration_time;
+
+    seed_offer_row(pool, &mut offer).await
+}
+
+#[tokio::test]
+#[serial]
+async fn offers_not_expired_filters_by_sync_state_height() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    seed_sync_state(&pool, 1_000).await?;
+
+    let factory_id = Uuid::new_v4();
+    seed_factory_row(
+        &pool,
+        &factory_model(factory_id, 1, unique_32_bytes_from_uuid(factory_id)),
+    )
+    .await?;
+
+    let expired_offer = seed_pending_offer_with_expiration(&pool, factory_id, 10, 100, 999).await?;
+    let at_expiration_offer =
+        seed_pending_offer_with_expiration(&pool, factory_id, 20, 100, 1_000).await?;
+    let future_offer =
+        seed_pending_offer_with_expiration(&pool, factory_id, 30, 100, 1_001).await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let all = get_json(&http, format!("{base_url}/offers?status=pending")).await?;
+    assert_eq!(all["total"], 3);
+    assert_ids_match_unordered(
+        offer_list_items(&all),
+        &[expired_offer, at_expiration_offer, future_offer],
+    );
+
+    let not_expired = get_json(
+        &http,
+        format!("{base_url}/offers?status=pending&not_expired=true"),
+    )
+    .await?;
+    assert_eq!(not_expired["total"], 2);
+    assert_ids_match_unordered(
+        offer_list_items(&not_expired),
+        &[at_expiration_offer, future_offer],
+    );
+
+    let invalid = http
+        .get(format!(
+            "{base_url}/offers?status=pending&not_expired=maybe"
+        ))
+        .send()
+        .await?;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
 
     server_handle.abort();
     Ok(())

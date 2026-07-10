@@ -70,6 +70,9 @@ pub struct OfferFilters {
     pub exclude_participant_role: Option<ParticipantType>,
     #[serde(skip, default)]
     parsed_exclude_participant: Option<(ParticipantType, Vec<u8>)>,
+    /// When true, only offers with `loan_expiration_time >= last_indexed_height` are returned.
+    #[serde(default, deserialize_with = "deserialize_query_bool")]
+    pub not_expired: bool,
     /// Maximum records to return (default 50, max 100).
     #[serde(default, deserialize_with = "deserialize_optional_u64")]
     pub limit: Option<u64>,
@@ -134,6 +137,21 @@ where
     value
         .map(|s| s.parse().map_err(D::Error::custom))
         .transpose()
+}
+
+fn deserialize_query_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    match value.as_deref() {
+        None => Ok(false),
+        Some("true") | Some("1") => Ok(true),
+        Some("false") | Some("0") | Some("") => Ok(false),
+        Some(other) => Err(D::Error::custom(format!(
+            "invalid boolean \"{other}\", expected true or false"
+        ))),
+    }
 }
 
 #[cfg(test)]
@@ -253,5 +271,24 @@ mod tests {
         let mut query: OfferListQuery =
             serde_urlencoded::from_str("exclude_participant_script=zzzz").expect("parse exclude");
         assert!(query.prepare_exclude_participant().is_err());
+    }
+
+    #[test]
+    fn offer_list_query_parses_not_expired_true() {
+        let parsed: OfferListQuery =
+            serde_urlencoded::from_str("not_expired=true").expect("parse not_expired");
+        assert!(parsed.not_expired);
+    }
+
+    #[test]
+    fn offer_list_query_defaults_not_expired_to_false() {
+        let parsed: OfferListQuery = serde_urlencoded::from_str("").expect("parse empty query");
+        assert!(!parsed.not_expired);
+    }
+
+    #[test]
+    fn offer_list_query_rejects_invalid_not_expired_value() {
+        let err = serde_urlencoded::from_str::<OfferListQuery>("not_expired=maybe");
+        assert!(err.is_err());
     }
 }
