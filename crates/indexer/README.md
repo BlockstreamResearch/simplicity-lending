@@ -190,16 +190,34 @@ cargo build -p lending-indexer --no-default-features
 
 `GET /events` opens a long-lived SSE stream (`text/event-stream`).
 
-After the indexer process successfully commits a block, it issues a Postgres `NOTIFY` on channel `lending_block_indexed`. The API process listens and fans the event out to all SSE subscribers.
+When the indexer commits on-chain updates, it issues Postgres `NOTIFY` on channel `lending_indexer_events` with a JSON `IndexerEvent` payload. The API process listens and fans events out to all SSE subscribers.
 
-Example event:
+Event types:
+
+| SSE `event:` | When emitted | Suggested client action |
+| :--- | :--- | :--- |
+| `block_indexed` | After each indexed block | Refetch lists using `not_expired`, overviews |
+| `factory_created` | New issuance factory indexed | Refetch `GET /factories/{id}` or `/factories/by-script` |
+| `offer_created` | New offer indexed (`pending`) | Refetch `GET /borrowers/offers` when `borrower_script_pubkey` matches; or `GET /offers/{id}` |
+| `offer_status_updated` | Offer status transition | Refetch offer details and role-specific lists |
+
+Examples:
 
 ```
 event: block_indexed
 data: {"type":"block_indexed","height":2500001}
+
+event: factory_created
+data: {"type":"factory_created","id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","height":2500001,"factory_auth_script_pubkey":"52ac…"}
+
+event: offer_created
+data: {"type":"offer_created","id":"42","issuance_factory_id":"…","height":2500001,"created_at_txid":"aabb…","borrower_script_pubkey":"52ac…"}
+
+event: offer_status_updated
+data: {"type":"offer_status_updated","id":"42","status":"active","height":2500005}
 ```
 
-Clients should treat this as a signal to refetch REST resources (offer lists, overviews, etc.). Keep-alive comments are sent periodically so proxies do not close idle connections. If an nginx (or similar) reverse proxy sits in front of the API, disable response buffering for this path.
+Clients should treat events as signals to refetch REST resources rather than as full state snapshots. Keep-alive comments are sent periodically so proxies do not close idle connections. If an nginx (or similar) reverse proxy sits in front of the API, disable response buffering for this path.
 
 API and indexer may run as separate processes (`RUN_MODE=api` / `RUN_MODE=indexer`); events cross the process boundary via Postgres LISTEN/NOTIFY.
 

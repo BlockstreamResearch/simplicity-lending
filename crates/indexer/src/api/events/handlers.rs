@@ -8,7 +8,6 @@ use futures_util::stream::{Stream, unfold};
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::api::AppState;
-use crate::events::IndexerEvent;
 
 #[utoipa::path(
     get,
@@ -18,7 +17,7 @@ use crate::events::IndexerEvent;
     responses(
         (
             status = 200,
-            description = "Server-Sent Events stream. Each `block_indexed` event carries JSON `{\"type\":\"block_indexed\",\"height\":N}`. Clients should refetch REST resources on receipt.",
+            description = "Server-Sent Events stream. Event types: `block_indexed`, `factory_created`, `offer_created`, `offer_status_updated`. Each `data` field carries a tagged JSON `IndexerEvent`. Clients should refetch REST resources on receipt.",
             content_type = "text/event-stream"
         ),
     )
@@ -33,11 +32,9 @@ pub async fn subscribe_events(
         loop {
             match receiver.recv().await {
                 Ok(event) => {
-                    let sse_event = match &event {
-                        IndexerEvent::BlockIndexed { .. } => {
-                            Event::default().event("block_indexed").json_data(&event)
-                        }
-                    };
+                    let sse_event = Event::default()
+                        .event(event.sse_event_name())
+                        .json_data(&event);
 
                     match sse_event {
                         Ok(sse_event) => return Some((Ok(sse_event), receiver)),

@@ -1,12 +1,13 @@
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, Transaction},
+    simplicityhl::elements::{AssetId, Transaction, hex::ToHex},
 };
 
 use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
 
 use crate::{
     db::DbTx,
+    events::{IndexerEvent, notify_indexer_event},
     indexer::{
         FactoriesTracker, FactoryAuthsTracker, insert_factory, scan_factory_creation_outputs,
     },
@@ -66,10 +67,10 @@ impl FactoryCreationsTracker {
         let factory_model =
             FactoryModel::new(&issuance_factory, factory_asset_id, block_height, txid);
 
-        if insert_factory(sql_tx, &factory_model).await?.is_none() {
+        let Some(factory_id) = insert_factory(sql_tx, &factory_model).await? else {
             tracing::debug!(%txid, "Factory already indexed, skipping");
             return Ok(());
-        }
+        };
 
         let identity = FactoryIdentity::from_factory_model(&factory_model);
         let outputs = scan_factory_creation_outputs(&identity, tx).ok_or_else(|| {
@@ -79,7 +80,7 @@ impl FactoryCreationsTracker {
         factory_auths
             .seed_creation_auth_utxo(
                 sql_tx,
-                factory_model.id,
+                factory_id,
                 txid,
                 outputs.auth_vout,
                 &outputs.auth_script_pubkey,
@@ -90,12 +91,22 @@ impl FactoryCreationsTracker {
         factories
             .seed_creation_program_utxo(
                 sql_tx,
-                factory_model.id,
+                factory_id,
                 txid,
                 outputs.program_vout,
                 block_height,
             )
             .await?;
+
+        notify_indexer_event(
+            sql_tx,
+            &IndexerEvent::FactoryCreated {
+                id: factory_id,
+                height: block_height,
+                factory_auth_script_pubkey: outputs.auth_script_pubkey.to_hex(),
+            },
+        )
+        .await?;
 
         Ok(())
     }

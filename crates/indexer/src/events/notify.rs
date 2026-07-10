@@ -1,21 +1,29 @@
 use crate::db::DbTx;
 
-use super::types::BLOCK_INDEXED_CHANNEL;
+use super::types::{INDEXER_EVENTS_CHANNEL, IndexerEvent};
 
-#[tracing::instrument(
-    name = "Notifying block indexed",
-    skip(sql_tx),
-    fields(height = %height)
-)]
-pub async fn notify_block_indexed(sql_tx: &mut DbTx<'_>, height: u64) -> Result<(), sqlx::Error> {
+#[tracing::instrument(name = "Notifying indexer event", skip(sql_tx, event))]
+pub async fn notify_indexer_event(
+    sql_tx: &mut DbTx<'_>,
+    event: &IndexerEvent,
+) -> Result<(), sqlx::Error> {
+    let payload = serde_json::to_string(event).map_err(|error| {
+        tracing::error!(?error, "Failed to serialize indexer event");
+        sqlx::Error::Encode(error.into())
+    })?;
+
     sqlx::query("SELECT pg_notify($1, $2)")
-        .bind(BLOCK_INDEXED_CHANNEL)
-        .bind(height.to_string())
+        .bind(INDEXER_EVENTS_CHANNEL)
+        .bind(payload)
         .execute(&mut **sql_tx)
         .await
-        .map_err(|e| {
-            tracing::error!(?e, height, "Failed to notify block indexed");
-            e
+        .map_err(|error| {
+            tracing::error!(
+                ?error,
+                event_type = event.sse_event_name(),
+                "Failed to pg_notify"
+            );
+            error
         })?;
 
     Ok(())

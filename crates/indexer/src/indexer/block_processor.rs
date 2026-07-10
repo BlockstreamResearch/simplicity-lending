@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     esplora_client::EsploraClient,
-    events::notify_block_indexed,
+    events::{IndexerEvent, notify_indexer_event},
     indexer::{db, trackers::TrackerRegistry},
 };
 
@@ -57,7 +57,13 @@ impl BlockProcessor {
 
             db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
 
-            notify_block_indexed(&mut sql_tx, block_height).await?;
+            notify_indexer_event(
+                &mut sql_tx,
+                &IndexerEvent::BlockIndexed {
+                    height: block_height,
+                },
+            )
+            .await?;
 
             sql_tx.commit().await?;
 

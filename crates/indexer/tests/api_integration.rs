@@ -3,7 +3,7 @@ mod common;
 use std::time::Duration;
 
 use lending_indexer::api::server::run_server;
-use lending_indexer::events::BLOCK_INDEXED_CHANNEL;
+use lending_indexer::events::{INDEXER_EVENTS_CHANNEL, IndexerEvent};
 use lending_indexer::models::{OfferStatus, ParticipantType, UtxoType};
 use reqwest::StatusCode;
 use serde_json::Value;
@@ -883,9 +883,10 @@ async fn events_sse_receives_block_indexed_after_notify() -> anyhow::Result<()> 
         "expected text/event-stream content type"
     );
 
+    let payload = serde_json::to_string(&IndexerEvent::BlockIndexed { height: 2_500_001 })?;
     sqlx::query("SELECT pg_notify($1, $2)")
-        .bind(BLOCK_INDEXED_CHANNEL)
-        .bind("2500001")
+        .bind(INDEXER_EVENTS_CHANNEL)
+        .bind(payload)
         .execute(&notify_pool)
         .await?;
 
