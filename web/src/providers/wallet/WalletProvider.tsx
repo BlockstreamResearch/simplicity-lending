@@ -145,13 +145,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const id = setInterval(refreshBalances, 60_000)
 
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') refreshBalances()
+      if (document.visibilityState === 'visible') {
+        refreshBalances()
+      }
     }
+
+    const handleFocus = () => {
+      refreshBalances()
+    }
+
     document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', handleFocus)
 
     return () => {
       clearInterval(id)
       document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', handleFocus)
     }
   }, [state.connectionStatus])
 
