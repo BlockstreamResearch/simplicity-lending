@@ -186,6 +186,23 @@ cargo build -p lending-indexer --no-default-features
 > [!TIP]
 > When running the API **directly** on port 8000, use paths without the `/api` prefix (e.g. `http://localhost:8000/offers`). The OpenAPI `servers` entry uses `/api` for deployments where nginx proxies `/api/*` to the backend. Swagger UI on a direct run still lists `/api/...` in "Try it out" unless you select or override the server URL.
 
+### Server-Sent Events
+
+`GET /events` opens a long-lived SSE stream (`text/event-stream`).
+
+After the indexer process successfully commits a block, it issues a Postgres `NOTIFY` on channel `lending_block_indexed`. The API process listens and fans the event out to all SSE subscribers.
+
+Example event:
+
+```
+event: block_indexed
+data: {"type":"block_indexed","height":2500001}
+```
+
+Clients should treat this as a signal to refetch REST resources (offer lists, overviews, etc.). Keep-alive comments are sent periodically so proxies do not close idle connections. If an nginx (or similar) reverse proxy sits in front of the API, disable response buffering for this path.
+
+API and indexer may run as separate processes (`RUN_MODE=api` / `RUN_MODE=indexer`); events cross the process boundary via Postgres LISTEN/NOTIFY.
+
 ### Identifiers
 
 - **Offer `id`**: internal auto-increment integer (`BIGINT`), serialized in JSON responses as a **decimal string** (e.g. `"1"`). Assigned by PostgreSQL on insert. Used in nested `offer_id` fields and `GET /offers/by-script` responses. Not present on-chain. The path parameter in `GET /offers/{id}` is a numeric ID (e.g. `/offers/42`).

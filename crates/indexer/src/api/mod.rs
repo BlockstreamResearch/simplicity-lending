@@ -2,6 +2,7 @@ mod borrowers;
 mod db;
 mod dto;
 mod error;
+mod events;
 mod factories;
 mod health;
 mod lenders;
