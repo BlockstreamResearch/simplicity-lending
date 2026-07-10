@@ -27,6 +27,7 @@ import {
   assertWalletUtxoAssetAndMinimumAmount,
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   requireWalletUtxo,
+  WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -242,6 +243,11 @@ export function useCreateOffer() {
         new OutPoint(params.issuanceFactoryOutpoint),
         ...params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)),
       ])
+    // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1).
+    txBuilder = txBuilder.setInputSequence(
+      new OutPoint(lenderNftIssuanceOutpointString),
+      WALLET_INPUT_RBF_SEQUENCE,
+    )
 
     const externalUtxos = [factoryAuthExternalUtxo, issuanceFactoryExternalUtxo]
     txBuilder = txBuilder.addExternalUtxos(externalUtxos)

@@ -21,7 +21,7 @@ import {
   requireTxOut,
   type UpdatedPset,
 } from '@/lwk/transaction'
-import { isPolicyAssetUtxo, requireWalletUtxo } from '@/lwk/utxo'
+import { isPolicyAssetUtxo, requireWalletUtxo, WALLET_INPUT_RBF_SEQUENCE } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
@@ -210,10 +210,14 @@ export function useAcceptOffer() {
     ]
     const pendingOfferVout = pendingOfferOutpoint.vout()
     const lenderNftVout = lenderNftOutpoint.vout()
+    const firstWalletOutpoint = walletInputOutpointStrings[0]
+    if (!firstWalletOutpoint) throw new Error('At least one wallet UTXO is required')
     let txBuilder = new TxBuilder(lwkNetwork)
       .feeRate(feeRate)
       .setWalletUtxos(walletInputOutpointStrings.map(outpoint => new OutPoint(outpoint)))
       .setInputOrder(inputOrderStrings.map(outpoint => new OutPoint(outpoint)))
+      // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1).
+      .setInputSequence(new OutPoint(firstWalletOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .addExternalUtxos([
         new ExternalUtxo(
           pendingOfferVout,

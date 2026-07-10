@@ -24,6 +24,7 @@ import {
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   isPolicyAssetUtxo,
   requireWalletUtxo,
+  WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -137,10 +138,15 @@ export function useLenderVaultClaim() {
       ...params.feeOutpoints,
     ]
 
+    const firstFeeOutpoint = params.feeOutpoints[0]
+    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
+
     const pset = new TxBuilder(lwkNetwork)
       .feeRate(feeRate)
       .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
       .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
+      // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1).
+      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .addExternalUtxos([
         new ExternalUtxo(
           lenderVaultOutpoint.vout(),

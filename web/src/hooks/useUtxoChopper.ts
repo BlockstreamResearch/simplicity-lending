@@ -3,7 +3,7 @@ import { Address, OutPoint, TxBuilder } from '@lilbonekit/lwk-web'
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'
 import { assertDistinctOutpoints } from '@/lwk/transaction'
-import { isPolicyAssetUtxo, requireWalletUtxo } from '@/lwk/utxo'
+import { isPolicyAssetUtxo, requireWalletUtxo, WALLET_INPUT_RBF_SEQUENCE } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -84,6 +84,7 @@ export function useUtxoChopper() {
       .feeRate(feeRate)
       .setWalletUtxos(walletInputOutpointStrings.map(o => new OutPoint(o)))
       .setInputOrder(walletInputOutpointStrings.map(o => new OutPoint(o)))
+      .setInputSequence(new OutPoint(params.fundingOutpoint), WALLET_INPUT_RBF_SEQUENCE)
 
     for (let index = 0; index < params.pieceCount; index += 1) {
       txBuilder = fundingIsLbtc

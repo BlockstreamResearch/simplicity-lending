@@ -3,8 +3,8 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 
 import ChevronLeftIcon from '@/components/icons/ChevronLeftIcon'
-import FileTextIcon from '@/components/icons/FileTextIcon'
-import LockIcon from '@/components/icons/LockIcon'
+import JadeIcon from '@/components/icons/JadeIcon'
+import SeedIcon from '@/components/icons/SeedIcon'
 import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import { MnemonicInput } from '@/components/MnemonicInput'
 import { UiButton } from '@/components/ui/UiButton'
@@ -24,21 +24,28 @@ function ConnectOptionCard({
   title,
   subtitle,
   badge,
+  disabled = false,
+  iconBadgeClassName,
   onPress,
 }: {
   icon: ReactNode
   title: string
   subtitle: string
   badge?: ReactNode
+  disabled?: boolean
+  iconBadgeClassName: string
   onPress: () => void
 }) {
   return (
     <button
       type='button'
+      disabled={disabled}
       onClick={onPress}
-      className='border-separator bg-surface-secondary hover:border-accent hover:bg-accent-soft/40 group flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition'
+      className='border-separator bg-surface-secondary hover:border-accent hover:bg-accent-soft/40 group flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition disabled:cursor-default disabled:opacity-60 disabled:hover:border-separator disabled:hover:bg-surface-secondary'
     >
-      <span className='bg-accent-soft text-accent-soft-foreground group-hover:bg-accent group-hover:text-accent-foreground flex size-11 shrink-0 items-center justify-center rounded-full transition'>
+      <span
+        className={`flex size-11 shrink-0 items-center justify-center rounded-full transition group-disabled:opacity-70 ${iconBadgeClassName}`}
+      >
         {icon}
       </span>
       <div className='min-w-0 flex-1'>
@@ -57,6 +64,7 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
   const [mode, setMode] = useState<'choose' | 'seed'>('choose')
   const [mnemonic, setMnemonic] = useState('')
   const [connecting, setConnecting] = useState(false)
+  const [jadeConnecting, setJadeConnecting] = useState(false)
   const [wasOpen, setWasOpen] = useState(isOpen)
 
   // Reset back to the picker each time the modal opens — derived during render (not an
@@ -77,9 +85,16 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
     }
   }, [isOpen, connectionStatus, onOpenChange])
 
-  const handleJadeConnect = () => {
+  const handleJadeConnect = async () => {
+    if (jadeConnecting) return
+
+    setJadeConnecting(true)
     onOpenChange(false)
-    void connect(DEFAULT_WALLET_TYPE)
+    try {
+      await connect(DEFAULT_WALLET_TYPE)
+    } finally {
+      setJadeConnecting(false)
+    }
   }
 
   const handleSeedConnect = async () => {
@@ -93,6 +108,7 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
 
   const wordCount = mnemonic.split(/\s+/).filter(Boolean).length
   const canConnect = wordCount === MNEMONIC_WORD_COUNT
+  const visibleError = isError ? error : null
 
   return (
     <UiModal
@@ -121,13 +137,16 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
       {mode === 'choose' ? (
         <div className='flex flex-col gap-3'>
           <ConnectOptionCard
-            icon={<LockIcon className='size-5' />}
+            icon={<JadeIcon className='size-6' />}
+            iconBadgeClassName='bg-accent'
             title='Jade (testnet)'
             subtitle='Sign with your Jade hardware wallet over USB'
-            onPress={handleJadeConnect}
+            disabled={jadeConnecting}
+            onPress={() => void handleJadeConnect()}
           />
           <ConnectOptionCard
-            icon={<FileTextIcon className='size-5' />}
+            icon={<SeedIcon className='size-5 text-white' />}
+            iconBadgeClassName='bg-accent'
             title='Seed phrase'
             subtitle='Paste or generate a 12-word phrase — no hardware needed'
             badge={
@@ -146,7 +165,7 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
             generated one.
           </div>
           <MnemonicInput onChange={setMnemonic} />
-          {isError && error && <p className='text-danger text-sm'>{error}</p>}
+          {visibleError && <p className='text-danger text-sm'>{visibleError}</p>}
           <UiButton
             variant='primary'
             fullWidth

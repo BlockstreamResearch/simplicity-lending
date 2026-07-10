@@ -26,6 +26,7 @@ import {
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   isPolicyAssetUtxo,
   requireWalletUtxo,
+  WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -143,6 +144,8 @@ export function useLiquidateOffer() {
 
     const currentDebt = getTotalAmountToRepay(offerParameters)
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
+    const firstFeeOutpoint = params.feeOutpoints[0]
+    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
 
     const pset = new TxBuilder(lwkNetwork)
       .feeRate(feeRate)
@@ -172,6 +175,9 @@ export function useLiquidateOffer() {
       .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
       .setFallbackLocktimeHeight(metadata.loanExpirationTime)
       .setInputSequence(new OutPoint(params.activeOfferOutpoint), MAX_SEQUENCE_NON_RBF)
+      // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1) —
+      // set on a fee UTXO, not the covenant input above, which must keep locktime enforced.
+      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .finish(wollet)
 
     return {

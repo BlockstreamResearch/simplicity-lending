@@ -6,7 +6,7 @@ import { fetchFeeEstimates } from './methods'
 // lwk_wollet::TxBuilder::fee_rate ("Multiply sats/vb value by 1000").
 const SAT_PER_VB_TO_SAT_PER_KVB = 1000
 
-const DEFAULT_TARGET_BLOCKS = 2
+const DEFAULT_TARGET_BLOCKS = 1
 
 export const FALLBACK_FEE_RATE_SAT_PER_KVB = 100
 
