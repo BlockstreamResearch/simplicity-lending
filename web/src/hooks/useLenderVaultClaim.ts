@@ -9,7 +9,7 @@ import {
   TxOutSecrets,
 } from '@lilbonekit/lwk-web'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -27,6 +27,7 @@ import {
   WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import {
   ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY,
@@ -35,6 +36,7 @@ import {
 } from '@/simplicity/asset-auth-vault/program'
 import { buildCovenantSpendInfo } from '@/simplicity/taproot'
 import { bytesToHex } from '@/utils/hex'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
@@ -61,6 +63,7 @@ export interface LenderVaultClaimSummary {
 export function useLenderVaultClaim() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const claimLenderVault = async (
     params: LenderVaultClaimParams,
@@ -90,7 +93,7 @@ export function useLenderVaultClaim() {
       fetchTransaction(lenderVaultOutpoint),
       fetchTransaction(lenderNftOutpoint),
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
-      fetchFeeRateSatPerKvb(),
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
 
     // The lender vault was created by the repay tx. Input 0 of that tx was the Borrower NFT
@@ -145,8 +148,6 @@ export function useLenderVaultClaim() {
       .feeRate(feeRate)
       .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
       .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
-      // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1).
-      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .addExternalUtxos([
         new ExternalUtxo(
           lenderVaultOutpoint.vout(),
@@ -165,6 +166,7 @@ export function useLenderVaultClaim() {
       ])
       .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
       .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
+      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .finish(wollet)
 
     return {

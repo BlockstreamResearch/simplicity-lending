@@ -11,18 +11,25 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
 import type { UpdatedPset } from '@/lwk/transaction'
-import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
+import {
+  isConfirmedWalletUtxo,
+  isPolicyAssetUtxo,
+  utxoToOutpointString,
+  WALLET_INPUT_RBF_SEQUENCE,
+} from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadIssuanceFactoryProgram } from '@/simplicity/issuance-factory/program'
 import { UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { formatFeeReserve } from '@/utils/format'
 import { bytesToHex } from '@/utils/hex'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { sha256 } from '@/utils/sha256'
 import { toUint8, toUint64 } from '@/utils/uint'
 
@@ -61,6 +68,7 @@ export interface BorrowerAccountCreationSummary {
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, scriptPubkey } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
   const queryClient = useQueryClient()
   const factoriesQuery = useFactories(scriptPubkey || '')
   const activeFactory = factoriesQuery.data?.[0] ?? null
@@ -100,7 +108,7 @@ export function useBorrowerAccount() {
     }
 
     const fundingOutpoint = utxoToOutpointString(feeUtxo)
-    const feeRate = await fetchFeeRateSatPerKvb()
+    const feeRate = await fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs))
     const receiveAddress = Address.parse(receiveAddressString, lwkNetwork).toUnconfidential()
     const issuanceFactoryProgram = loadIssuanceFactoryProgram({
       issuingUtxosCount: toUint8(ISSUING_UTXOS_COUNT, 'issuingUtxosCount'),
@@ -126,6 +134,7 @@ export function useBorrowerAccount() {
         null,
       )
       .addPostIssuanceScriptOutput(Script.newOpReturn(metadata), 0n, policyAsset)
+      .setInputSequence(feeUtxo.outpoint(), WALLET_INPUT_RBF_SEQUENCE)
       .finish(wollet)
 
     return {

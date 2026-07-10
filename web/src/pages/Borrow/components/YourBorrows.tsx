@@ -1,6 +1,6 @@
 import { Skeleton } from '@heroui/react'
 import { keepPreviousData } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useBorrowerOffers } from '@/api/indexer/hooks'
@@ -13,25 +13,38 @@ import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useOfferListControls } from '@/hooks/useOfferListControls'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { getBorrowerAccountPendingTx, getMempoolBlockingTx } from '@/utils/pendingTransactions'
+import {
+  getBorrowerAccountPendingTx,
+  getMempoolBlockingTx,
+  isBlockingTxStuck,
+} from '@/utils/pendingTransactions'
 
 import CreateBorrowerAccountModal from './CreateBorrowerAccountModal'
 import CreateBorrowOfferModal from './CreateBorrowOfferModal'
 
 const BORROW_PAGE_SIZE = 10
+const STUCK_CHECK_INTERVAL_MS = 1_000
 
 export default function YourBorrows() {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
 
   const { scriptPubkey } = useWallet()
   const { hasAccount } = useBorrowerAccount()
   const { pendingTxs } = usePendingTransactions()
 
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), STUCK_CHECK_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [])
+
   const isCreatingBorrowerAccount =
     !hasAccount && !!getBorrowerAccountPendingTx(scriptPubkey ?? '', pendingTxs)
 
-  const isBlockedByOtherTx = !isCreatingBorrowerAccount && Boolean(getMempoolBlockingTx(pendingTxs))
+  const blockingTx = isCreatingBorrowerAccount ? null : getMempoolBlockingTx(pendingTxs)
+  const isStuck = blockingTx !== null && isBlockingTxStuck(blockingTx, now)
+  const isBlockedByOtherTx = blockingTx !== null && !isStuck
   const isCreateOfferDisabled = isCreatingBorrowerAccount || isBlockedByOtherTx
 
   const { page, setPage, params, sort, setSort, statusFilter, setStatusFilter } =

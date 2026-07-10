@@ -9,7 +9,7 @@ import {
   TxOutSecrets,
 } from '@lilbonekit/lwk-web'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import {
   assertDistinctOutpoints,
@@ -23,6 +23,7 @@ import {
 } from '@/lwk/transaction'
 import { isPolicyAssetUtxo, requireWalletUtxo, WALLET_INPUT_RBF_SEQUENCE } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
@@ -41,6 +42,7 @@ import {
 } from '@/simplicity/script-auth/program'
 import { buildCovenantSpendInfo } from '@/simplicity/taproot'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
@@ -65,6 +67,7 @@ export interface AcceptOfferSummary {
 export function useAcceptOffer() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const acceptOffer = async (
     params: AcceptOfferParams,
@@ -107,7 +110,7 @@ export function useAcceptOffer() {
       fetchTransaction(lenderNftOutpoint),
       fetchTransaction(borrowerNftReferenceOutpoint),
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
-      fetchFeeRateSatPerKvb(),
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
     const pendingOfferTxOut = requireTxOut(
       pendingOfferTx,
@@ -216,8 +219,6 @@ export function useAcceptOffer() {
       .feeRate(feeRate)
       .setWalletUtxos(walletInputOutpointStrings.map(outpoint => new OutPoint(outpoint)))
       .setInputOrder(inputOrderStrings.map(outpoint => new OutPoint(outpoint)))
-      // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1).
-      .setInputSequence(new OutPoint(firstWalletOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .addExternalUtxos([
         new ExternalUtxo(
           pendingOfferVout,
@@ -254,6 +255,10 @@ export function useAcceptOffer() {
       )
     }
 
+    txBuilder = txBuilder.setInputSequence(
+      new OutPoint(firstWalletOutpoint),
+      WALLET_INPUT_RBF_SEQUENCE,
+    )
     const pset = txBuilder.finish(wollet)
     const unsignedTx = pset.extractTx()
     // TODO: Remove acceptance output layout debug logging.

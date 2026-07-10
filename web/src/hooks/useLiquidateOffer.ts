@@ -10,7 +10,7 @@ import {
   TxOutSecrets,
 } from '@lilbonekit/lwk-web'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import {
   assertDistinctOutpoints,
@@ -29,6 +29,7 @@ import {
   WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
 import {
@@ -40,6 +41,7 @@ import {
 } from '@/simplicity/lending/program'
 import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
 import { bytesToHex } from '@/utils/hex'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
@@ -63,6 +65,7 @@ export interface LiquidateOfferSummary {
 export function useLiquidateOffer() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const liquidateOffer = async (
     params: LiquidateOfferParams,
@@ -77,7 +80,7 @@ export function useLiquidateOffer() {
     const [receiveAddressString, wollet, feeRate] = await Promise.all([
       getReceiveAddress(),
       getWollet(),
-      fetchFeeRateSatPerKvb(),
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
     if (!receiveAddressString) throw new Error('Missing receive address')
     const collateralRecipient = Address.parse(receiveAddressString, lwkNetwork)

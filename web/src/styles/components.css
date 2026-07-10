@@ -49,6 +49,13 @@
   .pagination__summary {
     @apply gap-3;
   }
+
+  .button--warning-soft {
+    --button-bg: var(--warning-soft);
+    --button-bg-hover: var(--warning-soft-hover);
+    --button-bg-pressed: var(--warning-soft-hover);
+    --button-fg: var(--warning-soft-foreground);
+  }
 }
 
 /* Unlayered on purpose: HeroUI ships table styles in @layer components, so

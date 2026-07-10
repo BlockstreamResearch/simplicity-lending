@@ -11,11 +11,18 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import RepayOfferModal from '@/components/modals/RepayOfferModal'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
+import { UiButton } from '@/components/ui/UiButton'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
 import { resolveOfferAction } from '@/utils/offerActions'
-import { getMempoolBlockingTx, getOfferPendingTx } from '@/utils/pendingTransactions'
+import {
+  getMempoolBlockingTx,
+  getOfferPendingTx,
+  isBlockingTxStuck,
+} from '@/utils/pendingTransactions'
+
+const STUCK_CHECK_INTERVAL_MS = 1_000
 
 interface OfferActionModalProps {
   offer: OfferShort | null
@@ -45,12 +52,14 @@ export default function OfferActionModal({
   const [isProcessingAtOpen, setIsProcessingAtOpen] = useState(isProcessingNow)
   const [isBlockedByOtherTxAtOpen, setIsBlockedByOtherTxAtOpen] = useState(isBlockedByOtherTx)
   const [actionAtOpen, setActionAtOpen] = useState(liveAction)
+  const [hasConfirmedRetry, setHasConfirmedRetry] = useState(false)
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
     if (isOpen) {
       setIsProcessingAtOpen(isProcessingNow)
       setIsBlockedByOtherTxAtOpen(isBlockedByOtherTx)
       setActionAtOpen(liveAction)
+      setHasConfirmedRetry(false)
     }
   }
 
@@ -60,9 +69,23 @@ export default function OfferActionModal({
     }
   }, [isOpen, isProcessingAtOpen, isProcessingNow, onClose])
 
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), STUCK_CHECK_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  const blockingTxForStuckCheck = isBlockedByOtherTxAtOpen
+    ? getMempoolBlockingTx(pendingTxs)
+    : sameOfferPendingTx
+  const isStuck =
+    isProcessingAtOpen &&
+    blockingTxForStuckCheck !== null &&
+    isBlockingTxStuck(blockingTxForStuckCheck, now)
+
   if (!offer) return null
 
-  if (isProcessingAtOpen) {
+  if (isProcessingAtOpen && !(isStuck && hasConfirmedRetry)) {
     return (
       <OfferActionShell
         isOpen={isOpen}
@@ -71,9 +94,39 @@ export default function OfferActionModal({
         onClose={onClose}
       >
         {isBlockedByOtherTxAtOpen ? (
-          <div className='border-warning/30 bg-warning/10 text-warning mb-4 rounded-2xl border px-4 py-3 text-sm'>
-            You have another transaction that still needs at least 1 confirmation. Please wait
-            before starting a new one.
+          isStuck ? (
+            <div className='border-warning/30 bg-warning/10 text-warning mb-4 flex flex-col gap-3 rounded-2xl border px-4 py-3 text-sm'>
+              <p>
+                You have another transaction that hasn&apos;t confirmed yet. You don&apos;t need to
+                wait for it — you can go ahead with this one now.
+              </p>
+              <UiButton
+                variant='secondary'
+                className='button--warning-soft self-start'
+                onPress={() => setHasConfirmedRetry(true)}
+              >
+                Continue Anyway
+              </UiButton>
+            </div>
+          ) : (
+            <div className='border-warning/30 bg-warning/10 text-warning mb-4 rounded-2xl border px-4 py-3 text-sm'>
+              You have another transaction that still needs at least 1 confirmation. Please wait
+              before starting a new one.
+            </div>
+          )
+        ) : isStuck ? (
+          <div className='border-warning/30 bg-warning/10 text-warning mb-4 flex flex-col gap-3 rounded-2xl border px-4 py-3 text-sm'>
+            <p>
+              This transaction may be stuck — it&apos;s taking longer than usual to confirm. You can
+              keep waiting, or send it again.
+            </p>
+            <UiButton
+              variant='secondary'
+              className='button--warning-soft self-start'
+              onPress={() => setHasConfirmedRetry(true)}
+            >
+              Send Again
+            </UiButton>
           </div>
         ) : (
           <p className='text-muted mb-4 text-sm'>

@@ -14,7 +14,7 @@ import {
   XOnlyPublicKey,
 } from '@lilbonekit/lwk-web'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { fetchLatestBlockHeight } from '@/api/esplora/methods'
 import {
   assertExplicitAmount,
@@ -30,6 +30,7 @@ import {
   WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import {
   buildIssuanceFactoryWitness,
@@ -45,6 +46,7 @@ import {
 import { loadScriptAuthProgram } from '@/simplicity/script-auth/program'
 import { buildCovenantSpendInfo, UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint8, toUint16, toUint32, toUint64 } from '@/utils/uint'
 
 const ISSUING_UTXOS_COUNT = 2
@@ -78,6 +80,7 @@ export interface CreateOfferSummary {
 export function useCreateOffer() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const createOffer = async (
     params: CreateOfferParams,
@@ -126,7 +129,7 @@ export function useCreateOffer() {
         fetchTransaction(issuanceFactoryOutpoint),
         Promise.all(collateralOutpoints.map(outpoint => fetchTransaction(outpoint))),
         fetchLatestBlockHeight(),
-        fetchFeeRateSatPerKvb(),
+        fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
       ])
     const factoryAuthTxOut = requireTxOut(factoryAuthTx, factoryAuthOutpoint.vout(), 'FactoryAuth')
     const issuanceFactoryTxOut = requireTxOut(
@@ -243,11 +246,6 @@ export function useCreateOffer() {
         new OutPoint(params.issuanceFactoryOutpoint),
         ...params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)),
       ])
-    // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1).
-    txBuilder = txBuilder.setInputSequence(
-      new OutPoint(lenderNftIssuanceOutpointString),
-      WALLET_INPUT_RBF_SEQUENCE,
-    )
 
     const externalUtxos = [factoryAuthExternalUtxo, issuanceFactoryExternalUtxo]
     txBuilder = txBuilder.addExternalUtxos(externalUtxos)
@@ -292,6 +290,10 @@ export function useCreateOffer() {
       lendingScript,
       offerParameters.collateralAmount,
       AssetId.fromString(policyAssetString),
+    )
+    txBuilder = txBuilder.setInputSequence(
+      new OutPoint(lenderNftIssuanceOutpointString),
+      WALLET_INPUT_RBF_SEQUENCE,
     )
     const pset = txBuilder.finish(wollet)
 

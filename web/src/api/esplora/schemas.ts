@@ -76,6 +76,8 @@ export const esploraTxSchema = zod
     vout: zod.array(esploraVoutSchema),
     vin: zod.array(esploraVinSchema).optional(),
     status: txStatusSchema.optional(),
+    fee: zod.number().optional(),
+    weight: zod.number().optional(),
   })
   .passthrough()
 export type EsploraTx = zod.infer<typeof esploraTxSchema>
