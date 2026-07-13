@@ -11,11 +11,19 @@ import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import RepayOfferModal from '@/components/modals/RepayOfferModal'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
+import { useNow } from '@/hooks/useNow'
+import CardAlert from '@/pages/Dashboard/components/CardAlert'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
 import { resolveOfferAction } from '@/utils/offerActions'
-import { getMempoolBlockingTx, getOfferPendingTx } from '@/utils/pendingTransactions'
+import {
+  getMempoolBlockingTx,
+  getOfferPendingTx,
+  isBlockingTxStuck,
+} from '@/utils/pendingTransactions'
+
+const STUCK_CHECK_INTERVAL_MS = 1_000
 
 interface OfferActionModalProps {
   offer: OfferShort | null
@@ -45,12 +53,14 @@ export default function OfferActionModal({
   const [isProcessingAtOpen, setIsProcessingAtOpen] = useState(isProcessingNow)
   const [isBlockedByOtherTxAtOpen, setIsBlockedByOtherTxAtOpen] = useState(isBlockedByOtherTx)
   const [actionAtOpen, setActionAtOpen] = useState(liveAction)
+  const [hasConfirmedRetry, setHasConfirmedRetry] = useState(false)
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
     if (isOpen) {
       setIsProcessingAtOpen(isProcessingNow)
       setIsBlockedByOtherTxAtOpen(isBlockedByOtherTx)
       setActionAtOpen(liveAction)
+      setHasConfirmedRetry(false)
     }
   }
 
@@ -60,9 +70,19 @@ export default function OfferActionModal({
     }
   }, [isOpen, isProcessingAtOpen, isProcessingNow, onClose])
 
+  const now = useNow(STUCK_CHECK_INTERVAL_MS)
+
+  const blockingTxForStuckCheck = isBlockedByOtherTxAtOpen
+    ? getMempoolBlockingTx(pendingTxs)
+    : sameOfferPendingTx
+  const isStuck =
+    isProcessingAtOpen &&
+    blockingTxForStuckCheck !== null &&
+    isBlockingTxStuck(blockingTxForStuckCheck, now)
+
   if (!offer) return null
 
-  if (isProcessingAtOpen) {
+  if (isProcessingAtOpen && !(isStuck && hasConfirmedRetry)) {
     return (
       <OfferActionShell
         isOpen={isOpen}
@@ -70,16 +90,11 @@ export default function OfferActionModal({
         chip={<OfferStatusChip status={offer.status} isProcessing={!isBlockedByOtherTxAtOpen} />}
         onClose={onClose}
       >
-        {isBlockedByOtherTxAtOpen ? (
-          <div className='border-warning/30 bg-warning/10 text-warning mb-4 rounded-2xl border px-4 py-3 text-sm'>
-            You have another transaction that still needs at least 1 confirmation. Please wait
-            before starting a new one.
-          </div>
-        ) : (
-          <p className='text-muted mb-4 text-sm'>
-            Transaction is processing. Actions are temporarily disabled.
-          </p>
-        )}
+        <PendingActionBanner
+          isBlockedByOtherTx={isBlockedByOtherTxAtOpen}
+          isStuck={isStuck}
+          onRetry={() => setHasConfirmedRetry(true)}
+        />
         <OfferDetailsBody offer={offer} />
       </OfferActionShell>
     )
@@ -130,4 +145,49 @@ export default function OfferActionModal({
         </OfferActionShell>
       )
   }
+}
+
+function PendingActionBanner({
+  isBlockedByOtherTx,
+  isStuck,
+  onRetry,
+}: {
+  isBlockedByOtherTx: boolean
+  isStuck: boolean
+  onRetry: () => void
+}) {
+  if (isStuck) {
+    return (
+      <div className='mb-4'>
+        <CardAlert
+          variant='warning'
+          title={
+            isBlockedByOtherTx ? 'Another transaction is pending' : 'This transaction may be stuck'
+          }
+          description={
+            isBlockedByOtherTx
+              ? "It hasn't confirmed yet. You don't need to wait for it — you can go ahead with this one now."
+              : "It's taking longer than usual to confirm. You can keep waiting, or send it again."
+          }
+          actionLabel={isBlockedByOtherTx ? 'Continue Anyway' : 'Send Again'}
+          onAction={onRetry}
+        />
+      </div>
+    )
+  }
+
+  if (isBlockedByOtherTx) {
+    return (
+      <div className='border-warning/30 bg-warning/10 text-warning mb-4 rounded-2xl border px-4 py-3 text-sm'>
+        You have another transaction that still needs at least 1 confirmation. Please wait before
+        starting a new one.
+      </div>
+    )
+  }
+
+  return (
+    <p className='text-muted mb-4 text-sm'>
+      Transaction is processing. Actions are temporarily disabled.
+    </p>
+  )
 }

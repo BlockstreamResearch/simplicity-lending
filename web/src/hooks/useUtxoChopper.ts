@@ -1,11 +1,13 @@
 import { Address, OutPoint, TxBuilder } from '@lilbonekit/lwk-web'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'
 import { assertDistinctOutpoints } from '@/lwk/transaction'
-import { isPolicyAssetUtxo, requireWalletUtxo } from '@/lwk/utxo'
+import { isPolicyAssetUtxo, requireWalletUtxo, WALLET_INPUT_RBF_SEQUENCE } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 
 export interface ChopUtxoParams {
   fundingOutpoint: string
@@ -27,6 +29,7 @@ export interface ChopUtxoResult {
 export function useUtxoChopper() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const chopUtxo = async (params: ChopUtxoParams): Promise<ChopUtxoResult> => {
     if (params.pieceAmount <= 0n) throw new Error('Piece amount must be positive')
@@ -42,7 +45,7 @@ export function useUtxoChopper() {
     const [receiveAddressString, wollet, feeRate] = await Promise.all([
       getReceiveAddress(),
       getWollet(),
-      fetchFeeRateSatPerKvb(),
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
     const recipientAddressString = params.recipientAddress?.trim() || receiveAddressString
@@ -93,6 +96,10 @@ export function useUtxoChopper() {
 
     txBuilder = txBuilder.drainLbtcTo(lbtcChangeRecipient)
 
+    txBuilder = txBuilder.setInputSequence(
+      new OutPoint(params.fundingOutpoint),
+      WALLET_INPUT_RBF_SEQUENCE,
+    )
     const pset = txBuilder.finish(wollet)
     const finalizedTx = wollet.finalize(await signPset(pset)).extractTx()
     const txid = await broadcastTx(finalizedTx.toString())

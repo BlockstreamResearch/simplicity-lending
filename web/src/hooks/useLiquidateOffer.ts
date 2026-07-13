@@ -10,7 +10,7 @@ import {
   TxOutSecrets,
 } from '@lilbonekit/lwk-web'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import {
   assertDistinctOutpoints,
@@ -26,8 +26,10 @@ import {
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   isPolicyAssetUtxo,
   requireWalletUtxo,
+  WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
 import {
@@ -39,6 +41,7 @@ import {
 } from '@/simplicity/lending/program'
 import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
 import { bytesToHex } from '@/utils/hex'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
@@ -62,6 +65,7 @@ export interface LiquidateOfferSummary {
 export function useLiquidateOffer() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const liquidateOffer = async (
     params: LiquidateOfferParams,
@@ -76,7 +80,7 @@ export function useLiquidateOffer() {
     const [receiveAddressString, wollet, feeRate] = await Promise.all([
       getReceiveAddress(),
       getWollet(),
-      fetchFeeRateSatPerKvb(),
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
     if (!receiveAddressString) throw new Error('Missing receive address')
     const collateralRecipient = Address.parse(receiveAddressString, lwkNetwork)
@@ -143,6 +147,8 @@ export function useLiquidateOffer() {
 
     const currentDebt = getTotalAmountToRepay(offerParameters)
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
+    const firstFeeOutpoint = params.feeOutpoints[0]
+    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
 
     const pset = new TxBuilder(lwkNetwork)
       .feeRate(feeRate)
@@ -172,6 +178,9 @@ export function useLiquidateOffer() {
       .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
       .setFallbackLocktimeHeight(metadata.loanExpirationTime)
       .setInputSequence(new OutPoint(params.activeOfferOutpoint), MAX_SEQUENCE_NON_RBF)
+      // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1) —
+      // set on a fee UTXO, not the covenant input above, which must keep locktime enforced.
+      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .finish(wollet)
 
     return {

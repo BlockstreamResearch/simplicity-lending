@@ -120,7 +120,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (state.connectionStatus !== 'ready') return
 
-    const id = setInterval(() => {
+    const refreshBalances = () => {
       const session = sessionRef.current
       if (!session) return
       syncBalances(session.wollet, session.esploraClient)
@@ -140,27 +140,46 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           }))
         })
         .catch(console.warn)
-    }, 60_000)
+    }
 
-    return () => clearInterval(id)
+    const id = setInterval(refreshBalances, 60_000)
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshBalances()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', refreshBalances)
+
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', refreshBalances)
+    }
   }, [state.connectionStatus])
 
   const connect = useCallback(
-    async (variant: WalletType) => {
+    async (variant: WalletType, seedMnemonic?: string) => {
       if (sessionRef.current !== null || connectingRef.current) return
       connectingRef.current = true
       const attempt = ++connectionChangeCounterRef.current
 
-      const isJade = !env.VITE_DEBUG_MNEMONIC
+      // seedMnemonic is a runtime choice from the demo-mode seed connect form; falling back to
+      // VITE_DEBUG_MNEMONIC preserves the existing local-dev auto-connect behavior.
+      const mnemonic = seedMnemonic || env.VITE_DEBUG_MNEMONIC || null
+      const isJade = mnemonic === null
       setState(s => ({ ...s, syncing: true, error: null, isError: false }))
 
       let connector: WalletConnector | null = null
       try {
         const walletType: WalletType = isJade ? variant : DEFAULT_WALLET_TYPE
 
-        connector = isJade
-          ? new JadeConnector(lwkNetwork)
-          : new SeedConnector(lwkNetwork, env.VITE_DEBUG_MNEMONIC)
+        connector =
+          mnemonic === null
+            ? new JadeConnector(lwkNetwork)
+            : new SeedConnector(lwkNetwork, mnemonic)
 
         await connector.connect()
         // The native 'connect' event only fires for a device that was already paired and
@@ -203,6 +222,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           connectorId: connector.id,
           walletType,
           descriptorStr: descriptor.toString(),
+          seedMnemonic: mnemonic ?? undefined,
         }
         setSavedSession(saved)
 
@@ -255,7 +275,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const resumeSession = useCallback(async () => {
     if (!savedSession) return
-    await connect(savedSession.walletType)
+    await connect(savedSession.walletType, savedSession.seedMnemonic)
   }, [savedSession, connect])
 
   const autoResumedRef = useRef(false)

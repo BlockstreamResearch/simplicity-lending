@@ -11,6 +11,16 @@ export function getMempoolBlockingTx(pendingTxs: PendingTxRecord[]): PendingTxRe
   return pendingTxs.find(tx => tx.confirmationStatus === 'processing') ?? null
 }
 
+export function getProcessingTxids(pendingTxs: PendingTxRecord[]): string[] {
+  return pendingTxs.filter(tx => tx.confirmationStatus === 'processing').map(tx => tx.txid)
+}
+
+const STUCK_TX_RETRY_AFTER_MS = 3 * 60_000
+
+export function isBlockingTxStuck(record: PendingTxRecord, now: number): boolean {
+  return now - record.createdAt > STUCK_TX_RETRY_AFTER_MS
+}
+
 export function getBorrowerAccountPendingTx(
   walletScriptPubkey: string,
   pendingTxs: PendingTxRecord[],

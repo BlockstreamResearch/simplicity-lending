@@ -10,7 +10,7 @@ import {
   TxOutSecrets,
 } from '@lilbonekit/lwk-web'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { BPS_DIVISOR } from '@/constants/offers'
 import {
@@ -27,8 +27,10 @@ import {
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   isPolicyAssetUtxo,
   requireWalletUtxo,
+  WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { loadAssetAuthVaultProgram } from '@/simplicity/asset-auth-vault/program'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
@@ -42,6 +44,7 @@ import {
 import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
 import { buildCovenantSpendInfo } from '@/simplicity/taproot'
 import { bytesToHex } from '@/utils/hex'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
@@ -73,6 +76,7 @@ export interface RepayOfferSummary {
 export function useRepayOffer() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const repayOffer = async (params: RepayOfferParams): Promise<UpdatedPset<RepayOfferSummary>> => {
     const activeOfferOutpoint = new OutPoint(params.activeOfferOutpoint)
@@ -110,7 +114,7 @@ export function useRepayOffer() {
       fetchTransaction(pendingOfferOutpoint),
       Promise.all(principalOutpoints.map(o => fetchTransaction(o))),
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
-      fetchFeeRateSatPerKvb(),
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
     const activeOfferTxOut = requireTxOut(activeOfferTx, activeOfferOutpoint.vout(), 'Active offer')
     const borrowerNftTxOut = requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT')
@@ -205,6 +209,8 @@ export function useRepayOffer() {
       params.activeOfferOutpoint,
       ...walletInputOutpointStrings,
     ]
+    const firstWalletOutpoint = walletInputOutpointStrings[0]
+    if (!firstWalletOutpoint) throw new Error('At least one wallet UTXO is required')
 
     let txBuilder = new TxBuilder(lwkNetwork)
       .feeRate(feeRate)
@@ -247,6 +253,10 @@ export function useRepayOffer() {
       )
     }
 
+    txBuilder = txBuilder.setInputSequence(
+      new OutPoint(firstWalletOutpoint),
+      WALLET_INPUT_RBF_SEQUENCE,
+    )
     const pset = txBuilder.finish(wollet)
 
     return {

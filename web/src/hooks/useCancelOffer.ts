@@ -11,7 +11,7 @@ import {
   XOnlyPublicKey,
 } from '@lilbonekit/lwk-web'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import {
   assertDistinctOutpoints,
@@ -27,8 +27,10 @@ import {
   EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
   isPolicyAssetUtxo,
   requireWalletUtxo,
+  WALLET_INPUT_RBF_SEQUENCE,
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
+import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
 import {
@@ -45,6 +47,7 @@ import {
 } from '@/simplicity/script-auth/program'
 import { buildCovenantSpendInfo, UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
+import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
@@ -67,6 +70,7 @@ export interface CancelOfferSummary {
 export function useCancelOffer() {
   const { lwkNetwork } = useLwk()
   const { getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { pendingTxs } = usePendingTransactions()
 
   const cancelOffer = async (
     params: CancelOfferParams,
@@ -93,7 +97,7 @@ export function useCancelOffer() {
       fetchTransaction(lenderNftOutpoint),
       fetchTransaction(borrowerNftOutpoint),
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
-      fetchFeeRateSatPerKvb(),
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
     const pendingOfferTxOut = requireTxOut(
       pendingOfferTx,
@@ -166,6 +170,8 @@ export function useCancelOffer() {
     const pendingOfferVout = pendingOfferOutpoint.vout()
     const lenderNftVout = lenderNftOutpoint.vout()
     const borrowerNftVout = borrowerNftOutpoint.vout()
+    const firstFeeOutpoint = params.feeOutpoints[0]
+    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
     const pset = new TxBuilder(lwkNetwork)
       .feeRate(feeRate)
       .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
@@ -201,6 +207,7 @@ export function useCancelOffer() {
       .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
       .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
       .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
+      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .finish(wollet)
 
     return {

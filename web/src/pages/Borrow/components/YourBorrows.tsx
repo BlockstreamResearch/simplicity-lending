@@ -10,19 +10,26 @@ import { OffersLoadError } from '@/components/OffersLoadError'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useNow } from '@/hooks/useNow'
 import { useOfferListControls } from '@/hooks/useOfferListControls'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { getBorrowerAccountPendingTx, getMempoolBlockingTx } from '@/utils/pendingTransactions'
+import {
+  getBorrowerAccountPendingTx,
+  getMempoolBlockingTx,
+  isBlockingTxStuck,
+} from '@/utils/pendingTransactions'
 
 import CreateBorrowerAccountModal from './CreateBorrowerAccountModal'
 import CreateBorrowOfferModal from './CreateBorrowOfferModal'
 
 const BORROW_PAGE_SIZE = 10
+const STUCK_CHECK_INTERVAL_MS = 1_000
 
 export default function YourBorrows() {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false)
+  const now = useNow(STUCK_CHECK_INTERVAL_MS)
 
   const { scriptPubkey } = useWallet()
   const { hasAccount } = useBorrowerAccount()
@@ -31,7 +38,9 @@ export default function YourBorrows() {
   const isCreatingBorrowerAccount =
     !hasAccount && !!getBorrowerAccountPendingTx(scriptPubkey ?? '', pendingTxs)
 
-  const isBlockedByOtherTx = !isCreatingBorrowerAccount && Boolean(getMempoolBlockingTx(pendingTxs))
+  const blockingTx = isCreatingBorrowerAccount ? null : getMempoolBlockingTx(pendingTxs)
+  const isStuck = blockingTx !== null && isBlockingTxStuck(blockingTx, now)
+  const isBlockedByOtherTx = blockingTx !== null && !isStuck
   const isCreateOfferDisabled = isCreatingBorrowerAccount || isBlockedByOtherTx
 
   const { page, setPage, params, sort, setSort, statusFilter, setStatusFilter } =
