@@ -11,6 +11,7 @@ publish = false
 workspace = true
 
 [dependencies]
+lending-contracts = { path = "../contracts" }
 lending-indexer = { path = "../indexer" }
 smplx-std = { workspace = true }
 thiserror = { workspace = true }
@@ -21,5 +22,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
 anyhow = "1"
+serial_test = "3"
+sqlx = { version = "0.8.3", features = ["postgres", "runtime-tokio-rustls", "migrate"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6"

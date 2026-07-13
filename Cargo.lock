@@ -1825,11 +1825,14 @@ name = "lending-session"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "lending-contracts",
  "lending-indexer",
  "reqwest",
  "serde",
  "serde_json",
+ "serial_test",
  "smplx-std",
+ "sqlx",
  "thiserror",
  "tokio",
  "uuid",
