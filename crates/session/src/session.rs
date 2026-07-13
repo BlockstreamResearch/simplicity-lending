@@ -4,9 +4,9 @@ use simplex::signer::Signer;
 use crate::indexer::IndexerClient;
 
 pub struct Session {
-    pub(crate) provider: EsploraProvider,
-    pub(crate) signer: Signer,
-    pub(crate) indexer: IndexerClient,
+    provider: EsploraProvider,
+    signer: Signer,
+    indexer: IndexerClient,
 }
 
 impl Session {

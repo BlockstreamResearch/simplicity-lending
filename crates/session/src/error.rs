@@ -15,6 +15,9 @@ pub enum SessionError {
     #[error("No policy UTXOs available")]
     NoPolicyUtxos,
 
+    #[error("Factory not found")]
+    FactoryNotFound,
+
     #[error("Factory program UTXO not found")]
     FactoryProgramUtxoNotFound,
 
