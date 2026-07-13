@@ -1,18 +1,18 @@
 import type { SortDescriptor } from '@heroui/react/rac'
 import { useMemo, useState } from 'react'
 
-import type { ListOffersParams, SortField } from '@/api/indexer/methods'
+import type { ListOffersParams, OfferFilters, SortField } from '@/api/indexer/methods'
 import type { OfferStatus } from '@/api/indexer/schemas'
 
 interface UseOfferListControlsOptions {
   pageSize: number
-  status?: OfferStatus
+  filters?: OfferFilters
   defaultSort?: SortDescriptor
 }
 
 export function useOfferListControls({
   pageSize,
-  status,
+  filters,
   defaultSort,
 }: UseOfferListControlsOptions) {
   const [page, setPage] = useState(1)
@@ -31,13 +31,14 @@ export function useOfferListControls({
 
   const params: ListOffersParams = useMemo(
     () => ({
+      ...filters,
       limit: pageSize,
       offset: (page - 1) * pageSize,
       sortBy: sort?.column as SortField | undefined,
       sortDir: sort ? (sort.direction === 'ascending' ? 'asc' : 'desc') : undefined,
-      status: status ?? (statusFilter.length ? statusFilter : undefined),
+      status: filters?.status ?? (statusFilter.length ? statusFilter : undefined),
     }),
-    [pageSize, page, sort, statusFilter, status],
+    [pageSize, page, sort, statusFilter, filters],
   )
 
   return { page, setPage, sort, setSort, statusFilter, setStatusFilter, params }
