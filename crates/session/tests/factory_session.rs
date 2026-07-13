@@ -20,8 +20,10 @@ use sqlx::PgPool;
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
-const FACTORY_ISSUING_UTXOS_COUNT: u8 = 2;
-const FACTORY_REISSUANCE_FLAGS: u64 = 0;
+const FACTORY_ISSUING_UTXOS_COUNT_U8: u8 = 2;
+const FACTORY_ISSUANCE_UTXOS_COUNT_I16: i16 = 2;
+const FACTORY_REISSUANCE_FLAGS_U64: u64 = 0;
+const FACTORY_REISSUANCE_FLAGS_I64: i64 = 0;
 const RUN_IT_ENV: &str = "RUN_SESSION_INDEXER_IT";
 
 fn context_config_path() -> PathBuf {
@@ -108,8 +110,8 @@ async fn start_indexer_api(pool: PgPool) -> anyhow::Result<(String, tokio::task:
 
 fn issuance_factory_for_network(network: SimplicityNetwork) -> IssuanceFactory {
     IssuanceFactory::new(IssuanceFactoryParameters {
-        issuing_utxos_count: FACTORY_ISSUING_UTXOS_COUNT,
-        reissuance_flags: FACTORY_REISSUANCE_FLAGS,
+        issuing_utxos_count: FACTORY_ISSUING_UTXOS_COUNT_U8,
+        reissuance_flags: FACTORY_REISSUANCE_FLAGS_U64,
         network,
     })
 }
@@ -211,7 +213,7 @@ async fn create_and_broadcast_factory(
     ))
 }
 
-fn issue_only_program_factory_utxo(
+fn issue_program_only_factory_utxo(
     signer: &Signer,
     network: SimplicityNetwork,
 ) -> anyhow::Result<(AssetId, Txid, i32, Vec<u8>)> {
@@ -346,8 +348,8 @@ async fn create_factory_rejects_when_indexer_reports_existing_factory() -> anyho
         signer_script,
         existing_factory_asset,
         program_script,
-        FACTORY_ISSUING_UTXOS_COUNT as i16,
-        FACTORY_REISSUANCE_FLAGS as i64,
+        FACTORY_ISSUANCE_UTXOS_COUNT_I16,
+        FACTORY_REISSUANCE_FLAGS_I64,
         fake_txid,
         (fake_txid, 0),
         (fake_txid, 1),
@@ -386,8 +388,8 @@ async fn remove_factory_builds_and_broadcasts_transaction_when_factory_exists() 
         signer_script,
         factory_asset_id,
         program_script,
-        FACTORY_ISSUING_UTXOS_COUNT as i16,
-        FACTORY_REISSUANCE_FLAGS as i64,
+        FACTORY_ISSUANCE_UTXOS_COUNT_I16,
+        FACTORY_REISSUANCE_FLAGS_I64,
         creation_txid,
         (creation_txid, auth_vout),
         (creation_txid, program_vout),
@@ -429,8 +431,8 @@ async fn remove_factory_returns_factory_program_utxo_not_found_when_outpoint_mis
         signer_script,
         factory_asset_id,
         program_script,
-        FACTORY_ISSUING_UTXOS_COUNT as i16,
-        FACTORY_REISSUANCE_FLAGS as i64,
+        FACTORY_ISSUANCE_UTXOS_COUNT_I16,
+        FACTORY_REISSUANCE_FLAGS_I64,
         creation_txid,
         (creation_txid, auth_vout),
         (creation_txid, program_vout + 1000),
@@ -458,7 +460,7 @@ async fn remove_factory_returns_auth_nft_utxo_not_found_when_wallet_missing_auth
     let session = build_session(&context, &indexer_url);
 
     let (factory_asset_id, creation_txid, program_vout, program_script) =
-        issue_only_program_factory_utxo(session.signer(), session.network())?;
+        issue_program_only_factory_utxo(session.signer(), session.network())?;
     let signer_script = session.signer().get_address().script_pubkey().to_bytes();
 
     seed_active_factory(
@@ -466,8 +468,8 @@ async fn remove_factory_returns_auth_nft_utxo_not_found_when_wallet_missing_auth
         signer_script,
         factory_asset_id,
         program_script,
-        FACTORY_ISSUING_UTXOS_COUNT as i16,
-        FACTORY_REISSUANCE_FLAGS as i64,
+        FACTORY_ISSUANCE_UTXOS_COUNT_I16,
+        FACTORY_REISSUANCE_FLAGS_I64,
         creation_txid,
         (creation_txid, 0),
         (creation_txid, program_vout),
@@ -503,7 +505,7 @@ async fn remove_factory_returns_invalid_state_for_oversized_issuing_utxos_count(
         factory_asset_id,
         program_script,
         300,
-        FACTORY_REISSUANCE_FLAGS as i64,
+        FACTORY_REISSUANCE_FLAGS_I64,
         fake_txid,
         (fake_txid, 0),
         (fake_txid, 1),
