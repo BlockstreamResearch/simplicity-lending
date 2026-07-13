@@ -1,75 +1,17 @@
-use std::env;
+mod utils;
 
-use anyhow::Context;
-use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
 use lending_contracts::programs::lending::LendingOffer;
 use lending_contracts::programs::program::SimplexProgram;
-use lending_indexer::api::server::run_server;
-use lending_indexer::indexer::{insert_factory, insert_factory_auth_utxo, insert_factory_utxo};
-use lending_indexer::models::{FactoryAuthModel, FactoryModel, FactoryStatus, FactoryUtxoModel};
 use lending_session::{CreateOfferParams, IndexerClient, OfferParameters, Session, SessionError};
 use serial_test::serial;
-use simplex::provider::{EsploraProvider, SimplicityNetwork};
-use simplex::simplicityhl::elements::hashes::Hash;
-use simplex::simplicityhl::elements::{AssetId, Txid};
+use simplex::provider::EsploraProvider;
+use simplex::simplicityhl::elements::AssetId;
 use smplx_regtest::{Regtest, RegtestConfig};
-use sqlx::PgPool;
-use tokio::net::TcpListener;
-use uuid::Uuid;
 
-const FACTORY_ISSUING_UTXOS_COUNT: u8 = 2;
-const FACTORY_REISSUANCE_FLAGS: u64 = 0;
-const RUN_IT_ENV: &str = "RUN_SESSION_INDEXER_IT";
-
-async fn test_pool() -> anyhow::Result<Option<PgPool>> {
-    let Ok(database_url) = env::var("DATABASE_URL") else {
-        return Ok(None);
-    };
-
-    let pool = PgPool::connect(&database_url).await?;
-    sqlx::migrate!("../indexer/migrations").run(&pool).await?;
-    sqlx::query(
-        r#"
-        TRUNCATE TABLE
-            offer_participants,
-            offer_utxos,
-            offers,
-            factory_auths,
-            factory_utxos,
-            factories,
-            sync_state
-        RESTART IDENTITY CASCADE
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    Ok(Some(pool))
-}
-
-async fn setup_test_pool() -> anyhow::Result<Option<PgPool>> {
-    if !matches!(env::var(RUN_IT_ENV).as_deref(), Ok("1")) {
-        eprintln!("Skipping test: set RUN_SESSION_INDEXER_IT=1 to run DB-backed integration tests");
-        return Ok(None);
-    }
-
-    let Some(pool) = test_pool().await? else {
-        eprintln!("Skipping test: DATABASE_URL is not set");
-        return Ok(None);
-    };
-
-    Ok(Some(pool))
-}
-
-async fn start_indexer_api(pool: PgPool) -> anyhow::Result<(String, tokio::task::JoinHandle<()>)> {
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-    let handle = tokio::spawn(async move {
-        run_server(listener, pool).await;
-    });
-
-    Ok((format!("http://{addr}"), handle))
-}
+use utils::{
+    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, create_and_broadcast_factory,
+    seed_active_factory, setup_test_pool, start_indexer_api,
+};
 
 fn build_session(
     indexer_base_url: &str,
@@ -81,106 +23,6 @@ fn build_session(
     let indexer = IndexerClient::new(indexer_base_url)?;
 
     Ok((client, Session::new(provider, signer, indexer)))
-}
-
-fn issuance_factory_for_network(network: SimplicityNetwork) -> IssuanceFactory {
-    IssuanceFactory::new(IssuanceFactoryParameters {
-        issuing_utxos_count: FACTORY_ISSUING_UTXOS_COUNT,
-        reissuance_flags: FACTORY_REISSUANCE_FLAGS,
-        network,
-    })
-}
-
-async fn seed_active_factory(
-    pool: &PgPool,
-    session: &Session,
-    factory_asset_id: AssetId,
-    creation_txid: Txid,
-    auth_vout: i32,
-    program_vout: i32,
-    program_script_pubkey: Vec<u8>,
-) -> anyhow::Result<()> {
-    let factory_id = Uuid::new_v4();
-    let created_at_height = i64::from(session.signer().get_provider().fetch_tip_height()?);
-
-    let factory = FactoryModel {
-        id: factory_id,
-        factory_asset_id: factory_asset_id.into_inner().0.to_vec(),
-        program_script_pubkey,
-        issuing_utxos_count: i16::from(FACTORY_ISSUING_UTXOS_COUNT),
-        reissuance_flags: FACTORY_REISSUANCE_FLAGS as i64,
-        current_status: FactoryStatus::Active,
-        created_at_height,
-        created_at_txid: creation_txid.as_byte_array().to_vec(),
-    };
-    let auth_utxo = FactoryAuthModel {
-        factory_id,
-        script_pubkey: session.signer().get_address().script_pubkey().to_bytes(),
-        txid: creation_txid.as_byte_array().to_vec(),
-        vout: auth_vout,
-        created_at_height,
-        spent_txid: None,
-        spent_at_height: None,
-    };
-    let program_utxo = FactoryUtxoModel {
-        factory_id,
-        txid: creation_txid.as_byte_array().to_vec(),
-        vout: program_vout,
-        created_at_height,
-        spent_txid: None,
-        spent_at_height: None,
-    };
-
-    let mut sql_tx = pool.begin().await?;
-    insert_factory(&mut sql_tx, &factory).await?;
-    insert_factory_auth_utxo(&mut sql_tx, &auth_utxo).await?;
-    insert_factory_utxo(&mut sql_tx, &program_utxo).await?;
-    sql_tx.commit().await?;
-
-    Ok(())
-}
-
-async fn create_and_broadcast_factory(
-    session: &Session,
-) -> anyhow::Result<(AssetId, Txid, i32, i32, Vec<u8>)> {
-    let create = session.create_factory().await?;
-    let factory_asset_id = create.factory_asset_id;
-    let signer_script = session.signer().get_address().script_pubkey();
-    let factory_program_script =
-        issuance_factory_for_network(session.network()).get_script_pubkey();
-
-    let receipt = session.signer().broadcast(&create.transaction)?;
-    let creation_txid = receipt.txid();
-    receipt.wait()?;
-
-    let tx = session
-        .signer()
-        .get_provider()
-        .fetch_transaction(&creation_txid)?;
-    let auth_vout = tx
-        .output
-        .iter()
-        .position(|output| {
-            output.asset.explicit() == Some(factory_asset_id)
-                && output.script_pubkey == signer_script
-        })
-        .context("factory auth output is missing")? as i32;
-    let program_vout = tx
-        .output
-        .iter()
-        .position(|output| {
-            output.asset.explicit() == Some(factory_asset_id)
-                && output.script_pubkey == factory_program_script
-        })
-        .context("factory program output is missing")? as i32;
-
-    Ok((
-        factory_asset_id,
-        creation_txid,
-        auth_vout,
-        program_vout,
-        factory_program_script.to_bytes(),
-    ))
 }
 
 fn offer_params(session: &Session) -> anyhow::Result<CreateOfferParams> {
@@ -209,14 +51,17 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
 
     let (factory_asset_id, creation_txid, auth_vout, program_vout, program_script) =
         create_and_broadcast_factory(&session).await?;
+    let signer_script = session.signer().get_address().script_pubkey().to_bytes();
     seed_active_factory(
         &pool,
-        &session,
+        signer_script,
         factory_asset_id,
-        creation_txid,
-        auth_vout,
-        program_vout,
         program_script.clone(),
+        FACTORY_ISSUING_UTXOS_COUNT as i16,
+        FACTORY_REISSUANCE_FLAGS as i64,
+        creation_txid,
+        (creation_txid, auth_vout),
+        (creation_txid, program_vout),
     )
     .await?;
 
@@ -346,14 +191,17 @@ async fn create_offer_rejects_mismatched_indexed_program_outpoint() -> anyhow::R
 
     let (factory_asset_id, creation_txid, auth_vout, program_vout, program_script) =
         create_and_broadcast_factory(&session).await?;
+    let signer_script = session.signer().get_address().script_pubkey().to_bytes();
     seed_active_factory(
         &pool,
-        &session,
+        signer_script,
         factory_asset_id,
-        creation_txid,
-        auth_vout,
-        program_vout + 1_000,
         program_script,
+        FACTORY_ISSUING_UTXOS_COUNT as i16,
+        FACTORY_REISSUANCE_FLAGS as i64,
+        creation_txid,
+        (creation_txid, auth_vout),
+        (creation_txid, program_vout + 1_000),
     )
     .await?;
 
