@@ -1,6 +1,7 @@
-use lending_contracts::programs::issuance_factory::IssuanceFactoryError;
 use simplex::provider::ProviderError;
 use simplex::signer::SignerError;
+
+use lending_contracts::programs::issuance_factory::IssuanceFactoryError;
 
 use crate::indexer::IndexerClientError;
 

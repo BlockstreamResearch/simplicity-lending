@@ -91,6 +91,9 @@ impl Session {
         let program_outpoint = factory_info
             .program_utxo
             .ok_or(SessionError::FactoryProgramUtxoNotFound)?;
+        let auth_outpoint = factory_info
+            .auth_utxo
+            .ok_or(SessionError::AuthNftUtxoNotFound)?;
 
         let program_utxo = self
             .provider()
@@ -107,7 +110,10 @@ impl Session {
             .signer()
             .get_utxos_asset(factory_asset_id)?
             .into_iter()
-            .next()
+            .find(|utxo| {
+                utxo.outpoint.vout == auth_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == auth_outpoint.txid
+            })
             .ok_or(SessionError::AuthNftUtxoNotFound)?;
 
         let mut ft = FinalTransaction::new();
