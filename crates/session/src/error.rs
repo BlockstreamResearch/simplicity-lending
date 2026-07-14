@@ -28,6 +28,21 @@ pub enum SessionError {
     #[error("Collateral UTXO with sufficient amount not found in wallet")]
     CollateralUtxoNotFound,
 
+    #[error("Offer is not pending")]
+    OfferNotPending,
+
+    #[error("Pending offer UTXO not found")]
+    PendingOfferUtxoNotFound,
+
+    #[error("Lender NFT UTXO not found")]
+    LenderNftUtxoNotFound,
+
+    #[error("Borrower NFT UTXO not found in wallet")]
+    BorrowerNftUtxoNotFound,
+
+    #[error("Indexer returned invalid `{field}` value for offer: {value}")]
+    InvalidOfferData { field: &'static str, value: String },
+
     #[error(transparent)]
     Indexer(#[from] IndexerClientError),
 
