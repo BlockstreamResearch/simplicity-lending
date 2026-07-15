@@ -3,59 +3,20 @@ mod utils;
 use anyhow::Context;
 use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::utils::get_random_seed;
-use lending_session::{IndexerClient, Session, SessionError};
+use lending_session::SessionError;
 use serial_test::serial;
-use simplex::provider::{EsploraProvider, SimplicityNetwork};
+use simplex::provider::SimplicityNetwork;
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::hashes::Hash;
 use simplex::simplicityhl::elements::{AssetId, Txid};
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
-use sqlx::PgPool;
 
 use utils::{
-    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, create_and_broadcast_factory,
-    issuance_factory_for_network, seed_active_factory, setup_test_pool, start_indexer_api,
+    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, build_session,
+    build_session_with_signer, create_and_broadcast_factory, issuance_factory_for_network,
+    seed_active_factory, setup_it_context_pool, start_indexer_api,
 };
-
-fn context_config_path() -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("session-test-{}.toml", uuid::Uuid::new_v4()))
-}
-
-fn new_context() -> anyhow::Result<simplex::TestContext> {
-    let config_path = context_config_path();
-    simplex::TestConfig::default().to_file(&config_path)?;
-    let context = simplex::TestContext::new(config_path.clone())
-        .map_err(|e| anyhow::anyhow!("failed to initialize simplex test context: {e}"))?;
-    let _ = std::fs::remove_file(config_path);
-    Ok(context)
-}
-
-fn build_session(context: &simplex::TestContext, indexer_base_url: &str) -> Session {
-    let signer = context.create_signer(&context.get_config().mnemonic);
-    build_session_with_signer(context, signer, indexer_base_url)
-}
-
-fn build_session_with_signer(
-    context: &simplex::TestContext,
-    signer: Signer,
-    indexer_base_url: &str,
-) -> Session {
-    // Session.provider is used as a network source here; UTXO and broadcast operations
-    // in session methods are executed through signer/provider from the test context.
-    let provider = EsploraProvider::new("http://127.0.0.1:1".to_owned(), *context.get_network());
-    let indexer = IndexerClient::new(indexer_base_url).expect("build indexer client");
-    Session::new(provider, signer, indexer)
-}
-
-async fn setup_it_context_pool() -> anyhow::Result<Option<(simplex::TestContext, PgPool)>> {
-    let Some(pool) = setup_test_pool().await? else {
-        return Ok(None);
-    };
-
-    let context = new_context()?;
-    Ok(Some((context, pool)))
-}
 
 fn issue_only_program_factory_utxo(
     signer: &Signer,

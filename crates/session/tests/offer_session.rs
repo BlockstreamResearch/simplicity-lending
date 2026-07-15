@@ -2,28 +2,14 @@ mod utils;
 
 use lending_contracts::programs::lending::LendingOffer;
 use lending_contracts::programs::program::SimplexProgram;
-use lending_session::{CreateOfferParams, IndexerClient, OfferParameters, Session, SessionError};
+use lending_session::{CreateOfferParams, OfferParameters, Session, SessionError};
 use serial_test::serial;
-use simplex::provider::EsploraProvider;
 use simplex::simplicityhl::elements::AssetId;
-use smplx_regtest::{Regtest, RegtestConfig};
 
 use utils::{
-    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, create_and_broadcast_factory,
-    seed_active_factory, setup_test_pool, start_indexer_api,
+    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, build_session,
+    create_and_broadcast_factory, seed_active_factory, setup_it_context_pool, start_indexer_api,
 };
-
-fn build_session(
-    indexer_base_url: &str,
-) -> anyhow::Result<(smplx_regtest::client::RegtestClient, Session)> {
-    let config = RegtestConfig::default();
-    let (client, signer) = Regtest::from_config(&config)?;
-    let network = *signer.get_provider().get_network();
-    let provider = EsploraProvider::new(client.esplora_url(), network);
-    let indexer = IndexerClient::new(indexer_base_url)?;
-
-    Ok((client, Session::new(provider, signer, indexer)))
-}
 
 fn offer_params(session: &Session) -> anyhow::Result<CreateOfferParams> {
     let current_height = session.signer().get_provider().fetch_tip_height()?;
@@ -43,11 +29,11 @@ fn offer_params(session: &Session) -> anyhow::Result<CreateOfferParams> {
 #[tokio::test]
 #[serial]
 async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()> {
-    let Some(pool) = setup_test_pool().await? else {
+    let Some((context, pool)) = setup_it_context_pool().await? else {
         return Ok(());
     };
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
-    let (_regtest, session) = build_session(&indexer_url)?;
+    let session = build_session(&context, &indexer_url);
 
     let (factory_asset_id, creation_txid, auth_vout, program_vout, program_script) =
         create_and_broadcast_factory(&session).await?;
@@ -166,11 +152,11 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
 #[tokio::test]
 #[serial]
 async fn create_offer_returns_factory_not_found_when_indexer_is_empty() -> anyhow::Result<()> {
-    let Some(pool) = setup_test_pool().await? else {
+    let Some((context, pool)) = setup_it_context_pool().await? else {
         return Ok(());
     };
     let (indexer_url, server_handle) = start_indexer_api(pool).await?;
-    let (_regtest, session) = build_session(&indexer_url)?;
+    let session = build_session(&context, &indexer_url);
 
     let result = session.create_offer(offer_params(&session)?).await;
 
@@ -183,11 +169,11 @@ async fn create_offer_returns_factory_not_found_when_indexer_is_empty() -> anyho
 #[tokio::test]
 #[serial]
 async fn create_offer_rejects_mismatched_indexed_program_outpoint() -> anyhow::Result<()> {
-    let Some(pool) = setup_test_pool().await? else {
+    let Some((context, pool)) = setup_it_context_pool().await? else {
         return Ok(());
     };
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
-    let (_regtest, session) = build_session(&indexer_url)?;
+    let session = build_session(&context, &indexer_url);
 
     let (factory_asset_id, creation_txid, auth_vout, program_vout, program_script) =
         create_and_broadcast_factory(&session).await?;
