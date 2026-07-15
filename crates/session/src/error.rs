@@ -25,6 +25,9 @@ pub enum SessionError {
     #[error("Auth NFT UTXO not found in wallet")]
     AuthNftUtxoNotFound,
 
+    #[error("Collateral UTXO with sufficient amount not found in wallet")]
+    CollateralUtxoNotFound,
+
     #[error(transparent)]
     Indexer(#[from] IndexerClientError),
 

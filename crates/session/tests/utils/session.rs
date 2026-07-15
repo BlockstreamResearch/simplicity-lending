@@ -1,0 +1,45 @@
+use lending_session::{IndexerClient, Session};
+use simplex::provider::EsploraProvider;
+use simplex::signer::Signer;
+use sqlx::PgPool;
+
+use super::db::setup_test_pool;
+
+fn context_config_path() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("session-test-{}.toml", uuid::Uuid::new_v4()))
+}
+
+fn new_context() -> anyhow::Result<simplex::TestContext> {
+    let config_path = context_config_path();
+    simplex::TestConfig::default().to_file(&config_path)?;
+    let context = simplex::TestContext::new(config_path.clone())
+        .map_err(|e| anyhow::anyhow!("failed to initialize simplex test context: {e}"))?;
+    let _ = std::fs::remove_file(config_path);
+    Ok(context)
+}
+
+pub fn build_session(context: &simplex::TestContext, indexer_base_url: &str) -> Session {
+    let signer = context.create_signer(&context.get_config().mnemonic);
+    build_session_with_signer(context, signer, indexer_base_url)
+}
+
+pub fn build_session_with_signer(
+    context: &simplex::TestContext,
+    signer: Signer,
+    indexer_base_url: &str,
+) -> Session {
+    // Session.provider is used as a network source here; UTXO and broadcast operations
+    // in session methods are executed through signer/provider from the test context.
+    let provider = EsploraProvider::new("http://127.0.0.1:1".to_owned(), *context.get_network());
+    let indexer = IndexerClient::new(indexer_base_url).expect("build indexer client");
+    Session::new(provider, signer, indexer)
+}
+
+pub async fn setup_it_context_pool() -> anyhow::Result<Option<(simplex::TestContext, PgPool)>> {
+    let Some(pool) = setup_test_pool().await? else {
+        return Ok(None);
+    };
+
+    let context = new_context()?;
+    Ok(Some((context, pool)))
+}
