@@ -10,7 +10,7 @@ import {
 import type { ConnectionStatus, JadeVersionInfo, WalletType } from '../types'
 import { DEFAULT_WALLET_TYPE } from '../types'
 import { JadeBusyError, JadeNotConnectedError, mapJadeRpcError, toJadeConnectError } from './errors'
-import type { WalletConnector } from './types'
+import type { WalletConnector, WalletRequest } from './types'
 
 /**
  * Production hardware wallet connector for Jade.
@@ -80,21 +80,24 @@ export class JadeConnector implements WalletConnector {
     return info.state === 'READY' ? 'ready' : 'locked'
   }
 
-  async getDescriptor(variant: WalletType): Promise<WolletDescriptor> {
+  async getDescriptor(variant: WalletType): Promise<WalletRequest<WolletDescriptor>> {
     if (!this.jade) throw new JadeNotConnectedError()
     try {
       // wpkh = elwpkh native segwit; shWpkh = nested segwit (sh-wpkh).
-      return variant === DEFAULT_WALLET_TYPE ? await this.jade.wpkh() : await this.jade.shWpkh()
+      const descriptor =
+        variant === DEFAULT_WALLET_TYPE ? await this.jade.wpkh() : await this.jade.shWpkh()
+      return { requestId: null, result: Promise.resolve(descriptor) }
     } catch (error) {
       throw mapJadeRpcError(error)
     }
   }
 
-  async signPset(pset: Pset): Promise<Pset> {
+  async signPset(pset: Pset): Promise<WalletRequest<Pset>> {
     if (!this.jade) throw new JadeNotConnectedError()
     this.busy = true
     try {
-      return await this.jade.sign(pset)
+      const signed = await this.jade.sign(pset)
+      return { requestId: null, result: Promise.resolve(signed) }
     } catch (error) {
       throw mapJadeRpcError(error)
     } finally {

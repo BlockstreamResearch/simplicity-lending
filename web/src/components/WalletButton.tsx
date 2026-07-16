@@ -1,4 +1,4 @@
-import { buttonVariants, Chip, Dropdown, Tabs } from '@heroui/react'
+import { buttonVariants, Chip, Dropdown, Spinner, Tabs } from '@heroui/react'
 import { useState } from 'react'
 
 import CopyButton from '@/components/CopyButton'
@@ -18,8 +18,15 @@ const NETWORK_LABEL: Record<'liquidtestnet' | 'regtest', string> = {
 }
 
 export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
-  const { connectionStatus, syncing, receiveAddress, connect, disconnect, reconnecting } =
-    useWallet()
+  const {
+    connectionStatus,
+    syncing,
+    receiveAddress,
+    connect,
+    disconnect,
+    reconnecting,
+    pendingRequest,
+  } = useWallet()
   const { network, isMainnet } = useLwk()
   const [disconnecting, setDisconnecting] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -48,14 +55,6 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
     return (
       <UiButton variant='secondary' isDisabled>
         Enter PIN on device
-      </UiButton>
-    )
-  }
-
-  if (syncing && connectionStatus !== 'ready') {
-    return (
-      <UiButton variant='secondary' isDisabled isPending loadingText='Connecting…'>
-        Connecting…
       </UiButton>
     )
   }
@@ -121,15 +120,35 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
 
   return (
     <>
-      <UiButton
-        variant='primary'
-        isDisabled={isDisabled}
-        onPress={() =>
-          env.VITE_DEMO_MODE ? setIsConnectModalOpen(true) : connect(DEFAULT_WALLET_TYPE)
+      {(() => {
+        if (syncing && connectionStatus !== 'ready') {
+          if (pendingRequest) {
+            return (
+              <UiButton variant='secondary' onPress={() => setIsConnectModalOpen(true)}>
+                <Spinner size='sm' color='current' aria-hidden />
+                Connecting…
+              </UiButton>
+            )
+          }
+          return (
+            <UiButton variant='secondary' isDisabled isPending loadingText='Connecting…'>
+              Connecting…
+            </UiButton>
+          )
         }
-      >
-        Connect Wallet
-      </UiButton>
+
+        return (
+          <UiButton
+            variant='primary'
+            isDisabled={isDisabled}
+            onPress={() =>
+              env.VITE_DEMO_MODE ? setIsConnectModalOpen(true) : connect(DEFAULT_WALLET_TYPE)
+            }
+          >
+            Connect Wallet
+          </UiButton>
+        )
+      })()}
       {env.VITE_DEMO_MODE && (
         <ConnectWalletModal isOpen={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
       )}

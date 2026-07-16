@@ -112,3 +112,38 @@ export class SeedMissingError extends Error {
     this.name = 'SeedMissingError'
   }
 }
+
+export class SideSwapNotConnectedError extends Error {
+  constructor() {
+    super('SideSwap is not connected')
+    this.name = 'SideSwapNotConnectedError'
+  }
+}
+
+export class SideSwapSocketError extends Error {
+  constructor(cause?: unknown) {
+    super('Failed to connect to the SideSwap server', { cause })
+    this.name = 'SideSwapSocketError'
+  }
+}
+
+export class SideSwapRequestTimeoutError extends Error {
+  constructor() {
+    super('SideSwap request timed out')
+    this.name = 'SideSwapRequestTimeoutError'
+  }
+}
+
+export class SideSwapRequestCanceledError extends Error {
+  constructor() {
+    super('SideSwap request was canceled')
+    this.name = 'SideSwapRequestCanceledError'
+  }
+}
+
+export class SideSwapDescriptorUnavailableError extends Error {
+  constructor() {
+    super('SideSwap wallet did not provide a descriptor for this session')
+    this.name = 'SideSwapDescriptorUnavailableError'
+  }
+}

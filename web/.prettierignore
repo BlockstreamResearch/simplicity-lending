@@ -1,3 +1,4 @@
 dist
 node_modules
 *.min.js
+src/lib/wallet-core/connector/sideswap/rp_api

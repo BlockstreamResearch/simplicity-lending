@@ -8,7 +8,7 @@ import {
 
 import type { ConnectionStatus, WalletType } from '../types'
 import { SeedMissingError, SeedNotConnectedError } from './errors'
-import type { WalletConnector } from './types'
+import type { WalletConnector, WalletRequest } from './types'
 
 /**
  * Software signer connector backed by a BIP39 mnemonic.
@@ -52,17 +52,19 @@ export class SeedConnector implements WalletConnector {
   async getDescriptor(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _variant: WalletType,
-  ): Promise<WolletDescriptor> {
+  ): Promise<WalletRequest<WolletDescriptor>> {
     if (!this.signer) throw new SeedNotConnectedError()
     // Signer only exposes wpkhSlip77Descriptor (native segwit + SLIP77 blinding).
     // The variant param is accepted for interface compatibility but ignored here.
-    return this.signer.wpkhSlip77Descriptor()
+    const descriptor = this.signer.wpkhSlip77Descriptor()
+    return { requestId: null, result: Promise.resolve(descriptor) }
   }
 
-  async signPset(pset: Pset): Promise<Pset> {
+  async signPset(pset: Pset): Promise<WalletRequest<Pset>> {
     if (!this.signer) throw new SeedNotConnectedError()
     // Signer.sign() is synchronous — wrap for interface compatibility.
-    return this.signer.sign(pset)
+    const signed = this.signer.sign(pset)
+    return { requestId: null, result: Promise.resolve(signed) }
   }
 
   async getConnectionStatus(): Promise<ConnectionStatus> {
