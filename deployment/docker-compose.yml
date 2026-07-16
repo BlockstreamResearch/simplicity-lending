@@ -74,6 +74,7 @@ services:
         VITE_WATERFALLS_URL: ${VITE_WATERFALLS_URL}
         VITE_WATERFALLS_RECIPIENT: ${VITE_WATERFALLS_RECIPIENT}
         VITE_DEBUG_MNEMONIC: ${VITE_DEBUG_MNEMONIC:-}
+        VITE_SIDESWAP_WS_URL: ${VITE_SIDESWAP_WS_URL:-}
     restart: unless-stopped
     env_file:
       - ./configs/compose.env

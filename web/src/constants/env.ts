@@ -19,6 +19,8 @@ const envSchema = zod.object({
     .string()
     .default('age1xxzrgrfjm3yrwh3u6a7exgrldked0pdauvr3mx870wl6xzrwm5ps8s2h0p'),
   VITE_DEBUG_MNEMONIC: zod.string().optional().default(''),
+  /** Experimental SideSwap wallet connect (via their Liquid Connect server). Unset disables the connect option entirely. */
+  VITE_SIDESWAP_WS_URL: zod.string().optional(),
   /** Unlocks demo-only UI (seed-phrase wallet connect, short offer terms). Never enable in production. */
   VITE_DEMO_MODE: zod
     .string()
@@ -36,6 +38,7 @@ export const env = envSchema.parse({
   VITE_WATERFALLS_URL: import.meta.env.VITE_WATERFALLS_URL,
   VITE_WATERFALLS_RECIPIENT: import.meta.env.VITE_WATERFALLS_RECIPIENT,
   VITE_DEBUG_MNEMONIC: import.meta.env.VITE_DEBUG_MNEMONIC,
+  VITE_SIDESWAP_WS_URL: import.meta.env.VITE_SIDESWAP_WS_URL,
   VITE_DEMO_MODE: import.meta.env.VITE_DEMO_MODE,
 })
 

@@ -46,6 +46,7 @@ Set these values in `deployment/configs/compose.env`:
 - `VITE_WATERFALLS_URL`: Waterfalls server base URL for LWK sync
 - `VITE_WATERFALLS_RECIPIENT`: Waterfalls server recipient
 - `VITE_DEBUG_MNEMONIC`: optional development/testnet software signer mnemonic; leave unset in normal deployments
+- `VITE_SIDESWAP_WS_URL`: optional experimental SideSwap wallet connect server URL; leave unset to disable that connect option
 - `INDEXER_ESPLORA_BASE_URL`: the Esplora API used by the backend indexer
 - `WEB_ESPLORA_API_UPSTREAM`: the Esplora API proxied by nginx, for example `https://blockstream.info/liquidtestnet/api`
 - `INDEXER_POLL_INTERVAL_MS`: background polling interval

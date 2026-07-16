@@ -6,6 +6,7 @@ import { useSessionStorage } from '@/hooks/useSessionStorage'
 import { JadeBusyError, JadeDisconnectedError } from '@/lib/wallet-core/connector/errors'
 import { JadeConnector } from '@/lib/wallet-core/connector/jade'
 import { SeedConnector } from '@/lib/wallet-core/connector/seed'
+import { SideSwapConnector } from '@/lib/wallet-core/connector/sideswap'
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import { DEFAULT_WALLET_TYPE, type WalletType } from '@/lib/wallet-core/types'
 import {
@@ -19,6 +20,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { ErrorHandler } from '@/utils/errorHandler'
 
 import {
+  type ConnectOptions,
   INITIAL_WALLET_STATE,
   type SavedSession,
   type WalletSession,
@@ -33,6 +35,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const sessionRef = useRef<WalletSession | null>(null)
   const connectingRef = useRef(false)
+  // Cancels the in-flight SideSwap login/sign request, if any.
+  const pendingCancelRef = useRef<(() => Promise<void>) | null>(null)
   // Self-broadcast txs not yet confirmed per the indexer — reconciled after every full
   // scan so a stale scan can't silently undo their locally-applied effect.
   const pendingBroadcastsRef = useRef<Map<string, Transaction>>(new Map())
@@ -60,6 +64,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     },
     [setSavedSession],
   )
+
+  // Bump the counter (via disconnect) before the network-bound cancel RPC, so the in-flight
+  // connect()/signPset() sees it invalidated instead of racing this function's state reset.
+  const cancelPendingRequest = useCallback(async () => {
+    const cancel = pendingCancelRef.current
+    pendingCancelRef.current = null
+    await disconnect()
+    if (cancel) await cancel().catch(console.warn)
+  }, [disconnect])
 
   // Permanent Web Serial event listeners — detect USB plug/unplug.
   useEffect(() => {
@@ -161,30 +174,37 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [state.connectionStatus])
 
   const connect = useCallback(
-    async (variant: WalletType, seedMnemonic?: string) => {
+    async (variant: WalletType, options?: ConnectOptions) => {
       if (sessionRef.current !== null || connectingRef.current) return
       connectingRef.current = true
       const attempt = ++connectionChangeCounterRef.current
 
+      const useSideSwap = options?.sideswap === true
       // seedMnemonic is a runtime choice from the demo-mode seed connect form; falling back to
       // VITE_DEBUG_MNEMONIC preserves the existing local-dev auto-connect behavior.
-      const mnemonic = seedMnemonic || env.VITE_DEBUG_MNEMONIC || null
-      const isJade = mnemonic === null
+      const mnemonic = useSideSwap ? null : options?.seedMnemonic || env.VITE_DEBUG_MNEMONIC || null
+      const isJade = !useSideSwap && mnemonic === null
+      const signerType = useSideSwap ? 'sideswap' : isJade ? 'jade' : 'seed'
       setState(s => ({ ...s, syncing: true, error: null, isError: false }))
 
       let connector: WalletConnector | null = null
       try {
+        if (useSideSwap && !env.VITE_SIDESWAP_WS_URL) {
+          throw new Error('VITE_SIDESWAP_WS_URL is not set')
+        }
+
         const walletType: WalletType = isJade ? variant : DEFAULT_WALLET_TYPE
 
-        connector =
-          mnemonic === null
-            ? new JadeConnector(lwkNetwork)
-            : new SeedConnector(lwkNetwork, mnemonic)
+        connector = (() => {
+          if (useSideSwap) return new SideSwapConnector(env.VITE_SIDESWAP_WS_URL!)
+          if (mnemonic === null) return new JadeConnector(lwkNetwork)
+          return new SeedConnector(lwkNetwork, mnemonic)
+        })()
 
         await connector.connect()
         // The native 'connect' event only fires for a device that was already paired and
         // got replugged — a fresh pick-and-connect never triggers it.
-        setState(s => ({ ...s, usbDeviceDetected: isJade, signerType: isJade ? 'jade' : 'seed' }))
+        setState(s => ({ ...s, usbDeviceDetected: isJade, signerType }))
         const connectionStatus = await connector.getConnectionStatus()
 
         if (attempt !== connectionChangeCounterRef.current) {
@@ -202,7 +222,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           }))
         }
 
-        const descriptor = await connector.getDescriptor(walletType)
+        // resumeOnly: don't start a fresh login request nobody can see if there's no live session.
+        if (options?.resumeOnly && connectionStatus !== 'ready') {
+          connector.disconnect().catch(console.warn)
+          sessionRef.current = null
+          setState(s => ({ ...INITIAL_WALLET_STATE, usbDeviceDetected: s.usbDeviceDetected }))
+          return
+        }
+
+        const request = await connector.getDescriptor(walletType)
+        pendingCancelRef.current = request.cancel ?? null
+        if (request.id) {
+          const appLink = request.appLink ?? null
+          setState(s => ({
+            ...s,
+            pendingRequest: { kind: 'login', requestId: request.id!, appLink },
+          }))
+          if (appLink) window.location.href = appLink
+        }
+
+        const descriptor = await request.result
+        pendingCancelRef.current = null
+        setState(s => (s.pendingRequest ? { ...s, pendingRequest: null } : s))
 
         if (attempt !== connectionChangeCounterRef.current) {
           connector.disconnect().catch(console.warn)
@@ -223,6 +264,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           walletType,
           descriptorStr: descriptor.toString(),
           seedMnemonic: mnemonic ?? undefined,
+          sideswap: useSideSwap,
         }
         setSavedSession(saved)
 
@@ -275,7 +317,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const resumeSession = useCallback(async () => {
     if (!savedSession) return
-    await connect(savedSession.walletType, savedSession.seedMnemonic)
+    await connect(savedSession.walletType, {
+      seedMnemonic: savedSession.seedMnemonic,
+      sideswap: savedSession.sideswap,
+      resumeOnly: savedSession.sideswap,
+    })
   }, [savedSession, connect])
 
   const autoResumedRef = useRef(false)
@@ -340,7 +386,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const session = sessionRef.current
     if (!session) throw new Error('WalletProvider: not connected')
 
-    return session.connector.signPset(pset)
+    const request = await session.connector.signPset(pset)
+    if (!request.id) return request.result
+
+    pendingCancelRef.current = request.cancel ?? null
+    setState(s => ({
+      ...s,
+      pendingRequest: {
+        kind: 'sign',
+        requestId: request.id!,
+        appLink: request.appLink ?? null,
+      },
+    }))
+
+    try {
+      return await request.result
+    } finally {
+      pendingCancelRef.current = null
+      setState(s => (s.pendingRequest ? { ...s, pendingRequest: null } : s))
+    }
   }, [])
 
   // Returns the snapshot derived once on connect — single source of truth for the
@@ -386,6 +450,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         ...state,
         isReady: state.connectionStatus === 'ready',
         connect,
+        cancelPendingRequest,
         disconnect,
         syncWallet: sync,
         applyBroadcastTransaction: applyBroadcastTx,

@@ -2,13 +2,16 @@ import { Chip } from '@heroui/react'
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 
+import CopyButton from '@/components/CopyButton'
 import ChevronLeftIcon from '@/components/icons/ChevronLeftIcon'
 import JadeIcon from '@/components/icons/JadeIcon'
 import SeedIcon from '@/components/icons/SeedIcon'
+import SideSwapIcon from '@/components/icons/SideSwapIcon'
 import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import { MnemonicInput } from '@/components/MnemonicInput'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
+import { env } from '@/constants/env'
 import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -60,19 +63,20 @@ function ConnectOptionCard({
 }
 
 export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalProps) {
-  const { connect, connectionStatus, isError, error } = useWallet()
-  const [mode, setMode] = useState<'choose' | 'seed'>('choose')
+  const { connect, cancelPendingRequest, connectionStatus, pendingRequest, isError, error } =
+    useWallet()
+  const [mode, setMode] = useState<'choose' | 'seed' | 'sideswap'>('choose')
   const [mnemonic, setMnemonic] = useState('')
   const [connecting, setConnecting] = useState(false)
   const [jadeConnecting, setJadeConnecting] = useState(false)
+  const [sideswapConnecting, setSideswapConnecting] = useState(false)
   const [wasOpen, setWasOpen] = useState(isOpen)
 
-  // Reset back to the picker each time the modal opens — derived during render (not an
-  // effect) so it can't cause an extra flash of stale state before the reset commits.
+  // Reset to the picker on open, unless a SideSwap login is still pending.
   if (isOpen !== wasOpen) {
     setWasOpen(isOpen)
     if (isOpen) {
-      setMode('choose')
+      setMode(pendingRequest?.kind === 'login' ? 'sideswap' : 'choose')
       setMnemonic('')
     }
   }
@@ -100,15 +104,31 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
   const handleSeedConnect = async () => {
     setConnecting(true)
     try {
-      await connect(DEFAULT_WALLET_TYPE, mnemonic)
+      await connect(DEFAULT_WALLET_TYPE, { seedMnemonic: mnemonic })
     } finally {
       setConnecting(false)
     }
   }
 
+  const handleSideswapConnect = async () => {
+    setMode('sideswap')
+    setSideswapConnecting(true)
+    try {
+      await connect(DEFAULT_WALLET_TYPE, { sideswap: true })
+    } finally {
+      setSideswapConnecting(false)
+    }
+  }
+
+  const handleSideswapCancel = async () => {
+    await cancelPendingRequest()
+    setMode('choose')
+  }
+
   const wordCount = mnemonic.split(/\s+/).filter(Boolean).length
   const canConnect = wordCount === MNEMONIC_WORD_COUNT
   const visibleError = isError ? error : null
+  const loginLink = pendingRequest?.kind === 'login' ? pendingRequest.appLink : null
 
   return (
     <UiModal
@@ -128,6 +148,18 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
               <ChevronLeftIcon className='size-4' />
             </button>
             Connect with Seed Phrase
+          </span>
+        ) : mode === 'sideswap' ? (
+          <span className='flex items-center gap-1'>
+            <button
+              type='button'
+              onClick={() => void handleSideswapCancel()}
+              aria-label='Back'
+              className='text-muted hover:text-foreground -ml-1.5 flex size-7 items-center justify-center rounded-full transition disabled:opacity-50'
+            >
+              <ChevronLeftIcon className='size-4' />
+            </button>
+            Connect with SideSwap
           </span>
         ) : (
           'Connect Wallet'
@@ -156,8 +188,23 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
             }
             onPress={() => setMode('seed')}
           />
+          {env.VITE_SIDESWAP_WS_URL && (
+            <ConnectOptionCard
+              icon={<SideSwapIcon className='size-5' />}
+              iconBadgeClassName='bg-accent'
+              title='SideSwap'
+              subtitle='Connect SideSwap desktop app'
+              badge={
+                <Chip color='warning' variant='soft' size='sm'>
+                  Experimental
+                </Chip>
+              }
+              disabled={sideswapConnecting}
+              onPress={() => void handleSideswapConnect()}
+            />
+          )}
         </div>
-      ) : (
+      ) : mode === 'seed' ? (
         <div className='flex flex-col gap-4'>
           <div className='border-warning bg-warning/15 text-muted flex items-center gap-3 rounded-xl border-2 p-3 text-sm font-medium'>
             <TriangleExclamationIcon className='text-warning size-6 shrink-0' />
@@ -175,6 +222,31 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
             onPress={() => void handleSeedConnect()}
           >
             Connect
+          </UiButton>
+        </div>
+      ) : (
+        <div className='flex flex-col gap-4'>
+          <p className='text-muted text-sm'>
+            Open this link in a SideSwap testnet dev build to approve the connection.
+          </p>
+          {loginLink ? (
+            <div className='bg-surface-secondary flex items-center justify-between gap-2 rounded-lg p-2 px-3'>
+              <a
+                href={loginLink}
+                className='text-accent truncate font-mono text-xs underline-offset-2 hover:underline'
+              >
+                {loginLink}
+              </a>
+              <CopyButton value={loginLink} aria-label='Copy connect link' />
+            </div>
+          ) : (
+            <UiButton variant='secondary' fullWidth isDisabled isPending loadingText='Connecting…'>
+              Connecting…
+            </UiButton>
+          )}
+          {visibleError && <p className='text-danger text-sm'>{visibleError}</p>}
+          <UiButton variant='secondary' fullWidth onPress={() => void handleSideswapCancel()}>
+            Cancel
           </UiButton>
         </div>
       )}
