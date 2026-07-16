@@ -7,9 +7,9 @@ use serial_test::serial;
 use simplex::simplicityhl::elements::AssetId;
 
 use utils::{
-    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, OfferCreation, build_session,
+    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, build_session,
     create_and_broadcast_factory, create_and_broadcast_offer, seed_active_factory,
-    seed_pending_offer, setup_it_context_pool, start_indexer_api,
+    seed_pending_offer, setup_it_context_pool, setup_pending_offer, start_indexer_api,
 };
 
 fn offer_params(session: &Session) -> anyhow::Result<CreateOfferParams> {
@@ -27,32 +27,6 @@ fn offer_params(session: &Session) -> anyhow::Result<CreateOfferParams> {
     })
 }
 
-async fn setup_pending_offer(
-    session: &Session,
-    pool: &sqlx::PgPool,
-) -> anyhow::Result<OfferCreation> {
-    let (factory_asset_id, factory_creation_txid, auth_vout, program_vout, program_script) =
-        create_and_broadcast_factory(session).await?;
-    let signer_script = session.signer().get_address().script_pubkey().to_bytes();
-    let factory_id = seed_active_factory(
-        pool,
-        signer_script,
-        factory_asset_id,
-        program_script,
-        FACTORY_ISSUING_UTXOS_COUNT as i16,
-        FACTORY_REISSUANCE_FLAGS as i64,
-        factory_creation_txid,
-        (factory_creation_txid, auth_vout),
-        (factory_creation_txid, program_vout),
-    )
-    .await?;
-
-    let offer_creation = create_and_broadcast_offer(session, offer_params(session)?).await?;
-    seed_pending_offer(pool, factory_id, &offer_creation).await?;
-
-    Ok(offer_creation)
-}
-
 #[tokio::test]
 #[serial]
 async fn cancel_offer_burns_nfts_and_returns_collateral_to_borrower() -> anyhow::Result<()> {
@@ -62,7 +36,7 @@ async fn cancel_offer_burns_nfts_and_returns_collateral_to_borrower() -> anyhow:
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
-    let offer = setup_pending_offer(&session, &pool).await?;
+    let offer = setup_pending_offer(&session, &pool, offer_params(&session)?).await?;
 
     let cancel_tx = session.cancel_offer("1").await?;
 
@@ -127,7 +101,7 @@ async fn cancel_offer_returns_offer_not_pending_for_active_offer() -> anyhow::Re
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
-    setup_pending_offer(&session, &pool).await?;
+    setup_pending_offer(&session, &pool, offer_params(&session)?).await?;
 
     let mut sql_tx = pool.begin().await?;
     update_offer_status(&mut sql_tx, 1, OfferStatus::Active, 100).await?;

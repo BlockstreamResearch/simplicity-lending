@@ -1,5 +1,5 @@
 use lending_session::{IndexerClient, Session};
-use simplex::provider::EsploraProvider;
+use simplex::provider::{EsploraProvider, ProviderTrait, SimplexProvider};
 use simplex::signer::Signer;
 use sqlx::PgPool;
 
@@ -18,6 +18,12 @@ fn new_context() -> anyhow::Result<simplex::TestContext> {
     Ok(context)
 }
 
+fn esplora_url_from_signer(signer: &Signer) -> String {
+    let provider = signer.get_provider();
+    let simplex = unsafe { &*(provider as *const dyn ProviderTrait as *const SimplexProvider) };
+    simplex.esplora.esplora_url.clone()
+}
+
 pub fn build_session(context: &simplex::TestContext, indexer_base_url: &str) -> Session {
     let signer = context.create_signer(&context.get_config().mnemonic);
     build_session_with_signer(context, signer, indexer_base_url)
@@ -28,9 +34,7 @@ pub fn build_session_with_signer(
     signer: Signer,
     indexer_base_url: &str,
 ) -> Session {
-    // Session.provider is used as a network source here; UTXO and broadcast operations
-    // in session methods are executed through signer/provider from the test context.
-    let provider = EsploraProvider::new("http://127.0.0.1:1".to_owned(), *context.get_network());
+    let provider = EsploraProvider::new(esplora_url_from_signer(&signer), *context.get_network());
     let indexer = IndexerClient::new(indexer_base_url).expect("build indexer client");
     Session::new(provider, signer, indexer)
 }
