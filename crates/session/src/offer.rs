@@ -55,11 +55,11 @@ fn parse_interest_rate(value: u32) -> Result<u16, SessionError> {
     })
 }
 
-fn pending_offer_from_indexer(
+fn lending_offer_parameters_from_indexer(
     info: &OfferListItemFull,
     network: SimplicityNetwork,
-) -> Result<LendingOffer, SessionError> {
-    let parameters = LendingOfferParameters {
+) -> Result<LendingOfferParameters, SessionError> {
+    Ok(LendingOfferParameters {
         collateral_asset_id: parse_asset_id("collateral_asset", &info.base.collateral_asset)?,
         principal_asset_id: parse_asset_id("principal_asset", &info.base.principal_asset)?,
         borrower_nft_asset_id: parse_asset_id("borrower_nft_asset", &info.borrower_nft_asset)?,
@@ -75,9 +75,26 @@ fn pending_offer_from_indexer(
             principal_interest_rate: parse_interest_rate(info.base.interest_rate)?,
         },
         network,
-    };
+    })
+}
+
+fn pending_offer_from_indexer(
+    info: &OfferListItemFull,
+    network: SimplicityNetwork,
+) -> Result<LendingOffer, SessionError> {
+    let parameters = lending_offer_parameters_from_indexer(info, network)?;
 
     Ok(LendingOffer::new_pending(parameters))
+}
+
+fn active_offer_from_indexer(
+    info: &OfferListItemFull,
+    network: SimplicityNetwork,
+) -> Result<LendingOffer, SessionError> {
+    let parameters = lending_offer_parameters_from_indexer(info, network)?;
+    let current_debt = parameters.offer_parameters.get_total_amount_to_repay();
+
+    Ok(LendingOffer::new_active(parameters, current_debt))
 }
 
 impl Session {
@@ -366,5 +383,70 @@ impl Session {
             transaction,
             active_offer: offer,
         })
+    }
+
+    pub async fn liquidate_offer(&self, offer_id: &str) -> Result<FinalTransaction, SessionError> {
+        let offer_details = self.indexer().get_offer(offer_id).await?;
+        if offer_details.info.base.status != OfferStatus::Active {
+            return Err(SessionError::OfferNotActive);
+        }
+
+        let active_offer_outpoint = offer_details
+            .utxos
+            .iter()
+            .find(|utxo| utxo.utxo_type == UtxoType::ActiveOffer)
+            .ok_or(SessionError::ActiveOfferUtxoNotFound)?;
+        let lender_nft_outpoint = offer_details
+            .participants
+            .iter()
+            .find(|participant| {
+                participant.participant_type == ParticipantType::Lender
+                    && participant.spent_txid.is_none()
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let active_offer = active_offer_from_indexer(&offer_details.info, self.network())?;
+        let parameters = *active_offer.get_parameters();
+
+        if self.provider().fetch_tip_height()? < parameters.offer_parameters.loan_expiration_time {
+            return Err(SessionError::LoanNotExpired);
+        }
+
+        let active_offer_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&active_offer.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == active_offer_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == active_offer_outpoint.txid
+            })
+            .ok_or(SessionError::ActiveOfferUtxoNotFound)?;
+
+        let lender_nft_utxo = self
+            .signer()
+            .get_utxos_asset(parameters.lender_nft_asset_id)?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == lender_nft_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == lender_nft_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.lender_nft_asset_id)
+                    && utxo.txout.value.explicit() == Some(1)
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let mut transaction = FinalTransaction::new();
+        active_offer.attach_liquidation(&mut transaction, active_offer_utxo);
+
+        transaction.add_input(
+            PartialInput::new(lender_nft_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
+        transaction.add_output(PartialOutput::new(
+            self.signer().get_address().script_pubkey(),
+            parameters.offer_parameters.collateral_amount,
+            parameters.collateral_asset_id,
+        ));
+
+        Ok(transaction)
     }
 }
