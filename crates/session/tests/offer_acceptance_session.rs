@@ -4,35 +4,16 @@ use lending_contracts::programs::lending::LendingOfferParameters;
 use lending_contracts::programs::program::SimplexProgram;
 use lending_indexer::indexer::update_offer_status;
 use lending_indexer::models::OfferStatus;
-use lending_session::{CreateOfferParams, OfferParameters, Session, SessionError};
+use lending_session::SessionError;
 use serial_test::serial;
-use simplex::simplicityhl::elements::AssetId;
 
 use utils::{
-    build_session, build_session_with_signer, fund_asset_outputs, issue_asset,
+    DEFAULT_LOAN_EXPIRATION_OFFSET, TEST_PRINCIPAL_AMOUNT, build_session,
+    build_session_with_signer, fund_asset_outputs, issue_asset, offer_params,
     setup_it_context_pool, setup_pending_offer, start_indexer_api,
 };
 
-const PRINCIPAL_AMOUNT: u64 = 10_000;
 const PRINCIPAL_PARTS: [u64; 2] = [6_000, 5_000];
-
-fn offer_params(
-    session: &Session,
-    principal_asset_id: AssetId,
-) -> anyhow::Result<CreateOfferParams> {
-    let current_height = session.signer().get_provider().fetch_tip_height()?;
-
-    Ok(CreateOfferParams {
-        principal_asset_id,
-        protocol_fee_keeper_asset_id: AssetId::from_slice(&[0x41; 32])?,
-        offer_parameters: OfferParameters {
-            collateral_amount: 3_000,
-            principal_amount: PRINCIPAL_AMOUNT,
-            loan_expiration_time: current_height + 60,
-            principal_interest_rate: 1_000,
-        },
-    })
-}
 
 fn assert_acceptance_tx_shape(
     accept: &lending_session::AcceptOfferTx,
@@ -85,7 +66,11 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
     let offer = setup_pending_offer(
         &borrower,
         &pool,
-        offer_params(&borrower, principal_asset_id)?,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
     )
     .await?;
 
@@ -105,7 +90,7 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
     assert!(
         lender_principal_before
             .iter()
-            .all(|utxo| utxo.amount() < PRINCIPAL_AMOUNT),
+            .all(|utxo| utxo.amount() < TEST_PRINCIPAL_AMOUNT),
         "no single UTXO should cover the principal alone"
     );
     assert_eq!(
@@ -154,7 +139,7 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
             .iter()
             .any(|utxo| {
                 utxo.outpoint.txid == accept_txid
-                    && utxo.explicit_amount() == PRINCIPAL_AMOUNT
+                    && utxo.explicit_amount() == TEST_PRINCIPAL_AMOUNT
                     && utxo.explicit_asset() == principal_asset_id
             }),
         "borrower principal must be locked under AssetAuth"
@@ -196,7 +181,11 @@ async fn accept_offer_returns_offer_not_pending_for_active_offer() -> anyhow::Re
     setup_pending_offer(
         &borrower,
         &pool,
-        offer_params(&borrower, principal_asset_id)?,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
     )
     .await?;
 
@@ -226,7 +215,11 @@ async fn accept_offer_returns_principal_utxo_not_found_without_funds() -> anyhow
     setup_pending_offer(
         &borrower,
         &pool,
-        offer_params(&borrower, principal_asset_id)?,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
     )
     .await?;
 

@@ -2,29 +2,14 @@ mod utils;
 
 use lending_contracts::programs::lending::LendingOffer;
 use lending_contracts::programs::program::SimplexProgram;
-use lending_session::{CreateOfferParams, OfferParameters, Session, SessionError};
+use lending_session::SessionError;
 use serial_test::serial;
-use simplex::simplicityhl::elements::AssetId;
 
 use utils::{
-    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, build_session,
-    create_and_broadcast_factory, seed_active_factory, setup_it_context_pool, start_indexer_api,
+    DEFAULT_LOAN_EXPIRATION_OFFSET, FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS,
+    build_session, create_and_broadcast_factory, dummy_principal_asset_id, offer_params,
+    seed_active_factory, setup_it_context_pool, start_indexer_api,
 };
-
-fn offer_params(session: &Session) -> anyhow::Result<CreateOfferParams> {
-    let current_height = session.signer().get_provider().fetch_tip_height()?;
-
-    Ok(CreateOfferParams {
-        principal_asset_id: AssetId::from_slice(&[0x31; 32])?,
-        protocol_fee_keeper_asset_id: AssetId::from_slice(&[0x41; 32])?,
-        offer_parameters: OfferParameters {
-            collateral_amount: 3_000,
-            principal_amount: 10_000,
-            loan_expiration_time: current_height + 60,
-            principal_interest_rate: 1_000,
-        },
-    })
-}
 
 #[tokio::test]
 #[serial]
@@ -51,7 +36,11 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
     )
     .await?;
 
-    let params = offer_params(&session)?;
+    let params = offer_params(
+        &session,
+        dummy_principal_asset_id(),
+        DEFAULT_LOAN_EXPIRATION_OFFSET,
+    )?;
     let expected_principal_asset = params.principal_asset_id;
     let expected_protocol_fee_asset = params.protocol_fee_keeper_asset_id;
     let expected_offer_parameters = params.offer_parameters;
@@ -158,7 +147,13 @@ async fn create_offer_returns_factory_not_found_when_indexer_is_empty() -> anyho
     let (indexer_url, server_handle) = start_indexer_api(pool).await?;
     let session = build_session(&context, &indexer_url);
 
-    let result = session.create_offer(offer_params(&session)?).await;
+    let result = session
+        .create_offer(offer_params(
+            &session,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?)
+        .await;
 
     assert!(matches!(result, Err(SessionError::FactoryNotFound)));
 
@@ -191,7 +186,13 @@ async fn create_offer_rejects_mismatched_indexed_program_outpoint() -> anyhow::R
     )
     .await?;
 
-    let result = session.create_offer(offer_params(&session)?).await;
+    let result = session
+        .create_offer(offer_params(
+            &session,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?)
+        .await;
 
     assert!(matches!(
         result,

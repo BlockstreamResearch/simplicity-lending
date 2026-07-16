@@ -4,13 +4,16 @@ use anyhow::Context;
 use lending_contracts::programs::lending::LendingOfferParameters;
 use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::programs::script_auth::ScriptAuth;
-use lending_indexer::indexer::{insert_offer, insert_offer_utxo, insert_participant_utxo};
-use lending_indexer::models::{
-    OfferModel, OfferParticipantModel, OfferUtxoModel, ParticipantType, UtxoType,
+use lending_indexer::indexer::{
+    insert_offer, insert_offer_utxo, insert_participant_utxo, spend_offer_utxo,
+    spend_participant_utxo, update_offer_status,
 };
-use lending_session::{CreateOfferParams, Session};
-use simplex::simplicityhl::elements::Txid;
+use lending_indexer::models::{
+    OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType, UtxoType,
+};
+use lending_session::{AcceptOfferTx, CreateOfferParams, OfferParameters, Session};
 use simplex::simplicityhl::elements::hashes::Hash;
+use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -18,6 +21,33 @@ use super::factory::{
     FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, create_and_broadcast_factory,
     seed_active_factory,
 };
+
+pub const TEST_PRINCIPAL_AMOUNT: u64 = 10_000;
+pub const DEFAULT_LOAN_EXPIRATION_OFFSET: u32 = 60;
+
+pub fn dummy_principal_asset_id() -> AssetId {
+    AssetId::from_slice(&[0x31; 32]).expect("valid dummy principal asset id")
+}
+
+pub fn offer_params(
+    session: &Session,
+    principal_asset_id: AssetId,
+    loan_expiration_offset: u32,
+) -> anyhow::Result<CreateOfferParams> {
+    let current_height = session.signer().get_provider().fetch_tip_height()?;
+
+    Ok(CreateOfferParams {
+        principal_asset_id,
+        protocol_fee_keeper_asset_id: AssetId::from_slice(&[0x41; 32])
+            .expect("valid protocol fee keeper asset id"),
+        offer_parameters: OfferParameters {
+            collateral_amount: 3_000,
+            principal_amount: TEST_PRINCIPAL_AMOUNT,
+            loan_expiration_time: current_height + loan_expiration_offset,
+            principal_interest_rate: 1_000,
+        },
+    })
+}
 
 /// On-chain offer creation result used to seed the indexer (params + outpoints/scripts).
 pub struct OfferCreation {
@@ -176,4 +206,69 @@ pub async fn seed_pending_offer(
     sql_tx.commit().await?;
 
     Ok(offer_id)
+}
+
+pub async fn accept_pending_offer(
+    lender: &Session,
+    pool: &PgPool,
+    offer_id: i64,
+    offer: &OfferCreation,
+) -> anyhow::Result<AcceptOfferTx> {
+    let accept = lender.accept_offer(&offer_id.to_string()).await?;
+
+    let receipt = lender.signer().broadcast(&accept.transaction)?;
+    let accept_txid = receipt.txid();
+    receipt.wait()?;
+
+    let block_height = 200_u64;
+    let accept_txid_bytes = accept_txid.as_byte_array().to_vec();
+    let pending_offer_outpoint =
+        OutPoint::new(offer.creation_txid, offer.pending_offer_vout as u32);
+    let old_lender_outpoint = OutPoint::new(offer.creation_txid, offer.lender_nft_vout as u32);
+
+    let mut sql_tx = pool.begin().await?;
+
+    spend_offer_utxo(
+        &mut sql_tx,
+        &pending_offer_outpoint,
+        block_height,
+        accept_txid,
+    )
+    .await?;
+    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Active, block_height).await?;
+
+    insert_offer_utxo(
+        &mut sql_tx,
+        &OfferUtxoModel {
+            offer_id,
+            txid: accept_txid_bytes.clone(),
+            vout: 0,
+            utxo_type: UtxoType::ActiveOffer,
+            created_at_height: block_height as i64,
+            spent_txid: None,
+            spent_at_height: None,
+        },
+    )
+    .await?;
+
+    spend_participant_utxo(&mut sql_tx, &old_lender_outpoint, block_height, accept_txid).await?;
+
+    insert_participant_utxo(
+        &mut sql_tx,
+        &OfferParticipantModel {
+            offer_id,
+            participant_type: ParticipantType::Lender,
+            script_pubkey: lender.signer().get_address().script_pubkey().to_bytes(),
+            txid: accept_txid_bytes,
+            vout: 2,
+            created_at_height: block_height as i64,
+            spent_txid: None,
+            spent_at_height: None,
+        },
+    )
+    .await?;
+
+    sql_tx.commit().await?;
+
+    Ok(accept)
 }
