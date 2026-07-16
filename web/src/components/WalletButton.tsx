@@ -4,8 +4,6 @@ import { useState } from 'react'
 import CopyButton from '@/components/CopyButton'
 import { ConnectWalletModal } from '@/components/modals/ConnectWalletModal'
 import { UiButton } from '@/components/ui/UiButton'
-import { env } from '@/constants/env'
-import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -18,15 +16,8 @@ const NETWORK_LABEL: Record<'liquidtestnet' | 'regtest', string> = {
 }
 
 export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
-  const {
-    connectionStatus,
-    syncing,
-    receiveAddress,
-    connect,
-    disconnect,
-    reconnecting,
-    pendingRequest,
-  } = useWallet()
+  const { connectionStatus, syncing, receiveAddress, disconnect, reconnecting, pendingRequest } =
+    useWallet()
   const { network, isMainnet } = useLwk()
   const [disconnecting, setDisconnecting] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -141,17 +132,13 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
           <UiButton
             variant='primary'
             isDisabled={isDisabled}
-            onPress={() =>
-              env.VITE_DEMO_MODE ? setIsConnectModalOpen(true) : connect(DEFAULT_WALLET_TYPE)
-            }
+            onPress={() => setIsConnectModalOpen(true)}
           >
             Connect Wallet
           </UiButton>
         )
       })()}
-      {env.VITE_DEMO_MODE && (
-        <ConnectWalletModal isOpen={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
-      )}
+      <ConnectWalletModal isOpen={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
     </>
   )
 }

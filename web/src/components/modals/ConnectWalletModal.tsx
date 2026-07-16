@@ -3,10 +3,10 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 
 import CopyButton from '@/components/CopyButton'
-import ArrowSquareOutIcon from '@/components/icons/ArrowSquareOutIcon'
 import ChevronLeftIcon from '@/components/icons/ChevronLeftIcon'
 import JadeIcon from '@/components/icons/JadeIcon'
 import SeedIcon from '@/components/icons/SeedIcon'
+import SideSwapIcon from '@/components/icons/SideSwapIcon'
 import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import { MnemonicInput } from '@/components/MnemonicInput'
 import { UiButton } from '@/components/ui/UiButton'
@@ -190,10 +190,10 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
           />
           {env.VITE_SIDESWAP_WS_URL && (
             <ConnectOptionCard
-              icon={<ArrowSquareOutIcon className='size-5 text-white' />}
+              icon={<SideSwapIcon className='size-5' />}
               iconBadgeClassName='bg-accent'
               title='SideSwap'
-              subtitle='Approve the connection in the SideSwap app'
+              subtitle='Connect SideSwap desktop app'
               badge={
                 <Chip color='warning' variant='soft' size='sm'>
                   Experimental

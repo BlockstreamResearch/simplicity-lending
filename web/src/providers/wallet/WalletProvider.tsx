@@ -232,11 +232,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         const request = await connector.getDescriptor(walletType)
         pendingCancelRef.current = request.cancel ?? null
-        if (request.requestId) {
+        if (request.id) {
           const appLink = request.appLink ?? null
           setState(s => ({
             ...s,
-            pendingRequest: { kind: 'login', requestId: request.requestId!, appLink },
+            pendingRequest: { kind: 'login', requestId: request.id!, appLink },
           }))
           if (appLink) window.location.href = appLink
         }
@@ -387,14 +387,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!session) throw new Error('WalletProvider: not connected')
 
     const request = await session.connector.signPset(pset)
-    if (!request.requestId) return request.result
+    if (!request.id) return request.result
 
     pendingCancelRef.current = request.cancel ?? null
     setState(s => ({
       ...s,
       pendingRequest: {
         kind: 'sign',
-        requestId: request.requestId!,
+        requestId: request.id!,
         appLink: request.appLink ?? null,
       },
     }))

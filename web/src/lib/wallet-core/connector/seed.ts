@@ -57,14 +57,14 @@ export class SeedConnector implements WalletConnector {
     // Signer only exposes wpkhSlip77Descriptor (native segwit + SLIP77 blinding).
     // The variant param is accepted for interface compatibility but ignored here.
     const descriptor = this.signer.wpkhSlip77Descriptor()
-    return { requestId: null, result: Promise.resolve(descriptor) }
+    return { id: null, result: Promise.resolve(descriptor) }
   }
 
   async signPset(pset: Pset): Promise<WalletRequest<Pset>> {
     if (!this.signer) throw new SeedNotConnectedError()
     // Signer.sign() is synchronous — wrap for interface compatibility.
     const signed = this.signer.sign(pset)
-    return { requestId: null, result: Promise.resolve(signed) }
+    return { id: null, result: Promise.resolve(signed) }
   }
 
   async getConnectionStatus(): Promise<ConnectionStatus> {

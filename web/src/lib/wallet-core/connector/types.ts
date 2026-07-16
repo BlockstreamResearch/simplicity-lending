@@ -2,9 +2,9 @@ import type { Pset, Wollet, WolletDescriptor } from '@lilbonekit/lwk-web'
 
 import type { ConnectionStatus, WalletType } from '../types'
 
-// requestId/appLink/cancel are null/undefined for connectors that resolve immediately (Jade, seed).
+// id/appLink/cancel are null/undefined for connectors that resolve immediately (Jade, seed).
 export interface WalletRequest<T> {
-  readonly requestId: string | null
+  readonly id: string | null
   readonly appLink?: string | null
   readonly result: Promise<T>
   cancel?(): Promise<void>

@@ -125,7 +125,7 @@ export class SideSwapConnector implements WalletConnector {
 
     if (this._descriptor) {
       return {
-        requestId: null,
+        id: null,
         result: Promise.resolve(new WolletDescriptor(this._descriptor)),
       }
     }
@@ -144,7 +144,7 @@ export class SideSwapConnector implements WalletConnector {
     })
 
     return {
-      requestId: loginRequest.request_id,
+      id: loginRequest.request_id,
       appLink: buildLoginLink(loginRequest.request_id),
       result,
       cancel: () => this.cancelLoginRequest(loginRequest.request_id),
@@ -168,7 +168,7 @@ export class SideSwapConnector implements WalletConnector {
     this._signRequests.set(signRequest.request_id, signRequest)
 
     return {
-      requestId: signRequest.request_id,
+      id: signRequest.request_id,
       result: this.waitSign(signRequest.request_id).then(signedPset => new Pset(signedPset)),
       cancel: () => this.cancelSignRequest(signRequest.request_id),
     }

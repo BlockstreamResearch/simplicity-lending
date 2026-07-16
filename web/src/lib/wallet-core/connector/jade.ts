@@ -86,7 +86,7 @@ export class JadeConnector implements WalletConnector {
       // wpkh = elwpkh native segwit; shWpkh = nested segwit (sh-wpkh).
       const descriptor =
         variant === DEFAULT_WALLET_TYPE ? await this.jade.wpkh() : await this.jade.shWpkh()
-      return { requestId: null, result: Promise.resolve(descriptor) }
+      return { id: null, result: Promise.resolve(descriptor) }
     } catch (error) {
       throw mapJadeRpcError(error)
     }
@@ -97,7 +97,7 @@ export class JadeConnector implements WalletConnector {
     this.busy = true
     try {
       const signed = await this.jade.sign(pset)
-      return { requestId: null, result: Promise.resolve(signed) }
+      return { id: null, result: Promise.resolve(signed) }
     } catch (error) {
       throw mapJadeRpcError(error)
     } finally {
