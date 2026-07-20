@@ -4,6 +4,7 @@ use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 
 use crate::{
     db::DbTx,
+    events::{IndexerEvent, notify_indexer_event},
     indexer::{OffersWatchEntry, WatchCache},
     models::{OfferStatus, OfferUtxoModel, UtxoType},
 };
@@ -119,6 +120,16 @@ pub async fn update_offer_status(
         tracing::error!("Failed to update offer status: {e:?}");
         e
     })?;
+
+    notify_indexer_event(
+        sql_tx,
+        &IndexerEvent::OfferStatusUpdated {
+            id: offer_id.to_string(),
+            status: new_status,
+            height: block_height,
+        },
+    )
+    .await?;
 
     Ok(())
 }

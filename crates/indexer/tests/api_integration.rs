@@ -3,6 +3,7 @@ mod common;
 use std::time::Duration;
 
 use lending_indexer::api::server::run_server;
+use lending_indexer::events::{INDEXER_EVENTS_CHANNEL, IndexerEvent};
 use lending_indexer::models::{OfferStatus, ParticipantType, UtxoType};
 use reqwest::StatusCode;
 use serde_json::Value;
@@ -854,6 +855,56 @@ async fn server_accepts_connection_immediately_after_start_api() -> anyhow::Resu
     )
     .await??;
     assert!(response.status().is_success());
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn events_sse_receives_block_indexed_after_notify() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let notify_pool = pool.clone();
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    // Give the LISTEN task a moment to attach before NOTIFY.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let response_fut = http.get(format!("{base_url}/events")).send();
+    let mut response = timeout(Duration::from_secs(5), response_fut).await??;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.starts_with("text/event-stream")),
+        "expected text/event-stream content type"
+    );
+
+    let payload = serde_json::to_string(&IndexerEvent::BlockIndexed { height: 2_500_001 })?;
+    sqlx::query("SELECT pg_notify($1, $2)")
+        .bind(INDEXER_EVENTS_CHANNEL)
+        .bind(payload)
+        .execute(&notify_pool)
+        .await?;
+
+    let body = timeout(Duration::from_secs(5), async {
+        let mut buffer = String::new();
+        while let Some(chunk) = response.chunk().await? {
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+            if buffer.contains("block_indexed") && buffer.contains("2500001") {
+                return Ok::<_, anyhow::Error>(buffer);
+            }
+        }
+        anyhow::bail!("SSE stream ended before block_indexed event; buffer={buffer}");
+    })
+    .await??;
+
+    assert!(body.contains("event: block_indexed"));
+    assert!(body.contains(r#""type":"block_indexed""#));
+    assert!(body.contains(r#""height":2500001"#));
 
     server_handle.abort();
     Ok(())

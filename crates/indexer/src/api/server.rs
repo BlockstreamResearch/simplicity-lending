@@ -8,6 +8,7 @@ use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
 use crate::api::borrowers;
+use crate::api::events::{self, EventBus, spawn_indexer_events_listener};
 use crate::api::factories;
 use crate::api::health;
 use crate::api::lenders;
@@ -16,10 +17,17 @@ use crate::api::openapi;
 use crate::api::state::AppState;
 
 pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
-    let state = Arc::new(AppState { db: db_pool });
+    let events = EventBus::new();
+    spawn_indexer_events_listener(db_pool.clone(), events.clone());
+
+    let state = Arc::new(AppState {
+        db: db_pool,
+        events,
+    });
 
     let app = Router::new()
         .merge(health::routes())
+        .merge(events::routes())
         .merge(borrowers::routes())
         .merge(lenders::routes())
         .merge(factories::routes())
