@@ -1,4 +1,4 @@
-import { EsploraClient, Network, type Transaction } from '@lilbonekit/lwk-web'
+import { EsploraClient, Network } from '@lilbonekit/lwk-web'
 
 import { env, type NetworkName } from '@/constants/env'
 
@@ -25,10 +25,6 @@ export function createLwkNetwork(network: NetworkName): Network {
   }
 }
 
-export interface PsetWithExtractTx {
-  extractTx(): Transaction
-}
-
 /**
  * Creates an EsploraClient configured for waterfalls + utxoOnly scanning.
  * Waterfalls provides fast indexed encrypted UTXO discovery vs slow sequential HD scan.
@@ -36,7 +32,7 @@ export interface PsetWithExtractTx {
 export function createEsploraClient(lwkNetwork: Network): EsploraClient {
   const client = new EsploraClient(
     lwkNetwork,
-    `${env.VITE_WATERFALLS_URL}/api`,
+    env.VITE_WATERFALLS_URL,
     true, // waterfalls
     4, // concurrency
     true, // utxoOnly
