@@ -287,15 +287,19 @@ impl LendingOffer {
                 .expect("Unable to find borrower nft output index")
         };
 
+        let current_collateral_amount = active_offer_utxo.amount();
+
         self.add_program_input(ft, active_offer_utxo, witness_branch.build_witness());
 
         self.update_offer_debt(current_debt - amount_to_repay);
 
         if amount_to_repay < current_debt {
+            let collateral_to_unlock = amount_to_repay * current_collateral_amount / current_debt;
+
             self.add_program_output(
                 ft,
                 self.parameters.collateral_asset_id,
-                self.parameters.offer_parameters.collateral_amount,
+                current_collateral_amount - collateral_to_unlock,
             );
         }
 
