@@ -83,7 +83,11 @@ async fn cancel_offer_burns_nfts_and_returns_collateral_to_borrower() -> anyhow:
     );
     assert_eq!(
         outputs[2].script_pubkey,
-        session.signer().get_address().script_pubkey()
+        session.signer().get_confidential_address().script_pubkey()
+    );
+    assert_eq!(
+        outputs[2].blinding_key,
+        Some(session.signer().get_blinding_public_key())
     );
 
     let receipt = session.signer().broadcast(&cancel_tx)?;

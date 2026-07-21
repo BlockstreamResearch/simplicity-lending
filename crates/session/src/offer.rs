@@ -252,11 +252,14 @@ impl Session {
             PartialInput::new(borrower_nft_utxo),
             RequiredSignature::NativeEcdsa,
         );
-        transaction.add_output(PartialOutput::new(
-            self.signer().get_address().script_pubkey(),
-            parameters.offer_parameters.collateral_amount,
-            parameters.collateral_asset_id,
-        ));
+        transaction.add_output(
+            PartialOutput::new(
+                self.signer().get_confidential_address().script_pubkey(),
+                parameters.offer_parameters.collateral_amount,
+                parameters.collateral_asset_id,
+            )
+            .with_blinding_key(self.signer().get_blinding_public_key()),
+        );
 
         Ok(transaction)
     }
