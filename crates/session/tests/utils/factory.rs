@@ -32,7 +32,7 @@ pub async fn seed_active_factory(
     created_at_txid: Txid,
     auth_outpoint: (Txid, i32),
     program_outpoint: (Txid, i32),
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Uuid> {
     let factory_id = Uuid::new_v4();
     let created_at_height = 100_i64;
 
@@ -72,7 +72,7 @@ pub async fn seed_active_factory(
     insert_factory_utxo(&mut sql_tx, &program_utxo).await?;
     sql_tx.commit().await?;
 
-    Ok(())
+    Ok(factory_id)
 }
 
 pub async fn create_and_broadcast_factory(

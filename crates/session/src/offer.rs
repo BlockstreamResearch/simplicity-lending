@@ -1,14 +1,18 @@
+use std::str::FromStr;
+
 use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters};
 use lending_contracts::programs::program::SimplexProgram;
+use lending_contracts::programs::script_auth::ScriptAuth;
 use lending_contracts::utils::get_random_seed;
-use simplex::provider::ProviderTrait;
+use simplex::provider::{ProviderTrait, SimplicityNetwork};
 use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
 use crate::error::SessionError;
+use crate::indexer::{OfferListItemFull, OfferStatus, ParticipantType, UtxoType};
 use crate::session::Session;
 
 pub use lending_contracts::programs::lending::OfferParameters;
@@ -22,6 +26,52 @@ pub struct CreateOfferParams {
 pub struct CreateOfferTx {
     pub transaction: FinalTransaction,
     pub pending_offer: LendingOffer,
+}
+
+fn parse_asset_id(field: &'static str, value: &str) -> Result<AssetId, SessionError> {
+    AssetId::from_str(value).map_err(|_| SessionError::InvalidOfferData {
+        field,
+        value: value.to_owned(),
+    })
+}
+
+fn parse_amount(field: &'static str, value: &str) -> Result<u64, SessionError> {
+    value.parse().map_err(|_| SessionError::InvalidOfferData {
+        field,
+        value: value.to_owned(),
+    })
+}
+
+fn parse_interest_rate(value: u32) -> Result<u16, SessionError> {
+    u16::try_from(value).map_err(|_| SessionError::InvalidOfferData {
+        field: "interest_rate",
+        value: value.to_string(),
+    })
+}
+
+fn pending_offer_from_indexer(
+    info: &OfferListItemFull,
+    network: SimplicityNetwork,
+) -> Result<LendingOffer, SessionError> {
+    let parameters = LendingOfferParameters {
+        collateral_asset_id: parse_asset_id("collateral_asset", &info.base.collateral_asset)?,
+        principal_asset_id: parse_asset_id("principal_asset", &info.base.principal_asset)?,
+        borrower_nft_asset_id: parse_asset_id("borrower_nft_asset", &info.borrower_nft_asset)?,
+        lender_nft_asset_id: parse_asset_id("lender_nft_asset", &info.lender_nft_asset)?,
+        protocol_fee_keeper_asset_id: parse_asset_id(
+            "protocol_fee_keeper_asset",
+            &info.protocol_fee_keeper_asset,
+        )?,
+        offer_parameters: OfferParameters {
+            collateral_amount: parse_amount("collateral_amount", &info.base.collateral_amount)?,
+            principal_amount: parse_amount("principal_amount", &info.base.principal_amount)?,
+            loan_expiration_time: info.base.loan_expiration_height,
+            principal_interest_rate: parse_interest_rate(info.base.interest_rate)?,
+        },
+        network,
+    };
+
+    Ok(LendingOffer::new_pending(parameters))
 }
 
 impl Session {
@@ -128,5 +178,89 @@ impl Session {
             transaction,
             pending_offer,
         })
+    }
+
+    pub async fn cancel_offer(&self, offer_id: &str) -> Result<FinalTransaction, SessionError> {
+        let offer_details = self.indexer().get_offer(offer_id).await?;
+        if offer_details.info.base.status != OfferStatus::Pending {
+            return Err(SessionError::OfferNotPending);
+        }
+
+        let pending_outpoint = offer_details
+            .utxos
+            .iter()
+            .find(|utxo| utxo.utxo_type == UtxoType::PendingOffer)
+            .ok_or(SessionError::PendingOfferUtxoNotFound)?;
+        let lender_nft_outpoint = offer_details
+            .participants
+            .iter()
+            .find(|participant| {
+                participant.participant_type == ParticipantType::Lender
+                    && participant.spent_txid.is_none()
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+        let borrower_nft_outpoint = offer_details
+            .participants
+            .iter()
+            .find(|participant| {
+                participant.participant_type == ParticipantType::Borrower
+                    && participant.spent_txid.is_none()
+            })
+            .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
+
+        let pending_offer = pending_offer_from_indexer(&offer_details.info, self.network())?;
+        let parameters = *pending_offer.get_parameters();
+
+        let pending_offer_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&pending_offer.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == pending_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == pending_outpoint.txid
+            })
+            .ok_or(SessionError::PendingOfferUtxoNotFound)?;
+
+        let lender_nft_auth = ScriptAuth::from_simplex_program(&pending_offer);
+        let lender_nft_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&lender_nft_auth.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == lender_nft_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == lender_nft_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.lender_nft_asset_id)
+                    && utxo.txout.value.explicit() == Some(1)
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let borrower_nft_utxo = self
+            .signer()
+            .get_utxos_asset(parameters.borrower_nft_asset_id)?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == borrower_nft_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == borrower_nft_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.borrower_nft_asset_id)
+                    && utxo.txout.value.explicit() == Some(1)
+            })
+            .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
+
+        let mut transaction = FinalTransaction::new();
+        pending_offer.attach_cancellation(&mut transaction, pending_offer_utxo, lender_nft_utxo);
+        transaction.add_input(
+            PartialInput::new(borrower_nft_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
+        transaction.add_output(
+            PartialOutput::new(
+                self.signer().get_confidential_address().script_pubkey(),
+                parameters.offer_parameters.collateral_amount,
+                parameters.collateral_asset_id,
+            )
+            .with_blinding_key(self.signer().get_blinding_public_key()),
+        );
+
+        Ok(transaction)
     }
 }
