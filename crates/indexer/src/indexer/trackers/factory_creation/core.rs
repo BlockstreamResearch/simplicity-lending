@@ -9,7 +9,8 @@ use crate::{
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{
-        AssetRegistration, FactoriesTracker, FactoryAuthsTracker, insert_factory,
+        AssetContractKind, AssetRegistration, FactoriesTracker, FactoryAuthsTracker,
+        insert_factory,
         scan_factory_creation_outputs,
     },
     models::{FactoryIdentity, FactoryModel},
@@ -61,7 +62,8 @@ impl FactoryCreationsTracker {
             // When the creation committed the expected asset contract, submit it to the registry.
             // Verifying the metadata remains the wallets' responsibility.
             if let Some(registration) = &self.asset_registration
-                && let Some(contract) = registration.verified_contract(tx, factory_asset_id)
+                && let Some(contract) =
+                    registration.verified_contract(AssetContractKind::Factory, tx, factory_asset_id)
             {
                 registration.spawn_registration(factory_asset_id, contract);
             }

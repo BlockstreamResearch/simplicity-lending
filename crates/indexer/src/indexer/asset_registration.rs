@@ -1,4 +1,5 @@
-//! ELIP-0100 asset metadata for factory assets issued by the lending flow.
+//! ELIP-0100 asset metadata for the assets issued by the lending flow
+//! (factory assets and offer NFTs).
 
 use std::time::Duration;
 
@@ -12,6 +13,38 @@ use crate::configuration::AssetRegistrySettings;
 /// The BIP-341 NUMS point (compressed) as the contract `issuer_pubkey`.
 const ISSUER_PUBKEY: &str = "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
 
+/// Protocol asset kinds issued with an ELIP-0100 contract.
+///
+/// Naming must stay in sync with `ASSET_KINDS` in `web/src/lwk/assetContract.ts`.
+#[derive(Clone, Copy, Debug)]
+pub enum AssetContractKind {
+    Factory,
+    BorrowerNft,
+    LenderNft,
+}
+
+impl AssetContractKind {
+    /// Role segment spliced into the contract `name` after the protocol tag.
+    fn name_role(self) -> &'static str {
+        match self {
+            Self::Factory => "",
+            Self::BorrowerNft => " borrower-nft",
+            Self::LenderNft => " lender-nft",
+        }
+    }
+
+    /// Ticker prefix; with 4 txid chars appended tickers stay at 7 chars
+    /// (hardware wallets hold tickers in 8-byte buffers incl. NUL).
+    fn ticker_prefix(self) -> &'static str {
+        match self {
+            Self::Factory => "SLF",
+            Self::BorrowerNft => "SLB",
+            Self::LenderNft => "SLL",
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct AssetRegistration {
     domain: String,
     registry_url: Option<String>,
@@ -51,18 +84,19 @@ impl AssetRegistration {
         })
     }
 
-    /// The contract the lending flow commits for a factory asset funded by `prevout`.
+    /// The contract the lending flow commits for a `kind` asset funded by `prevout`.
     ///
-    /// Must stay in sync with `buildAssetContract` in `web/src/hooks/useBorrowerAccount.ts`.
-    fn expected_contract(&self, prevout: &OutPoint) -> serde_json::Value {
+    /// Must stay in sync with `buildAssetContract` in `web/src/lwk/assetContract.ts`.
+    fn expected_contract(&self, kind: AssetContractKind, prevout: &OutPoint) -> serde_json::Value {
         json!({
             "entity": { "domain": self.domain },
             "issuer_pubkey": ISSUER_PUBKEY,
-            "name": format!("simplicity-lending/v1 {}:{}", prevout.txid, prevout.vout),
+            "name": format!(
+                "simplicity-lending/v1{} {}:{}",
+                kind.name_role(), prevout.txid, prevout.vout
+            ),
             "precision": 0,
-            // Max 7 chars: hardware wallets hold tickers in 8-byte buffers
-            // incl. NUL (e.g. Jade's sign_tx.c ticker[8]).
-            "ticker": format!("SLF{}", &prevout.txid.to_string()[..4]),
+            "ticker": format!("{}{}", kind.ticker_prefix(), &prevout.txid.to_string()[..4]),
             "version": 0,
         })
     }
@@ -70,40 +104,40 @@ impl AssetRegistration {
     /// Returns the expected contract when the creation transaction committed it.
     pub fn verified_contract(
         &self,
+        kind: AssetContractKind,
         tx: &Transaction,
-        factory_asset_id: AssetId,
+        asset_id: AssetId,
     ) -> Option<serde_json::Value> {
-        tx.input
+        let matched = tx
+            .input
             .iter()
             .filter(|input| {
                 input.has_issuance() && input.asset_issuance.asset_blinding_nonce == ZERO_TWEAK
             })
             .find_map(|input| {
                 let prevout = input.previous_output;
-                let contract = self.expected_contract(&prevout);
-                let contract_hash = match ContractHash::from_json_contract(&contract.to_string()) {
-                    Ok(hash) => hash,
-                    Err(error) => {
-                        tracing::warn!(%factory_asset_id, %prevout, %error, "expected contract failed to hash");
-                        return None;
-                    }
-                };
-                let computed_asset_id = AssetId::new_issuance(prevout, contract_hash);
-                if computed_asset_id == factory_asset_id {
-                    tracing::info!(
-                        %factory_asset_id, %prevout, %contract_hash,
-                        "factory issuance commits the expected asset contract"
-                    );
-                    Some(contract)
-                } else {
-                    tracing::warn!(
-                        %factory_asset_id, %computed_asset_id, %prevout, %contract_hash,
-                        expected_contract = %contract,
-                        "factory issuance does not commit the expected asset contract; not registering"
-                    );
-                    None
-                }
-            })
+                let contract = self.expected_contract(kind, &prevout);
+                let contract_hash = ContractHash::from_json_contract(&contract.to_string()).ok()?;
+                (AssetId::new_issuance(prevout, contract_hash) == asset_id)
+                    .then_some((contract, contract_hash, prevout))
+            });
+
+        match matched {
+            Some((contract, contract_hash, prevout)) => {
+                tracing::info!(
+                    ?kind, %asset_id, %prevout, %contract_hash,
+                    "issuance commits the expected asset contract"
+                );
+                Some(contract)
+            }
+            None => {
+                tracing::warn!(
+                    ?kind, %asset_id,
+                    "no issuance input commits the expected asset contract; not registering"
+                );
+                None
+            }
+        }
     }
 
     /// Fire-and-forget registry submission.
@@ -113,16 +147,16 @@ impl AssetRegistration {
     ///
     /// Failures are logged, never propagated (the registry is transport for the
     /// already-committed contract, not a trust anchor).
-    pub fn spawn_registration(&self, factory_asset_id: AssetId, contract: serde_json::Value) {
+    pub fn spawn_registration(&self, asset_id: AssetId, contract: serde_json::Value) {
         let Some(registry_url) = &self.registry_url else {
             tracing::warn!(
-                %factory_asset_id,
+                %asset_id,
                 "registry submission skipped: indexer.asset_registry.registry_url is not configured"
             );
             return;
         };
         let url = format!("{}/", registry_url.trim_end_matches('/'));
-        let asset_id = factory_asset_id.to_string();
+        let asset_id = asset_id.to_string();
         let body = json!({ "asset_id": asset_id, "contract": contract }).to_string();
         let client = self.client.clone();
 
@@ -176,7 +210,7 @@ impl AssetRegistration {
 mod tests {
     use simplex::simplicityhl::elements::OutPoint;
 
-    use super::AssetRegistration;
+    use super::{AssetContractKind, AssetRegistration};
     use crate::configuration::AssetRegistrySettings;
 
     const FUNDING_TXID: &str = "0e19e938c74378ae83b549213a12be88ede6e32e1407bfdf50c4ec3f927408ec";
@@ -193,22 +227,33 @@ mod tests {
         OutPoint::new(FUNDING_TXID.parse().expect("txid"), 0)
     }
 
-    /// Pins the canonical serialization the web flow must reproduce
-    /// (`buildAssetContract` in web/src/hooks/useBorrowerAccount.ts).
+    /// Pins the canonical serializations the web flow must reproduce
+    /// (`buildAssetContract` in web/src/lwk/assetContract.ts).
     #[test]
-    fn expected_contract_is_deterministic() {
-        let contract = registration("lending.example").expected_contract(&prevout());
+    fn expected_contracts_are_deterministic() {
+        let registration = registration("lending.example");
 
-        assert_eq!(
-            contract.to_string(),
-            concat!(
-                "{\"entity\":{\"domain\":\"lending.example\"},",
-                "\"issuer_pubkey\":\"0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0\",",
-                "\"name\":\"simplicity-lending/v1 ",
-                "0e19e938c74378ae83b549213a12be88ede6e32e1407bfdf50c4ec3f927408ec:0\",",
-                "\"precision\":0,\"ticker\":\"SLF0e19\",\"version\":0}"
-            )
-        );
+        for (kind, name_role, ticker) in [
+            (AssetContractKind::Factory, "", "SLF0e19"),
+            (AssetContractKind::BorrowerNft, " borrower-nft", "SLB0e19"),
+            (AssetContractKind::LenderNft, " lender-nft", "SLL0e19"),
+        ] {
+            let contract = registration.expected_contract(kind, &prevout());
+            assert_eq!(
+                contract.to_string(),
+                format!(
+                    concat!(
+                        "{{\"entity\":{{\"domain\":\"lending.example\"}},",
+                        "\"issuer_pubkey\":\"0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0\",",
+                        "\"name\":\"simplicity-lending/v1{} ",
+                        "0e19e938c74378ae83b549213a12be88ede6e32e1407bfdf50c4ec3f927408ec:0\",",
+                        "\"precision\":0,\"ticker\":\"{}\",\"version\":0}}"
+                    ),
+                    name_role, ticker
+                ),
+                "{kind:?}"
+            );
+        }
     }
 
     /// Pins the derivation against a live issuance: liquidtestnet tx
@@ -226,7 +271,7 @@ mod tests {
             0,
         );
 
-        let contract = registration.expected_contract(&prevout);
+        let contract = registration.expected_contract(AssetContractKind::Factory, &prevout);
         let hash = ContractHash::from_json_contract(&contract.to_string()).expect("hash");
         assert_eq!(
             AssetId::new_issuance(prevout, hash).to_string(),

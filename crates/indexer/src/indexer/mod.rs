@@ -5,7 +5,7 @@ mod db;
 mod trackers;
 pub mod worker;
 
-pub use asset_registration::AssetRegistration;
+pub use asset_registration::{AssetContractKind, AssetRegistration};
 pub use block_processor::*;
 pub use cache::WatchCache;
 pub use db::*;

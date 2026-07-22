@@ -15,8 +15,9 @@ use crate::{
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{
-        OfferCreationOutputs, OfferParticipantsTracker, OffersTracker, ParticipantCreationUtxo,
-        scan_offer_creation_outputs, trackers::offers_creation::insert_offer,
+        AssetContractKind, AssetRegistration, OfferCreationOutputs, OfferParticipantsTracker,
+        OffersTracker, ParticipantCreationUtxo, scan_offer_creation_outputs,
+        trackers::offers_creation::insert_offer,
     },
     models::{OfferModel, ParticipantType},
 };
@@ -29,13 +30,19 @@ struct ParsedOfferCreation {
 pub struct OfferCreationsTracker {
     protocol_fee_keeper_asset_id: AssetId,
     network: SimplicityNetwork,
+    asset_registration: Option<AssetRegistration>,
 }
 
 impl OfferCreationsTracker {
-    pub fn new(protocol_fee_keeper_asset_id: AssetId, network: SimplicityNetwork) -> Self {
+    pub fn new(
+        protocol_fee_keeper_asset_id: AssetId,
+        network: SimplicityNetwork,
+        asset_registration: Option<AssetRegistration>,
+    ) -> Self {
         Self {
             protocol_fee_keeper_asset_id,
             network,
+            asset_registration,
         }
     }
 
@@ -49,7 +56,7 @@ impl OfferCreationsTracker {
         participants: &mut OfferParticipantsTracker,
     ) -> anyhow::Result<()> {
         if let Some(creation) = self.parse_offer_creation_tx(tx) {
-            Self::handle_offer_creation(
+            self.handle_offer_creation(
                 sql_tx,
                 creation,
                 factory_id,
@@ -64,7 +71,9 @@ impl OfferCreationsTracker {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_offer_creation(
+        &self,
         sql_tx: &mut DbTx<'_>,
         creation: ParsedOfferCreation,
         factory_id: Uuid,
@@ -131,6 +140,27 @@ impl OfferCreationsTracker {
                 block_height,
             )
             .await?;
+
+        // Best-effort ELIP-0100 metadata registration for the offer NFTs,
+        // mirroring the factory asset flow: when the creation committed the
+        // expected contract, submit it to the registry. Verifying the metadata
+        // remains the wallets' responsibility.
+        if let Some(registration) = &self.asset_registration {
+            for (kind, asset_id) in [
+                (
+                    AssetContractKind::BorrowerNft,
+                    creation.parameters.borrower_nft_asset_id,
+                ),
+                (
+                    AssetContractKind::LenderNft,
+                    creation.parameters.lender_nft_asset_id,
+                ),
+            ] {
+                if let Some(contract) = registration.verified_contract(kind, tx, asset_id) {
+                    registration.spawn_registration(asset_id, contract);
+                }
+            }
+        }
 
         Ok(())
     }
