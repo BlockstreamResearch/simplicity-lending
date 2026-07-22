@@ -1,5 +1,6 @@
 import {
   Address,
+  type AssetId,
   assetIdFromIssuance,
   Contract,
   ContractHash,
@@ -112,10 +113,7 @@ export function useBorrowerAccount() {
       XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
       lwkNetwork,
     )
-    const contract = buildAssetContract(feeUtxo.outpoint())
-    const contractHash = contract ? await contractHashOf(contract) : emptyContractHash()
-    const issuedAssetId = assetIdFromIssuance(feeUtxo.outpoint(), contractHash)
-    const metadata = await buildMetadata()
+    const { contract, issuedAssetId, metadata } = await prepareIssuance(feeUtxo.outpoint())
 
     const pset = new TxBuilder(lwkNetwork)
       .feeRate(feeRate)
@@ -166,6 +164,20 @@ export function useBorrowerAccount() {
     hasAccount,
     removeBorrowerAccount,
     scriptPubkey,
+  }
+}
+
+async function prepareIssuance(fundingOutpoint: OutPoint): Promise<{
+  contract: Contract | null
+  issuedAssetId: AssetId
+  metadata: Uint8Array
+}> {
+  const contract = buildAssetContract(fundingOutpoint)
+  const contractHash = contract ? await contractHashOf(contract) : emptyContractHash()
+  return {
+    contract,
+    issuedAssetId: assetIdFromIssuance(fundingOutpoint, contractHash),
+    metadata: await buildMetadata(),
   }
 }
 
