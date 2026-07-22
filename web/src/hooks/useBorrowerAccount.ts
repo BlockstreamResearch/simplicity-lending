@@ -2,8 +2,7 @@ import {
   Address,
   type AssetId,
   assetIdFromIssuance,
-  Contract,
-  ContractHash,
+  type Contract,
   IssuanceRecipient,
   type OutPoint,
   type Pset,
@@ -18,6 +17,7 @@ import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
+import { AssetKind, buildAssetContract, contractHashOrEmpty } from '@/lwk/assetContract'
 import type { UpdatedPset } from '@/lwk/transaction'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -172,55 +172,12 @@ async function prepareIssuance(fundingOutpoint: OutPoint): Promise<{
   issuedAssetId: AssetId
   metadata: Uint8Array
 }> {
-  const contract = buildAssetContract(fundingOutpoint)
-  const contractHash = contract ? await contractHashOf(contract) : emptyContractHash()
+  const contract = buildAssetContract(fundingOutpoint, AssetKind.Factory)
   return {
     contract,
-    issuedAssetId: assetIdFromIssuance(fundingOutpoint, contractHash),
+    issuedAssetId: assetIdFromIssuance(fundingOutpoint, await contractHashOrEmpty(contract)),
     metadata: await buildMetadata(),
   }
-}
-
-function emptyContractHash(): ContractHash {
-  return ContractHash.fromBytes(new Uint8Array(32))
-}
-
-/**
- * The ELIP-0100 asset contract committed into the factory asset issuance so its metadata is verifiable against
- * the asset id and registrable in the asset registry.
- *
- * Fully stateless, nothing is supplied by the user or by build configuration, so the backend derives the
- * identical contract with no interaction.
- *
- * The backend is the authority. It re-derives this contract while indexing the creation
- * transaction (`expected_contract` in `crates/indexer/src/indexer/asset_registration.rs`) and
- * only a matching commitment gets registered and a domain proof.
- */
-function buildAssetContract(fundingOutpoint: OutPoint): Contract | null {
-  const domain = window.location.hostname.toLowerCase()
-  if (!domain.includes('.')) return null
-
-  const txid = fundingOutpoint.txid().toString()
-  try {
-    return new Contract(
-      domain,
-      `02${UNSPENDABLE_TAPROOT_PUBKEY}`,
-      `simplicity-lending/v1 ${txid}:${fundingOutpoint.vout()}`,
-      0,
-      // Max 7 chars: hardware wallets hold tickers in 8-byte buffers
-      // incl. NUL (e.g. Jade's sign_tx.c ticker[8]).
-      `SLF${txid.slice(0, 4)}`,
-      0,
-    )
-  } catch {
-    return null
-  }
-}
-
-/** SHA-256 of the contract's canonical (key-sorted) JSON serialization. */
-async function contractHashOf(contract: Contract): Promise<ContractHash> {
-  const digest = await sha256(new TextEncoder().encode(contract.toString()))
-  return ContractHash.fromBytes(new Uint8Array(digest))
 }
 
 async function buildMetadata(): Promise<Uint8Array> {

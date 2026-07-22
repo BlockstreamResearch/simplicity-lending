@@ -33,10 +33,19 @@ impl TrackerRegistry {
         Ok(Self {
             factories: FactoriesTracker::load(db_pool).await?,
             factory_auths: FactoryAuthsTracker::load(db_pool).await?,
-            factory_creations: FactoryCreationsTracker::new(2, 0, network, asset_registration),
+            factory_creations: FactoryCreationsTracker::new(
+                2,
+                0,
+                network,
+                asset_registration.clone(),
+            ),
             offers: OffersTracker::load(db_pool).await?,
             participants: OfferParticipantsTracker::load(db_pool).await?,
-            creations: OfferCreationsTracker::new(protocol_fee_keeper_asset_id, network),
+            creations: OfferCreationsTracker::new(
+                protocol_fee_keeper_asset_id,
+                network,
+                asset_registration,
+            ),
         })
     }
 

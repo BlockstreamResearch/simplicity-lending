@@ -8,7 +8,8 @@ use crate::api::utils::parse_filter_hex;
 use crate::api::{ApiError, AppState};
 
 /// Serves the HTTP domain proof asset registries fetch during domain
-/// verification (`https://<domain>/.well-known/liquid-asset-proof-<asset_id>`), for any indexed factory asset.
+/// verification (`https://<domain>/.well-known/liquid-asset-proof-<asset_id>`),
+/// for any indexed factory asset or offer NFT.
 ///
 /// The domain named in the text is the request host.
 /// The registry fetches the proof from the very domain it is verifying, so no configuration is involved.
@@ -24,8 +25,8 @@ use crate::api::{ApiError, AppState};
         description = "Proof file name in the form `liquid-asset-proof-<asset_id>`"
     )),
     responses(
-        (status = 200, description = "Domain proof for an indexed factory asset", body = String),
-        (status = 404, description = "Not a known factory asset", body = ErrorResponse),
+        (status = 200, description = "Domain proof for an indexed factory asset or offer NFT", body = String),
+        (status = 404, description = "Not a known protocol asset", body = ErrorResponse),
     )
 )]
 #[tracing::instrument(name = "Serving asset domain proof", skip(state, headers))]
@@ -49,13 +50,7 @@ pub async fn get_domain_proof(
         .filter(|host| !host.is_empty())
         .ok_or_else(not_found)?;
 
-    let known = sqlx::query_scalar!(
-        "SELECT id FROM factories WHERE factory_asset_id = $1 LIMIT 1",
-        asset_id_bytes,
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .is_some();
+    let known = super::db::is_known_protocol_asset(&state.db, &asset_id_bytes).await?;
 
     if !known {
         return Err(not_found());
