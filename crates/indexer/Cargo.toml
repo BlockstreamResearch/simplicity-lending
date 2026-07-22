@@ -36,6 +36,8 @@ hex = { workspace = true }
 smplx-std = { workspace = true }
 
 lending-contracts = { path = "../contracts" }
+# `json-contract` enables ContractHash::from_json_contract
+elements = { version = "0.25.2", features = ["json-contract"] }
 
 utoipa = { version = "5", features = ["uuid", "axum_extras"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"], optional = true }

@@ -8,8 +8,8 @@ use simplex::{
 use crate::{
     db::DbTx,
     indexer::{
-        FactoriesTracker, FactoryAuthsTracker, FactoryCreationsTracker, OfferCreationsTracker,
-        OfferParticipantsTracker, OffersTracker,
+        AssetRegistration, FactoriesTracker, FactoryAuthsTracker, FactoryCreationsTracker,
+        OfferCreationsTracker, OfferParticipantsTracker, OffersTracker,
     },
 };
 
@@ -27,12 +27,13 @@ impl TrackerRegistry {
         db_pool: &PgPool,
         protocol_fee_keeper_asset_id: AssetId,
         network: SimplicityNetwork,
+        asset_registration: Option<AssetRegistration>,
     ) -> anyhow::Result<Self> {
         // TODO: move factory parameters to config
         Ok(Self {
             factories: FactoriesTracker::load(db_pool).await?,
             factory_auths: FactoryAuthsTracker::load(db_pool).await?,
-            factory_creations: FactoryCreationsTracker::new(2, 0, network),
+            factory_creations: FactoryCreationsTracker::new(2, 0, network, asset_registration),
             offers: OffersTracker::load(db_pool).await?,
             participants: OfferParticipantsTracker::load(db_pool).await?,
             creations: OfferCreationsTracker::new(protocol_fee_keeper_asset_id, network),

@@ -9,7 +9,8 @@ use crate::{
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{
-        FactoriesTracker, FactoryAuthsTracker, insert_factory, scan_factory_creation_outputs,
+        AssetRegistration, FactoriesTracker, FactoryAuthsTracker, insert_factory,
+        scan_factory_creation_outputs,
     },
     models::{FactoryIdentity, FactoryModel},
 };
@@ -18,14 +19,21 @@ pub struct FactoryCreationsTracker {
     issuing_utxos_count: u8,
     reissuance_flags: u64,
     network: SimplicityNetwork,
+    asset_registration: Option<AssetRegistration>,
 }
 
 impl FactoryCreationsTracker {
-    pub fn new(issuing_utxos_count: u8, reissuance_flags: u64, network: SimplicityNetwork) -> Self {
+    pub fn new(
+        issuing_utxos_count: u8,
+        reissuance_flags: u64,
+        network: SimplicityNetwork,
+        asset_registration: Option<AssetRegistration>,
+    ) -> Self {
         Self {
             issuing_utxos_count,
             reissuance_flags,
             network,
+            asset_registration,
         }
     }
 
@@ -47,7 +55,16 @@ impl FactoryCreationsTracker {
                 factories,
                 factory_auths,
             )
-            .await?
+            .await?;
+
+            // Best-effort ELIP-0100 metadata registration. 
+            // When the creation committed the expected asset contract, submit it to the registry.
+            // Verifying the metadata remains the wallets' responsibility.
+            if let Some(registration) = &self.asset_registration
+                && let Some(contract) = registration.verified_contract(tx, factory_asset_id)
+            {
+                registration.spawn_registration(factory_asset_id, contract);
+            }
         }
 
         Ok(())

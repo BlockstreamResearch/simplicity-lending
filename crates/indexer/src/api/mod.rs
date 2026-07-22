@@ -1,3 +1,4 @@
+mod assets;
 mod borrowers;
 mod db;
 mod dto;
