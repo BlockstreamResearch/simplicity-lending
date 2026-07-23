@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 
+import { softAssertNever } from '@/utils/assert'
 import { normalizeHex } from '@/utils/hex'
 
 import type { IndexerEvent } from './events'
@@ -13,10 +14,6 @@ export interface InvalidateContext {
 
 function isOwnScript(eventScript: string, walletScript: string | null): boolean {
   return walletScript !== null && normalizeHex(eventScript) === normalizeHex(walletScript)
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled indexer event: ${JSON.stringify(value)}`)
 }
 
 export function invalidateEventQueries(
@@ -49,6 +46,6 @@ export function invalidateEventQueries(
       break
 
     default:
-      assertNever(event)
+      softAssertNever(event)
   }
 }
