@@ -33,11 +33,9 @@ export function BorrowCard() {
   const { stats, isLoading, error, refetch } = useBorrowerStats()
   const { collateralUnit, formatCollateralAmount, formatCollateralDisplay, formatPrincipalAmount } =
     useFormatAmount()
-  const offersQuery = useAllBorrowerOffers(
-    scriptPubkey ?? '',
-    { status: ['active', 'pending', 'liquidated'] },
-    { refetchInterval: 30_000 },
-  )
+  const offersQuery = useAllBorrowerOffers(scriptPubkey ?? '', {
+    status: ['active', 'pending', 'liquidated'],
+  })
   const { data: currentBlockHeight } = useBlockHeight()
   const { pendingTxs } = usePendingTransactions()
   const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)

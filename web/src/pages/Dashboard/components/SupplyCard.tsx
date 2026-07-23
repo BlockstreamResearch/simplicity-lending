@@ -34,11 +34,7 @@ export function SupplyCard() {
   const balanceUsd = formatUsd(balance, NETWORK_CONFIG.principalAsset.decimals, principalPriceUsd)
   const { pendingTxs } = usePendingTransactions()
   const { data: currentBlockHeight } = useBlockHeight()
-  const offersQuery = useAllLenderOffers(
-    scriptPubkey ?? '',
-    { status: ['active', 'repaid'] },
-    { refetchInterval: 30_000 },
-  )
+  const offersQuery = useAllLenderOffers(scriptPubkey ?? '', { status: ['active', 'repaid'] })
 
   const notifications = buildOfferNotifications(
     offersQuery.data ?? [],
