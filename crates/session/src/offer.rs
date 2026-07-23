@@ -14,6 +14,7 @@ use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, Requir
 use crate::error::SessionError;
 use crate::indexer::{OfferListItemFull, OfferStatus, ParticipantType, UtxoType};
 use crate::session::Session;
+use crate::utxo::select_utxos_for_amount;
 
 pub use lending_contracts::programs::lending::OfferParameters;
 
@@ -26,6 +27,11 @@ pub struct CreateOfferParams {
 pub struct CreateOfferTx {
     pub transaction: FinalTransaction,
     pub pending_offer: LendingOffer,
+}
+
+pub struct AcceptOfferTx {
+    pub transaction: FinalTransaction,
+    pub active_offer: LendingOffer,
 }
 
 fn parse_asset_id(field: &'static str, value: &str) -> Result<AssetId, SessionError> {
@@ -124,12 +130,14 @@ impl Session {
             .ok_or(SessionError::AuthNftUtxoNotFound)?;
 
         let collateral_asset_id = self.network().policy_asset();
-        let collateral_utxo = self
-            .signer()
-            .get_utxos_asset(collateral_asset_id)?
-            .into_iter()
-            .find(|utxo| utxo.explicit_amount() >= params.offer_parameters.collateral_amount)
-            .ok_or(SessionError::CollateralUtxoNotFound)?;
+        let mut collateral_utxos = select_utxos_for_amount(
+            self.signer().get_utxos_asset(collateral_asset_id)?,
+            collateral_asset_id,
+            params.offer_parameters.collateral_amount,
+        )
+        .ok_or(SessionError::CollateralUtxoNotFound)?
+        .into_utxos();
+        let issuance_collateral_utxo = collateral_utxos.remove(0);
 
         let nfts_entropy = get_random_seed();
         let mut transaction = FinalTransaction::new();
@@ -150,10 +158,16 @@ impl Session {
             IssuanceInput::new_issuance(1, 0, nfts_entropy),
         );
         let lender_nft_issuance = transaction.add_issuance_input(
-            PartialInput::new(collateral_utxo),
+            PartialInput::new(issuance_collateral_utxo),
             IssuanceInput::new_issuance(1, 0, nfts_entropy),
             RequiredSignature::NativeEcdsa,
         );
+        for collateral_utxo in collateral_utxos {
+            transaction.add_input(
+                PartialInput::new(collateral_utxo),
+                RequiredSignature::NativeEcdsa,
+            );
+        }
 
         let lending_offer_parameters = LendingOfferParameters {
             collateral_asset_id,
@@ -262,5 +276,95 @@ impl Session {
         );
 
         Ok(transaction)
+    }
+
+    pub async fn accept_offer(&self, offer_id: &str) -> Result<AcceptOfferTx, SessionError> {
+        let offer_details = self.indexer().get_offer(offer_id).await?;
+        if offer_details.info.base.status != OfferStatus::Pending {
+            return Err(SessionError::OfferNotPending);
+        }
+
+        let pending_outpoint = offer_details
+            .utxos
+            .iter()
+            .find(|utxo| utxo.utxo_type == UtxoType::PendingOffer)
+            .ok_or(SessionError::PendingOfferUtxoNotFound)?;
+        let lender_nft_outpoint = offer_details
+            .participants
+            .iter()
+            .find(|participant| {
+                participant.participant_type == ParticipantType::Lender
+                    && participant.spent_txid.is_none()
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let mut offer = pending_offer_from_indexer(&offer_details.info, self.network())?;
+        let parameters = *offer.get_parameters();
+        let principal_amount = parameters.offer_parameters.principal_amount;
+
+        let pending_offer_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&offer.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == pending_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == pending_outpoint.txid
+            })
+            .ok_or(SessionError::PendingOfferUtxoNotFound)?;
+
+        let lender_nft_auth = ScriptAuth::from_simplex_program(&offer);
+        let lender_nft_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&lender_nft_auth.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == lender_nft_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == lender_nft_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.lender_nft_asset_id)
+                    && utxo.txout.value.explicit() == Some(1)
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let principal_utxos = select_utxos_for_amount(
+            self.signer()
+                .get_utxos_asset(parameters.principal_asset_id)?,
+            parameters.principal_asset_id,
+            principal_amount,
+        )
+        .ok_or(SessionError::PrincipalUtxoNotFound)?;
+
+        let mut transaction = FinalTransaction::new();
+        offer.attach_acceptance(&mut transaction, pending_offer_utxo, lender_nft_utxo);
+
+        for principal_utxo in principal_utxos.utxos() {
+            transaction.add_input(
+                PartialInput::new(principal_utxo.clone()),
+                RequiredSignature::NativeEcdsa,
+            );
+        }
+        transaction.add_output(PartialOutput::new(
+            self.signer().get_address().script_pubkey(),
+            1,
+            parameters.lender_nft_asset_id,
+        ));
+
+        if principal_utxos.has_change() {
+            let change_output = PartialOutput::new(
+                self.signer().get_address().script_pubkey(),
+                principal_utxos.change_amount(),
+                principal_utxos.asset_id(),
+            );
+            let change_output = if principal_utxos.any_confidential() {
+                change_output.with_blinding_key(self.signer().get_blinding_public_key())
+            } else {
+                change_output
+            };
+            transaction.add_output(change_output);
+        }
+
+        Ok(AcceptOfferTx {
+            transaction,
+            active_offer: offer,
+        })
     }
 }

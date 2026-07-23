@@ -14,6 +14,11 @@ use simplex::simplicityhl::elements::hashes::Hash;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::factory::{
+    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, create_and_broadcast_factory,
+    seed_active_factory,
+};
+
 /// On-chain offer creation result used to seed the indexer (params + outpoints/scripts).
 pub struct OfferCreation {
     pub parameters: LendingOfferParameters,
@@ -23,6 +28,33 @@ pub struct OfferCreation {
     pub borrower_script_pubkey: Vec<u8>,
     pub lender_nft_vout: i32,
     pub lender_script_pubkey: Vec<u8>,
+}
+
+pub async fn setup_pending_offer(
+    session: &Session,
+    pool: &PgPool,
+    params: CreateOfferParams,
+) -> anyhow::Result<OfferCreation> {
+    let (factory_asset_id, factory_creation_txid, auth_vout, program_vout, program_script) =
+        create_and_broadcast_factory(session).await?;
+    let signer_script = session.signer().get_address().script_pubkey().to_bytes();
+    let factory_id = seed_active_factory(
+        pool,
+        signer_script,
+        factory_asset_id,
+        program_script,
+        FACTORY_ISSUING_UTXOS_COUNT as i16,
+        FACTORY_REISSUANCE_FLAGS as i64,
+        factory_creation_txid,
+        (factory_creation_txid, auth_vout),
+        (factory_creation_txid, program_vout),
+    )
+    .await?;
+
+    let offer_creation = create_and_broadcast_offer(session, params).await?;
+    seed_pending_offer(pool, factory_id, &offer_creation).await?;
+
+    Ok(offer_creation)
 }
 
 pub async fn create_and_broadcast_offer(
