@@ -15,6 +15,10 @@ function isOwnScript(eventScript: string, walletScript: string | null): boolean 
   return walletScript !== null && normalizeHex(eventScript) === normalizeHex(walletScript)
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unhandled indexer event: ${JSON.stringify(value)}`)
+}
+
 export function invalidateEventQueries(
   event: IndexerEvent,
   { queryClient, scriptPubkey }: InvalidateContext,
@@ -41,7 +45,10 @@ export function invalidateEventQueries(
       }
       break
     case 'block_indexed':
-    default:
       invalidateAllIndexerQueries(queryClient)
+      break
+
+    default:
+      assertNever(event)
   }
 }
