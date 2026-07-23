@@ -4,6 +4,7 @@ import { type ListOffersParams, toQueryParams } from './methods'
 
 export const offersQueryKeys = {
   all: () => ['offers'] as const,
+  lists: () => ['offers', 'list'] as const,
   list: (params: ListOffersParams) => ['offers', 'list', toQueryParams(params)] as const,
   detail: (offerId: string) => ['offers', 'detail', offerId] as const,
   overview: () => ['offers', 'overview'] as const,
