@@ -2,15 +2,16 @@ import { Tooltip } from '@heroui/react'
 
 import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
 import { UiFieldLabel } from '@/components/ui/UiFieldLabel'
+import { APR_TOOLTIP, PROTOCOL_FEE_LABEL, PROTOCOL_FEE_TOOLTIP } from '@/constants/offers'
 
 import { MAX_LTV } from '../helpers'
 
 interface LoanMetricsSummaryProps {
+  protocolFee: string
   apr: number
   ltv: number | null
 }
 
-const APR_TOOLTIP = 'The annualized cost of the loan, based on your fee, borrowed amount, and term.'
 const LTV_TOOLTIP =
   "Loan-to-value, or how much you're borrowing against your collateral's current value."
 const LTV_RISK_TOOLTIP = `How close your loan is to the ${(MAX_LTV * 100).toFixed(0)}% maximum LTV. The closer to the limit, the higher the risk.`
@@ -21,7 +22,7 @@ function getLtvRisk(position: number) {
   return { label: 'Low', fill: 'bg-success' }
 }
 
-export default function LoanMetricsSummary({ apr, ltv }: LoanMetricsSummaryProps) {
+export default function LoanMetricsSummary({ protocolFee, apr, ltv }: LoanMetricsSummaryProps) {
   const exceedsMaxLtv = ltv !== null && ltv > MAX_LTV
   const position = ltv === null ? 0 : Math.min(ltv / MAX_LTV, 1)
   const risk = getLtvRisk(position)
@@ -35,12 +36,27 @@ export default function LoanMetricsSummary({ apr, ltv }: LoanMetricsSummaryProps
       >
         <div className='flex items-center justify-between pb-3 text-sm font-medium'>
           <span className='inline-flex items-center gap-2'>
+            {PROTOCOL_FEE_LABEL}
+            <Tooltip delay={0}>
+              <Tooltip.Trigger className='text-muted inline-flex cursor-help'>
+                <CircleInfoIcon className='size-3' />
+              </Tooltip.Trigger>
+              <Tooltip.Content className='text-muted whitespace-pre'>
+                {PROTOCOL_FEE_TOOLTIP}
+              </Tooltip.Content>
+            </Tooltip>
+          </span>
+          <span>{protocolFee}</span>
+        </div>
+        <div className='border-separator border-t' />
+        <div className='flex items-center justify-between py-3 text-sm font-medium'>
+          <span className='inline-flex items-center gap-2'>
             APR
             <Tooltip delay={0}>
               <Tooltip.Trigger className='text-muted inline-flex cursor-help'>
                 <CircleInfoIcon className='size-3' />
               </Tooltip.Trigger>
-              <Tooltip.Content className='max-w-64 break-normal!'>{APR_TOOLTIP}</Tooltip.Content>
+              <Tooltip.Content className='text-muted whitespace-pre'>{APR_TOOLTIP}</Tooltip.Content>
             </Tooltip>
           </span>
           <span>{apr.toFixed(2)}%</span>
@@ -59,7 +75,9 @@ export default function LoanMetricsSummary({ apr, ltv }: LoanMetricsSummaryProps
               >
                 <CircleInfoIcon className='size-3' />
               </Tooltip.Trigger>
-              <Tooltip.Content className='max-w-64 break-normal!'>{LTV_TOOLTIP}</Tooltip.Content>
+              <Tooltip.Content className='text-muted max-w-64 break-normal!'>
+                {LTV_TOOLTIP}
+              </Tooltip.Content>
             </Tooltip>
           </span>
           <span>{ltv === null ? '—' : `${(ltv * 100).toFixed(2)}%`}</span>

@@ -20,7 +20,7 @@ export function UiFieldLabel({
           <Tooltip.Trigger className='text-muted inline-flex cursor-help'>
             <CircleInfoIcon className='size-3' />
           </Tooltip.Trigger>
-          <Tooltip.Content className='max-w-64 break-normal!'>{tooltip}</Tooltip.Content>
+          <Tooltip.Content className='text-muted max-w-64 break-normal!'>{tooltip}</Tooltip.Content>
         </Tooltip>
       )}
     </span>

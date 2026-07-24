@@ -13,7 +13,7 @@ export default function PendingBalanceBadge({ label, tooltip }: PendingBalanceBa
           <Spinner size='sm' color='current' className='size-3.5' />+{label}
         </Chip>
       </Tooltip.Trigger>
-      <Tooltip.Content className='max-w-64 break-normal!'>{tooltip}</Tooltip.Content>
+      <Tooltip.Content className='text-muted max-w-64 break-normal!'>{tooltip}</Tooltip.Content>
     </Tooltip>
   )
 }

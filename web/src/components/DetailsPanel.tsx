@@ -9,6 +9,7 @@ export interface DetailRow {
   value: ReactNode
   copyValue?: string
   tooltip?: string
+  multilineTooltip?: boolean
 }
 
 interface DetailsPanelProps {
@@ -40,7 +41,11 @@ export default function DetailsPanel({ title, rows, bordered }: DetailsPanelProp
                   <Tooltip.Trigger className='text-muted inline-flex shrink-0 cursor-help'>
                     <CircleInfoIcon className='size-3' />
                   </Tooltip.Trigger>
-                  <Tooltip.Content className='max-w-64 break-normal!'>
+                  <Tooltip.Content
+                    className={`text-muted ${
+                      row.multilineTooltip ? 'whitespace-pre' : 'max-w-64 break-normal!'
+                    }`}
+                  >
                     {row.tooltip}
                   </Tooltip.Content>
                 </Tooltip>

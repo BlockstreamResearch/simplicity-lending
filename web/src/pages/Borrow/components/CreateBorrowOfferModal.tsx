@@ -32,7 +32,14 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
 import { formatAmount, formatFeeReserve, formatUsd } from '@/utils/format'
-import { computeApr, computeLtv, daysToBlocks, feeToBps } from '@/utils/offers'
+import {
+  computeApr,
+  computeLtv,
+  computeProtocolFee,
+  daysToBlocks,
+  feeToBps,
+  netFeeBps,
+} from '@/utils/offers'
 import {
   formatPolicyAssetDisplay,
   formatPolicyAssetInputValue,
@@ -333,6 +340,7 @@ export default function CreateBorrowOfferModal({
   const principalBase = toBigintAmount(values.borrow, principalAsset.decimals)
   const feeBase = toBigintAmount(values.fee, principalAsset.decimals)
   const bps = feeToBps(feeBase, principalBase)
+  const protocolFee = `${formatAmount(computeProtocolFee(feeBase), principalAsset.decimals)} ${principalAsset.symbol}`
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
 
   const confirmedBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
@@ -396,7 +404,7 @@ export default function CreateBorrowOfferModal({
       })
     },
   })
-  const apr = computeApr(bps, loanDurationBlocks)
+  const apr = computeApr(netFeeBps(bps), loanDurationBlocks)
   const ltv = computeLtv({
     principal: principalBase,
     principalDecimals: principalAsset.decimals,
@@ -575,7 +583,7 @@ export default function CreateBorrowOfferModal({
           </div>
         </div>
 
-        <LoanMetricsSummary apr={apr} ltv={ltv} />
+        <LoanMetricsSummary protocolFee={protocolFee} apr={apr} ltv={ltv} />
 
         <div className='border-warning bg-warning/15 text-muted flex items-center gap-3 rounded-xl border-2 p-3 text-sm font-medium'>
           <TriangleExclamationIcon className='text-warning size-6 shrink-0' />
