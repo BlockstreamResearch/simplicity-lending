@@ -6,10 +6,18 @@ import { useAssetPriceUsd } from '@/api/prices/hooks'
 import BalanceCard from '@/components/BalanceCard'
 import DetailsPanel, { type DetailRow } from '@/components/DetailsPanel'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { APR_TOOLTIP, PROTOCOL_FEE_LABEL, PROTOCOL_FEE_TOOLTIP } from '@/constants/offers'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
-import { calcInterest, computeApr, computeLtv, formatOfferTermLeft } from '@/utils/offers'
+import {
+  calcInterest,
+  computeApr,
+  computeLtv,
+  computeProtocolFee,
+  formatOfferTermLeft,
+  netFeeBps,
+} from '@/utils/offers'
 
 interface OfferDetailsBodyProps {
   offer: OfferShort
@@ -63,9 +71,16 @@ export default function OfferDetailsBody({
         tooltip: 'The interest you earn when the borrower repays this loan.',
       },
       {
+        label: PROTOCOL_FEE_LABEL,
+        value: formatPrincipalAmount(computeProtocolFee(interest)),
+        tooltip: PROTOCOL_FEE_TOOLTIP,
+        multilineTooltip: true,
+      },
+      {
         label: 'APR',
-        value: `${computeApr(offer.interest_rate, loanDurationBlocks).toFixed(2)}%`,
-        tooltip: 'The annualized cost of this loan.',
+        value: `${computeApr(netFeeBps(offer.interest_rate), loanDurationBlocks).toFixed(2)}%`,
+        tooltip: APR_TOOLTIP,
+        multilineTooltip: true,
       },
       {
         label: 'LTV & Risk Level',
