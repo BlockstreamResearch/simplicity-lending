@@ -5,6 +5,10 @@ CONFIG_DIR="/app/crates/indexer/configuration"
 
 mkdir -p "$CONFIG_DIR"
 
+ASSET_REGISTRY_DOMAIN=$(printf '%s' "${ASSET_REGISTRY_DOMAIN:-${PUBLIC_ORIGIN:-}}" \
+  | sed -E 's#^[a-zA-Z]+://##; s#[/:].*$##')
+export ASSET_REGISTRY_DOMAIN
+
 envsubst < /deployment/configs/backend/base.yaml.template > "$CONFIG_DIR/base.yaml"
 envsubst < /deployment/configs/backend/production.yaml.template > "$CONFIG_DIR/production.yaml"
 

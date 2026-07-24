@@ -86,6 +86,11 @@ esplora:
 indexer:
   interval: 10000
   last_indexed_height: 2309541
+  asset_registry:
+    # Issuer domain served in `.well-known` asset domain proofs (optional).
+    domain: "lending.example.com"
+    # Asset registry to submit verified contracts to (optional).
+    registry_url: "https://assets-testnet.blockstream.info"
 ```
 
 > [!TIP]

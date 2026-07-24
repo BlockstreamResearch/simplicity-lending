@@ -7,6 +7,7 @@ use tokio::net::TcpListener;
 use tower_http::request_id::{self, MakeRequestUuid, RequestId};
 use tower_http::trace::TraceLayer;
 
+use crate::api::assets;
 use crate::api::borrowers;
 use crate::api::events::{self, EventBus, spawn_indexer_events_listener};
 use crate::api::factories;
@@ -31,7 +32,8 @@ pub async fn run_server(listener: TcpListener, db_pool: PgPool) {
         .merge(borrowers::routes())
         .merge(lenders::routes())
         .merge(factories::routes())
-        .merge(offers::routes());
+        .merge(offers::routes())
+        .merge(assets::routes());
 
     #[cfg(feature = "swagger-ui")]
     let app = app.merge(openapi::swagger_routes());

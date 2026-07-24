@@ -44,5 +44,8 @@ COPY crates/indexer/migrations /app/crates/indexer/migrations
 COPY deployment/configs /deployment/configs
 COPY deployment/scripts/render-backend-config.sh /deployment/render-backend-config.sh
 
+ENV ASSET_REGISTRY_DOMAIN=lending.dev.blockstream.com
+ENV ASSET_REGISTRY_URL=https://v1.assets-testnet.blockstream.info/
+
 ENTRYPOINT ["/deployment/render-backend-config.sh"]
 CMD ["simplicity-lending-indexer"]

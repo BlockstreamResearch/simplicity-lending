@@ -2,7 +2,6 @@ import {
   Address,
   AssetId,
   assetIdFromIssuance,
-  ContractHash,
   ExternalUtxo,
   IssuanceRecipient,
   OutPoint,
@@ -16,6 +15,7 @@ import {
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { fetchLatestBlockHeight } from '@/api/esplora/methods'
+import { AssetKind, buildAssetContract, contractHashOrEmpty } from '@/lwk/assetContract'
 import {
   assertExplicitAmount,
   fetchTransaction,
@@ -170,13 +170,15 @@ export function useCreateOffer() {
       EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
       true,
     )
+    const borrowerNftContract = buildAssetContract(issuanceFactoryOutpoint, AssetKind.BorrowerNft)
+    const lenderNftContract = buildAssetContract(lenderNftIssuanceOutpoint, AssetKind.LenderNft)
     const borrowerNftAsset = assetIdFromIssuance(
       issuanceFactoryOutpoint,
-      ContractHash.fromBytes(new Uint8Array(32)),
+      await contractHashOrEmpty(borrowerNftContract),
     )
     const lenderNftAsset = assetIdFromIssuance(
       lenderNftIssuanceOutpoint,
-      ContractHash.fromBytes(new Uint8Array(32)),
+      await contractHashOrEmpty(lenderNftContract),
     )
     const borrowerNftAssetString = borrowerNftAsset.toString()
     const lenderNftAssetString = lenderNftAsset.toString()
@@ -259,14 +261,14 @@ export function useCreateOffer() {
       [IssuanceRecipient.fromAddress(NFT_AMOUNT, new Address(receiveAddressExplicitString))],
       REISSUANCE_TOKEN_AMOUNT,
       null,
-      null,
+      borrowerNftContract,
       new OutPoint(params.issuanceFactoryOutpoint),
     )
     txBuilder = txBuilder.issueAssetToRecipients(
       [IssuanceRecipient.fromAddress(NFT_AMOUNT, new Address(lenderNftScriptAuthAddressString))],
       REISSUANCE_TOKEN_AMOUNT,
       null,
-      null,
+      lenderNftContract,
       new OutPoint(lenderNftIssuanceOutpointString),
     )
     const pendingOfferMetadataPayload = await encodePendingOfferMetadata({
