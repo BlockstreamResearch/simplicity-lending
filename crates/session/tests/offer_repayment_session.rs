@@ -15,9 +15,7 @@ const BORROWER_PRINCIPAL_ASSET_SUPPLY: u64 = 30_000;
 #[tokio::test]
 #[serial]
 async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
@@ -183,9 +181,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
 #[tokio::test]
 #[serial]
 async fn repay_offer_returns_offer_not_active_for_pending_offer() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
 
@@ -211,9 +207,7 @@ async fn repay_offer_returns_offer_not_active_for_pending_offer() -> anyhow::Res
 #[tokio::test]
 #[serial]
 async fn repay_offer_returns_principal_utxo_not_found_without_funds() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);

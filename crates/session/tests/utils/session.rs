@@ -39,11 +39,8 @@ pub fn build_session_with_signer(
     Session::new(provider, signer, indexer)
 }
 
-pub async fn setup_it_context_pool() -> anyhow::Result<Option<(simplex::TestContext, PgPool)>> {
-    let Some(pool) = setup_test_pool().await? else {
-        return Ok(None);
-    };
-
+pub async fn setup_it_context_pool() -> anyhow::Result<(simplex::TestContext, PgPool)> {
+    let pool = setup_test_pool().await?;
     let context = new_context()?;
-    Ok(Some((context, pool)))
+    Ok((context, pool))
 }

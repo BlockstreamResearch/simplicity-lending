@@ -15,9 +15,7 @@ const LIQUIDATION_LOAN_EXPIRATION_OFFSET: u32 = 20;
 #[serial]
 async fn liquidate_offer_burns_lender_nft_and_returns_collateral_after_expiration()
 -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
@@ -86,7 +84,7 @@ async fn liquidate_offer_burns_lender_nft_and_returns_collateral_after_expiratio
             .any(|utxo| {
                 utxo.outpoint.txid == liquidation_txid
                     && utxo.outpoint.vout == 1
-                    && utxo.explicit_amount() == offer.parameters.offer_parameters.collateral_amount
+                    && utxo.amount() == offer.parameters.offer_parameters.collateral_amount
             }),
         "collateral must be returned to the lender's wallet"
     );
@@ -98,9 +96,7 @@ async fn liquidate_offer_burns_lender_nft_and_returns_collateral_after_expiratio
 #[tokio::test]
 #[serial]
 async fn liquidate_offer_returns_loan_not_expired_before_expiration_height() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
@@ -136,9 +132,7 @@ async fn liquidate_offer_returns_loan_not_expired_before_expiration_height() -> 
 #[tokio::test]
 #[serial]
 async fn liquidate_offer_returns_offer_not_active_for_pending_offer() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
 

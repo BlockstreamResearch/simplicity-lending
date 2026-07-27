@@ -67,9 +67,7 @@ fn issue_only_program_factory_utxo(
 #[tokio::test]
 #[serial]
 async fn create_factory_builds_and_broadcasts_transaction() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool).await?;
 
     let session = build_session(&context, &indexer_url);
@@ -118,9 +116,7 @@ async fn create_factory_builds_and_broadcasts_transaction() -> anyhow::Result<()
 #[tokio::test]
 #[serial]
 async fn create_factory_returns_no_policy_utxos_for_unfunded_signer() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool).await?;
 
     let unfunded_signer = context.random_signer();
@@ -136,9 +132,7 @@ async fn create_factory_returns_no_policy_utxos_for_unfunded_signer() -> anyhow:
 #[tokio::test]
 #[serial]
 async fn create_factory_rejects_when_indexer_reports_existing_factory() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
 
     let signer = context.create_signer(&context.get_config().mnemonic);
     let signer_script = signer.get_address().script_pubkey().to_bytes();
@@ -178,9 +172,7 @@ async fn create_factory_rejects_when_indexer_reports_existing_factory() -> anyho
 #[serial]
 async fn remove_factory_builds_and_broadcasts_transaction_when_factory_exists() -> anyhow::Result<()>
 {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
@@ -221,9 +213,7 @@ async fn remove_factory_builds_and_broadcasts_transaction_when_factory_exists() 
 #[serial]
 async fn remove_factory_returns_factory_program_utxo_not_found_when_outpoint_mismatches()
 -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
@@ -258,9 +248,7 @@ async fn remove_factory_returns_factory_program_utxo_not_found_when_outpoint_mis
 #[serial]
 async fn remove_factory_returns_auth_nft_utxo_not_found_when_wallet_missing_auth_token()
 -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
@@ -292,9 +280,7 @@ async fn remove_factory_returns_auth_nft_utxo_not_found_when_wallet_missing_auth
 #[serial]
 async fn remove_factory_returns_invalid_state_for_oversized_issuing_utxos_count()
 -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
 
     let signer = context.create_signer(&context.get_config().mnemonic);
     let signer_script = signer.get_address().script_pubkey().to_bytes();
@@ -330,9 +316,7 @@ async fn remove_factory_returns_invalid_state_for_oversized_issuing_utxos_count(
 #[tokio::test]
 #[serial]
 async fn remove_factory_reports_not_found_for_missing_asset() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool).await?;
 
     let session = build_session(&context, &indexer_url);
