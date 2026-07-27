@@ -31,8 +31,17 @@ pub enum SessionError {
     #[error("Offer is not pending")]
     OfferNotPending,
 
+    #[error("Offer is not active")]
+    OfferNotActive,
+
     #[error("Pending offer UTXO not found")]
     PendingOfferUtxoNotFound,
+
+    #[error("Active offer UTXO not found")]
+    ActiveOfferUtxoNotFound,
+
+    #[error("Loan expiration time has not been reached yet")]
+    LoanNotExpired,
 
     #[error("Lender NFT UTXO not found")]
     LenderNftUtxoNotFound,

@@ -15,7 +15,9 @@ pub use factory::{
 pub use indexer::start_indexer_api;
 #[allow(unused_imports)]
 pub use offer::{
-    OfferCreation, create_and_broadcast_offer, seed_pending_offer, setup_pending_offer,
+    DEFAULT_LOAN_EXPIRATION_OFFSET, OfferCreation, TEST_PRINCIPAL_AMOUNT, accept_pending_offer,
+    create_and_broadcast_offer, dummy_principal_asset_id, offer_params, seed_pending_offer,
+    setup_pending_offer,
 };
 #[allow(unused_imports)]
 pub use session::{build_session, build_session_with_signer, setup_it_context_pool};
