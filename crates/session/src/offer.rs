@@ -449,4 +449,100 @@ impl Session {
 
         Ok(transaction)
     }
+
+    pub async fn repay_offer(&self, offer_id: &str) -> Result<FinalTransaction, SessionError> {
+        let offer_details = self.indexer().get_offer(offer_id).await?;
+        if offer_details.info.base.status != OfferStatus::Active {
+            return Err(SessionError::OfferNotActive);
+        }
+
+        let active_offer_outpoint = offer_details
+            .utxos
+            .iter()
+            .find(|utxo| utxo.utxo_type == UtxoType::ActiveOffer)
+            .ok_or(SessionError::ActiveOfferUtxoNotFound)?;
+        let borrower_nft_outpoint = offer_details
+            .participants
+            .iter()
+            .find(|participant| {
+                participant.participant_type == ParticipantType::Borrower
+                    && participant.spent_txid.is_none()
+            })
+            .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
+
+        let mut active_offer = active_offer_from_indexer(&offer_details.info, self.network())?;
+        let parameters = *active_offer.get_parameters();
+        let total_amount_to_repay = parameters.offer_parameters.get_total_amount_to_repay();
+
+        let active_offer_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&active_offer.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == active_offer_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == active_offer_outpoint.txid
+            })
+            .ok_or(SessionError::ActiveOfferUtxoNotFound)?;
+
+        let borrower_nft_utxo = self
+            .signer()
+            .get_utxos_asset(parameters.borrower_nft_asset_id)?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == borrower_nft_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == borrower_nft_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.borrower_nft_asset_id)
+                    && utxo.txout.value.explicit() == Some(1)
+            })
+            .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
+
+        let principal_utxos = select_utxos_for_amount(
+            self.signer()
+                .get_utxos_asset(parameters.principal_asset_id)?,
+            parameters.principal_asset_id,
+            total_amount_to_repay,
+        )
+        .ok_or(SessionError::PrincipalUtxoNotFound)?;
+
+        let mut transaction = FinalTransaction::new();
+
+        transaction.add_input(
+            PartialInput::new(borrower_nft_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
+
+        active_offer.attach_full_repayment(&mut transaction, active_offer_utxo, None, None);
+
+        for principal_utxo in principal_utxos.utxos() {
+            transaction.add_input(
+                PartialInput::new(principal_utxo.clone()),
+                RequiredSignature::NativeEcdsa,
+            );
+        }
+
+        transaction.add_output(
+            PartialOutput::new(
+                self.signer().get_confidential_address().script_pubkey(),
+                parameters.offer_parameters.collateral_amount,
+                parameters.collateral_asset_id,
+            )
+            .with_blinding_key(self.signer().get_blinding_public_key()),
+        );
+
+        if principal_utxos.has_change() {
+            let change_output = PartialOutput::new(
+                self.signer().get_address().script_pubkey(),
+                principal_utxos.change_amount(),
+                principal_utxos.asset_id(),
+            );
+            let change_output = if principal_utxos.any_confidential() {
+                change_output.with_blinding_key(self.signer().get_blinding_public_key())
+            } else {
+                change_output
+            };
+            transaction.add_output(change_output);
+        }
+
+        Ok(transaction)
+    }
 }
