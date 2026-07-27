@@ -14,9 +14,7 @@ use utils::{
 #[tokio::test]
 #[serial]
 async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
@@ -141,9 +139,7 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
 #[tokio::test]
 #[serial]
 async fn create_offer_returns_factory_not_found_when_indexer_is_empty() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool).await?;
     let session = build_session(&context, &indexer_url);
 
@@ -164,9 +160,7 @@ async fn create_offer_returns_factory_not_found_when_indexer_is_empty() -> anyho
 #[tokio::test]
 #[serial]
 async fn create_offer_rejects_mismatched_indexed_program_outpoint() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 

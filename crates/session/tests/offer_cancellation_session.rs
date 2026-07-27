@@ -15,9 +15,7 @@ use utils::{
 #[tokio::test]
 #[serial]
 async fn cancel_offer_burns_nfts_and_returns_collateral_to_borrower() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
@@ -77,7 +75,7 @@ async fn cancel_offer_burns_nfts_and_returns_collateral_to_borrower() -> anyhow:
             .any(|utxo| {
                 utxo.outpoint.txid == cancel_txid
                     && utxo.outpoint.vout == 2
-                    && utxo.explicit_amount() == offer.parameters.offer_parameters.collateral_amount
+                    && utxo.amount() == offer.parameters.offer_parameters.collateral_amount
             }),
         "collateral must be returned to the borrower's wallet"
     );
@@ -89,9 +87,7 @@ async fn cancel_offer_burns_nfts_and_returns_collateral_to_borrower() -> anyhow:
 #[tokio::test]
 #[serial]
 async fn cancel_offer_returns_offer_not_pending_for_active_offer() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
@@ -122,9 +118,7 @@ async fn cancel_offer_returns_offer_not_pending_for_active_offer() -> anyhow::Re
 #[serial]
 async fn cancel_offer_returns_pending_offer_utxo_not_found_for_mismatched_outpoint()
 -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 

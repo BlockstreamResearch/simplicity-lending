@@ -54,9 +54,7 @@ fn assert_acceptance_tx_shape(
 #[tokio::test]
 #[serial]
 async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
     let lender_signer = context.random_signer();
@@ -170,9 +168,7 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
 #[tokio::test]
 #[serial]
 async fn accept_offer_returns_offer_not_pending_for_active_offer() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
@@ -204,9 +200,7 @@ async fn accept_offer_returns_offer_not_pending_for_active_offer() -> anyhow::Re
 #[tokio::test]
 #[serial]
 async fn accept_offer_returns_principal_utxo_not_found_without_funds() -> anyhow::Result<()> {
-    let Some((context, pool)) = setup_it_context_pool().await? else {
-        return Ok(());
-    };
+    let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);

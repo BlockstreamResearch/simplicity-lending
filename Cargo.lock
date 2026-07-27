@@ -1827,6 +1827,7 @@ name = "lending-session"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dotenvy",
  "lending-contracts",
  "lending-indexer",
  "reqwest",
