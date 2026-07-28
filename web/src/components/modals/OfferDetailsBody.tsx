@@ -16,7 +16,6 @@ import {
   computeLtv,
   computeProtocolFee,
   formatOfferTermLeft,
-  netFeeBps,
 } from '@/utils/offers'
 
 interface OfferDetailsBodyProps {
@@ -78,9 +77,8 @@ export default function OfferDetailsBody({
       },
       {
         label: 'APR',
-        value: `${computeApr(netFeeBps(offer.interest_rate), loanDurationBlocks).toFixed(2)}%`,
+        value: `${computeApr(offer.interest_rate, loanDurationBlocks).toFixed(2)}%`,
         tooltip: APR_TOOLTIP,
-        multilineTooltip: true,
       },
       {
         label: 'LTV & Risk Level',

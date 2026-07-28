@@ -32,14 +32,7 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
 import { formatAmount, formatFeeReserve, formatUsd } from '@/utils/format'
-import {
-  computeApr,
-  computeLtv,
-  computeProtocolFee,
-  daysToBlocks,
-  feeToBps,
-  netFeeBps,
-} from '@/utils/offers'
+import { computeApr, computeLtv, computeProtocolFee, daysToBlocks, feeToBps } from '@/utils/offers'
 import {
   formatPolicyAssetDisplay,
   formatPolicyAssetInputValue,
@@ -404,7 +397,7 @@ export default function CreateBorrowOfferModal({
       })
     },
   })
-  const apr = computeApr(netFeeBps(bps), loanDurationBlocks)
+  const apr = computeApr(bps, loanDurationBlocks)
   const ltv = computeLtv({
     principal: principalBase,
     principalDecimals: principalAsset.decimals,

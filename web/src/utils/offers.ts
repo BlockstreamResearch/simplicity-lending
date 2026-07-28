@@ -29,10 +29,6 @@ export function feeToBps(feeBaseUnits: bigint, principalBaseUnits: bigint): numb
   return Number((feeBaseUnits * BPS_DIVISOR) / principalBaseUnits)
 }
 
-export function netFeeBps(bps: number): number {
-  return bps * (1 - PROTOCOL_FEE_BPS / Number(BPS_DIVISOR))
-}
-
 export function computeApr(bps: number, loanDurationBlocks: number): number {
   if (loanDurationBlocks <= 0) return 0
   return (bps / Number(BPS_DIVISOR)) * (BLOCKS_PER_YEAR / loanDurationBlocks) * 100
