@@ -56,7 +56,9 @@ export default function LoanMetricsSummary({ protocolFee, apr, ltv }: LoanMetric
               <Tooltip.Trigger className='text-muted inline-flex cursor-help'>
                 <CircleInfoIcon className='size-3' />
               </Tooltip.Trigger>
-              <Tooltip.Content className='text-muted whitespace-pre'>{APR_TOOLTIP}</Tooltip.Content>
+              <Tooltip.Content className='text-muted max-w-64 break-normal!'>
+                {APR_TOOLTIP}
+              </Tooltip.Content>
             </Tooltip>
           </span>
           <span>{apr.toFixed(2)}%</span>

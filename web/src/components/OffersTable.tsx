@@ -19,7 +19,7 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { formatAmount } from '@/utils/format'
 import { resolveActorRole } from '@/utils/offerActions'
-import { calcInterest, computeApr, formatOfferTermLeft, netFeeBps } from '@/utils/offers'
+import { calcInterest, computeApr, formatOfferTermLeft } from '@/utils/offers'
 import { getOfferPendingTx } from '@/utils/pendingTransactions'
 import {
   formatPolicyAssetAmount,
@@ -319,7 +319,7 @@ export default function OffersTable<T extends OfferShort>({
                     </Table.Cell>
                     <Table.Cell className='pl-9'>
                       {computeApr(
-                        netFeeBps(offer.interest_rate),
+                        offer.interest_rate,
                         offer.loan_expiration_height - offer.created_at_height,
                       ).toFixed(2)}
                       %
