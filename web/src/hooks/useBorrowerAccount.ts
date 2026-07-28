@@ -1,8 +1,10 @@
 import {
   Address,
+  type AssetId,
   assetIdFromIssuance,
-  ContractHash,
+  type Contract,
   IssuanceRecipient,
+  type OutPoint,
   type Pset,
   Script,
   TxBuilder,
@@ -15,6 +17,7 @@ import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
+import { AssetKind, buildAssetContract, contractHashOrEmpty } from '@/lwk/assetContract'
 import type { UpdatedPset } from '@/lwk/transaction'
 import {
   isConfirmedWalletUtxo,
@@ -118,8 +121,7 @@ export function useBorrowerAccount() {
       XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
       lwkNetwork,
     )
-    const issuedAssetId = assetIdFromIssuance(feeUtxo.outpoint(), emptyContractHash())
-    const metadata = await buildMetadata()
+    const { contract, issuedAssetId, metadata } = await prepareIssuance(feeUtxo.outpoint())
 
     const pset = new TxBuilder(lwkNetwork)
       .feeRate(feeRate)
@@ -131,7 +133,7 @@ export function useBorrowerAccount() {
         ],
         REISSUANCE_TOKEN_AMOUNT,
         null,
-        null,
+        contract,
       )
       .addPostIssuanceScriptOutput(Script.newOpReturn(metadata), 0n, policyAsset)
       .setInputSequence(feeUtxo.outpoint(), WALLET_INPUT_RBF_SEQUENCE)
@@ -174,8 +176,17 @@ export function useBorrowerAccount() {
   }
 }
 
-function emptyContractHash(): ContractHash {
-  return ContractHash.fromBytes(new Uint8Array(32))
+async function prepareIssuance(fundingOutpoint: OutPoint): Promise<{
+  contract: Contract | null
+  issuedAssetId: AssetId
+  metadata: Uint8Array
+}> {
+  const contract = buildAssetContract(fundingOutpoint, AssetKind.Factory)
+  return {
+    contract,
+    issuedAssetId: assetIdFromIssuance(fundingOutpoint, await contractHashOrEmpty(contract)),
+    metadata: await buildMetadata(),
+  }
 }
 
 async function buildMetadata(): Promise<Uint8Array> {

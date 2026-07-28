@@ -96,6 +96,10 @@ fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_less_than_the_t
     let total_fee_to_repay = offer_parameters.offer_parameters.get_total_fee();
     let amount_to_repay = total_fee_to_repay / 2;
 
+    let collateral_to_unlock = amount_to_repay
+        * offer_parameters.offer_parameters.collateral_amount
+        / total_amount_to_repay;
+
     assert!(principal_utxo_amount >= amount_to_repay);
     assert_eq!(
         offer_parameters
@@ -121,6 +125,15 @@ fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_less_than_the_t
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
         RequiredSignature::NativeEcdsa,
+    );
+
+    ft.add_output(
+        PartialOutput::new(
+            borrower.get_address().script_pubkey(),
+            collateral_to_unlock,
+            offer_parameters.collateral_asset_id,
+        )
+        .with_blinding_key(borrower.get_blinding_public_key()),
     );
 
     if principal_utxo_amount > amount_to_repay {
@@ -171,6 +184,10 @@ fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_bigger_than_the
     let total_fee_to_repay = offer_parameters.offer_parameters.get_total_fee();
     let amount_to_repay = total_fee_to_repay * 2;
 
+    let collateral_to_unlock = amount_to_repay
+        * offer_parameters.offer_parameters.collateral_amount
+        / total_amount_to_repay;
+
     assert!(principal_utxo_amount >= amount_to_repay);
     assert_eq!(
         offer_parameters
@@ -196,6 +213,15 @@ fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_bigger_than_the
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
         RequiredSignature::NativeEcdsa,
+    );
+
+    ft.add_output(
+        PartialOutput::new(
+            borrower.get_address().script_pubkey(),
+            collateral_to_unlock,
+            offer_parameters.collateral_asset_id,
+        )
+        .with_blinding_key(borrower.get_blinding_public_key()),
     );
 
     if principal_utxo_amount > amount_to_repay {
@@ -245,6 +271,12 @@ fn partial_repayment_succeeds_in_repayment_offer_fee_phase_with_amount_less_than
     let fee_amount_left = total_fee_to_repay - amount_to_repay;
     let amount_to_repay = fee_amount_left / 2;
 
+    let collateral_to_unlock = amount_to_repay
+        * offer_parameters.offer_parameters.collateral_amount
+        / offer_parameters
+            .offer_parameters
+            .get_total_amount_to_repay();
+
     let active_offer_utxo = provider.fetch_scripthash_utxos(&offer.get_script_pubkey())?[0].clone();
     let borrower_nft_utxo =
         borrower.get_utxos_asset(offer_parameters.borrower_nft_asset_id)?[0].clone();
@@ -283,6 +315,15 @@ fn partial_repayment_succeeds_in_repayment_offer_fee_phase_with_amount_less_than
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
         RequiredSignature::NativeEcdsa,
+    );
+
+    ft.add_output(
+        PartialOutput::new(
+            borrower.get_address().script_pubkey(),
+            collateral_to_unlock,
+            offer_parameters.collateral_asset_id,
+        )
+        .with_blinding_key(borrower.get_blinding_public_key()),
     );
 
     if principal_utxo_amount > amount_to_repay {
@@ -339,6 +380,12 @@ fn partial_repayment_succeeds_in_principal_repayment_phase(
 
     let amount_to_repay = offer.get_current_debt() / 2;
 
+    let collateral_to_unlock = amount_to_repay
+        * offer_parameters.offer_parameters.collateral_amount
+        / offer_parameters
+            .offer_parameters
+            .get_total_amount_to_repay();
+
     let active_offer_utxo = provider.fetch_scripthash_utxos(&offer.get_script_pubkey())?[0].clone();
     let borrower_nft_utxo =
         borrower.get_utxos_asset(offer_parameters.borrower_nft_asset_id)?[0].clone();
@@ -377,6 +424,15 @@ fn partial_repayment_succeeds_in_principal_repayment_phase(
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
         RequiredSignature::NativeEcdsa,
+    );
+
+    ft.add_output(
+        PartialOutput::new(
+            borrower.get_address().script_pubkey(),
+            collateral_to_unlock,
+            offer_parameters.collateral_asset_id,
+        )
+        .with_blinding_key(borrower.get_blinding_public_key()),
     );
 
     if principal_utxo_amount > amount_to_repay {

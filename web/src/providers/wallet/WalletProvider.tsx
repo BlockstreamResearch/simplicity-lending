@@ -1,4 +1,10 @@
-import { type Pset, type Transaction, type Wollet, WolletBuilder } from '@lilbonekit/lwk-web'
+import {
+  type Pset,
+  Registry,
+  type Transaction,
+  type Wollet,
+  WolletBuilder,
+} from '@lilbonekit/lwk-web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -42,6 +48,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const pendingBroadcastsRef = useRef<Map<string, Transaction>>(new Map())
   // Invalidates stale connect() attempts and prevents duplicate disconnect handling.
   const connectionChangeCounterRef = useRef(0)
+  // Registry metadata cache for signPset, keyed by the owned-asset set that seeded it.
+  const registryRef = useRef<{ key: string; registry: Registry } | null>(null)
 
   const [state, setState] = useState<WalletState>(INITIAL_WALLET_STATE)
   const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
@@ -382,30 +390,58 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const signPset = useCallback(async (pset: Pset): Promise<Pset> => {
-    const session = sessionRef.current
-    if (!session) throw new Error('WalletProvider: not connected')
+  /**
+   * Embed ELIP-0100 asset metadata (contract + issuance prevout) into the PSET
+   * for every registry-registered asset the wallet owns.
+   */
+  const withAssetContracts = useCallback(
+    async (pset: Pset, wollet: Wollet): Promise<Pset> => {
+      try {
+        const owned = wollet.assetsOwned()
+        const key = owned.toString()
+        if (registryRef.current?.key !== key) {
+          const registry = await Registry.defaultForNetwork(lwkNetwork, owned)
+          registryRef.current?.registry.free()
+          registryRef.current = { key, registry }
+        }
+        return registryRef.current.registry.addContracts(pset)
+      } catch (error) {
+        console.warn('Signing without asset metadata (registry unavailable):', error)
+        return pset
+      }
+    },
+    [lwkNetwork],
+  )
 
-    const request = await session.connector.signPset(pset)
-    if (!request.id) return request.result
+  const signPset = useCallback(
+    async (pset: Pset): Promise<Pset> => {
+      const session = sessionRef.current
+      if (!session) throw new Error('WalletProvider: not connected')
 
-    pendingCancelRef.current = request.cancel ?? null
-    setState(s => ({
-      ...s,
-      pendingRequest: {
-        kind: 'sign',
-        requestId: request.id!,
-        appLink: request.appLink ?? null,
-      },
-    }))
+      const request = await session.connector.signPset(
+        await withAssetContracts(pset, session.wollet),
+      )
+      if (!request.id) return request.result
 
-    try {
-      return await request.result
-    } finally {
-      pendingCancelRef.current = null
-      setState(s => (s.pendingRequest ? { ...s, pendingRequest: null } : s))
-    }
-  }, [])
+      pendingCancelRef.current = request.cancel ?? null
+      setState(s => ({
+        ...s,
+        pendingRequest: {
+          kind: 'sign',
+          requestId: request.id!,
+          appLink: request.appLink ?? null,
+        },
+      }))
+
+      try {
+        return await request.result
+      } finally {
+        pendingCancelRef.current = null
+        setState(s => (s.pendingRequest ? { ...s, pendingRequest: null } : s))
+      }
+    },
+    [withAssetContracts],
+  )
 
   // Returns the snapshot derived once on connect — single source of truth for the
   // deterministic address(0). Live wollet/utxos still come from get* below.

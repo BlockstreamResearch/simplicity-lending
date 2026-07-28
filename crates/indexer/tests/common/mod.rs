@@ -42,9 +42,38 @@ pub async fn test_pool() -> anyhow::Result<PgPool> {
     Ok(pool)
 }
 
-/// Produces a deterministic 32-byte blob unique per UUID. Handy for
+pub async fn seed_sync_state(pool: &PgPool, last_indexed_height: i64) -> anyhow::Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO sync_state (id, last_indexed_height, last_indexed_hash)
+        VALUES (1, $1, $2)
+        ON CONFLICT (id) DO UPDATE SET
+            last_indexed_height = EXCLUDED.last_indexed_height,
+            last_indexed_hash = EXCLUDED.last_indexed_hash
+        "#,
+    )
+    .bind(last_indexed_height)
+    .bind("test_hash")
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Produces a deterministic 32-byte blob unique per integer seed. Handy for
 /// `created_at_txid` (which has a UNIQUE constraint) when seeding several
 /// offers in the same test.
+pub fn unique_32_bytes_from_i64(seed: i64) -> Vec<u8> {
+    let bytes = seed.to_be_bytes();
+    let mut buf = [0_u8; 32];
+    buf[..8].copy_from_slice(&bytes);
+    buf[8..16].copy_from_slice(&bytes);
+    buf.to_vec()
+}
+
+/// Produces a deterministic 32-byte blob unique per UUID. Handy for
+/// `created_at_txid` (which has a UNIQUE constraint) when seeding several
+/// factories in the same test.
 pub fn unique_32_bytes_from_uuid(id: Uuid) -> Vec<u8> {
     let mut buf = [0_u8; 32];
     buf[..16].copy_from_slice(id.as_bytes());
@@ -66,13 +95,12 @@ pub fn factory_model(id: Uuid, created_at_height: i64, created_at_txid: Vec<u8>)
 }
 
 pub fn offer_model(
-    id: Uuid,
+    txid_seed: i64,
     issuance_factory_id: Uuid,
     created_at_height: i64,
-    created_at_txid: Vec<u8>,
 ) -> OfferModel {
     OfferModel {
-        id,
+        id: 0,
         issuance_factory_id,
         collateral_asset_id: vec![1; 32],
         principal_asset_id: vec![2; 32],
@@ -84,8 +112,9 @@ pub fn offer_model(
         interest_rate: 120,
         loan_expiration_time: 1_234_567,
         current_status: OfferStatus::Pending,
+        updated_at_height: created_at_height,
         created_at_height,
-        created_at_txid,
+        created_at_txid: unique_32_bytes_from_i64(txid_seed),
     }
 }
 
@@ -99,14 +128,29 @@ pub async fn seed_factory_row(pool: &PgPool, factory: &FactoryModel) -> anyhow::
     Ok(())
 }
 
-pub async fn seed_offer_row(pool: &PgPool, offer: &OfferModel) -> anyhow::Result<()> {
+pub async fn seed_offer_row(pool: &PgPool, offer: &mut OfferModel) -> anyhow::Result<i64> {
     let mut sql_tx = pool.begin().await?;
-    insert_offer(&mut sql_tx, offer).await?;
+    let Some(id) = insert_offer(&mut sql_tx, offer).await? else {
+        anyhow::bail!("offer with the same created_at_txid already exists");
+    };
+    offer.id = id;
     if !matches!(offer.current_status, OfferStatus::Pending) {
-        update_offer_status(&mut sql_tx, offer.id, offer.current_status).await?;
+        let update_height = if offer.updated_at_height > offer.created_at_height {
+            offer.updated_at_height
+        } else {
+            offer.created_at_height + 1
+        };
+        update_offer_status(
+            &mut sql_tx,
+            offer.id,
+            offer.current_status,
+            update_height as u64,
+        )
+        .await?;
+        offer.updated_at_height = update_height;
     }
     sql_tx.commit().await?;
-    Ok(())
+    Ok(id)
 }
 
 pub async fn seed_offer_utxo_row(pool: &PgPool, utxo: &OfferUtxoModel) -> anyhow::Result<()> {
@@ -127,7 +171,7 @@ pub async fn seed_participant_utxo_row(
 }
 
 pub fn unspent_offer_utxo(
-    offer_id: Uuid,
+    offer_id: i64,
     outpoint: OutPoint,
     utxo_type: UtxoType,
     created_at_height: i64,
@@ -144,7 +188,7 @@ pub fn unspent_offer_utxo(
 }
 
 pub fn spent_offer_utxo(
-    offer_id: Uuid,
+    offer_id: i64,
     outpoint: OutPoint,
     utxo_type: UtxoType,
     created_at_height: i64,
@@ -163,7 +207,7 @@ pub fn spent_offer_utxo(
 }
 
 pub fn unspent_participant(
-    offer_id: Uuid,
+    offer_id: i64,
     participant_type: ParticipantType,
     outpoint: OutPoint,
     script_pubkey: Vec<u8>,
@@ -182,7 +226,7 @@ pub fn unspent_participant(
 }
 
 pub fn spent_participant(
-    offer_id: Uuid,
+    offer_id: i64,
     participant_type: ParticipantType,
     outpoint: OutPoint,
     script_pubkey: Vec<u8>,
@@ -209,10 +253,11 @@ pub fn outpoint_with_txid_byte(txid_byte: u8, vout: u32) -> OutPoint {
     }
 }
 
-pub fn outpoint_from_uuid_vout(id: Uuid, vout: u32) -> OutPoint {
+pub fn outpoint_from_offer_id(offer_id: i64, vout: u32) -> OutPoint {
     let mut txid_bytes = [0_u8; 32];
-    txid_bytes[..16].copy_from_slice(id.as_bytes());
-    txid_bytes[16..].copy_from_slice(id.as_bytes());
+    let seed_bytes = offer_id.to_be_bytes();
+    txid_bytes[..8].copy_from_slice(&seed_bytes);
+    txid_bytes[8..16].copy_from_slice(&seed_bytes);
     // Perturb first byte so UTXO txid differs from offer's created_at_txid.
     txid_bytes[0] ^= 0x5a;
     OutPoint {

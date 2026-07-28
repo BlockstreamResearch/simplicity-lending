@@ -28,6 +28,19 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
+  # Asset registries verify issuer domain ownership by fetching
+  # https://<domain>/.well-known/liquid-asset-proof-<asset_id> at the domain
+  # root, so this must reach the backend (which serves proofs only for assets
+  # it verified), not the SPA fallback.
+  location ^~ /.well-known/liquid-asset-proof- {
+    proxy_pass http://api:8000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
   location = /esplora {
     return 301 /esplora/;
   }

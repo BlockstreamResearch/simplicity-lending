@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS(\n            SELECT 1 FROM factories WHERE factory_asset_id = $1\n            UNION ALL\n            SELECT 1 FROM offers\n            WHERE borrower_nft_asset_id = $1 OR lender_nft_asset_id = $1\n        ) AS \"known!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "known!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0fd5b933190e36228bff077e207e0d0cde693a947cda39ab46b3000e81d600bc"
+}

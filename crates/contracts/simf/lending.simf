@@ -166,6 +166,20 @@ fn ensure_asset_transition_with_additional_amount(
     check_asset_amounts_eq(output_amount, new_asset_amount);
 }
 
+// Math helpers
+
+fn mul_div(x: u64, y: u64, denominator: u64) -> u64 {
+    let product: u128 = jet::multiply_64(x, y);
+
+    // TODO: Handle case when hi > 0
+    let (hi, lo): (u64, u64) = <u128>::into(product);
+    check_asset_amounts_eq(hi, 0);
+
+    let result: u64 = jet::divide_64(lo, denominator);
+
+    result
+}
+
 // Basis points math
 
 fn get_max_basis_points() -> u64 {
@@ -173,15 +187,7 @@ fn get_max_basis_points() -> u64 {
 }
 
 fn apply_basis_points(amount: u64, bps: u64) -> u64 {
-    let amount_with_bps: u128 = jet::multiply_64(amount, bps);
-
-    // TODO: Handle case when hi > 0
-    let (hi, lo): (u64, u64) = <u128>::into(amount_with_bps);
-    check_asset_amounts_eq(hi, 0);
-
-    let result: u64 = jet::divide_64(lo, get_max_basis_points());
-
-    result
+    mul_div(amount, bps, get_max_basis_points())
 }
 
 // Storage helpers
@@ -242,11 +248,28 @@ fn get_total_amount_to_repay() -> u64 {
     safe_add_64(param::PRINCIPAL_AMOUNT, get_total_fee_amount())
 }
 
+fn get_collateral_for_principal(principal_amount: u64) -> u64 {
+    mul_div(principal_amount, param::COLLATERAL_AMOUNT, get_total_amount_to_repay())
+}
+
 fn split_repayment_by_fees(fee_left: u64, amount_to_repay: u64) -> (u64, u64) {
     let fee_repaid: u64 = min_64(fee_left, amount_to_repay);
     let protocol_fee_repaid: u64 = get_protocol_fee_amount(fee_repaid);
 
     (fee_repaid, protocol_fee_repaid)
+}
+
+fn validate_collateral_input(input_index: u32, current_debt: u64) -> u64 {
+    let (asset_bits, current_collateral_amount): (u256, u64) = get_explicit_asset_and_amount(input_index, true);
+
+    let already_paid_debt: u64 = safe_sub_64(get_total_amount_to_repay(), current_debt);
+    let already_unlocked_collateral: u64 = get_collateral_for_principal(already_paid_debt);
+    let total_collateral_amount: u64 = safe_add_64(current_collateral_amount, already_unlocked_collateral);
+
+    check_assets_eq(asset_bits, param::COLLATERAL_ASSET_ID);
+    check_asset_amounts_eq(total_collateral_amount, param::COLLATERAL_AMOUNT);
+
+    current_collateral_amount
 }
 
 fn validate_vaults(
@@ -365,12 +388,11 @@ fn partial_repay_offer(current_debt: u64, amount_to_repay: u64) {
     assert!(jet::some_64(amount_to_repay));
     assert!(jet::lt_64(amount_to_repay, current_debt));
 
-    ensure_io_asset_and_amount_eq(
-        offer_input_index,
-        offer_output_index,
-        param::COLLATERAL_ASSET_ID,
-        param::COLLATERAL_AMOUNT
-    );
+    let current_collateral_amount: u64 = validate_collateral_input(offer_input_index, current_debt);
+    let collateral_to_unlock: u64 = get_collateral_for_principal(amount_to_repay);
+    let new_collateral_amount: u64 = safe_sub_64(current_collateral_amount, collateral_to_unlock);
+
+    ensure_output_asset_and_amount(offer_output_index, param::COLLATERAL_ASSET_ID, new_collateral_amount);
 
     let new_debt: u64 = safe_sub_64(current_debt, amount_to_repay);
     let new_offer_script_hash: u256 = get_script_hash_for_storage(true, new_debt);
@@ -415,7 +437,8 @@ fn full_repay_offer(current_debt: u64) {
     let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
     ensure_input_script_hash(offer_input_index, current_script_hash);
 
-    ensure_input_asset_and_amount(offer_input_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+    let _: u64 = validate_collateral_input(offer_input_index, current_debt);
+
     ensure_input_asset_and_amount_burn(
         borrower_nft_input_index,
         borrower_nft_output_index,
@@ -451,7 +474,7 @@ fn liquidate_offer(current_debt: u64) {
 
     jet::check_lock_height(param::LOAN_EXPIRATION_TIME);
 
-    ensure_input_asset_and_amount(lending_input_index, param::COLLATERAL_ASSET_ID, param::COLLATERAL_AMOUNT);
+    let _: u64 = validate_collateral_input(lending_input_index, current_debt);
 
     ensure_input_asset_and_amount_burn(lender_nft_input_index, lender_nft_output_index, param::LENDER_NFT_ASSET_ID, 1);
 }

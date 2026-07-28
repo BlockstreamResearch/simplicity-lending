@@ -17,7 +17,7 @@ pub enum UtxoData {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActiveUtxo {
-    pub offer_id: Uuid,
+    pub offer_id: i64,
     pub data: UtxoData,
 }
 
@@ -75,7 +75,7 @@ impl OfferStatus {
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct OfferModel {
-    pub id: Uuid,
+    pub id: i64,
     pub issuance_factory_id: Uuid,
     pub collateral_asset_id: Vec<u8>,
     pub principal_asset_id: Vec<u8>,
@@ -87,6 +87,7 @@ pub struct OfferModel {
     pub interest_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
+    pub updated_at_height: i64,
     pub created_at_height: i64,
     pub created_at_txid: Vec<u8>,
 }
@@ -99,7 +100,7 @@ impl OfferModel {
         txid: Txid,
     ) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: 0,
             issuance_factory_id: factory_id,
             collateral_asset_id: offer_parameters.collateral_asset_id.into_inner().0.to_vec(),
             principal_asset_id: offer_parameters.principal_asset_id.into_inner().0.to_vec(),
@@ -119,6 +120,7 @@ impl OfferModel {
             interest_rate: offer_parameters.offer_parameters.principal_interest_rate as i32,
             loan_expiration_time: offer_parameters.offer_parameters.loan_expiration_time as i32,
             current_status: OfferStatus::Pending,
+            updated_at_height: block_height as i64,
             created_at_height: block_height as i64,
             created_at_txid: txid.as_byte_array().to_vec(),
         }
@@ -127,7 +129,7 @@ impl OfferModel {
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct OfferModelShort {
-    pub id: Uuid,
+    pub id: i64,
     pub issuance_factory_id: Uuid,
     pub collateral_asset_id: Vec<u8>,
     pub principal_asset_id: Vec<u8>,
@@ -136,6 +138,7 @@ pub struct OfferModelShort {
     pub interest_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
+    pub updated_at_height: i64,
     pub created_at_height: i64,
     pub created_at_txid: Vec<u8>,
 }
@@ -202,18 +205,9 @@ mod tests {
         assert_eq!(model.interest_rate, 250);
         assert_eq!(model.loan_expiration_time, 12_345);
         assert_eq!(model.current_status, OfferStatus::Pending);
+        assert_eq!(model.updated_at_height, block_height as i64);
         assert_eq!(model.created_at_height, block_height as i64);
         assert_eq!(model.created_at_txid, txid.as_byte_array().to_vec());
-    }
-
-    #[test]
-    fn offer_model_new_generates_non_nil_offer_id() {
-        let params = make_offer_params();
-        let txid = Txid::from_slice(&[11_u8; 32]).expect("txid");
-
-        let model = OfferModel::new(&params, Uuid::new_v4(), 1, txid);
-
-        assert_ne!(model.id, Uuid::nil());
     }
 
     #[test]
