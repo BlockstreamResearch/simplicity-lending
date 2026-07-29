@@ -1,5 +1,4 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
 
@@ -14,7 +13,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct OffersWatchEntry {
-    pub offer_id: Uuid,
+    pub offer_id: i64,
     pub utxo_type: UtxoType,
 }
 
@@ -71,7 +70,7 @@ impl OffersTracker {
     pub async fn seed_creation_pending_offer_utxo(
         &mut self,
         sql_tx: &mut DbTx<'_>,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         vout: u32,
         block_height: u64,
@@ -101,7 +100,7 @@ impl OffersTracker {
     }
 
     fn new_offer_utxo_model(
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         vout: u32,
         utxo_type: UtxoType,
@@ -123,7 +122,7 @@ impl OffersTracker {
         sql_tx: &mut DbTx<'_>,
         tx: &Transaction,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         utxo_type: UtxoType,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -185,14 +184,14 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Cancelled).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Cancelled, block_height).await?;
 
         let cancellation_outpoint = OutPoint { txid, vout: 0 };
 
@@ -225,14 +224,14 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Active).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Active, block_height).await?;
 
         let lending_outpoint = OutPoint { txid, vout: 0 };
         let lending_offer_utxo = OfferUtxoModel {
@@ -288,7 +287,7 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -309,14 +308,14 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Repaid).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
 
         let repayment_outpoint = OutPoint { txid, vout: 1 };
         let repayment_utxo = OfferUtxoModel {
@@ -351,14 +350,14 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Liquidated).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Liquidated, block_height).await?;
 
         let repayment_outpoint = OutPoint { txid, vout: 0 };
         let repayment_utxo = OfferUtxoModel {
@@ -390,14 +389,14 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         txid: Txid,
         block_height: u64,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
-        update_offer_status(sql_tx, offer_id, OfferStatus::Claimed).await?;
+        update_offer_status(sql_tx, offer_id, OfferStatus::Claimed, block_height).await?;
 
         let claim_outpoint = OutPoint { txid, vout: 1 };
 

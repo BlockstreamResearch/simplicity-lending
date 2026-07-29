@@ -3,9 +3,11 @@ use utoipa::OpenApi;
 #[cfg(feature = "swagger-ui")]
 use utoipa_swagger_ui::{Config, SwaggerUi};
 
+use crate::api::assets::handlers as asset_handlers;
 use crate::api::borrowers::dto::BorrowerOverview;
 use crate::api::borrowers::handlers as borrower_handlers;
 use crate::api::dto::AssetAmount;
+use crate::api::events::handlers as event_handlers;
 use crate::api::factories::dto::{
     FactoryAuthUtxoDto, FactoryDetailsResponse, FactoryProgramUtxoDto,
 };
@@ -19,6 +21,7 @@ use crate::api::offers::dto::{
 };
 use crate::api::offers::handlers as offer_handlers;
 use crate::api::params::{OfferSortBy, SortDir};
+use crate::events::IndexerEvent;
 use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
 
 use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
@@ -44,6 +47,8 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         lender_handlers::list_offers_by_script,
         factory_handlers::get_by_script,
         factory_handlers::get_by_id,
+        event_handlers::subscribe_events,
+        asset_handlers::get_domain_proof,
         health::health,
         health::ready,
     ),
@@ -57,6 +62,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         FactoryProgramUtxoDto,
         FactoryStatus,
         HealthResponse,
+        IndexerEvent,
         LenderOverview,
         OfferDetailsResponseSchema,
         OfferListItemShort,
@@ -77,6 +83,8 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         (name = "borrowers", description = "Borrower queries"),
         (name = "lenders", description = "Lender queries"),
         (name = "factories", description = "Issuance factory queries"),
+        (name = "events", description = "Server-Sent Events for indexer updates"),
+        (name = "assets", description = "ELIP-0100 asset domain proofs"),
         (name = "health", description = "Liveness and readiness checks"),
     )
 )]
@@ -109,8 +117,10 @@ mod tests {
         assert!(paths.contains_key("/lenders/offers"));
         assert!(paths.contains_key("/factories/by-script"));
         assert!(paths.contains_key("/factories/{id}"));
+        assert!(paths.contains_key("/.well-known/{proof_file}"));
         assert!(paths.contains_key("/health"));
         assert!(paths.contains_key("/ready"));
+        assert!(paths.contains_key("/events"));
     }
 
     #[test]
@@ -124,6 +134,10 @@ mod tests {
         let json = serde_json::to_string(&ApiDoc::openapi()).expect("serialize openapi");
         assert!(json.contains("Simplicity Lending Indexer"));
         assert!(json.contains("collateral_amount"));
+        assert!(
+            json.contains("auto-increment") || json.contains(r#""type":"string""#),
+            "offer id should be documented as string in OpenAPI"
+        );
     }
 
     #[test]

@@ -1,14 +1,16 @@
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, Transaction},
+    simplicityhl::elements::{AssetId, Transaction, hex::ToHex},
 };
 
 use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
 
 use crate::{
     db::DbTx,
+    events::{IndexerEvent, notify_indexer_event},
     indexer::{
-        FactoriesTracker, FactoryAuthsTracker, insert_factory, scan_factory_creation_outputs,
+        AssetContractKind, AssetRegistration, FactoriesTracker, FactoryAuthsTracker,
+        insert_factory, scan_factory_creation_outputs,
     },
     models::{FactoryIdentity, FactoryModel},
 };
@@ -17,14 +19,21 @@ pub struct FactoryCreationsTracker {
     issuing_utxos_count: u8,
     reissuance_flags: u64,
     network: SimplicityNetwork,
+    asset_registration: Option<AssetRegistration>,
 }
 
 impl FactoryCreationsTracker {
-    pub fn new(issuing_utxos_count: u8, reissuance_flags: u64, network: SimplicityNetwork) -> Self {
+    pub fn new(
+        issuing_utxos_count: u8,
+        reissuance_flags: u64,
+        network: SimplicityNetwork,
+        asset_registration: Option<AssetRegistration>,
+    ) -> Self {
         Self {
             issuing_utxos_count,
             reissuance_flags,
             network,
+            asset_registration,
         }
     }
 
@@ -46,7 +55,17 @@ impl FactoryCreationsTracker {
                 factories,
                 factory_auths,
             )
-            .await?
+            .await?;
+
+            // Best-effort ELIP-0100 metadata registration.
+            // When the creation committed the expected asset contract, submit it to the registry.
+            // Verifying the metadata remains the wallets' responsibility.
+            if let Some(registration) = &self.asset_registration
+                && let Some(contract) =
+                    registration.verified_contract(AssetContractKind::Factory, tx, factory_asset_id)
+            {
+                registration.spawn_registration(factory_asset_id, contract);
+            }
         }
 
         Ok(())
@@ -66,10 +85,10 @@ impl FactoryCreationsTracker {
         let factory_model =
             FactoryModel::new(&issuance_factory, factory_asset_id, block_height, txid);
 
-        if insert_factory(sql_tx, &factory_model).await?.is_none() {
+        let Some(factory_id) = insert_factory(sql_tx, &factory_model).await? else {
             tracing::debug!(%txid, "Factory already indexed, skipping");
             return Ok(());
-        }
+        };
 
         let identity = FactoryIdentity::from_factory_model(&factory_model);
         let outputs = scan_factory_creation_outputs(&identity, tx).ok_or_else(|| {
@@ -79,7 +98,7 @@ impl FactoryCreationsTracker {
         factory_auths
             .seed_creation_auth_utxo(
                 sql_tx,
-                factory_model.id,
+                factory_id,
                 txid,
                 outputs.auth_vout,
                 &outputs.auth_script_pubkey,
@@ -90,12 +109,22 @@ impl FactoryCreationsTracker {
         factories
             .seed_creation_program_utxo(
                 sql_tx,
-                factory_model.id,
+                factory_id,
                 txid,
                 outputs.program_vout,
                 block_height,
             )
             .await?;
+
+        notify_indexer_event(
+            sql_tx,
+            &IndexerEvent::FactoryCreated {
+                id: factory_id,
+                height: block_height,
+                factory_auth_script_pubkey: outputs.auth_script_pubkey.to_hex(),
+            },
+        )
+        .await?;
 
         Ok(())
     }

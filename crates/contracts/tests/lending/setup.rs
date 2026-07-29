@@ -282,6 +282,12 @@ pub(super) fn partial_repay_offer(
 
     assert!(principal_utxo_amount >= amount_to_repay);
 
+    let collateral_to_unlock = amount_to_repay
+        * active_offer_parameters.offer_parameters.collateral_amount
+        / active_offer_parameters
+            .offer_parameters
+            .get_total_amount_to_repay();
+
     let mut ft = FinalTransaction::new();
 
     ft.add_input(
@@ -307,13 +313,14 @@ pub(super) fn partial_repay_offer(
         RequiredSignature::NativeEcdsa,
     );
 
-    if active_offer.get_current_debt() == amount_to_repay {
-        ft.add_output(PartialOutput::new(
+    ft.add_output(
+        PartialOutput::new(
             borrower.get_address().script_pubkey(),
-            active_offer_parameters.offer_parameters.collateral_amount,
+            collateral_to_unlock,
             active_offer_parameters.collateral_asset_id,
-        ));
-    }
+        )
+        .with_blinding_key(borrower.get_blinding_public_key()),
+    );
 
     if principal_utxo_amount > amount_to_repay {
         ft.add_output(PartialOutput::new(

@@ -1,10 +1,10 @@
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 
 use crate::{
     db::DbTx,
+    events::{IndexerEvent, notify_indexer_event},
     indexer::{OffersWatchEntry, WatchCache},
     models::{OfferStatus, OfferUtxoModel, UtxoType},
 };
@@ -96,18 +96,22 @@ pub async fn spend_offer_utxo(
 #[tracing::instrument(
     name = "Updating offer status in DB",
     skip(sql_tx),
-    fields(offer_id = %offer_id, status = ?new_status)
+    fields(offer_id = %offer_id, status = ?new_status, block_height = %block_height)
 )]
 pub async fn update_offer_status(
     sql_tx: &mut DbTx<'_>,
-    offer_id: Uuid,
+    offer_id: i64,
     new_status: OfferStatus,
+    block_height: u64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
-        UPDATE offers SET current_status = $1 WHERE id = $2
+        UPDATE offers
+        SET current_status = $1, updated_at_height = $2
+        WHERE id = $3
         "#,
         new_status as OfferStatus,
+        block_height as i64,
         offer_id,
     )
     .execute(&mut **sql_tx)
@@ -116,6 +120,16 @@ pub async fn update_offer_status(
         tracing::error!("Failed to update offer status: {e:?}");
         e
     })?;
+
+    notify_indexer_event(
+        sql_tx,
+        &IndexerEvent::OfferStatusUpdated {
+            id: offer_id.to_string(),
+            status: new_status,
+            height: block_height,
+        },
+    )
+    .await?;
 
     Ok(())
 }

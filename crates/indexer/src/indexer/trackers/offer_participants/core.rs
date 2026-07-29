@@ -1,6 +1,5 @@
 use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use crate::{
     db::DbTx,
@@ -14,7 +13,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct ParticipantWatchEntry {
-    pub offer_id: Uuid,
+    pub offer_id: i64,
     pub participant_type: ParticipantType,
 }
 
@@ -74,7 +73,7 @@ impl OfferParticipantsTracker {
     pub async fn seed_creation_participant_utxo(
         &mut self,
         sql_tx: &mut DbTx<'_>,
-        offer_id: Uuid,
+        offer_id: i64,
         participant_type: ParticipantType,
         utxo: ParticipantCreationUtxo,
         block_height: u64,
@@ -101,7 +100,7 @@ impl OfferParticipantsTracker {
         sql_tx: &mut DbTx<'_>,
         tx: &Transaction,
         old_outpoint: &OutPoint,
-        offer_id: Uuid,
+        offer_id: i64,
         participant_type: ParticipantType,
         block_height: u64,
     ) -> anyhow::Result<()> {
@@ -156,7 +155,7 @@ impl OfferParticipantsTracker {
     }
 
     fn new_participant_model(
-        offer_id: Uuid,
+        offer_id: i64,
         participant_type: ParticipantType,
         txid: Txid,
         vout: u32,

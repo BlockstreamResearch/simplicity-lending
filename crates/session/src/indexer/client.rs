@@ -66,7 +66,7 @@ impl IndexerClient {
 
     pub async fn get_offer(
         &self,
-        offer_id: Uuid,
+        offer_id: &str,
     ) -> Result<OfferDetailsResponse, IndexerClientError> {
         self.get(&format!("/offers/{offer_id}"), &[]).await
     }
@@ -74,7 +74,7 @@ impl IndexerClient {
     pub async fn get_offer_ids_by_script(
         &self,
         script_pubkey: &str,
-    ) -> Result<Vec<Uuid>, IndexerClientError> {
+    ) -> Result<Vec<String>, IndexerClientError> {
         self.get(
             "/offers/by-script",
             &[("script_pubkey", script_pubkey.to_string())],

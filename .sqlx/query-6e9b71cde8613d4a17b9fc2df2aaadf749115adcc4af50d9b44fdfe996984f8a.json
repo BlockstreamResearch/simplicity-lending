@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE offers SET current_status = $1 WHERE id = $2\n        ",
+  "query": "\n        UPDATE offers\n        SET current_status = $1, updated_at_height = $2\n        WHERE id = $3\n        ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -20,10 +20,11 @@
             }
           }
         },
-        "Uuid"
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": []
   },
-  "hash": "4e1f629e6f89df695baa64a6eab7bff30c03846378317d19c22385bc83da2e1b"
+  "hash": "6e9b71cde8613d4a17b9fc2df2aaadf749115adcc4af50d9b44fdfe996984f8a"
 }

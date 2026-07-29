@@ -21,9 +21,7 @@ export interface UseLenderStatsResult {
   refetch: () => void
 }
 
-export function useLenderStats({
-  pollIntervalMs = 30_000,
-}: { pollIntervalMs?: number } = {}): UseLenderStatsResult {
+export function useLenderStats(): UseLenderStatsResult {
   const { isReady, confirmedBalances, pendingBalances, scriptPubkey } = useWallet()
   const script = scriptPubkey ?? ''
 
@@ -32,7 +30,7 @@ export function useLenderStats({
     isLoading: overviewLoading,
     error: overviewError,
     refetch: refetchOverview,
-  } = useLenderOverview(script, { refetchInterval: pollIntervalMs })
+  } = useLenderOverview(script)
 
   const refetch = useCallback(() => {
     refetchOverview()

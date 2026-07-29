@@ -31,7 +31,6 @@ import type {
 } from './schemas'
 
 export interface ExtraQueryOptions<T = unknown> {
-  refetchInterval?: number
   staleTime?: number
   placeholderData?: UseQueryOptions<T, Error, T, QueryKey>['placeholderData']
 }
@@ -44,7 +43,6 @@ export function useOffers(
     queryKey: offersQueryKeys.list(params),
     queryFn: ({ signal }) => fetchOffers(params, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.medium,
-    refetchInterval: options.refetchInterval,
     placeholderData: options.placeholderData,
   })
 }
@@ -65,7 +63,6 @@ export function useOffersOverview(
     queryKey: offersQueryKeys.overview(),
     queryFn: ({ signal }) => fetchOffersOverview({ signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.medium,
-    refetchInterval: options.refetchInterval,
     placeholderData: options.placeholderData,
   })
 }
@@ -78,7 +75,6 @@ export function useBorrowerOverview(
     queryKey: borrowerQueryKeys.overview(scriptPubkeyHex),
     queryFn: ({ signal }) => fetchBorrowerOverview(scriptPubkeyHex, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
-    refetchInterval: options.refetchInterval,
     enabled: !!scriptPubkeyHex,
   })
 }
@@ -92,7 +88,6 @@ export function useBorrowerOffers(
     queryKey: borrowerQueryKeys.offers(scriptPubkeyHex, params),
     queryFn: ({ signal }) => fetchBorrowerOffers(scriptPubkeyHex, params, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
-    refetchInterval: options.refetchInterval,
     placeholderData: options.placeholderData,
     enabled: !!scriptPubkeyHex,
   })
@@ -111,7 +106,6 @@ export function useAllBorrowerOffers(
         params,
       ),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
-    refetchInterval: options.refetchInterval,
     placeholderData: options.placeholderData,
     enabled: !!scriptPubkeyHex,
   })
@@ -125,7 +119,6 @@ export function useLenderOverview(
     queryKey: lenderQueryKeys.overview(scriptPubkeyHex),
     queryFn: ({ signal }) => fetchLenderOverview(scriptPubkeyHex, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
-    refetchInterval: options.refetchInterval,
     enabled: !!scriptPubkeyHex,
   })
 }
@@ -139,7 +132,6 @@ export function useLenderOffers(
     queryKey: lenderQueryKeys.offers(scriptPubkeyHex, params),
     queryFn: ({ signal }) => fetchLenderOffers(scriptPubkeyHex, params, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
-    refetchInterval: options.refetchInterval,
     placeholderData: options.placeholderData,
     enabled: !!scriptPubkeyHex,
   })
@@ -158,7 +150,6 @@ export function useAllLenderOffers(
         params,
       ),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
-    refetchInterval: options.refetchInterval,
     placeholderData: options.placeholderData,
     enabled: !!scriptPubkeyHex,
   })
@@ -172,7 +163,6 @@ export function useFactories(
     queryKey: factoryQueryKeys.byScript(scriptPubkeyHex),
     queryFn: ({ signal }) => fetchFactoriesByScript(scriptPubkeyHex, { signal }),
     staleTime: options.staleTime ?? STALE_TIME_MS.realtime,
-    refetchInterval: options.refetchInterval,
     enabled: !!scriptPubkeyHex,
   })
 }

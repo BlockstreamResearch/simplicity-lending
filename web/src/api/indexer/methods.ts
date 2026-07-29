@@ -43,11 +43,15 @@ export interface ListOffersParams {
   factoryId?: string
   collateralAsset?: string
   principalAsset?: string
+  excludeParticipantScript?: string
+  notExpired?: boolean
   limit?: number
   offset?: number
   sortBy?: SortField
   sortDir?: SortDir
 }
+
+export type OfferFilters = Omit<ListOffersParams, 'limit' | 'offset' | 'sortBy' | 'sortDir'>
 
 export const OFFERS_PAGE_LIMIT = 100
 
@@ -65,7 +69,7 @@ export async function fetchAllOfferPages(
   return items
 }
 
-function toQueryParams(params: ListOffersParams): Record<string, string> {
+export function toQueryParams(params: ListOffersParams): Record<string, string> {
   const q: Record<string, string> = {}
   if (params.status) {
     q.status = Array.isArray(params.status) ? params.status.join(',') : params.status
@@ -73,6 +77,10 @@ function toQueryParams(params: ListOffersParams): Record<string, string> {
   if (params.factoryId) q.factory_id = params.factoryId
   if (params.collateralAsset) q.collateral_asset = params.collateralAsset
   if (params.principalAsset) q.principal_asset = params.principalAsset
+  if (params.excludeParticipantScript) {
+    q.exclude_participant_script = normalizeHex(params.excludeParticipantScript)
+  }
+  if (params.notExpired) q.not_expired = 'true'
   if (params.limit !== undefined) q.limit = String(params.limit)
   if (params.offset !== undefined) q.offset = String(params.offset)
   if (params.sortBy) q.sort_by = params.sortBy

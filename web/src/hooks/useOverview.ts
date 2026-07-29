@@ -10,8 +10,8 @@ export interface DashboardOverview {
   activeLoansCount: number
 }
 
-export function useOverview({ pollIntervalMs = 30_000 }: { pollIntervalMs?: number } = {}) {
-  const overviewQuery = useOffersOverview({ refetchInterval: pollIntervalMs })
+export function useOverview() {
+  const overviewQuery = useOffersOverview()
 
   const overview = useMemo<DashboardOverview>(() => {
     const data = overviewQuery.data

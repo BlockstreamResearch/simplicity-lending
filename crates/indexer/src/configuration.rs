@@ -39,11 +39,26 @@ pub struct EsploraSettings {
     pub network: String,
 }
 
+/// ELIP-0100 asset metadata registration for factory assets issued by the lending flow.
+/// Disabled while `domain` is unset.
+#[derive(serde::Deserialize, Clone, Default)]
+pub struct AssetRegistrySettings {
+    /// Issuer domain committed in asset contracts (the deployment's public origin.
+    /// The `.well-known` proof route echoes the request host).
+    #[serde(default)]
+    pub domain: Option<String>,
+    /// Asset registry base URL, e.g. `https://assets-testnet.blockstream.info`.
+    #[serde(default)]
+    pub registry_url: Option<String>,
+}
+
 #[derive(serde::Deserialize, Clone)]
 pub struct IndexerSettings {
     pub protocol_fee_keeper_asset_id: AssetId,
     pub interval: u64,
     pub last_indexed_height: u64,
+    #[serde(default)]
+    pub asset_registry: AssetRegistrySettings,
 }
 
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {

@@ -1,9 +1,10 @@
 use uuid::Uuid;
 
-use super::types::OfferStatus;
+use super::types::{OfferStatus, ParticipantType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OfferSortBy {
+    UpdatedAtHeight,
     CreatedAtHeight,
     CollateralAmount,
     PrincipalAmount,
@@ -14,6 +15,7 @@ pub enum OfferSortBy {
 impl OfferSortBy {
     fn as_query_str(self) -> &'static str {
         match self {
+            Self::UpdatedAtHeight => "updated_at_height",
             Self::CreatedAtHeight => "created_at_height",
             Self::CollateralAmount => "collateral_amount",
             Self::PrincipalAmount => "principal_amount",
@@ -44,6 +46,9 @@ pub struct OfferListParams {
     pub collateral_asset: Option<String>,
     pub principal_asset: Option<String>,
     pub factory_id: Option<Uuid>,
+    pub exclude_participant_script: Option<String>,
+    pub exclude_participant_role: Option<ParticipantType>,
+    pub not_expired: bool,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
     pub sort_by: Option<OfferSortBy>,
@@ -60,6 +65,36 @@ impl OfferListParams {
         self
     }
 
+    pub fn with_collateral_asset(mut self, collateral_asset: impl Into<String>) -> Self {
+        self.collateral_asset = Some(collateral_asset.into());
+        self
+    }
+
+    pub fn with_principal_asset(mut self, principal_asset: impl Into<String>) -> Self {
+        self.principal_asset = Some(principal_asset.into());
+        self
+    }
+
+    pub fn with_factory_id(mut self, factory_id: Uuid) -> Self {
+        self.factory_id = Some(factory_id);
+        self
+    }
+
+    pub fn with_exclude_participant_script(mut self, script: impl Into<String>) -> Self {
+        self.exclude_participant_script = Some(script.into());
+        self
+    }
+
+    pub fn with_exclude_participant_role(mut self, role: ParticipantType) -> Self {
+        self.exclude_participant_role = Some(role);
+        self
+    }
+
+    pub fn with_not_expired(mut self, not_expired: bool) -> Self {
+        self.not_expired = not_expired;
+        self
+    }
+
     pub fn with_limit(mut self, limit: u64) -> Self {
         self.limit = Some(limit);
         self
@@ -67,11 +102,6 @@ impl OfferListParams {
 
     pub fn with_offset(mut self, offset: u64) -> Self {
         self.offset = Some(offset);
-        self
-    }
-
-    pub fn with_factory_id(mut self, factory_id: Uuid) -> Self {
-        self.factory_id = Some(factory_id);
         self
     }
 
@@ -106,6 +136,18 @@ impl OfferListParams {
             pairs.push(("factory_id", factory_id.to_string()));
         }
 
+        if let Some(script) = &self.exclude_participant_script {
+            pairs.push(("exclude_participant_script", script.clone()));
+        }
+
+        if let Some(role) = self.exclude_participant_role {
+            pairs.push(("exclude_participant_role", participant_role_query(role)));
+        }
+
+        if self.not_expired {
+            pairs.push(("not_expired", "true".to_string()));
+        }
+
         if let Some(limit) = self.limit {
             pairs.push(("limit", limit.to_string()));
         }
@@ -123,6 +165,13 @@ impl OfferListParams {
         }
 
         pairs
+    }
+}
+
+fn participant_role_query(role: ParticipantType) -> String {
+    match role {
+        ParticipantType::Borrower => "borrower".to_string(),
+        ParticipantType::Lender => "lender".to_string(),
     }
 }
 
@@ -155,5 +204,21 @@ mod tests {
         assert!(pairs.contains(&("offset", "5".to_string())));
         assert!(pairs.contains(&("sort_by", "loan_expiration_height".to_string())));
         assert!(pairs.contains(&("sort_dir", "asc".to_string())));
+    }
+
+    #[test]
+    fn exclude_and_not_expired_filters_are_serialized() {
+        let params = OfferListParams::new()
+            .with_exclude_participant_script("52ac")
+            .with_exclude_participant_role(ParticipantType::Lender)
+            .with_not_expired(true)
+            .with_sort(OfferSortBy::UpdatedAtHeight, SortDir::Desc);
+        let pairs = params.to_query_pairs();
+
+        assert!(pairs.contains(&("exclude_participant_script", "52ac".to_string())));
+        assert!(pairs.contains(&("exclude_participant_role", "lender".to_string())));
+        assert!(pairs.contains(&("not_expired", "true".to_string())));
+        assert!(pairs.contains(&("sort_by", "updated_at_height".to_string())));
+        assert!(pairs.contains(&("sort_dir", "desc".to_string())));
     }
 }

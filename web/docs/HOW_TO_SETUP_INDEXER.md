@@ -53,7 +53,7 @@ cargo build
 From repo root:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 After this, the indexer should be available at http://localhost:80

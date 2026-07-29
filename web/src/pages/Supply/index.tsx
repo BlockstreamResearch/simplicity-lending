@@ -1,5 +1,7 @@
 import { Spinner } from '@heroui/react'
+import { useMemo } from 'react'
 
+import type { OfferFilters } from '@/api/indexer/methods'
 import BackLink from '@/components/BackLink'
 import OffersPanel from '@/components/OffersPanel'
 import UserBalances from '@/components/UserBalances'
@@ -9,8 +11,19 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import SupplyOverview from './components/SupplyOverview'
 import YourSupply from './components/YourSupply'
 
+const BORROW_OFFERS_PAGE_SIZE = 10
+
 export default function SupplyPage() {
-  const { isReady, reconnecting } = useWallet()
+  const { isReady, reconnecting, scriptPubkey } = useWallet()
+
+  const acceptableOffersFilters: OfferFilters = useMemo(
+    () => ({
+      status: 'pending',
+      notExpired: true,
+      excludeParticipantScript: scriptPubkey ?? undefined,
+    }),
+    [scriptPubkey],
+  )
 
   return (
     <div className='flex flex-col gap-6'>
@@ -23,7 +36,11 @@ export default function SupplyPage() {
               <UserBalances />
               <SupplyOverview />
               <YourSupply />
-              <OffersPanel title='Most recent Borrow Offers' status='pending' pageSize={10} />
+              <OffersPanel
+                title='Most recent Borrow Offers'
+                pageSize={BORROW_OFFERS_PAGE_SIZE}
+                filters={acceptableOffersFilters}
+              />
             </div>
           )
         }

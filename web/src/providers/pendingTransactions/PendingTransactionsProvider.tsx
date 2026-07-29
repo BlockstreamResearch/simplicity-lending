@@ -10,13 +10,9 @@ import {
 } from 'react'
 
 import { fetchTxConfirmations } from '@/api/esplora/methods'
+import { invalidateAllIndexerQueries } from '@/api/indexer/invalidateIndexerQueries'
 import { fetchBorrowerOffers, fetchFactoriesByScript, fetchOffer } from '@/api/indexer/methods'
-import {
-  borrowerQueryKeys,
-  factoryQueryKeys,
-  lenderQueryKeys,
-  offersQueryKeys,
-} from '@/api/indexer/queryKeys'
+import { borrowerQueryKeys, factoryQueryKeys, offersQueryKeys } from '@/api/indexer/queryKeys'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { usePendingTxToasts } from '@/hooks/usePendingTxToasts'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -26,7 +22,6 @@ import { deletePendingTx, loadPendingTxsForWallet, putPendingTx } from './storag
 import type { AddPendingTxInput, PendingTxRecord } from './types'
 
 const CONFIRMATION_POLL_MS = 15_000
-const INDEXER_POLL_MS = 10_000
 const CONFIRMED_THRESHOLD = 1
 const FINALIZED_THRESHOLD = 2
 /** Defensive cap on how long a pending record can sit untracked before we give up on it. */
@@ -115,7 +110,6 @@ function useOfferCleanupPolling({
     queries: offerGroups.map(([offerId]) => ({
       queryKey: offersQueryKeys.detail(offerId),
       queryFn: ({ signal }) => fetchOffer(offerId, { signal }),
-      refetchInterval: INDEXER_POLL_MS,
     })),
     combine: queryResults =>
       queryResults.map(result => ({
@@ -177,7 +171,6 @@ function useCreateOfferCleanupPolling({
     queryKey: borrowerQueryKeys.offers(scriptPubkey ?? '', {}),
     queryFn: ({ signal }) => fetchBorrowerOffers(scriptPubkey as string, {}, { signal }),
     enabled: Boolean(scriptPubkey && records.length > 0),
-    refetchInterval: INDEXER_POLL_MS,
     select: response => response.items,
   })
 
@@ -216,7 +209,6 @@ function useCreateBorrowerAccountCleanupPolling({
     queryKey: factoryQueryKeys.byScript(scriptPubkey ?? ''),
     queryFn: ({ signal }) => fetchFactoriesByScript(scriptPubkey as string, { signal }),
     enabled: Boolean(scriptPubkey && records.length > 0),
-    refetchInterval: INDEXER_POLL_MS,
   })
 
   useEffect(() => {
@@ -286,10 +278,7 @@ function PendingTransactionsStore({
   }, [scriptPubkey])
 
   const invalidateIndexerQueries = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: offersQueryKeys.all() })
-    queryClient.invalidateQueries({ queryKey: borrowerQueryKeys.all() })
-    queryClient.invalidateQueries({ queryKey: lenderQueryKeys.all() })
-    queryClient.invalidateQueries({ queryKey: factoryQueryKeys.all() })
+    invalidateAllIndexerQueries(queryClient)
   }, [queryClient])
 
   const addPendingTx = useCallback(

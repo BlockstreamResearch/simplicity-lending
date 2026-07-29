@@ -86,6 +86,11 @@ esplora:
 indexer:
   interval: 10000
   last_indexed_height: 2309541
+  asset_registry:
+    # Issuer domain served in `.well-known` asset domain proofs (optional).
+    domain: "lending.example.com"
+    # Asset registry to submit verified contracts to (optional).
+    registry_url: "https://assets-testnet.blockstream.info"
 ```
 
 > [!TIP]
@@ -183,6 +188,73 @@ Swagger UI is enabled by default (`swagger-ui` feature). Build without it for pr
 cargo build -p lending-indexer --no-default-features
 ```
 
+> [!TIP]
+> When running the API **directly** on port 8000, use paths without the `/api` prefix (e.g. `http://localhost:8000/offers`). The OpenAPI `servers` entry uses `/api` for deployments where nginx proxies `/api/*` to the backend. Swagger UI on a direct run still lists `/api/...` in "Try it out" unless you select or override the server URL.
+
+### Server-Sent Events
+
+`GET /events` opens a long-lived SSE stream (`text/event-stream`).
+
+When the indexer commits on-chain updates, it issues Postgres `NOTIFY` on channel `lending_indexer_events` with a JSON `IndexerEvent` payload. The API process listens and fans events out to all SSE subscribers.
+
+Event types:
+
+| SSE `event:` | When emitted | Suggested client action |
+| :--- | :--- | :--- |
+| `block_indexed` | After each indexed block | Refetch lists using `not_expired`, overviews |
+| `factory_created` | New issuance factory indexed | Refetch `GET /factories/{id}` or `/factories/by-script` |
+| `offer_created` | New offer indexed (`pending`) | Refetch `GET /borrowers/offers` when `borrower_script_pubkey` matches; or `GET /offers/{id}` |
+| `offer_status_updated` | Offer status transition | Refetch offer details and role-specific lists |
+
+Examples:
+
+```
+event: block_indexed
+data: {"type":"block_indexed","height":2500001}
+
+event: factory_created
+data: {"type":"factory_created","id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","height":2500001,"factory_auth_script_pubkey":"52ac…"}
+
+event: offer_created
+data: {"type":"offer_created","id":"42","issuance_factory_id":"…","height":2500001,"created_at_txid":"aabb…","borrower_script_pubkey":"52ac…"}
+
+event: offer_status_updated
+data: {"type":"offer_status_updated","id":"42","status":"active","height":2500005}
+```
+
+Clients should treat events as signals to refetch REST resources rather than as full state snapshots. Keep-alive comments are sent periodically so proxies do not close idle connections. If an nginx (or similar) reverse proxy sits in front of the API, disable response buffering for this path.
+
+API and indexer may run as separate processes (`RUN_MODE=api` / `RUN_MODE=indexer`); events cross the process boundary via Postgres LISTEN/NOTIFY.
+
+### Identifiers
+
+- **Offer `id`**: internal auto-increment integer (`BIGINT`), serialized in JSON responses as a **decimal string** (e.g. `"1"`). Assigned by PostgreSQL on insert. Used in nested `offer_id` fields and `GET /offers/by-script` responses. Not present on-chain. The path parameter in `GET /offers/{id}` is a numeric ID (e.g. `/offers/42`).
+- **`issuance_factory_id`**: UUID of the issuance factory that created the offer.
+- **`created_at_txid`**: on-chain unique key (hex) of the offer creation transaction.
+
+Example short offer item:
+
+```json
+{
+  "id": "1",
+  "issuance_factory_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "pending",
+  "collateral_asset": "010101…",
+  "principal_asset": "020202…",
+  "collateral_amount": "1000",
+  "principal_amount": "500",
+  "interest_rate": 120,
+  "loan_expiration_height": 1234567,
+  "updated_at_height": 42,
+  "created_at_height": 42,
+  "created_at_txid": "aabbcc…",
+  "participants": [],
+  "borrower_principal_utxo": null
+}
+```
+
+`GET /offers/by-script` returns a JSON array of decimal strings, e.g. `["1", "2", "5"]`.
+
 ### Filtering Parameters (Query Params)
 
 The following parameters are available for `GET /offers`, `GET /borrowers/offers`, and `GET /lenders/offers`:
@@ -191,20 +263,24 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 - `factory_id`: Filter by issuance factory UUID.
 - `collateral_asset`: Hex identifier of the collateral asset (same byte order as in API responses). Filters by `collateral_asset_id` when set alone.
 - `principal_asset`: Hex identifier of the principal asset (same byte order as in API responses). Filters by `principal_asset_id` when set alone. When both `collateral_asset` and `principal_asset` are set, offers must match the asset pair (collateral **and** principal).
+- `exclude_participant_script`: Hex script pubkey. Excludes offers where this script is the latest participant for the given role (e.g. hide a user's own pending offers from the lender marketplace list).
+- `exclude_participant_role`: `borrower` or `lender` (default: `borrower`). Used together with `exclude_participant_script`; ignored when the script parameter is omitted.
+- `not_expired`: When `true`, only returns offers with `loan_expiration_height >= last_indexed_height` from the indexer sync state (i.e. not yet expired at the indexer's current chain height).
 - `limit`: Maximum number of records to return (default: 50, max: 100).
 - `offset`: Pagination offset (default: 0).
-- `sort_by`: `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_height` (default: `created_at_height`).
+- `sort_by`: `updated_at_height`, `created_at_height`, `collateral_amount`, `principal_amount`, `interest_rate`, `loan_expiration_height` (default: `updated_at_height`).
 - `sort_dir`: `asc` or `desc` (default: `desc`).
 
 ### Response Shapes
 
 **Short offer** (`OfferListItemShort`) — used in `GET /offers`, `GET /borrowers/offers`, and `GET /lenders/offers`:
 
-- `id`, `issuance_factory_id`, `status`
+- `id` (decimal string, auto-increment offer ID), `issuance_factory_id` (UUID), `status`
 - `collateral_asset`, `principal_asset` (hex)
 - `collateral_amount`, `principal_amount` (decimal strings, satoshi)
 - `interest_rate` (basis points, e.g. 1000 = 10%)
 - `loan_expiration_height` (block height)
+- `updated_at_height` (block height of the latest offer status update)
 - `created_at_height`, `created_at_txid` (hex)
 - `participants`: latest participant per role (`borrower`, `lender`) — script pubkey only
 - `borrower_principal_utxo`: unspent `borrower_principal` UTXO outpoint (`txid`, `vout`), or omitted when none
@@ -220,11 +296,11 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 }
 ```
 
-**Offer details** (`GET /offers/{id}`) — full offer fields (short + NFT asset ids) plus:
+**Offer details** (`GET /offers/{id}`) — `{id}` in the path is a numeric offer ID (e.g. `/offers/42`); the response `id` and nested `offer_id` fields are decimal strings. Full offer fields (short + NFT asset ids) plus:
 
 - `borrower_principal_utxo`: unspent `borrower_principal` UTXO outpoint (`txid`, `vout`), or omitted when none
-- `participants`: latest participant UTXO per role (`borrower`, `lender`)
-- `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
+- `participants`: latest participant UTXO per role (`borrower`, `lender`); each entry includes `offer_id` (decimal string)
+- `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`); each entry includes `offer_id` (decimal string). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
 
 **Offers overview** (`GET /offers/overview`):
 
@@ -291,5 +367,5 @@ Overview sums (`collateral_locked`, `borrowings`) are per asset across the borro
 | :--- | :--- | :--- | :--- |
 | `GET` | `/offers/overview` | Protocol-wide active loan totals | — |
 | `GET` | `/offers` | Paginated short offer list | offer list filters (see above) |
-| `GET` | `/offers/by-script` | Offer IDs where `script_pubkey` matches an unspent participant UTXO (borrower or lender) | `script_pubkey` (query param, hex) |
-| `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and unspent offer UTXOs | — |
+| `GET` | `/offers/by-script` | Offer IDs (decimal strings) where `script_pubkey` matches an unspent participant UTXO (borrower or lender); response body is `["1", "2", …]` | `script_pubkey` (query param, hex) |
+| `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and unspent offer UTXOs; `{id}` is the numeric offer ID in the path | — |

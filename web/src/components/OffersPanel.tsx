@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffers } from '@/api/indexer/hooks'
-import type { OfferStatus } from '@/api/indexer/schemas'
+import type { OfferFilters } from '@/api/indexer/methods'
 import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
 import { OffersLoadError } from '@/components/OffersLoadError'
 import OffersTable from '@/components/OffersTable'
@@ -13,11 +13,11 @@ import { useOfferListControls } from '@/hooks/useOfferListControls'
 interface OffersPanelProps {
   title: string
   pageSize: number
-  status?: OfferStatus
+  filters?: OfferFilters
 }
 
-export default function OffersPanel({ title, pageSize, status }: OffersPanelProps) {
-  const { page, setPage, params, sort, setSort } = useOfferListControls({ pageSize, status })
+export default function OffersPanel({ title, pageSize, filters }: OffersPanelProps) {
+  const { page, setPage, params, sort, setSort } = useOfferListControls({ pageSize, filters })
 
   const {
     data: offersData,

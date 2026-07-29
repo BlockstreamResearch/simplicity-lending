@@ -8,7 +8,7 @@ use uuid::Uuid;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-const OFFER_ID: &str = "11111111-1111-1111-1111-111111111111";
+const OFFER_ID: &str = "123";
 const FACTORY_ID: &str = "22222222-2222-2222-2222-222222222222";
 
 async fn client_for(server: &MockServer) -> IndexerClient {
@@ -29,6 +29,7 @@ fn offer_list_body() -> String {
                     "principal_amount": "500",
                     "interest_rate": 250,
                     "loan_expiration_height": 123,
+                    "updated_at_height": 456,
                     "created_at_height": 456,
                     "created_at_txid": "ccbbaa",
                     "participants": []
@@ -62,10 +63,11 @@ async fn list_offers_parses_paginated_response() {
     assert_eq!(response.items.len(), 1);
 
     let item = &response.items[0];
-    assert_eq!(item.id, Uuid::parse_str(OFFER_ID).unwrap());
+    assert_eq!(item.id, OFFER_ID);
     assert_eq!(item.status, OfferStatus::Active);
     assert_eq!(item.collateral_amount, "1000");
     assert_eq!(item.interest_rate, 250);
+    assert_eq!(item.updated_at_height, 456);
     assert!(item.participants.is_empty());
     assert!(item.borrower_principal_utxo.is_none());
 }
@@ -127,6 +129,7 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
             "principal_amount": "77",
             "interest_rate": 12,
             "loan_expiration_height": 321,
+            "updated_at_height": 55,
             "created_at_height": 55,
             "created_at_txid": "adde",
             "participants": [],
@@ -167,10 +170,7 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
         .await;
 
     let client = client_for(&server).await;
-    let details = client
-        .get_offer(Uuid::parse_str(OFFER_ID).unwrap())
-        .await
-        .expect("offer details");
+    let details = client.get_offer(OFFER_ID).await.expect("offer details");
 
     assert_eq!(details.info.base.status, OfferStatus::Pending);
     assert_eq!(details.info.borrower_nft_asset, "0a09");
@@ -187,7 +187,7 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
 }
 
 #[tokio::test]
-async fn get_offer_ids_by_script_parses_uuid_list() {
+async fn get_offer_ids_by_script_parses_decimal_string_list() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/offers/by-script"))
@@ -201,7 +201,32 @@ async fn get_offer_ids_by_script_parses_uuid_list() {
         .get_offer_ids_by_script("0014abcd")
         .await
         .expect("offer ids");
-    assert_eq!(ids, vec![Uuid::parse_str(OFFER_ID).unwrap()]);
+    assert_eq!(ids, vec![OFFER_ID.to_string()]);
+}
+
+#[tokio::test]
+async fn list_offers_forwards_new_filter_query_params() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/offers"))
+        .and(query_param("exclude_participant_script", "52ac"))
+        .and(query_param("exclude_participant_role", "borrower"))
+        .and(query_param("not_expired", "true"))
+        .and(query_param("sort_by", "updated_at_height"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(offer_list_body()))
+        .mount(&server)
+        .await;
+
+    let params = OfferListParams::new()
+        .with_exclude_participant_script("52ac")
+        .with_exclude_participant_role(ParticipantType::Borrower)
+        .with_not_expired(true)
+        .with_sort(OfferSortBy::UpdatedAtHeight, SortDir::Desc);
+
+    let client = client_for(&server).await;
+    let response = client.list_offers(&params).await.expect("filtered offers");
+    assert_eq!(response.total, 1);
 }
 
 #[tokio::test]
@@ -283,7 +308,7 @@ async fn not_found_maps_to_not_found_error() {
 
     let client = client_for(&server).await;
     let error = client
-        .get_offer(Uuid::parse_str(OFFER_ID).unwrap())
+        .get_offer(OFFER_ID)
         .await
         .expect_err("expected not found");
 

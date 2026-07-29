@@ -97,7 +97,6 @@ mod tests {
 
     use crate::models::{ActiveUtxo, UtxoData, UtxoType};
     use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
-    use uuid::Uuid;
 
     fn outpoint(txid_byte: u8, vout: u32) -> OutPoint {
         OutPoint {
@@ -106,9 +105,9 @@ mod tests {
         }
     }
 
-    fn active_utxo(offer_byte: u8) -> ActiveUtxo {
+    fn active_utxo(offer_id: i64) -> ActiveUtxo {
         ActiveUtxo {
-            offer_id: Uuid::from_bytes([offer_byte; 16]),
+            offer_id,
             data: UtxoData::Offer(UtxoType::PendingOffer),
         }
     }
@@ -119,10 +118,7 @@ mod tests {
         let op = outpoint(1, 0);
 
         cache.insert(op, active_utxo(10));
-        assert_eq!(
-            cache.get(&op).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([10; 16]))
-        );
+        assert_eq!(cache.get(&op).map(|u| u.offer_id), Some(10));
 
         cache.remove(&op);
         assert!(cache.get(&op).is_none());
@@ -138,10 +134,7 @@ mod tests {
         cache.begin_block();
         cache.commit_block();
 
-        assert_eq!(
-            cache.get(&op).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([20; 16]))
-        );
+        assert_eq!(cache.get(&op).map(|u| u.offer_id), Some(20));
     }
 
     #[test]
@@ -156,10 +149,7 @@ mod tests {
         cache.insert(pending, active_utxo(40));
 
         assert!(cache.get(&existing).is_none());
-        assert_eq!(
-            cache.get(&pending).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([40; 16]))
-        );
+        assert_eq!(cache.get(&pending).map(|u| u.offer_id), Some(40));
     }
 
     #[test]
@@ -174,10 +164,7 @@ mod tests {
         cache.insert(pending, active_utxo(60));
         cache.abort_block();
 
-        assert_eq!(
-            cache.get(&existing).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([50; 16]))
-        );
+        assert_eq!(cache.get(&existing).map(|u| u.offer_id), Some(50));
         assert!(cache.get(&pending).is_none());
     }
 
@@ -194,10 +181,7 @@ mod tests {
         cache.commit_block();
 
         assert!(cache.get(&existing).is_none());
-        assert_eq!(
-            cache.get(&pending).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([80; 16]))
-        );
+        assert_eq!(cache.get(&pending).map(|u| u.offer_id), Some(80));
     }
 
     #[test]
@@ -211,10 +195,7 @@ mod tests {
         cache.insert(op, active_utxo(91));
         cache.commit_block();
 
-        assert_eq!(
-            cache.get(&op).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([91; 16]))
-        );
+        assert_eq!(cache.get(&op).map(|u| u.offer_id), Some(91));
     }
 
     #[test]
@@ -225,10 +206,7 @@ mod tests {
 
         cache.commit_block();
 
-        assert_eq!(
-            cache.get(&op).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([100; 16]))
-        );
+        assert_eq!(cache.get(&op).map(|u| u.offer_id), Some(100));
     }
 
     #[test]
@@ -239,10 +217,7 @@ mod tests {
 
         cache.abort_block();
 
-        assert_eq!(
-            cache.get(&op).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([110; 16]))
-        );
+        assert_eq!(cache.get(&op).map(|u| u.offer_id), Some(110));
     }
 
     #[test]
@@ -266,9 +241,6 @@ mod tests {
 
         assert!(cache.get(&existing).is_none());
         assert!(cache.get(&aborted_new).is_none());
-        assert_eq!(
-            cache.get(&committed_new).map(|u| u.offer_id),
-            Some(Uuid::from_bytes([140; 16]))
-        );
+        assert_eq!(cache.get(&committed_new).map(|u| u.offer_id), Some(140));
     }
 }
