@@ -39,7 +39,13 @@ create_timestamp:
     - when: manual
   script:
     - PLATFORM=linux/${ARCH}
-    - TAG=${CI_COMMIT_SHORT_SHA}-${TIMESTAMP}
+    - |
+      if [ "${CI_COMMIT_BRANCH}" = "${CI_DEFAULT_BRANCH}" ]; then
+        IMAGE_CHANNEL="${CI_DEFAULT_BRANCH}"
+      else
+        IMAGE_CHANNEL="branch-${CI_COMMIT_REF_SLUG}"
+      fi
+      TAG="${IMAGE_CHANNEL}-${CI_COMMIT_SHORT_SHA}-${TIMESTAMP}"
     - echo "Using timestamp ${TIMESTAMP} and tag ${TAG}"
     - CONTEXT=${CONTEXT:-.}
     - BUILD_ARG_FLAGS=""
