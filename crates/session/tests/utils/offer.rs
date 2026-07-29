@@ -251,6 +251,20 @@ pub async fn accept_pending_offer(
     )
     .await?;
 
+    insert_offer_utxo(
+        &mut sql_tx,
+        &OfferUtxoModel {
+            offer_id,
+            txid: accept_txid_bytes.clone(),
+            vout: 1,
+            utxo_type: UtxoType::BorrowerPrincipal,
+            created_at_height: block_height as i64,
+            spent_txid: None,
+            spent_at_height: None,
+        },
+    )
+    .await?;
+
     spend_participant_utxo(&mut sql_tx, &old_lender_outpoint, block_height, accept_txid).await?;
 
     insert_participant_utxo(
