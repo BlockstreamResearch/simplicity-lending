@@ -1,6 +1,9 @@
 use std::lib::binary::not;
 use std::lib::asserts::assert_eq_64;
-use std::lib::op_return::is_output_op_return as is_op_return;
+use std::lib::op_return::is_output_op_return;
+use std::lib::u64::safe_add_64;
+
+use crate::helper::get_asset_and_amount;
 
 // Helper getters
 
@@ -18,29 +21,6 @@ fn get_script_hash(
     };
 
     script_hash
-}
-
-fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
-    let pair: (Asset1, Amount1) = match is_input_index {
-        false => {
-            unwrap(jet::output_amount(index))
-        },
-        true => {
-            unwrap(jet::input_amount(index))
-        }
-    };
-    let (asset, amount): (Asset1, Amount1) = pair;
-    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
-    let amount: u64 = unwrap_right::<(u1, u256)>(amount);
-    (asset_bits, amount)
-}
-
-// Math helpers
-
-fn safe_add_64(first: u64, second: u64) -> u64 {
-    let (carry, result): (bool, u64) = jet::add_64(first, second);
-
-    result
 }
 
 // Check helpers
@@ -120,10 +100,10 @@ fn auth_with_burn_check(
 
     match with_asset_burn {
         false => {
-            assert!(not(is_op_return(output_asset_index)));
+            assert!(not(is_output_op_return(output_asset_index)));
         },
         true => {
-            assert!(is_op_return(output_asset_index));
+            assert!(is_output_op_return(output_asset_index));
         }
     }
 }

@@ -1,0 +1,15 @@
+pub fn get_asset_and_amount(index: u32, is_input_index: bool) -> (u256, u64) {
+    let pair: (Asset1, Amount1) = match is_input_index {
+        false => {
+            unwrap(jet::output_amount(index))
+        },
+        true => {
+            unwrap(jet::input_amount(index))
+        }
+    };
+
+    let (asset, amount): (Asset1, Amount1) = pair;
+    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_bits, amount)
+}
