@@ -7,8 +7,8 @@ use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::programs::script_auth::ScriptAuth;
 use lending_contracts::utils::get_random_seed;
 use simplex::provider::{ProviderTrait, SimplicityNetwork};
-use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::hex::ToHex;
+use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
@@ -620,6 +620,79 @@ impl Session {
             )
             .with_blinding_key(self.signer().get_blinding_public_key()),
         );
+
+        Ok(transaction)
+    }
+
+    pub async fn claim_lender_vault(
+        &self,
+        offer_id: &str,
+    ) -> Result<FinalTransaction, SessionError> {
+        let offer_details = self.indexer().get_offer(offer_id).await?;
+        if offer_details.info.base.status != OfferStatus::Repaid {
+            return Err(SessionError::OfferNotRepaid);
+        }
+
+        let lender_vault_outpoint = offer_details
+            .utxos
+            .iter()
+            .find(|utxo| utxo.utxo_type == UtxoType::Repayment)
+            .ok_or(SessionError::RepaymentUtxoNotFound)?;
+        let lender_nft_outpoint = offer_details
+            .participants
+            .iter()
+            .find(|participant| {
+                participant.participant_type == ParticipantType::Lender
+                    && participant.spent_txid.is_none()
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let parameters =
+            lending_offer_parameters_from_indexer(&offer_details.info, self.network())?;
+        let finalized_lender_vault = parameters.get_finalized_lender_vault();
+
+        let lender_vault_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&finalized_lender_vault.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == lender_vault_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == lender_vault_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.principal_asset_id)
+            })
+            .ok_or(SessionError::RepaymentUtxoNotFound)?;
+
+        let lender_nft_utxo = self
+            .signer()
+            .get_utxos_asset(parameters.lender_nft_asset_id)?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == lender_nft_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == lender_nft_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.lender_nft_asset_id)
+                    && utxo.txout.value.explicit() == Some(1)
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let principal_amount = lender_vault_utxo.explicit_amount();
+
+        let mut transaction = FinalTransaction::new();
+
+        finalized_lender_vault.attach_withdrawing_all(&mut transaction, lender_vault_utxo, 1, 0);
+        transaction.add_input(
+            PartialInput::new(lender_nft_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
+        transaction.add_output(PartialOutput::new(
+            Script::new_op_return(b"burn"),
+            1,
+            parameters.lender_nft_asset_id,
+        ));
+        transaction.add_output(PartialOutput::new(
+            self.signer().get_address().script_pubkey(),
+            principal_amount,
+            parameters.principal_asset_id,
+        ));
 
         Ok(transaction)
     }
