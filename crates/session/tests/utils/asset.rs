@@ -31,7 +31,7 @@ pub fn issue_asset(session: &Session, asset_amount: u64) -> anyhow::Result<Asset
         issuance.asset_id,
     ));
     let policy_change = funding_utxo
-        .explicit_amount()
+        .amount()
         .checked_sub(500)
         .context("policy UTXO too small to cover issuance fee")?;
     tx.add_output(PartialOutput::new(script, policy_change, policy_asset));
@@ -59,7 +59,7 @@ pub fn fund_asset_outputs(
     let asset_utxo = from_signer
         .get_utxos_asset(asset_id)?
         .into_iter()
-        .find(|utxo| utxo.explicit_amount() >= total_amount)
+        .find(|utxo| utxo.amount() >= total_amount)
         .context("sender does not have enough of the funded asset")?;
     let policy_utxo = from_signer
         .get_utxos_asset(policy_asset)?
@@ -67,8 +67,8 @@ pub fn fund_asset_outputs(
         .next()
         .context("expected a policy UTXO for the funding fee")?;
 
-    let asset_utxo_amount = asset_utxo.explicit_amount();
-    let policy_utxo_amount = policy_utxo.explicit_amount();
+    let asset_utxo_amount = asset_utxo.amount();
+    let policy_utxo_amount = policy_utxo.amount();
     let policy_to_send = policy_utxo_amount / 2;
     anyhow::ensure!(
         policy_to_send > 0,

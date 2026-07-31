@@ -62,8 +62,8 @@ pub(super) fn fund_lender(
     let principal_utxo = signer.get_utxos_asset(principal_asset_id)?[0].clone();
     let policy_utxo = signer.get_utxos_asset(context.get_network().policy_asset())?[0].clone();
 
-    let principal_utxo_amount = principal_utxo.explicit_amount();
-    let policy_amount_to_send = policy_utxo.explicit_amount() / 2;
+    let principal_utxo_amount = principal_utxo.amount();
+    let policy_amount_to_send = policy_utxo.amount() / 2;
 
     let mut ft = FinalTransaction::new();
 
@@ -106,8 +106,8 @@ pub(super) fn make_confidential(signer: &Signer, asset_utxo: UTXO) -> anyhow::Re
     ft.add_output(
         PartialOutput::new(
             signer.get_confidential_address().script_pubkey(),
-            asset_utxo.explicit_amount(),
-            asset_utxo.explicit_asset(),
+            asset_utxo.amount(),
+            asset_utxo.asset(),
         )
         .with_blinding_key(signer.get_blinding_public_key()),
     );
