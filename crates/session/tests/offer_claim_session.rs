@@ -69,7 +69,11 @@ async fn claim_principal_unlocks_principal_and_returns_borrower_nft() -> anyhow:
     );
     assert_eq!(
         outputs[1].script_pubkey,
-        borrower.signer().get_address().script_pubkey()
+        borrower.signer().get_confidential_address().script_pubkey()
+    );
+    assert_eq!(
+        outputs[1].blinding_key,
+        Some(borrower.signer().get_blinding_public_key())
     );
 
     let receipt = borrower.signer().broadcast(&claim_tx)?;
@@ -100,7 +104,7 @@ async fn claim_principal_unlocks_principal_and_returns_borrower_nft() -> anyhow:
             .any(|utxo| {
                 utxo.outpoint.txid == claim_txid
                     && utxo.outpoint.vout == 1
-                    && utxo.explicit_amount() == TEST_PRINCIPAL_AMOUNT
+                    && utxo.amount() == TEST_PRINCIPAL_AMOUNT
             }),
         "unlocked principal must return to the borrower's wallet"
     );
