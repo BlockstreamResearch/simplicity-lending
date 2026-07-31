@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use lending_contracts::programs::asset_auth::AssetAuthWitnessParams;
 use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters};
 use lending_contracts::programs::program::SimplexProgram;
@@ -542,6 +543,83 @@ impl Session {
             };
             transaction.add_output(change_output);
         }
+
+        Ok(transaction)
+    }
+
+    pub async fn claim_principal(&self, offer_id: &str) -> Result<FinalTransaction, SessionError> {
+        let offer_details = self.indexer().get_offer(offer_id).await?;
+        if offer_details.info.base.status != OfferStatus::Active {
+            return Err(SessionError::OfferNotActive);
+        }
+
+        let borrower_principal_outpoint = offer_details
+            .utxos
+            .iter()
+            .find(|utxo| utxo.utxo_type == UtxoType::BorrowerPrincipal)
+            .ok_or(SessionError::BorrowerPrincipalUtxoNotFound)?;
+        let borrower_nft_outpoint = offer_details
+            .participants
+            .iter()
+            .find(|participant| {
+                participant.participant_type == ParticipantType::Borrower
+                    && participant.spent_txid.is_none()
+            })
+            .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
+
+        let active_offer = active_offer_from_indexer(&offer_details.info, self.network())?;
+        let parameters = *active_offer.get_parameters();
+        let principal_asset_auth = parameters.get_principal_output_asset_auth();
+
+        let borrower_principal_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&principal_asset_auth.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == borrower_principal_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == borrower_principal_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.principal_asset_id)
+            })
+            .ok_or(SessionError::BorrowerPrincipalUtxoNotFound)?;
+
+        let borrower_nft_utxo = self
+            .signer()
+            .get_utxos_asset(parameters.borrower_nft_asset_id)?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == borrower_nft_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == borrower_nft_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.borrower_nft_asset_id)
+                    && utxo.txout.value.explicit() == Some(1)
+            })
+            .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
+
+        let principal_amount = borrower_principal_utxo.explicit_amount();
+
+        let mut transaction = FinalTransaction::new();
+
+        principal_asset_auth.attach_unlocking(
+            &mut transaction,
+            borrower_principal_utxo,
+            AssetAuthWitnessParams::new(1, 0),
+        );
+        transaction.add_input(
+            PartialInput::new(borrower_nft_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
+        transaction.add_output(PartialOutput::new(
+            self.signer().get_address().script_pubkey(),
+            1,
+            parameters.borrower_nft_asset_id,
+        ));
+        transaction.add_output(
+            PartialOutput::new(
+                self.signer().get_confidential_address().script_pubkey(),
+                principal_amount,
+                parameters.principal_asset_id,
+            )
+            .with_blinding_key(self.signer().get_blinding_public_key()),
+        );
 
         Ok(transaction)
     }

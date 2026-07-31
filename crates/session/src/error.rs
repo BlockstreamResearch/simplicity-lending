@@ -52,6 +52,9 @@ pub enum SessionError {
     #[error("Principal UTXOs with sufficient amount not found in wallet")]
     PrincipalUtxoNotFound,
 
+    #[error("Borrower principal UTXO not found")]
+    BorrowerPrincipalUtxoNotFound,
+
     #[error("Indexer returned invalid `{field}` value for offer: {value}")]
     InvalidOfferData { field: &'static str, value: String },
 
