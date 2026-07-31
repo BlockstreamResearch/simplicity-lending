@@ -1,22 +1,9 @@
-use crate::helper::get_explicit_asset_and_amount;
+use crate::helper::{
+    get_explicit_asset_and_amount,
+    get_script_hash
+};
 
 // Helper getters
-
-fn get_script_hash(
-    index: u32,
-    is_input_index: bool
-) -> u256 {
-    let script_hash: u256 = match is_input_index {
-        false => {
-            unwrap(jet::output_script_hash(index))
-        },
-        true => {
-            unwrap(jet::input_script_hash(index))
-        }
-    };
-
-    script_hash
-}
 
 fn get_current_explicit_asset() -> u256 {
     let asset: Asset1 = jet::current_asset();

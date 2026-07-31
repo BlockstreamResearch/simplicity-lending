@@ -18,3 +18,14 @@ pub fn get_explicit_asset_and_amount(
     let amount: u64 = unwrap_right::<(u1, u256)>(amount);
     (asset_bits, amount)
 }
+
+pub fn get_script_hash(index: u32, is_input_index: bool) -> u256 {
+    match is_input_index {
+        false => {
+            unwrap(jet::output_script_hash(index))
+        },
+        true => {
+            unwrap(jet::input_script_hash(index))
+        }
+    }
+}

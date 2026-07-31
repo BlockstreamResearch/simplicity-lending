@@ -1,33 +1,9 @@
-use crate::helper::get_explicit_asset_and_amount;
+use std::lib::op_return::is_output_op_return;
 
-// Helper getters
-
-fn get_script_hash(
-    index: u32,
-    is_input_index: bool
-) -> u256 {
-    let script_hash: u256 = match is_input_index {
-        false => {
-            unwrap(jet::output_script_hash(index))
-        },
-        true => {
-            unwrap(jet::input_script_hash(index))
-        }
-    };
-
-    script_hash
-}
-
-fn is_op_return(output_index: u32) -> bool {
-    match jet::output_null_datum(output_index, 0) {
-        None => {
-            false
-        },
-        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => {
-            true
-        }
-    }
-}
+use crate::helper::{
+    get_explicit_asset_and_amount,
+    get_script_hash
+};
 
 // Check helpers
 
@@ -87,7 +63,7 @@ fn min_64(first: u64, second: u64) -> u64 {
 // Ensure functions
 
 fn ensure_output_is_op_return(index: u32) {
-    check_flags_eq(is_op_return(index), true);
+    check_flags_eq(is_output_op_return(index), true);
 }
 
 fn ensure_input_script_hash(input_index: u32, expected_script_hash: u256) {
