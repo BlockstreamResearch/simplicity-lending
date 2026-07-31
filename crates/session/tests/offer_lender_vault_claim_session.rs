@@ -81,7 +81,11 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
     assert_eq!(outputs[1].amount, expected_principal);
     assert_eq!(
         outputs[1].script_pubkey,
-        lender.signer().get_address().script_pubkey()
+        lender.signer().get_confidential_address().script_pubkey()
+    );
+    assert_eq!(
+        outputs[1].blinding_key,
+        Some(lender.signer().get_blinding_public_key())
     );
 
     let receipt = lender.signer().broadcast(&claim_tx)?;
@@ -111,7 +115,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
             .any(|utxo| {
                 utxo.outpoint.txid == claim_txid
                     && utxo.outpoint.vout == 1
-                    && utxo.explicit_amount() == expected_principal
+                    && utxo.amount() == expected_principal
             }),
         "unlocked principal must return to the lender's wallet"
     );

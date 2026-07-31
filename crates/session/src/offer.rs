@@ -688,11 +688,14 @@ impl Session {
             1,
             parameters.lender_nft_asset_id,
         ));
-        transaction.add_output(PartialOutput::new(
-            self.signer().get_address().script_pubkey(),
-            principal_amount,
-            parameters.principal_asset_id,
-        ));
+        transaction.add_output(
+            PartialOutput::new(
+                self.signer().get_confidential_address().script_pubkey(),
+                principal_amount,
+                parameters.principal_asset_id,
+            )
+            .with_blinding_key(self.signer().get_blinding_public_key()),
+        );
 
         Ok(transaction)
     }
