@@ -1,4 +1,6 @@
 use std::lib::op_return::is_output_op_return;
+use std::lib::u64::{safe_add_64, safe_sub_64};
+use std::lib::u32::safe_add_32;
 
 use crate::helper::{
     get_explicit_asset_and_amount,
@@ -24,30 +26,6 @@ fn check_flags_eq(flag_1: bool, flag_2: bool) {
 }
 
 // Math helpers
-
-fn safe_add_64(first: u64, second: u64) -> u64 {
-    let (carry, result): (bool, u64) = jet::add_64(first, second);
-
-    check_flags_eq(carry, false);
-
-    result
-}
-
-fn safe_add_32(first: u32, second: u32) -> u32 {
-    let (carry, result): (bool, u32) = jet::add_32(first, second);
-
-    check_flags_eq(carry, false);
-
-    result
-}
-
-fn safe_sub_64(first: u64, second: u64) -> u64 {
-    let (carry, result): (bool, u64) = jet::subtract_64(first, second);
-
-    check_flags_eq(carry, false);
-
-    result
-}
 
 fn min_64(first: u64, second: u64) -> u64 {
     match jet::lt_64(first, second) {

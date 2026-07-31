@@ -1,3 +1,5 @@
+use std::lib::op_return::is_output_op_return;
+
 use crate::helper::{
     get_explicit_asset_and_amount,
     get_script_hash
@@ -10,17 +12,6 @@ fn get_current_explicit_asset() -> u256 {
     let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
 
     asset_bits
-}
-
-fn is_op_return(output_index: u32) -> bool {
-    match jet::output_null_datum(output_index, 0) {
-        None => {
-            false
-        },
-        Some(entry: Option<Either<(u2, u256), Either<u1, u4>>>) => {
-            true
-        }
-    }
 }
 
 // Check helpers
@@ -44,7 +35,7 @@ fn check_flags_eq(flag_1: bool, flag_2: bool) {
 // Ensure functions
 
 fn ensure_output_is_op_return(index: u32) {
-    check_flags_eq(is_op_return(index), true);
+    check_flags_eq(is_output_op_return(index), true);
 }
 
 fn ensure_io_script_hashes_eq(input_index: u32, output_index: u32) {
