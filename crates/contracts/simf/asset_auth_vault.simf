@@ -3,7 +3,7 @@ use std::lib::asserts::assert_eq_64;
 use std::lib::op_return::is_output_op_return;
 use std::lib::u64::safe_add_64;
 
-use crate::helper::get_asset_and_amount;
+use crate::helper::get_explicit_asset_and_amount;
 
 // Helper getters
 
@@ -43,7 +43,7 @@ fn ensure_asset_and_amount_ge(
     expected_asset_bits: u256,
     expected_amount: u64
 ) {
-    let (asset_bits, amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
+    let (asset_bits, amount): (u256, u64) = get_explicit_asset_and_amount(index, is_input_index);
     assert!(jet::eq_256(asset_bits, expected_asset_bits));
     assert!(jet::le_64(expected_amount, amount));
 }
@@ -60,7 +60,10 @@ fn ensure_output_script_hash(index: u32, expected_script_hash: u256) {
 }
 
 fn ensure_vault_asset(index: u32, is_input_index: bool) -> u64 {
-    let (vault_asset_id, vault_amount): (u256, u64) = get_asset_and_amount(index, is_input_index);
+    let (
+        vault_asset_id,
+        vault_amount
+    ): (u256, u64) = get_explicit_asset_and_amount(index, is_input_index);
 
     check_assets_eq(vault_asset_id, param::VAULT_ASSET_ID);
 
