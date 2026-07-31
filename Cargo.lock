@@ -1742,7 +1742,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
 dependencies = [
  "base64 0.13.1",
- "minreq",
+ "minreq 2.14.1",
  "serde",
  "serde_json",
 ]
@@ -1772,7 +1772,7 @@ dependencies = [
  "dotenvy",
  "hex",
  "lending-contracts",
- "minreq",
+ "minreq 2.14.1",
  "serde",
  "sled",
  "smplx-std",
@@ -2002,6 +2002,19 @@ dependencies = [
  "serde",
  "serde_json",
  "webpki-roots 0.25.4",
+]
+
+[[package]]
+name = "minreq"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "659579df697b372ef9e36f02fcbb41f6d6f157dcec7db9c9618fa0f23cf0fc20"
+dependencies = [
+ "rustls 0.23.40",
+ "rustls-webpki 0.103.13",
+ "serde",
+ "serde_json",
+ "webpki-roots 1.0.7",
 ]
 
 [[package]]
@@ -2754,6 +2767,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
 dependencies = [
  "aws-lc-rs",
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -2852,15 +2866,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "santiago"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de36022292bc2086eb8f55bffa460fef3475e4459b478820711f4c421feb87ec"
-dependencies = [
- "regex",
 ]
 
 [[package]]
@@ -3144,9 +3149,9 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "simplicity-lang"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e57bd4d84853974a212eab24ed89da54f49fbccf5e33e93bcd29f0a6591cd5"
+checksum = "13ed081e3046d66c146d7201bcbf3b655ca3436cb83f6efc26d7895bd2b79d06"
 dependencies = [
  "bitcoin",
  "bitcoin_hashes",
@@ -3156,15 +3161,14 @@ dependencies = [
  "ghost-cell",
  "hex-conservative",
  "miniscript",
- "santiago",
  "simplicity-sys",
 ]
 
 [[package]]
 name = "simplicity-sys"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3401ee7331f183a5458c0f5a4b3d5d00bde0fd12e2e03728c537df34efae289"
+checksum = "96d1ec5477c7650b8ef511aa56dccb28f2e8cdb6e87f260ecffdaf0ebfef2d3b"
 dependencies = [
  "bitcoin_hashes",
  "cc",
@@ -3172,9 +3176,9 @@ dependencies = [
 
 [[package]]
 name = "simplicityhl"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25de8990174fe3e1a843df138cacc4265d05839ebd2550c18b9196f567d55e81"
+checksum = "361316795ec753230c421d964ab60940d20d5252c2d39272452528832c9e0ec5"
 dependencies = [
  "base64 0.21.7",
  "chumsky",
@@ -3221,9 +3225,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-build"
-version = "0.0.5"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3170d79eafea8c119d0b491014aaf2054679ba8c285c453c2acb879b52896b5e"
+checksum = "f9f3e2235cc1bb20a5dda4bd32c9be665f39c95f1bcc62d7aa2a9adfc8fb670f"
 dependencies = [
  "glob",
  "globwalk",
@@ -3236,13 +3240,14 @@ dependencies = [
  "syn",
  "thiserror",
  "toml 0.9.12+spec-1.1.0",
+ "toml_edit",
 ]
 
 [[package]]
 name = "smplx-macros"
-version = "0.0.5"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05e591d0bb8c971f38ea525b5e1bc18a39b369bc1fdecc07632120142afb7e34"
+checksum = "03e1a764666ba1aada361499286710a0d5d7f1a0251d882a0843bb67ae5b7973"
 dependencies = [
  "smplx-build",
  "smplx-test",
@@ -3251,9 +3256,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-regtest"
-version = "0.0.5"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b42c1ad54f123195eb90543e88a2e3b1519a11479862ac29a5cd7a0e24f13d7"
+checksum = "f60a5ca5ccc0b531f4915f1d044c68b7ba3bc344e84ac019f539b2e488c8c8d7"
 dependencies = [
  "electrsd",
  "hex",
@@ -3267,17 +3272,17 @@ dependencies = [
 
 [[package]]
 name = "smplx-sdk"
-version = "0.0.5"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe05e7d0f9cef029968453f087f323df01f92e13fc240796a732cffac734074a"
+checksum = "940acb2e942bda24f3f27c3a387aabcf866dc16299746e79a58b47d091162f5d"
 dependencies = [
  "bip39",
  "bitcoin_hashes",
+ "bitcoincore-rpc",
  "dyn-clone",
- "electrsd",
  "elements-miniscript",
  "hex",
- "minreq",
+ "minreq 3.0.0",
  "serde",
  "serde_json",
  "sha2",
@@ -3287,9 +3292,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-std"
-version = "0.0.5"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8465bd3dae0d1bf37c88f2ba4144e5b5157d390a3c5e56016ff04b64ee9fc199"
+checksum = "bcfa462d2e480d1fa6baa382d578501991fd19c3fb15ae5cdd44be362ef5e9ef"
 dependencies = [
  "either",
  "serde",
@@ -3301,9 +3306,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-test"
-version = "0.0.5"
+version = "0.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1025e34b6101ab8e92b6baa4807227894ca324e0405d22a703c2ddd6c5af979"
+checksum = "d76eab48bbf610aea049644b6aacffebbb194e59c663cd450b1f30a29ead19c1"
 dependencies = [
  "electrsd",
  "proc-macro2",
@@ -3852,6 +3857,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "toml_edit"
+version = "0.25.13+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6975367e4d2ef766d86af01ffad14b622fecc8d4357a998fbc4deb6e9bacaf9b"
+dependencies = [
+ "indexmap",
+ "toml_datetime 1.1.1+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "winnow 1.0.3",
+]
+
+[[package]]
 name = "toml_parser"
 version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3862,9 +3880,9 @@ dependencies = [
 
 [[package]]
 name = "toml_writer"
-version = "1.1.1+spec-1.1.0"
+version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
+checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
 
 [[package]]
 name = "tower"

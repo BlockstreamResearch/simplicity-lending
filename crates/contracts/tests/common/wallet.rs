@@ -11,8 +11,8 @@ pub fn get_split_utxo_ft(
     signer: &Signer,
     network: SimplicityNetwork,
 ) -> FinalTransaction {
-    let utxo_asset_id = utxo.explicit_asset();
-    let utxo_amount = utxo.explicit_amount();
+    let utxo_asset_id = utxo.asset();
+    let utxo_amount = utxo.amount();
 
     let mut ft = FinalTransaction::new();
 

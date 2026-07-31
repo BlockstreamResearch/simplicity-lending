@@ -137,8 +137,8 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
             .iter()
             .any(|utxo| {
                 utxo.outpoint.txid == accept_txid
-                    && utxo.explicit_amount() == TEST_PRINCIPAL_AMOUNT
-                    && utxo.explicit_asset() == principal_asset_id
+                    && utxo.amount() == TEST_PRINCIPAL_AMOUNT
+                    && utxo.asset() == principal_asset_id
             }),
         "borrower principal must be locked under AssetAuth"
     );
@@ -155,9 +155,7 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
             .signer()
             .get_utxos_asset(principal_asset_id)?
             .iter()
-            .any(|utxo| {
-                utxo.outpoint.txid == accept_txid && utxo.explicit_amount() == expected_change
-            }),
+            .any(|utxo| { utxo.outpoint.txid == accept_txid && utxo.amount() == expected_change }),
         "principal change must return to the lender wallet"
     );
 
