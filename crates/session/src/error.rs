@@ -34,6 +34,9 @@ pub enum SessionError {
     #[error("Offer is not active")]
     OfferNotActive,
 
+    #[error("Offer is not repaid")]
+    OfferNotRepaid,
+
     #[error("Pending offer UTXO not found")]
     PendingOfferUtxoNotFound,
 
@@ -54,6 +57,9 @@ pub enum SessionError {
 
     #[error("Borrower principal UTXO not found")]
     BorrowerPrincipalUtxoNotFound,
+
+    #[error("Repayment UTXO not found")]
+    RepaymentUtxoNotFound,
 
     #[error("Indexer returned invalid `{field}` value for offer: {value}")]
     InvalidOfferData { field: &'static str, value: String },

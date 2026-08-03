@@ -213,7 +213,7 @@ pub async fn accept_pending_offer(
     pool: &PgPool,
     offer_id: i64,
     offer: &OfferCreation,
-) -> anyhow::Result<AcceptOfferTx> {
+) -> anyhow::Result<(AcceptOfferTx, Txid)> {
     let accept = lender.accept_offer(&offer_id.to_string()).await?;
 
     let receipt = lender.signer().broadcast(&accept.transaction)?;
@@ -284,5 +284,50 @@ pub async fn accept_pending_offer(
 
     sql_tx.commit().await?;
 
-    Ok(accept)
+    Ok((accept, accept_txid))
+}
+
+pub async fn repay_active_offer(
+    borrower: &Session,
+    pool: &PgPool,
+    offer_id: i64,
+    accept_txid: Txid,
+) -> anyhow::Result<Txid> {
+    let repay = borrower.repay_offer(&offer_id.to_string()).await?;
+
+    let receipt = borrower.signer().broadcast(&repay)?;
+    let repay_txid = receipt.txid();
+    receipt.wait()?;
+
+    let block_height = 300_u64;
+    let active_offer_outpoint = OutPoint::new(accept_txid, 0);
+
+    let mut sql_tx = pool.begin().await?;
+
+    spend_offer_utxo(
+        &mut sql_tx,
+        &active_offer_outpoint,
+        block_height,
+        repay_txid,
+    )
+    .await?;
+    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
+
+    insert_offer_utxo(
+        &mut sql_tx,
+        &OfferUtxoModel {
+            offer_id,
+            txid: repay_txid.as_byte_array().to_vec(),
+            vout: 1,
+            utxo_type: UtxoType::Repayment,
+            created_at_height: block_height as i64,
+            spent_txid: None,
+            spent_at_height: None,
+        },
+    )
+    .await?;
+
+    sql_tx.commit().await?;
+
+    Ok(repay_txid)
 }
