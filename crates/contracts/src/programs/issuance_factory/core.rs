@@ -22,7 +22,7 @@ pub struct IssuanceFactory {
 impl IssuanceFactory {
     pub fn new(parameters: IssuanceFactoryParameters) -> Self {
         Self {
-            program: IssuanceFactoryProgram::new(parameters.build_arguments()),
+            program: IssuanceFactoryProgram::new(&parameters.build_arguments()),
             parameters,
         }
     }

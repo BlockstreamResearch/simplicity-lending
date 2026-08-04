@@ -20,7 +20,7 @@ pub struct ScriptAuth {
 impl ScriptAuth {
     pub fn new(parameters: ScriptAuthParameters) -> Self {
         Self {
-            program: ScriptAuthProgram::new(parameters.build_arguments()),
+            program: ScriptAuthProgram::new(&parameters.build_arguments()),
             parameters,
         }
     }

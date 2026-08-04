@@ -18,7 +18,7 @@ pub struct AssetAuth {
 impl AssetAuth {
     pub fn new(parameters: AssetAuthParameters) -> Self {
         Self {
-            program: AssetAuthProgram::new(parameters.build_arguments()),
+            program: AssetAuthProgram::new(&parameters.build_arguments()),
             parameters,
         }
     }

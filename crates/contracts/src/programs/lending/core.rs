@@ -80,7 +80,7 @@ impl LendingOffer {
 
     fn new(parameters: LendingOfferParameters, storage: LendingOfferStorage) -> Self {
         let mut lending_offer_program =
-            LendingProgram::new(parameters.build_arguments()).with_storage_capacity(2);
+            LendingProgram::new(&parameters.build_arguments()).with_storage_capacity(2);
 
         storage.set_storage_slots(&mut lending_offer_program);
 

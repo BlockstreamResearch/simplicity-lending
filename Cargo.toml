@@ -1,8 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-    "crates/*"
-]
+members = ["crates/*"]
 
 [workspace.package]
 license = "MIT OR Apache-2.0"
@@ -14,8 +12,8 @@ multiple_crate_versions = "allow"
 [workspace.dependencies]
 ring = "0.17.14"
 hex = "0.4.3"
-smplx-std = "0.0.9"
+smplx-std = { git = "https://github.com/BlockstreamResearch/smplx.git", branch = "dev" }
 sha2 = { version = "0.10.9", features = ["compress"] }
-serde = { version = "1.0.228", features = ["derive"]}
+serde = { version = "1.0.228", features = ["derive"] }
 thiserror = { version = "2.0.18" }
 tracing = { version = "0.1.41" }
