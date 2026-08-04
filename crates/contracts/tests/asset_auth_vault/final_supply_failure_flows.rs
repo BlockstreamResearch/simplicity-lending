@@ -1,6 +1,4 @@
-use lending_contracts::programs::asset_auth_vault::{
-    ActiveAssetAuthVault, ActiveAssetAuthVaultParameters, FinalizedAssetAuthVaultParameters,
-};
+use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::simplicityhl::elements::Script;
@@ -11,7 +9,7 @@ use super::setup::{final_supply, issue_auth_assets, prepare_vault_asset, setup_a
 fn default_final_vault_supplying_setup(
     context: &simplex::TestContext,
     with_supplier_asset_burn: bool,
-) -> anyhow::Result<(ActiveAssetAuthVault, ActiveAssetAuthVaultParameters)> {
+) -> anyhow::Result<(AssetAuthVault, AssetAuthVaultParameters)> {
     let (supplier_asset_id, keeper_asset_id) = issue_auth_assets(context, 1, 1)?;
 
     let vault_asset_amount = 1_000_000;
@@ -19,17 +17,17 @@ fn default_final_vault_supplying_setup(
 
     let vault_asset_id = prepare_vault_asset(context, vault_asset_amount, vault_asset_amounts)?;
 
-    let vault_parameters = FinalizedAssetAuthVaultParameters {
+    let vault_parameters = AssetAuthVaultParameters {
         vault_asset_id,
         keeper_asset_id,
         supplier_asset_id,
-        keeper_min_asset_amount: 1,
+        supply_goal: 4000,
         with_keeper_asset_burn: false,
         with_supplier_asset_burn,
         network: *context.get_network(),
     };
 
-    let asset_auth_vault = setup_asset_auth_vault(context, vault_parameters)?;
+    let asset_auth_vault = setup_asset_auth_vault(context, vault_parameters, 3000)?;
     let active_vault_parameters = *asset_auth_vault.get_parameters();
 
     Ok((asset_auth_vault, active_vault_parameters))
@@ -42,17 +40,15 @@ fn final_supply_fails_when_vault_already_finalized(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (asset_auth_vault, vault_parameters) =
+    let (mut asset_auth_vault, vault_parameters) =
         default_final_vault_supplying_setup(&context, false)?;
 
-    let finalized_asset_auth_vault = final_supply(&context, &asset_auth_vault, 300)?;
+    final_supply(&context, &mut asset_auth_vault)?;
 
-    let asset_auth_vault_utxo = provider
-        .fetch_scripthash_utxos(&finalized_asset_auth_vault.get_script_pubkey())?[0]
-        .clone();
+    let asset_auth_vault_utxo =
+        provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
 
     let utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
-    let amount_to_supply = utxo_to_supply.explicit_amount();
 
     let supplier_auth_utxo = signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
 
@@ -68,7 +64,7 @@ fn final_supply_fails_when_vault_already_finalized(
         RequiredSignature::NativeEcdsa,
     );
 
-    asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0, amount_to_supply);
+    asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
@@ -92,7 +88,7 @@ fn final_supply_fails_when_auth_utxo_is_invalid(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (asset_auth_vault, vault_parameters) =
+    let (mut asset_auth_vault, vault_parameters) =
         default_final_vault_supplying_setup(&context, false)?;
 
     let asset_auth_vault_utxo =
@@ -102,7 +98,6 @@ fn final_supply_fails_when_auth_utxo_is_invalid(
 
     for auth_index_pair in invalid_auth_index_pairs {
         let utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
-        let amount_to_supply = utxo_to_supply.explicit_amount();
 
         let supplier_auth_utxo =
             signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
@@ -128,7 +123,6 @@ fn final_supply_fails_when_auth_utxo_is_invalid(
             asset_auth_vault_utxo.clone(),
             auth_index_pair.0,
             auth_index_pair.1,
-            amount_to_supply,
         );
 
         let result = signer.finalize(&ft);
@@ -149,14 +143,13 @@ fn final_supply_fails_when_auth_utxo_burned_but_burn_flag_was_not_set(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (asset_auth_vault, vault_parameters) =
+    let (mut asset_auth_vault, vault_parameters) =
         default_final_vault_supplying_setup(&context, false)?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
 
     let utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
-    let amount_to_supply = utxo_to_supply.explicit_amount();
 
     let supplier_auth_utxo = signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
 
@@ -172,7 +165,7 @@ fn final_supply_fails_when_auth_utxo_burned_but_burn_flag_was_not_set(
         RequiredSignature::NativeEcdsa,
     );
 
-    asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0, amount_to_supply);
+    asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
@@ -196,13 +189,13 @@ fn final_supply_fails_when_auth_utxo_was_not_burned_but_burn_flag_was_set(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (asset_auth_vault, vault_parameters) = default_final_vault_supplying_setup(&context, true)?;
+    let (mut asset_auth_vault, vault_parameters) =
+        default_final_vault_supplying_setup(&context, true)?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
 
     let utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
-    let amount_to_supply = utxo_to_supply.explicit_amount();
 
     let supplier_auth_utxo = signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
 
@@ -218,7 +211,7 @@ fn final_supply_fails_when_auth_utxo_was_not_burned_but_burn_flag_was_set(
         RequiredSignature::NativeEcdsa,
     );
 
-    asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0, amount_to_supply);
+    asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),

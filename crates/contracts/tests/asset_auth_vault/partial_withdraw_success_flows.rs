@@ -1,6 +1,4 @@
-use lending_contracts::programs::asset_auth_vault::{
-    ActiveAssetAuthVault, ActiveAssetAuthVaultParameters, FinalizedAssetAuthVaultParameters,
-};
+use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::signer::Signer;
@@ -15,27 +13,28 @@ fn default_vault_withdrawing_setup(
     context: &simplex::TestContext,
     keeper: &Signer,
     vault_asset_amounts: Vec<u64>,
+    supply_goal: u64,
     amount_to_supply: u64,
-) -> anyhow::Result<(ActiveAssetAuthVault, ActiveAssetAuthVaultParameters)> {
+) -> anyhow::Result<(AssetAuthVault, AssetAuthVaultParameters)> {
     let (supplier_asset_id, keeper_asset_id) = issue_auth_assets(context, 1, 1)?;
 
     let vault_asset_amount = 1_000_000;
     let vault_asset_id = prepare_vault_asset(context, vault_asset_amount, vault_asset_amounts)?;
 
-    let vault_parameters = FinalizedAssetAuthVaultParameters {
+    let vault_parameters = AssetAuthVaultParameters {
         vault_asset_id,
         keeper_asset_id,
         supplier_asset_id,
-        keeper_min_asset_amount: 1,
+        supply_goal,
         with_keeper_asset_burn: false,
         with_supplier_asset_burn: false,
         network: *context.get_network(),
     };
 
-    let asset_auth_vault = setup_asset_auth_vault(context, vault_parameters)?;
+    let mut asset_auth_vault = setup_asset_auth_vault(context, vault_parameters, supply_goal / 2)?;
     let active_vault_parameters = *asset_auth_vault.get_parameters();
 
-    supply(context, &asset_auth_vault, amount_to_supply)?;
+    supply(context, &mut asset_auth_vault, amount_to_supply)?;
 
     fund_keeper(context, keeper, vault_parameters.keeper_asset_id)?;
 
@@ -45,7 +44,7 @@ fn default_vault_withdrawing_setup(
 fn withdraw(
     context: &simplex::TestContext,
     keeper: &Signer,
-    asset_auth_vault: &ActiveAssetAuthVault,
+    asset_auth_vault: &AssetAuthVault,
     amount_to_withdraw: u64,
 ) -> anyhow::Result<()> {
     let provider = context.get_default_provider();
@@ -96,7 +95,7 @@ fn partial_withdraw_succeeds_with_one_explicit_output(
     let keeper = context.random_signer();
 
     let (asset_auth_vault, vault_parameters) =
-        default_vault_withdrawing_setup(&context, &keeper, vec![5000], 1000)?;
+        default_vault_withdrawing_setup(&context, &keeper, vec![5000], 3000, 1000)?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
@@ -151,7 +150,7 @@ fn partial_withdraw_succeeds_with_several_explicit_outputs(
     let keeper = context.random_signer();
 
     let (asset_auth_vault, vault_parameters) =
-        default_vault_withdrawing_setup(&context, &keeper, vec![5000], 1000)?;
+        default_vault_withdrawing_setup(&context, &keeper, vec![5000], 3000, 1000)?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
@@ -211,7 +210,7 @@ fn partial_withdraw_succeeds_with_several_confidential_outputs(
     let keeper = context.random_signer();
 
     let (asset_auth_vault, vault_parameters) =
-        default_vault_withdrawing_setup(&context, &keeper, vec![5000], 1000)?;
+        default_vault_withdrawing_setup(&context, &keeper, vec![5000], 3000, 1000)?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
@@ -275,7 +274,7 @@ fn partial_withdraw_succeeds_several_times(context: simplex::TestContext) -> any
     let keeper = context.random_signer();
 
     let (asset_auth_vault, _) =
-        default_vault_withdrawing_setup(&context, &keeper, vec![5000], 1000)?;
+        default_vault_withdrawing_setup(&context, &keeper, vec![5000], 3000, 1000)?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();

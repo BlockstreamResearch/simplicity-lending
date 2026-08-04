@@ -1,6 +1,4 @@
-use lending_contracts::programs::asset_auth_vault::{
-    ActiveAssetAuthVault, ActiveAssetAuthVaultParameters, FinalizedAssetAuthVaultParameters,
-};
+use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::simplicityhl::elements::Script;
@@ -10,25 +8,26 @@ use super::setup::{final_supply, issue_auth_assets, prepare_vault_asset, setup_a
 
 fn default_vault_supplying_setup(
     context: &simplex::TestContext,
-) -> anyhow::Result<(ActiveAssetAuthVault, ActiveAssetAuthVaultParameters)> {
+    supply_goal: u64,
+) -> anyhow::Result<(AssetAuthVault, AssetAuthVaultParameters)> {
     let (supplier_asset_id, keeper_asset_id) = issue_auth_assets(context, 1, 1)?;
 
     let vault_asset_amount = 1_000_000;
-    let vault_asset_amounts = vec![5000];
+    let vault_asset_amounts = vec![5000, 5000, 5000];
 
     let vault_asset_id = prepare_vault_asset(context, vault_asset_amount, vault_asset_amounts)?;
 
-    let vault_parameters = FinalizedAssetAuthVaultParameters {
+    let vault_parameters = AssetAuthVaultParameters {
         vault_asset_id,
         keeper_asset_id,
         supplier_asset_id,
-        keeper_min_asset_amount: 1,
+        supply_goal,
         with_keeper_asset_burn: false,
         with_supplier_asset_burn: false,
         network: *context.get_network(),
     };
 
-    let asset_auth_vault = setup_asset_auth_vault(context, vault_parameters)?;
+    let asset_auth_vault = setup_asset_auth_vault(context, vault_parameters, 3000)?;
     let active_vault_parameters = *asset_auth_vault.get_parameters();
 
     Ok((asset_auth_vault, active_vault_parameters))
@@ -39,13 +38,12 @@ fn fails_to_supply_to_finalized_vault(context: simplex::TestContext) -> anyhow::
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (asset_auth_vault, vault_parameters) = default_vault_supplying_setup(&context)?;
+    let (mut asset_auth_vault, vault_parameters) = default_vault_supplying_setup(&context, 7_000)?;
 
-    let finalized_asset_auth_vault = final_supply(&context, &asset_auth_vault, 300)?;
+    final_supply(&context, &mut asset_auth_vault)?;
 
-    let asset_auth_vault_utxo = provider
-        .fetch_scripthash_utxos(&finalized_asset_auth_vault.get_script_pubkey())?[0]
-        .clone();
+    let asset_auth_vault_utxo =
+        provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
 
     let utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
     let amount_to_supply = utxo_to_supply.explicit_amount();
@@ -86,7 +84,8 @@ fn fails_to_supply_when_auth_utxo_is_invalid(context: simplex::TestContext) -> a
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (asset_auth_vault, vault_parameters) = default_vault_supplying_setup(&context)?;
+    let (mut asset_auth_vault, vault_parameters) =
+        default_vault_supplying_setup(&context, 1_000_000)?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
@@ -142,7 +141,7 @@ fn fails_to_supply_when_auth_utxo_burned_but_burn_flag_was_not_set(
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (asset_auth_vault, vault_parameters) = default_vault_supplying_setup(&context)?;
+    let (mut asset_auth_vault, vault_parameters) = default_vault_supplying_setup(&context, 5_000)?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();

@@ -1,6 +1,4 @@
-use lending_contracts::programs::asset_auth_vault::{
-    FinalizedAssetAuthVault, FinalizedAssetAuthVaultParameters,
-};
+use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::signer::Signer;
@@ -17,29 +15,30 @@ fn default_vault_withdrawing_all_setup(
     vault_asset_amounts: Vec<u64>,
     amount_to_supply: u64,
     with_keeper_asset_burn: bool,
-) -> anyhow::Result<(FinalizedAssetAuthVault, FinalizedAssetAuthVaultParameters)> {
+) -> anyhow::Result<(AssetAuthVault, AssetAuthVaultParameters)> {
     let (supplier_asset_id, keeper_asset_id) = issue_auth_assets(context, 1, 1)?;
 
     let vault_asset_amount = 1_000_000;
     let vault_asset_id = prepare_vault_asset(context, vault_asset_amount, vault_asset_amounts)?;
 
-    let vault_parameters = FinalizedAssetAuthVaultParameters {
+    let vault_parameters = AssetAuthVaultParameters {
         vault_asset_id,
         keeper_asset_id,
         supplier_asset_id,
-        keeper_min_asset_amount: 1,
+        supply_goal: amount_to_supply,
         with_keeper_asset_burn,
         with_supplier_asset_burn: false,
         network: *context.get_network(),
     };
 
-    let asset_auth_vault = setup_asset_auth_vault(context, vault_parameters)?;
+    let mut asset_auth_vault =
+        setup_asset_auth_vault(context, vault_parameters, amount_to_supply / 2)?;
 
-    let finalized_vault = final_supply(context, &asset_auth_vault, amount_to_supply)?;
+    final_supply(context, &mut asset_auth_vault)?;
 
     fund_keeper(context, keeper, vault_parameters.keeper_asset_id)?;
 
-    Ok((finalized_vault, vault_parameters))
+    Ok((asset_auth_vault, vault_parameters))
 }
 
 #[simplex::test]

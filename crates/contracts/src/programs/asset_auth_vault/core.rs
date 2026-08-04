@@ -46,7 +46,7 @@ impl AssetAuthVault {
     pub fn new_active(parameters: AssetAuthVaultParameters, already_supplied: u64) -> Self {
         assert!(
             already_supplied < parameters.supply_goal,
-            "Already supplied amount cnt't be higher than the supply goal"
+            "Already supplied amount can't be higher than the supply goal"
         );
 
         let storage = AssetAuthVaultStorage {
