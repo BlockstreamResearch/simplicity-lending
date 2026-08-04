@@ -1,6 +1,6 @@
 use std::lib::binary::not;
 use std::lib::op_return::is_output_op_return;
-use std::lib::u64::safe_sub_64;
+use std::lib::u64::{safe_add_64, safe_sub_64};
 
 use crate::helper::{
     get_explicit_asset_and_amount,
@@ -12,6 +12,7 @@ use crate::helper::{
 use crate::checks::{
     ensure_input_asset_and_amount_ge,
     ensure_output_asset_and_amount_ge,
+    ensure_input_script_hash,
     ensure_output_script_hash,
     ensure_asset_transition_with_additional_amount
 };
@@ -39,6 +40,48 @@ fn ensure_input_vault_asset(input_index: u32) -> u64 {
 
 fn ensure_output_vault_asset(output_index: u32) -> u64 {
     ensure_vault_asset(output_index, false)
+}
+
+// Storage logic
+
+fn get_is_active_slot_leaf(is_active: bool) -> u256 {
+    let is_active_num: u64 = jet::left_pad_low_1_64(<bool>::into(is_active));
+    let is_active_num: u256 = <(u128, u128)>::into((0, <(u64, u64)>::into((0, is_active_num))));
+
+    let state_ctx1: Ctx8 = jet::tapdata_init();
+    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, is_active_num);
+
+    jet::sha_256_ctx_8_finalize(state_ctx2)
+}
+
+fn get_already_supplied_slot_leaf(already_supplied: u64) -> u256 {
+    let already_supplied: u256 = <(u128, u128)>::into(
+        (0, <(u64, u64)>::into((0, already_supplied)))
+    );
+
+    let state_ctx1: Ctx8 = jet::tapdata_init();
+    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, already_supplied);
+
+    jet::sha_256_ctx_8_finalize(state_ctx2)
+}
+
+fn get_script_hash_for_storage(is_active: bool, already_supplied: u64) -> u256 {
+    let is_active_slot_leaf: u256 = get_is_active_slot_leaf(is_active);
+    let already_supplied_slot_leaf: u256 = get_already_supplied_slot_leaf(already_supplied);
+
+    let first_tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), is_active_slot_leaf);
+    let tap_node: u256 = jet::build_tapbranch(first_tap_node, already_supplied_slot_leaf);
+
+    // Compute a TapTweak
+    let bip0341_key: u256 = 0x50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0;
+    let tweaked_key: u256 = jet::build_taptweak(bip0341_key, tap_node);
+
+    // Turn the TapTweak into a script hash
+    let hash_ctx1: Ctx8 = jet::sha_256_ctx_8_init();
+    let hash_ctx2: Ctx8 = jet::sha_256_ctx_8_add_2(hash_ctx1, 0x5120); // Segwit v1, length 32
+    let hash_ctx3: Ctx8 = jet::sha_256_ctx_8_add_32(hash_ctx2, tweaked_key);
+
+    jet::sha_256_ctx_8_finalize(hash_ctx3)
 }
 
 // Auth logic
@@ -73,8 +116,14 @@ fn auth_with_burn_check(
 
 // Main paths logic
 
+fn get_amount_to_goal(already_supplied: u64) -> u64 {
+    safe_sub_64(param::SUPPLY_GOAL, already_supplied)
+}
+
 fn withdraw_all(input_keeper_index: u32, output_keeper_index: u32) {
-    ensure_active_status(false);
+    let current_script_hash: u256 = get_script_hash_for_storage(false, param::SUPPLY_GOAL);
+
+    ensure_input_script_hash(jet::current_index(), current_script_hash);
 
     auth_with_burn_check(
         input_keeper_index,
@@ -91,9 +140,12 @@ fn withdraw_part(
     input_keeper_index: u32,
     output_keeper_index: u32,
     vault_output_index: u32,
+    already_supplied: u64,
     amount_to_withdraw: u64
 ) {
-    ensure_active_status(true);
+    let current_script_hash: u256 = get_script_hash_for_storage(true, already_supplied);
+
+    ensure_input_script_hash(jet::current_index(), current_script_hash);
 
     auth_with_burn_check(
         input_keeper_index,
@@ -103,7 +155,7 @@ fn withdraw_part(
         false
     );
 
-    ensure_output_script_hash(vault_output_index, jet::current_script_hash());
+    ensure_output_script_hash(vault_output_index, current_script_hash);
 
     let vault_amount: u64 = ensure_input_vault_asset(jet::current_index());
     let output_vault_amount: u64 = ensure_output_vault_asset(vault_output_index);
@@ -119,9 +171,12 @@ fn supply(
     input_supplier_index: u32,
     output_supplier_index: u32,
     vault_output_index: u32,
+    already_supplied: u64,
     amount_to_supply: u64
 ) {
-    ensure_active_status(true);
+    let current_script_hash: u256 = get_script_hash_for_storage(true, already_supplied);
+
+    ensure_input_script_hash(jet::current_index(), current_script_hash);
 
     auth_with_burn_check(
         input_supplier_index,
@@ -131,7 +186,15 @@ fn supply(
         false
     );
 
-    ensure_output_script_hash(vault_output_index, jet::current_script_hash());
+    let amount_to_goal: u64 = get_amount_to_goal(already_supplied);
+
+    assert!(jet::some_64(amount_to_supply));
+    assert!(jet::lt_64(amount_to_supply, amount_to_goal));
+
+    let new_supplied_amount: u64 = safe_add_64(already_supplied, amount_to_supply);
+    let new_script_hash: u256 = get_script_hash_for_storage(true, new_supplied_amount);
+
+    ensure_output_script_hash(vault_output_index, new_script_hash);
 
     ensure_asset_transition_with_additional_amount(
         jet::current_index(),
@@ -141,14 +204,15 @@ fn supply(
     );
 }
 
-// TODO: Add goal logic to finalization flow
 fn final_supply(
     input_supplier_index: u32,
     output_supplier_index: u32,
     finalized_vault_output_index: u32,
-    amount_to_supply: u64
+    already_supplied: u64,
 ) {
-    ensure_active_status(true);
+    let current_script_hash: u256 = get_script_hash_for_storage(true, already_supplied);
+
+    ensure_input_script_hash(jet::current_index(), current_script_hash);
 
     auth_with_burn_check(
         input_supplier_index,
@@ -158,56 +222,62 @@ fn final_supply(
         param::WITH_SUPPLIER_ASSET_BURN
     );
 
-    ensure_output_script_hash(finalized_vault_output_index, param::FINALIZED_VAULT_COV_HASH);
+    let finalized_vault_script_hash: u256 = get_script_hash_for_storage(false, param::SUPPLY_GOAL);
+
+    ensure_output_script_hash(finalized_vault_output_index, finalized_vault_script_hash);
 
     ensure_asset_transition_with_additional_amount(
         jet::current_index(),
         finalized_vault_output_index,
         param::VAULT_ASSET_ID,
-        amount_to_supply
+        get_amount_to_goal(already_supplied)
     );
 }
 
 fn main() {
     match witness::PATH {
-        Left(withdraw_params: Either<(u32, u32), (u32, u32, u32, u64)>) => {
+        Left(withdraw_params: Either<(u32, u32), (u32, u32, u32, u64, u64)>) => {
             match withdraw_params {
                 Left(withdraw_all_params: (u32, u32)) => {
                     let (input_keeper_index, output_keeper_index): (u32, u32) = withdraw_all_params;
 
                     withdraw_all(input_keeper_index, output_keeper_index);
                 },
-                Right(withdraw_part_params: (u32, u32, u32, u64)) => {
+                Right(withdraw_part_params: (u32, u32, u32, u64, u64)) => {
                     let (
                         input_keeper_index,
                         output_keeper_index,
                         vault_output_index,
+                        already_supplied,
                         amount_to_withdraw
-                    ): (u32, u32, u32, u64) = withdraw_part_params;
+                    ): (u32, u32, u32, u64, u64) = withdraw_part_params;
 
                     withdraw_part(
                         input_keeper_index,
                         output_keeper_index,
                         vault_output_index,
+                        already_supplied,
                         amount_to_withdraw
                     );
                 }
             }
         },
-        Right(supply_params: Either<(u32, u32, u32, u64), (u32, u32, u32, u64)>) => {
+        Right(supply_params: Either<(u32, u32, u32, u64, u64), (u32, u32, u32, u64)>) => {
             match supply_params {
-                Left(supply_params: (u32, u32, u32, u64)) => {
+                Left(supply_params: (u32, u32, u32, u64, u64)) => {
                     let (
                         input_supplier_index,
                         output_supplier_index,
                         vault_output_index,
+                        already_supplied,
                         amount_to_supply
-                    ): (u32, u32, u32, u64) = supply_params;
+                    ): (u32, u32, u32, u64, u64) = supply_params;
 
                     supply(
                         input_supplier_index,
                         output_supplier_index,
                         vault_output_index,
+                        already_supplied,
                         amount_to_supply
                     );
                 },
@@ -216,14 +286,14 @@ fn main() {
                         input_supplier_index,
                         output_supplier_index,
                         finalized_vault_output_index,
-                        amount_to_supply
+                        already_supplied
                     ): (u32, u32, u32, u64) = final_supply_params;
 
                     final_supply(
                         input_supplier_index,
                         output_supplier_index,
                         finalized_vault_output_index,
-                        amount_to_supply
+                        already_supplied
                     );
                 }
             }
