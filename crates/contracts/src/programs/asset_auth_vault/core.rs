@@ -160,6 +160,24 @@ impl AssetAuthVault {
         );
     }
 
+    pub fn attach_final_supplying(
+        &mut self,
+        ft: &mut FinalTransaction,
+        program_utxo: UTXO,
+        input_supplier_index: u32,
+        output_supplier_index: u32,
+    ) {
+        let amount_to_goal = self.parameters.supply_goal - self.get_already_supplied_amount();
+
+        self.attach_supplying(
+            ft,
+            program_utxo,
+            input_supplier_index,
+            output_supplier_index,
+            amount_to_goal,
+        );
+    }
+
     pub fn attach_supplying(
         &mut self,
         ft: &mut FinalTransaction,
@@ -168,52 +186,38 @@ impl AssetAuthVault {
         output_supplier_index: u32,
         amount_to_supply: u64,
     ) {
+        let already_supplied = self.get_already_supplied_amount();
+        let amount_to_goal = self.parameters.supply_goal - already_supplied;
+        let is_final_supply = amount_to_supply == amount_to_goal;
+
         let new_vault_amount = program_utxo.explicit_amount() + amount_to_supply;
 
         let vault_output_index = ft.n_outputs() as u32;
 
-        let already_supplied = self.get_already_supplied_amount();
-
-        let supply_witness_branch = AssetAuthVaultWitnessBranch::Supply {
-            input_supplier_index,
-            output_supplier_index,
-            vault_output_index,
-            already_supplied,
-            amount_to_supply,
+        let supply_witness_branch = if is_final_supply {
+            AssetAuthVaultWitnessBranch::FinalSupply {
+                input_supplier_index,
+                output_supplier_index,
+                vault_output_index,
+                already_supplied,
+            }
+        } else {
+            AssetAuthVaultWitnessBranch::Supply {
+                input_supplier_index,
+                output_supplier_index,
+                vault_output_index,
+                already_supplied,
+                amount_to_supply,
+            }
         };
 
         self.add_program_input(ft, program_utxo, supply_witness_branch.build_witness());
 
         self.update_vault_already_supplied(already_supplied + amount_to_supply);
 
-        self.add_program_output(ft, self.parameters.vault_asset_id, new_vault_amount);
-    }
-
-    pub fn attach_final_supplying(
-        &mut self,
-        ft: &mut FinalTransaction,
-        program_utxo: UTXO,
-        input_supplier_index: u32,
-        output_supplier_index: u32,
-    ) {
-        let already_supplied = self.get_already_supplied_amount();
-        let amount_to_goal = self.parameters.supply_goal - already_supplied;
-
-        let new_vault_amount = program_utxo.explicit_amount() + amount_to_goal;
-
-        let vault_output_index = ft.n_outputs() as u32;
-
-        let supply_witness_branch = AssetAuthVaultWitnessBranch::FinalSupply {
-            input_supplier_index,
-            output_supplier_index,
-            vault_output_index,
-            already_supplied,
-        };
-
-        self.add_program_input(ft, program_utxo, supply_witness_branch.build_witness());
-
-        self.update_vault_already_supplied(self.parameters.supply_goal);
-        self.update_vault_status(false);
+        if is_final_supply {
+            self.update_vault_status(false);
+        }
 
         self.add_program_output(ft, self.parameters.vault_asset_id, new_vault_amount);
     }

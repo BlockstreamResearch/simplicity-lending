@@ -51,31 +51,25 @@ fn apply_basis_points(amount: u64, bps: u64) -> u64 {
 
 // Storage helpers
 
-fn get_is_active_slot_leaf(is_active: bool) -> u256 {
-    let is_active_num: u256 = u64_into_u256(jet::left_pad_low_1_64(<bool>::into(is_active)));
+fn get_bool_slot_leaf(value: bool) -> u256 {
+    let value_num: u256 = u64_into_u256(jet::left_pad_low_1_64(<bool>::into(value)));
 
     let state_ctx1: Ctx8 = jet::tapdata_init();
-    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, is_active_num);
+    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, value_num);
 
     jet::sha_256_ctx_8_finalize(state_ctx2)
 }
 
-fn get_borrower_debt_slot_leaf(borrower_debt: u64) -> u256 {
-    let borrower_debt: u256 = u64_into_u256(borrower_debt);
+fn get_u64_slot_leaf(value: u64) -> u256 {
+    let value: u256 = u64_into_u256(value);
 
     let state_ctx1: Ctx8 = jet::tapdata_init();
-    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, borrower_debt);
+    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, value);
 
     jet::sha_256_ctx_8_finalize(state_ctx2)
 }
 
-fn get_script_hash_for_storage(is_active: bool, borrower_debt: u64) -> u256 {
-    let is_active_slot_leaf: u256 = get_is_active_slot_leaf(is_active);
-    let borrower_debt_slot_leaf: u256 = get_borrower_debt_slot_leaf(borrower_debt);
-
-    let first_tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), is_active_slot_leaf);
-    let tap_node: u256 = jet::build_tapbranch(first_tap_node, borrower_debt_slot_leaf);
-
+fn get_script_hash_from_tap_node(tap_node: u256) -> u256 {
     // Compute a TapTweak
     let bip0341_key: u256 = 0x50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0;
     let tweaked_key: u256 = jet::build_taptweak(bip0341_key, tap_node);
@@ -86,6 +80,26 @@ fn get_script_hash_for_storage(is_active: bool, borrower_debt: u64) -> u256 {
     let hash_ctx3: Ctx8 = jet::sha_256_ctx_8_add_32(hash_ctx2, tweaked_key);
 
     jet::sha_256_ctx_8_finalize(hash_ctx3)
+}
+
+fn get_script_hash_for_vault_storage(vault_tapleaf_hash: u256, is_active: bool, already_supplied: u64) -> u256 {
+    let is_active_slot_leaf: u256 = get_bool_slot_leaf(is_active);
+    let already_supplied_slot_leaf: u256 = get_u64_slot_leaf(already_supplied);
+
+    let first_tap_node: u256 = jet::build_tapbranch(vault_tapleaf_hash, is_active_slot_leaf);
+    let tap_node: u256 = jet::build_tapbranch(first_tap_node, already_supplied_slot_leaf);
+
+    get_script_hash_from_tap_node(tap_node)
+}
+
+fn get_script_hash_for_offer_storage(is_active: bool, borrower_debt: u64) -> u256 {
+    let is_active_slot_leaf: u256 = get_bool_slot_leaf(is_active);
+    let borrower_debt_slot_leaf: u256 = get_u64_slot_leaf(borrower_debt);
+
+    let first_tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), is_active_slot_leaf);
+    let tap_node: u256 = jet::build_tapbranch(first_tap_node, borrower_debt_slot_leaf);
+
+    get_script_hash_from_tap_node(tap_node)
 }
 
 // Main paths helpers
@@ -143,11 +157,9 @@ fn validate_vaults(
     amount_to_repay: u64
 ) {
     let total_fee_amount: u64 = get_total_fee_amount();
+    let total_amount_to_repay: u64 = get_total_amount_to_repay();
 
-    let already_repaid_amount: u64 = safe_sub_64(
-        get_total_amount_to_repay(),
-        current_borrower_debt
-    );
+    let already_repaid_amount: u64 = safe_sub_64(total_amount_to_repay, current_borrower_debt);
 
     let (
         already_repaid_fee,
@@ -168,25 +180,20 @@ fn validate_vaults(
     let additional_lender_vault_amount: u64 = safe_sub_64(amount_to_repay, protocol_fee_repaid);
 
     let total_protocol_fee: u64 = get_protocol_fee_amount(total_fee_amount);
+    let lender_vault_supply_goal: u64 = safe_sub_64(total_amount_to_repay, total_protocol_fee);
+    let lender_vault_already_supplied: u64 = safe_sub_64(already_repaid_amount, already_repaid_protocol_fee);
 
-    let lender_vault_output_hash: u256 = match jet::eq_64(current_borrower_debt, amount_to_repay) {
-        true => {
-            param::FINALIZED_LENDER_VAULT_COV_HASH
-        },
-        false => {
-            param::LENDER_VAULT_COV_HASH
-        }
+    let new_lender_vault_cov_hash: u256 = match jet::eq_64(current_borrower_debt, amount_to_repay) {
+        true => get_script_hash_for_vault_storage(param::LENDER_VAULT_TAPLEAF_HASH, false, lender_vault_supply_goal),
+        false => get_script_hash_for_vault_storage(
+            param::LENDER_VAULT_TAPLEAF_HASH,
+            true,
+            safe_add_64(lender_vault_already_supplied, additional_lender_vault_amount)
+        ),
     };
-    let protocol_fee_vault_output_hash: u256 = match jet::eq_64(
-        total_repaid_protocol_fee,
-        total_protocol_fee
-    ) {
-        true => {
-            param::FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH
-        },
-        false => {
-            param::PROTOCOL_FEE_VAULT_COV_HASH
-        }
+    let new_protocol_fee_vault_cov_hash: u256 = match jet::eq_64(total_repaid_protocol_fee, total_protocol_fee) {
+        true => get_script_hash_for_vault_storage(param::PROTOCOL_FEE_VAULT_TAPLEAF_HASH, false, total_protocol_fee),
+        false => get_script_hash_for_vault_storage(param::PROTOCOL_FEE_VAULT_TAPLEAF_HASH, true, total_repaid_protocol_fee),
     };
 
     let (lender_vault_input_index, lender_vault_output_index): (u32, u32) = lender_vault_indexes;
@@ -197,6 +204,12 @@ fn validate_vaults(
 
     match jet::some_64(already_repaid_amount) {
         true => {
+            let current_lender_vault_cov_hash: u256 = get_script_hash_for_vault_storage(
+                param::LENDER_VAULT_TAPLEAF_HASH,
+                true,
+                lender_vault_already_supplied
+            );
+
             ensure_asset_transition_with_additional_amount(
                 lender_vault_input_index,
                 lender_vault_output_index,
@@ -206,12 +219,18 @@ fn validate_vaults(
             ensure_script_hash_transition(
                 lender_vault_input_index,
                 lender_vault_output_index,
-                param::LENDER_VAULT_COV_HASH,
-                lender_vault_output_hash
+                current_lender_vault_cov_hash,
+                new_lender_vault_cov_hash
             );
 
             match jet::lt_64(already_repaid_protocol_fee, total_protocol_fee) {
                 true => {
+                    let current_protocol_fee_vault_cov_hash: u256 = get_script_hash_for_vault_storage(
+                        param::PROTOCOL_FEE_VAULT_TAPLEAF_HASH,
+                        true,
+                        already_repaid_protocol_fee
+                    );
+
                     ensure_asset_transition_with_additional_amount(
                         protocol_fee_vault_input_index,
                         protocol_fee_vault_output_index,
@@ -221,8 +240,8 @@ fn validate_vaults(
                     ensure_script_hash_transition(
                         protocol_fee_vault_input_index,
                         protocol_fee_vault_output_index,
-                        param::PROTOCOL_FEE_VAULT_COV_HASH,
-                        protocol_fee_vault_output_hash
+                        current_protocol_fee_vault_cov_hash,
+                        new_protocol_fee_vault_cov_hash
                     );
                 },
                 false => {}
@@ -234,18 +253,15 @@ fn validate_vaults(
                 param::PRINCIPAL_ASSET_ID,
                 additional_lender_vault_amount
             );
-            ensure_output_script_hash(lender_vault_output_index, lender_vault_output_hash);
+            ensure_output_script_hash(lender_vault_output_index, new_lender_vault_cov_hash);
 
             ensure_output_asset_and_amount(
                 protocol_fee_vault_output_index,
                 param::PRINCIPAL_ASSET_ID,
                 protocol_fee_repaid
             );
-            ensure_output_script_hash(
-                protocol_fee_vault_output_index,
-                protocol_fee_vault_output_hash
-            );
-        }
+            ensure_output_script_hash(protocol_fee_vault_output_index, new_protocol_fee_vault_cov_hash);
+        },
     };
 }
 
@@ -284,7 +300,7 @@ fn partial_repay_offer(current_debt: u64, amount_to_repay: u64) {
 
     assert_eq_32(jet::current_index(), offer_input_index);
 
-    let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
+    let current_script_hash: u256 = get_script_hash_for_offer_storage(true, current_debt);
     ensure_input_script_hash(offer_input_index, current_script_hash);
 
     ensure_non_zero_amount(amount_to_repay);
@@ -301,7 +317,7 @@ fn partial_repay_offer(current_debt: u64, amount_to_repay: u64) {
     );
 
     let new_debt: u64 = safe_sub_64(current_debt, amount_to_repay);
-    let new_offer_script_hash: u256 = get_script_hash_for_storage(true, new_debt);
+    let new_offer_script_hash: u256 = get_script_hash_for_offer_storage(true, new_debt);
 
     ensure_output_script_hash(offer_output_index, new_offer_script_hash);
 
@@ -352,7 +368,7 @@ fn full_repay_offer(current_debt: u64) {
 
     assert_eq_32(jet::current_index(), offer_input_index);
 
-    let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
+    let current_script_hash: u256 = get_script_hash_for_offer_storage(true, current_debt);
     ensure_input_script_hash(offer_input_index, current_script_hash);
 
     let _: u64 = validate_collateral_input(offer_input_index, current_debt);
@@ -396,7 +412,7 @@ fn liquidate_offer(current_debt: u64) {
 
     assert!(jet::is_zero_32(lending_input_index));
 
-    let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
+    let current_script_hash: u256 = get_script_hash_for_offer_storage(true, current_debt);
     ensure_input_script_hash(lending_input_index, current_script_hash);
 
     jet::check_lock_height(param::LOAN_EXPIRATION_TIME);
@@ -437,8 +453,8 @@ fn accept_offer() {
     assert!(jet::is_zero_32(lending_input_index));
 
     let total_amount_to_repay: u64 = get_total_amount_to_repay();
-    let current_script_hash: u256 = get_script_hash_for_storage(false, total_amount_to_repay);
-    let active_offer_script_hash: u256 = get_script_hash_for_storage(true, total_amount_to_repay);
+    let current_script_hash: u256 = get_script_hash_for_offer_storage(false, total_amount_to_repay);
+    let active_offer_script_hash: u256 = get_script_hash_for_offer_storage(true, total_amount_to_repay);
 
     ensure_io_asset_and_amount_eq(
         lending_input_index,
@@ -497,7 +513,7 @@ fn cancel_offer() {
 
     assert!(jet::is_zero_32(lending_input_index));
 
-    let current_script_hash: u256 = get_script_hash_for_storage(false, get_total_amount_to_repay());
+    let current_script_hash: u256 = get_script_hash_for_offer_storage(false, get_total_amount_to_repay());
     ensure_input_script_hash(lending_input_index, current_script_hash);
 
     ensure_input_asset_and_amount(

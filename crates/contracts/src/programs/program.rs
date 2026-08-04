@@ -126,6 +126,10 @@ pub trait SimplexProgram {
         self.get_program().get_script_hash(self.get_network())
     }
 
+    fn get_tapleaf_hash(&self) -> [u8; 32] {
+        self.get_program().get_tapleaf_hash()
+    }
+
     fn get_program_id() -> ProgramId {
         let source_code_hash = digest(&SHA256, Self::get_program_source_code().as_bytes());
         let mut hash_prefix = [0; 4];
