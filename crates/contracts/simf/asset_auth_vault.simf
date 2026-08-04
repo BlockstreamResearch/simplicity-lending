@@ -10,8 +10,7 @@ use crate::helper::{
 };
 
 use crate::checks::{
-    ensure_input_asset_and_amount_ge,
-    ensure_output_asset_and_amount_ge,
+    ensure_io_asset_eq,
     ensure_input_script_hash,
     ensure_output_script_hash,
     ensure_asset_transition_with_additional_amount
@@ -90,19 +89,11 @@ fn auth_with_burn_check(
     input_asset_index: u32,
     output_asset_index: u32,
     expected_asset_id: u256,
-    expected_minimal_asset_amount: u64,
     with_asset_burn: bool
 ) {
-    ensure_input_asset_and_amount_ge(
-        input_asset_index,
-        expected_asset_id,
-        expected_minimal_asset_amount
-    );
-    ensure_output_asset_and_amount_ge(
-        output_asset_index,
-        expected_asset_id,
-        expected_minimal_asset_amount
-    );
+    let (input_amount, output_amount): (u64, u64) = ensure_io_asset_eq(input_asset_index, output_asset_index, expected_asset_id);
+
+    check_asset_amounts_eq(input_amount, output_amount);
 
     match with_asset_burn {
         true => {
@@ -129,7 +120,6 @@ fn withdraw_all(input_keeper_index: u32, output_keeper_index: u32) {
         input_keeper_index,
         output_keeper_index,
         param::KEEPER_AUTH_ASSET_ID,
-        param::KEEPER_AUTH_ASSET_AMOUNT,
         param::WITH_KEEPER_ASSET_BURN
     );
 
@@ -151,7 +141,6 @@ fn withdraw_part(
         input_keeper_index,
         output_keeper_index,
         param::KEEPER_AUTH_ASSET_ID,
-        param::KEEPER_AUTH_ASSET_AMOUNT,
         false
     );
 
@@ -182,7 +171,6 @@ fn supply(
         input_supplier_index,
         output_supplier_index,
         param::SUPPLIER_AUTH_ASSET_ID,
-        1, // Allow any amount of the supplier auth asset
         false
     );
 
@@ -218,7 +206,6 @@ fn final_supply(
         input_supplier_index,
         output_supplier_index,
         param::SUPPLIER_AUTH_ASSET_ID,
-        1, // Allow any amount of the supplier auth asset
         param::WITH_SUPPLIER_ASSET_BURN
     );
 
