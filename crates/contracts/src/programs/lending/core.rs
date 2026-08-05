@@ -139,6 +139,15 @@ impl LendingOffer {
         &self.parameters
     }
 
+    pub fn get_lender_vault(&self) -> AssetAuthVault {
+        self.parameters.get_lender_vault(self.get_current_debt())
+    }
+
+    pub fn get_protocol_fee_vault(&self) -> AssetAuthVault {
+        self.parameters
+            .get_protocol_fee_vault(self.get_current_debt())
+    }
+
     pub fn is_active_offer(&self) -> bool {
         self.storage.is_active
     }
@@ -385,7 +394,6 @@ impl LendingOffer {
                     ft,
                     lender_vault_utxo.unwrap(),
                     borrower_nft_indexes,
-                    current_borrower_debt,
                     amount_to_repay,
                 );
             }
@@ -441,26 +449,9 @@ impl LendingOffer {
             .parameters
             .offer_parameters
             .get_repaid_protocol_fee(current_borrower_debt, amount_to_repay);
-        let protocol_fee_left = self
-            .parameters
-            .offer_parameters
-            .get_protocol_fee_to_repay(current_borrower_debt);
 
-        let already_repaid_amount = self
-            .parameters
-            .offer_parameters
-            .get_already_repaid_amount(current_borrower_debt);
-        let already_repaid_protocol_fee =
-            self.parameters.offer_parameters.get_total_protocol_fee() - protocol_fee_left;
-
-        let mut lender_vault = AssetAuthVault::new_active(
-            self.parameters.get_lender_vault_parameters(),
-            already_repaid_amount - already_repaid_protocol_fee,
-        );
-        let mut protocol_fee_vault = AssetAuthVault::new_active(
-            self.parameters.get_protocol_fee_vault_parameters(),
-            already_repaid_protocol_fee,
-        );
+        let mut lender_vault = self.get_lender_vault();
+        let mut protocol_fee_vault = self.get_protocol_fee_vault();
 
         lender_vault.attach_supplying(
             ft,
@@ -484,21 +475,9 @@ impl LendingOffer {
         ft: &mut FinalTransaction,
         lender_vault_utxo: UTXO,
         borrower_debt_nft_indexes: (u32, u32),
-        current_borrower_debt: u64,
         amount_to_repay: u64,
     ) {
-        let already_repaid_amount = self
-            .parameters
-            .offer_parameters
-            .get_already_repaid_amount(current_borrower_debt);
-        let repaid_protocol_fee = self.parameters.offer_parameters.get_total_protocol_fee();
-
-        let mut lender_vault = AssetAuthVault::new_active(
-            self.parameters.get_lender_vault_parameters(),
-            already_repaid_amount - repaid_protocol_fee,
-        );
-
-        lender_vault.attach_supplying(
+        self.get_lender_vault().attach_supplying(
             ft,
             lender_vault_utxo,
             borrower_debt_nft_indexes.0,

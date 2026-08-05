@@ -31,6 +31,36 @@ impl LendingOfferParameters {
         })
     }
 
+    pub fn get_lender_vault(&self, current_debt: u64) -> AssetAuthVault {
+        let protocol_fee_left = self
+            .offer_parameters
+            .get_protocol_fee_to_repay(current_debt);
+
+        let already_repaid_amount = self
+            .offer_parameters
+            .get_already_repaid_amount(current_debt);
+        let already_repaid_protocol_fee =
+            self.offer_parameters.get_total_protocol_fee() - protocol_fee_left;
+
+        AssetAuthVault::new_active(
+            self.get_lender_vault_parameters(),
+            already_repaid_amount - already_repaid_protocol_fee,
+        )
+    }
+
+    pub fn get_protocol_fee_vault(&self, current_debt: u64) -> AssetAuthVault {
+        let protocol_fee_left = self
+            .offer_parameters
+            .get_protocol_fee_to_repay(current_debt);
+        let already_repaid_protocol_fee =
+            self.offer_parameters.get_total_protocol_fee() - protocol_fee_left;
+
+        AssetAuthVault::new_active(
+            self.get_protocol_fee_vault_parameters(),
+            already_repaid_protocol_fee,
+        )
+    }
+
     pub fn get_lender_vault_parameters(&self) -> AssetAuthVaultParameters {
         AssetAuthVaultParameters {
             vault_asset_id: self.principal_asset_id,
