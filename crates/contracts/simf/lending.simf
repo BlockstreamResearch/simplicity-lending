@@ -4,26 +4,12 @@ use std::lib::u32::safe_add_32;
 
 use crate::helper::{
     get_explicit_asset_and_amount,
-    get_script_hash
+    get_script_hash,
+    check_asset_amounts_eq,
+    check_assets_eq,
+    check_script_hashes_eq,
+    check_flags_eq
 };
-
-// Check helpers
-
-fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
-    assert!(jet::eq_64(asset_amount_1, asset_amount_2));
-}
-
-fn check_assets_eq(asset_bits_1: u256, asset_bits_2: u256) {
-    assert!(jet::eq_256(asset_bits_1, asset_bits_2));
-}
-
-fn check_script_hashes_eq(script_1: u256, script_2: u256) {
-    assert!(jet::eq_256(script_1, script_2));
-}
-
-fn check_flags_eq(flag_1: bool, flag_2: bool) {
-    assert!(jet::eq_1(<bool>::into(flag_1), <bool>::into(flag_2)));
-}
 
 // Math helpers
 
