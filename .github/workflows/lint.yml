@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SQLX_OFFLINE: true
-      SIMPLEX_VERSION: 0.0.7
+      SIMPLEX_VERSION: 0.0.9
 
     steps:
       - name: Checkout
