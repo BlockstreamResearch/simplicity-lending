@@ -1,3 +1,4 @@
+use std::lib::asserts::{assert_eq_64, assert_eq_256};
 use std::lib::op_return::assert_output_is_op_return;
 
 use crate::helper::get_explicit_asset_and_amount;
@@ -9,8 +10,8 @@ fn ensure_asset_and_amount_eq(
     expected_amount: u64
 ) {
     let (asset_bits, amount): (u256, u64) = get_explicit_asset_and_amount(index, is_input_index);
-    assert!(jet::eq_256(asset_bits, expected_asset_bits));
-    assert!(jet::eq_64(amount, expected_amount));
+    assert_eq_256(asset_bits, expected_asset_bits);
+    assert_eq_64(amount, expected_amount);
 }
 
 fn auth_with_burn_check(input_asset_index: u32, output_asset_index: u32) {

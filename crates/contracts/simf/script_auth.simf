@@ -1,7 +1,9 @@
+use std::lib::asserts::assert_eq_256;
+
 fn ensure_input_script_hash(input_script_index: u32, expected_script_hash: u256) {
     let actual_script_hash: u256 = unwrap(jet::input_script_hash(input_script_index));
 
-    assert!(jet::eq_256(actual_script_hash, expected_script_hash));
+    assert_eq_256(actual_script_hash, expected_script_hash);
 }
 
 fn script_auth_check(input_script_index: u32) {

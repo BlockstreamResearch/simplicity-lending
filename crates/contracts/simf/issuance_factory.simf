@@ -1,4 +1,6 @@
+use std::lib::asserts::{assert_eq_1, assert_eq_32};
 use std::lib::op_return::is_output_op_return;
+use std::lib::u32::safe_add_32;
 
 use crate::helper::{
     get_explicit_asset_and_amount,
@@ -98,17 +100,7 @@ fn ensure_input_asset_and_amount_burn(
 }
 
 fn ensure_zero_bit(bit: bool) {
-    assert!(jet::eq_1(<bool>::into(bit), 0));
-}
-
-// Math helpers
-
-fn safe_add_32(first: u32, second: u32) -> u32 {
-    let (carry, result): (bool, u32) = jet::add_32(first, second);
-
-    check_flags_eq(carry, false);
-
-    result
+    assert_eq_1(<bool>::into(bit), 0);
 }
 
 // Main paths helpers
@@ -188,7 +180,7 @@ fn issue_new_assets(output_index: u32) {
         auth_nft_output_index
     );
 
-    assert!(jet::eq_32(issuance_factory_input_index, jet::current_index()));
+    assert_eq_32(issuance_factory_input_index, jet::current_index());
 
     let current_asset_bits: u256 = get_current_explicit_asset();
 
@@ -236,7 +228,7 @@ fn remove_factory(output_index: u32) {
         issuance_factory_output_index
     );
 
-    assert!(jet::eq_32(issuance_factory_input_index, jet::current_index()));
+    assert_eq_32(issuance_factory_input_index, jet::current_index());
 
     let current_asset_bits: u256 = get_current_explicit_asset();
 

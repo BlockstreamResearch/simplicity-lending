@@ -1,3 +1,4 @@
+use std::lib::asserts::assert_eq_32;
 use std::lib::op_return::is_output_op_return;
 use std::lib::u64::{safe_add_64, safe_sub_64};
 use std::lib::u32::safe_add_32;
@@ -399,7 +400,7 @@ fn partial_repay_offer(current_debt: u64, amount_to_repay: u64) {
         borrower_nft_output_index
     );
 
-    assert!(jet::eq_32(jet::current_index(), offer_input_index));
+    assert_eq_32(jet::current_index(), offer_input_index);
 
     let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
     ensure_input_script_hash(offer_input_index, current_script_hash);
@@ -467,7 +468,7 @@ fn full_repay_offer(current_debt: u64) {
     let (borrower_nft_input_index, borrower_nft_output_index): (u32, u32) = (0, 0);
     let offer_input_index: u32 = get_full_repayment_offer_input_index(borrower_nft_input_index);
 
-    assert!(jet::eq_32(jet::current_index(), offer_input_index));
+    assert_eq_32(jet::current_index(), offer_input_index);
 
     let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
     ensure_input_script_hash(offer_input_index, current_script_hash);
@@ -511,7 +512,7 @@ fn liquidate_offer(current_debt: u64) {
         lender_nft_output_index
     ): (u32, u32) = get_liquidation_lender_nft_indexes(lending_input_index, lending_output_index);
 
-    assert!(jet::eq_32(lending_input_index, 0));
+    assert!(jet::is_zero_32(lending_input_index));
 
     let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
     ensure_input_script_hash(lending_input_index, current_script_hash);
@@ -551,7 +552,7 @@ fn accept_offer() {
     ): (u32, u32) = get_acceptance_lender_nft_indexes(lending_input_index, lending_output_index);
     let principal_output_index: u32 = get_acceptance_principal_output_index(lending_output_index);
 
-    assert!(jet::eq_32(lending_input_index, 0));
+    assert!(jet::is_zero_32(lending_input_index));
 
     let total_amount_to_repay: u64 = get_total_amount_to_repay();
     let current_script_hash: u256 = get_script_hash_for_storage(false, total_amount_to_repay);
@@ -612,7 +613,7 @@ fn cancel_offer() {
         borrower_nft_output_index
     ): (u32, u32) = get_cancellation_borrower_nft_indexes(lending_input_index, 0);
 
-    assert!(jet::eq_32(lending_input_index, 0));
+    assert!(jet::is_zero_32(lending_input_index));
 
     let current_script_hash: u256 = get_script_hash_for_storage(false, get_total_amount_to_repay());
     ensure_input_script_hash(lending_input_index, current_script_hash);

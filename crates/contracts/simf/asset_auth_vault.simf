@@ -1,5 +1,5 @@
+use std::lib::asserts::{assert_eq_1, assert_eq_64, assert_eq_256};
 use std::lib::binary::not;
-use std::lib::asserts::assert_eq_64;
 use std::lib::op_return::is_output_op_return;
 use std::lib::u64::safe_add_64;
 
@@ -20,7 +20,7 @@ fn ensure_asset_and_amount_ge(
     expected_amount: u64
 ) {
     let (asset_bits, amount): (u256, u64) = get_explicit_asset_and_amount(index, is_input_index);
-    assert!(jet::eq_256(asset_bits, expected_asset_bits));
+    assert_eq_256(asset_bits, expected_asset_bits);
     assert!(jet::le_64(expected_amount, amount));
 }
 
@@ -28,7 +28,7 @@ fn ensure_asset_and_amount_ge(
 fn ensure_active_status(
     expected_status: bool
 ) {
-    assert!(jet::eq_1(<bool>::into(expected_status), <bool>::into(param::IS_ACTIVE)));
+    assert_eq_1(<bool>::into(expected_status), <bool>::into(param::IS_ACTIVE));
 }
 
 fn ensure_output_script_hash(index: u32, expected_script_hash: u256) {
