@@ -11,11 +11,11 @@ pub fn get_explicit_asset_and_amount(
     is_input_index: bool
 ) -> (u256, u64) {
     let pair: (Asset1, Amount1) = match is_input_index {
-        false => {
-            unwrap(jet::output_amount(index))
-        },
         true => {
             unwrap(jet::input_amount(index))
+        },
+        false => {
+            unwrap(jet::output_amount(index))
         }
     };
 
@@ -35,11 +35,11 @@ pub fn get_output_explicit_asset_and_amount(output_index: u32) -> (u256, u64) {
 
 pub fn get_script_hash(index: u32, is_input_index: bool) -> u256 {
     match is_input_index {
-        false => {
-            unwrap(jet::output_script_hash(index))
-        },
         true => {
             unwrap(jet::input_script_hash(index))
+        },
+        false => {
+            unwrap(jet::output_script_hash(index))
         }
     }
 }

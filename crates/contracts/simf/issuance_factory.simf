@@ -55,6 +55,9 @@ fn verify_issuance(input_index: u32, output_index: u32, reissuance_flag: bool) {
 
 fn verify_issuance_step(acc: (), start_output_index: u32, i: u8) -> Either<(), ()> {
     match jet::le_8(param::ISSUING_UTXOS_COUNT, i) {
+        true => {
+            Left(())
+        },
         false => {
             let step_index: u32 = <(u16, u16)>::into((0, <(u8, u8)>::into((0, i))));
 
@@ -64,9 +67,6 @@ fn verify_issuance_step(acc: (), start_output_index: u32, i: u8) -> Either<(), (
             verify_issuance(input_index, output_index, get_reissuance_flag(i));
 
             Right(())
-        },
-        true => {
-            Left(())
         }
     }
 }

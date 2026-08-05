@@ -7,10 +7,10 @@ fn auth_with_burn_check(input_asset_index: u32, output_asset_index: u32) {
     ensure_output_asset_and_amount(output_asset_index, param::ASSET_ID, param::ASSET_AMOUNT);
 
     match param::WITH_ASSET_BURN {
-        false => {},
         true => {
             assert_output_is_op_return(output_asset_index);
-        }
+        },
+        false => {}
     }
 }
 

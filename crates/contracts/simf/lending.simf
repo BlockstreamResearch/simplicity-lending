@@ -20,11 +20,11 @@ use crate::checks::{
 
 fn min_64(first: u64, second: u64) -> u64 {
     match jet::lt_64(first, second) {
-        false => {
-            second
-        },
         true => {
             first
+        },
+        false => {
+            second
         }
     }
 }
@@ -42,7 +42,7 @@ fn mul_div(x: u64, y: u64, denominator: u64) -> u64 {
 // Basis points math
 
 fn get_max_basis_points() -> u64 {
-    10000
+    10_000
 }
 
 fn apply_basis_points(amount: u64, bps: u64) -> u64 {
@@ -170,22 +170,22 @@ fn validate_vaults(
     let total_protocol_fee: u64 = get_protocol_fee_amount(total_fee_amount);
 
     let lender_vault_output_hash: u256 = match jet::eq_64(current_borrower_debt, amount_to_repay) {
-        false => {
-            param::LENDER_VAULT_COV_HASH
-        },
         true => {
             param::FINALIZED_LENDER_VAULT_COV_HASH
+        },
+        false => {
+            param::LENDER_VAULT_COV_HASH
         }
     };
     let protocol_fee_vault_output_hash: u256 = match jet::eq_64(
         total_repaid_protocol_fee,
         total_protocol_fee
     ) {
-        false => {
-            param::PROTOCOL_FEE_VAULT_COV_HASH
-        },
         true => {
             param::FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH
+        },
+        false => {
+            param::PROTOCOL_FEE_VAULT_COV_HASH
         }
     };
 
@@ -196,6 +196,38 @@ fn validate_vaults(
     ): (u32, u32) = protocol_fee_vault_indexes;
 
     match jet::some_64(already_repaid_amount) {
+        true => {
+            ensure_asset_transition_with_additional_amount(
+                lender_vault_input_index,
+                lender_vault_output_index,
+                param::PRINCIPAL_ASSET_ID,
+                additional_lender_vault_amount
+            );
+            ensure_script_hash_transition(
+                lender_vault_input_index,
+                lender_vault_output_index,
+                param::LENDER_VAULT_COV_HASH,
+                lender_vault_output_hash
+            );
+
+            match jet::lt_64(already_repaid_protocol_fee, total_protocol_fee) {
+                true => {
+                    ensure_asset_transition_with_additional_amount(
+                        protocol_fee_vault_input_index,
+                        protocol_fee_vault_output_index,
+                        param::PRINCIPAL_ASSET_ID,
+                        protocol_fee_repaid
+                    );
+                    ensure_script_hash_transition(
+                        protocol_fee_vault_input_index,
+                        protocol_fee_vault_output_index,
+                        param::PROTOCOL_FEE_VAULT_COV_HASH,
+                        protocol_fee_vault_output_hash
+                    );
+                },
+                false => {}
+            };
+        },
         false => {
             ensure_output_asset_and_amount(
                 lender_vault_output_index,
@@ -213,38 +245,6 @@ fn validate_vaults(
                 protocol_fee_vault_output_index,
                 protocol_fee_vault_output_hash
             );
-        },
-        true => {
-            ensure_asset_transition_with_additional_amount(
-                lender_vault_input_index,
-                lender_vault_output_index,
-                param::PRINCIPAL_ASSET_ID,
-                additional_lender_vault_amount
-            );
-            ensure_script_hash_transition(
-                lender_vault_input_index,
-                lender_vault_output_index,
-                param::LENDER_VAULT_COV_HASH,
-                lender_vault_output_hash
-            );
-
-            match jet::lt_64(already_repaid_protocol_fee, total_protocol_fee) {
-                false => {},
-                true => {
-                    ensure_asset_transition_with_additional_amount(
-                        protocol_fee_vault_input_index,
-                        protocol_fee_vault_output_index,
-                        param::PRINCIPAL_ASSET_ID,
-                        protocol_fee_repaid
-                    );
-                    ensure_script_hash_transition(
-                        protocol_fee_vault_input_index,
-                        protocol_fee_vault_output_index,
-                        param::PROTOCOL_FEE_VAULT_COV_HASH,
-                        protocol_fee_vault_output_hash
-                    );
-                }
-            };
         }
     };
 }
