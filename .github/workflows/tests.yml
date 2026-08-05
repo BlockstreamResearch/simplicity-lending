@@ -139,7 +139,7 @@ jobs:
           # abort before we can read $rc.
 
           set +e
-          simplex test --test-threads 4 2>&1 | tee simplex.log
+          simplex test --test-threads 2 2>&1 | tee simplex.log
           rc=${PIPESTATUS[0]}
           set -e
           if [ "$rc" -ne 0 ] || grep -Eq '^(error: test run failed|Exit Status: [1-9]|[[:space:]]*FAIL[[:space:]]*\[)' simplex.log; then
