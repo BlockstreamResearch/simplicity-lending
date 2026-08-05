@@ -1,106 +1,20 @@
-use std::lib::asserts::{assert_eq_1, assert_eq_32};
-use std::lib::op_return::is_output_op_return;
+use std::lib::asserts::assert_eq_32;
 use std::lib::u32::safe_add_32;
 
-use crate::helper::{
-    get_explicit_asset_and_amount,
-    get_script_hash,
-    check_asset_amounts_eq,
-    check_assets_eq,
-    check_script_hashes_eq,
-    check_flags_eq
+use crate::helper::check_asset_amounts_eq;
+
+use crate::checks::{
+    ensure_non_zero_amount,
+    ensure_io_script_hashes_eq,
+    ensure_output_asset_and_amount,
+    ensure_io_asset_and_amount_eq,
+    ensure_input_asset_and_amount_burn
 };
 
 // Helper getters
 
 fn get_current_explicit_asset() -> u256 {
-    let asset: Asset1 = jet::current_asset();
-    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
-
-    asset_bits
-}
-
-// Ensure functions
-
-fn ensure_output_is_op_return(index: u32) {
-    check_flags_eq(is_output_op_return(index), true);
-}
-
-fn ensure_io_script_hashes_eq(input_index: u32, output_index: u32) {
-    let input_script_hash: u256 = get_script_hash(input_index, true);
-    let output_script_hash: u256 = get_script_hash(output_index, false);
-
-    check_script_hashes_eq(input_script_hash, output_script_hash);
-}
-
-fn ensure_non_zero_amount(amount: u64) {
-    assert!(jet::some_64(amount));
-}
-
-fn ensure_output_asset_and_amount(
-    output_index: u32,
-    expected_asset_bits: u256,
-    expected_amount: u64
-) {
-    let (asset_bits, amount): (u256, u64) = get_explicit_asset_and_amount(output_index, false);
-
-    check_assets_eq(asset_bits, expected_asset_bits);
-    check_asset_amounts_eq(amount, expected_amount);
-}
-
-fn ensure_io_asset_eq(
-    input_index: u32,
-    output_index: u32,
-    expected_asset_bits: u256
-) -> (u64, u64) {
-    let (
-        input_asset_bits,
-        input_amount
-    ): (u256, u64) = get_explicit_asset_and_amount(input_index, true);
-    let (
-        output_asset_bits,
-        output_amount
-    ): (u256, u64) = get_explicit_asset_and_amount(output_index, false);
-
-    check_assets_eq(input_asset_bits, expected_asset_bits);
-    check_assets_eq(input_asset_bits, output_asset_bits);
-
-    (input_amount, output_amount)
-}
-
-fn ensure_io_asset_and_amount_eq(
-    input_index: u32,
-    output_index: u32,
-    expected_asset_bits: u256,
-    expected_amount: u64
-) {
-    let (
-        input_amount,
-        output_amount
-    ): (u64, u64) = ensure_io_asset_eq(input_index, output_index, expected_asset_bits);
-
-    check_asset_amounts_eq(input_amount, expected_amount);
-    check_asset_amounts_eq(input_amount, output_amount);
-}
-
-fn ensure_input_asset_and_amount_burn(
-    input_index: u32,
-    output_index: u32,
-    expected_asset_bits: u256,
-    expected_asset_amount: u64
-) {
-    ensure_io_asset_and_amount_eq(
-        input_index,
-        output_index,
-        expected_asset_bits,
-        expected_asset_amount
-    );
-
-    ensure_output_is_op_return(output_index);
-}
-
-fn ensure_zero_bit(bit: bool) {
-    assert_eq_1(<bool>::into(bit), 0);
+    unwrap_right::<(u1, u256)>(jet::current_asset())
 }
 
 // Main paths helpers

@@ -1,15 +1,19 @@
-use std::lib::asserts::assert_eq_32;
-use std::lib::op_return::is_output_op_return;
-use std::lib::u64::{safe_add_64, safe_sub_64};
+use std::lib::asserts::{assert_eq_32, assert_eq_64};
+use std::lib::u64::{safe_add_64, safe_div_64, safe_sub_64, u64_into_u256};
 use std::lib::u32::safe_add_32;
 
-use crate::helper::{
-    get_explicit_asset_and_amount,
-    get_script_hash,
-    check_asset_amounts_eq,
-    check_assets_eq,
-    check_script_hashes_eq,
-    check_flags_eq
+use crate::helper::{get_input_explicit_asset_and_amount, check_asset_amounts_eq, check_assets_eq};
+
+use crate::checks::{
+    ensure_non_zero_amount,
+    ensure_input_script_hash,
+    ensure_output_script_hash,
+    ensure_script_hash_transition,
+    ensure_input_asset_and_amount,
+    ensure_output_asset_and_amount,
+    ensure_io_asset_and_amount_eq,
+    ensure_input_asset_and_amount_burn,
+    ensure_asset_transition_with_additional_amount
 };
 
 // Math helpers
@@ -25,135 +29,14 @@ fn min_64(first: u64, second: u64) -> u64 {
     }
 }
 
-// Ensure functions
-
-fn ensure_output_is_op_return(index: u32) {
-    check_flags_eq(is_output_op_return(index), true);
-}
-
-fn ensure_input_script_hash(input_index: u32, expected_script_hash: u256) {
-    let script_hash: u256 = get_script_hash(input_index, true);
-
-    check_script_hashes_eq(script_hash, expected_script_hash);
-}
-
-fn ensure_output_script_hash(output_index: u32, expected_script_hash: u256) {
-    let script_hash: u256 = get_script_hash(output_index, false);
-
-    check_script_hashes_eq(script_hash, expected_script_hash);
-}
-
-fn ensure_script_hash_transition(
-    input_index: u32,
-    output_index: u32,
-    expected_input_script_hash: u256,
-    expected_output_script_hash: u256
-) {
-    ensure_input_script_hash(input_index, expected_input_script_hash);
-    ensure_output_script_hash(output_index, expected_output_script_hash);
-}
-
-fn ensure_input_asset_and_amount(
-    input_index: u32,
-    expected_asset_bits: u256,
-    expected_amount: u64
-) {
-    let (asset_bits, amount): (u256, u64) = get_explicit_asset_and_amount(input_index, true);
-
-    check_assets_eq(asset_bits, expected_asset_bits);
-    check_asset_amounts_eq(amount, expected_amount);
-}
-
-fn ensure_output_asset_and_amount(
-    output_index: u32,
-    expected_asset_bits: u256,
-    expected_amount: u64
-) {
-    let (asset_bits, amount): (u256, u64) = get_explicit_asset_and_amount(output_index, false);
-
-    check_assets_eq(asset_bits, expected_asset_bits);
-    check_asset_amounts_eq(amount, expected_amount);
-}
-
-fn ensure_io_asset_eq(
-    input_index: u32,
-    output_index: u32,
-    expected_asset_bits: u256
-) -> (u64, u64) {
-    let (
-        input_asset_bits,
-        input_amount
-    ): (u256, u64) = get_explicit_asset_and_amount(input_index, true);
-    let (
-        output_asset_bits,
-        output_amount
-    ): (u256, u64) = get_explicit_asset_and_amount(output_index, false);
-
-    check_assets_eq(input_asset_bits, expected_asset_bits);
-    check_assets_eq(input_asset_bits, output_asset_bits);
-
-    (input_amount, output_amount)
-}
-
-fn ensure_io_asset_and_amount_eq(
-    input_index: u32,
-    output_index: u32,
-    expected_asset_bits: u256,
-    expected_amount: u64
-) {
-    let (
-        input_amount,
-        output_amount
-    ): (u64, u64) = ensure_io_asset_eq(input_index, output_index, expected_asset_bits);
-
-    check_asset_amounts_eq(input_amount, expected_amount);
-    check_asset_amounts_eq(input_amount, output_amount);
-}
-
-fn ensure_input_asset_and_amount_burn(
-    input_index: u32,
-    output_index: u32,
-    expected_asset_bits: u256,
-    expected_asset_amount: u64
-) {
-    ensure_io_asset_and_amount_eq(
-        input_index,
-        output_index,
-        expected_asset_bits,
-        expected_asset_amount
-    );
-
-    ensure_output_is_op_return(output_index);
-}
-
-fn ensure_asset_transition_with_additional_amount(
-    input_index: u32,
-    output_index: u32,
-    expected_asset_bits: u256,
-    additional_amount: u64
-) {
-    let (
-        input_amount,
-        output_amount
-    ): (u64, u64) = ensure_io_asset_eq(input_index, output_index, expected_asset_bits);
-
-    let new_asset_amount: u64 = safe_add_64(input_amount, additional_amount);
-
-    check_asset_amounts_eq(output_amount, new_asset_amount);
-}
-
-// Math helpers
-
 fn mul_div(x: u64, y: u64, denominator: u64) -> u64 {
     let product: u128 = jet::multiply_64(x, y);
 
     // TODO: Handle case when hi > 0
     let (hi, lo): (u64, u64) = <u128>::into(product);
-    check_asset_amounts_eq(hi, 0);
+    assert_eq_64(hi, 0);
 
-    let result: u64 = jet::divide_64(lo, denominator);
-
-    result
+    safe_div_64(lo, denominator)
 }
 
 // Basis points math
@@ -169,8 +52,7 @@ fn apply_basis_points(amount: u64, bps: u64) -> u64 {
 // Storage helpers
 
 fn get_is_active_slot_leaf(is_active: bool) -> u256 {
-    let is_active_num: u64 = jet::left_pad_low_1_64(<bool>::into(is_active));
-    let is_active_num: u256 = <(u128, u128)>::into((0, <(u64, u64)>::into((0, is_active_num))));
+    let is_active_num: u256 = u64_into_u256(jet::left_pad_low_1_64(<bool>::into(is_active)));
 
     let state_ctx1: Ctx8 = jet::tapdata_init();
     let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, is_active_num);
@@ -179,7 +61,7 @@ fn get_is_active_slot_leaf(is_active: bool) -> u256 {
 }
 
 fn get_borrower_debt_slot_leaf(borrower_debt: u64) -> u256 {
-    let borrower_debt: u256 = <(u128, u128)>::into((0, <(u64, u64)>::into((0, borrower_debt))));
+    let borrower_debt: u256 = u64_into_u256(borrower_debt);
 
     let state_ctx1: Ctx8 = jet::tapdata_init();
     let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, borrower_debt);
@@ -239,7 +121,7 @@ fn validate_collateral_input(input_index: u32, current_debt: u64) -> u64 {
     let (
         asset_bits,
         current_collateral_amount
-    ): (u256, u64) = get_explicit_asset_and_amount(input_index, true);
+    ): (u256, u64) = get_input_explicit_asset_and_amount(input_index);
 
     let already_paid_debt: u64 = safe_sub_64(get_total_amount_to_repay(), current_debt);
     let already_unlocked_collateral: u64 = get_collateral_for_principal(already_paid_debt);
@@ -405,7 +287,7 @@ fn partial_repay_offer(current_debt: u64, amount_to_repay: u64) {
     let current_script_hash: u256 = get_script_hash_for_storage(true, current_debt);
     ensure_input_script_hash(offer_input_index, current_script_hash);
 
-    assert!(jet::some_64(amount_to_repay));
+    ensure_non_zero_amount(amount_to_repay);
     assert!(jet::lt_64(amount_to_repay, current_debt));
 
     let current_collateral_amount: u64 = validate_collateral_input(offer_input_index, current_debt);

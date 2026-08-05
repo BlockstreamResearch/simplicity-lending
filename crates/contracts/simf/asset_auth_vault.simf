@@ -1,38 +1,25 @@
-use std::lib::asserts::{assert_eq_1, assert_eq_64, assert_eq_256};
 use std::lib::binary::not;
 use std::lib::op_return::is_output_op_return;
-use std::lib::u64::safe_add_64;
+use std::lib::u64::safe_sub_64;
 
 use crate::helper::{
     get_explicit_asset_and_amount,
-    get_script_hash,
     check_asset_amounts_eq,
     check_assets_eq,
-    check_script_hashes_eq
+    check_flags_eq
+};
+
+use crate::checks::{
+    ensure_input_asset_and_amount_ge,
+    ensure_output_asset_and_amount_ge,
+    ensure_output_script_hash,
+    ensure_asset_transition_with_additional_amount
 };
 
 // Check helpers
 
-fn ensure_asset_and_amount_ge(
-    index: u32,
-    is_input_index: bool,
-    expected_asset_bits: u256,
-    expected_amount: u64
-) {
-    let (asset_bits, amount): (u256, u64) = get_explicit_asset_and_amount(index, is_input_index);
-    assert_eq_256(asset_bits, expected_asset_bits);
-    assert!(jet::le_64(expected_amount, amount));
-}
-
-// TODO: Consider to add `assert_eq_bool` function to std.
-fn ensure_active_status(
-    expected_status: bool
-) {
-    assert_eq_1(<bool>::into(expected_status), <bool>::into(param::IS_ACTIVE));
-}
-
-fn ensure_output_script_hash(index: u32, expected_script_hash: u256) {
-    check_script_hashes_eq(get_script_hash(index, false), expected_script_hash);
+fn ensure_active_status(expected_status: bool) {
+    check_flags_eq(expected_status, param::IS_ACTIVE);
 }
 
 fn ensure_vault_asset(index: u32, is_input_index: bool) -> u64 {
@@ -46,13 +33,12 @@ fn ensure_vault_asset(index: u32, is_input_index: bool) -> u64 {
     vault_amount
 }
 
-fn ensure_vault_amount_after_supplying(vault_output_index: u32, amount_to_supply: u64) {
-    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
-    let output_vault_amount: u64 = ensure_vault_asset(vault_output_index, false);
+fn ensure_input_vault_asset(input_index: u32) -> u64 {
+    ensure_vault_asset(input_index, true)
+}
 
-    let expected_output_vault_amount: u64 = safe_add_64(vault_amount, amount_to_supply);
-
-    check_asset_amounts_eq(output_vault_amount, expected_output_vault_amount);
+fn ensure_output_vault_asset(output_index: u32) -> u64 {
+    ensure_vault_asset(output_index, false)
 }
 
 // Auth logic
@@ -64,15 +50,13 @@ fn auth_with_burn_check(
     expected_minimal_asset_amount: u64,
     with_asset_burn: bool
 ) {
-    ensure_asset_and_amount_ge(
+    ensure_input_asset_and_amount_ge(
         input_asset_index,
-        true,
         expected_asset_id,
         expected_minimal_asset_amount
     );
-    ensure_asset_and_amount_ge(
+    ensure_output_asset_and_amount_ge(
         output_asset_index,
-        false,
         expected_asset_id,
         expected_minimal_asset_amount
     );
@@ -100,7 +84,7 @@ fn withdraw_all(input_keeper_index: u32, output_keeper_index: u32) {
         param::WITH_KEEPER_ASSET_BURN
     );
 
-    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
+    let _: u64 = ensure_input_vault_asset(jet::current_index());
 }
 
 fn withdraw_part(
@@ -121,17 +105,22 @@ fn withdraw_part(
 
     ensure_output_script_hash(vault_output_index, jet::current_script_hash());
 
-    let vault_amount: u64 = ensure_vault_asset(jet::current_index(), true);
-    let output_vault_amount: u64 = ensure_vault_asset(vault_output_index, false);
+    let vault_amount: u64 = ensure_input_vault_asset(jet::current_index());
+    let output_vault_amount: u64 = ensure_output_vault_asset(vault_output_index);
 
     assert!(jet::lt_64(amount_to_withdraw, vault_amount));
 
-    let (carry, vault_change): (bool, u64) = jet::subtract_64(vault_amount, amount_to_withdraw);
+    let vault_change: u64 = safe_sub_64(vault_amount, amount_to_withdraw);
 
     check_asset_amounts_eq(output_vault_amount, vault_change);
 }
 
-fn supply(input_supplier_index: u32, output_supplier_index: u32, vault_output_index: u32, amount_to_supply: u64) {
+fn supply(
+    input_supplier_index: u32,
+    output_supplier_index: u32,
+    vault_output_index: u32,
+    amount_to_supply: u64
+) {
     ensure_active_status(true);
 
     auth_with_burn_check(
@@ -144,7 +133,12 @@ fn supply(input_supplier_index: u32, output_supplier_index: u32, vault_output_in
 
     ensure_output_script_hash(vault_output_index, jet::current_script_hash());
 
-    ensure_vault_amount_after_supplying(vault_output_index, amount_to_supply);
+    ensure_asset_transition_with_additional_amount(
+        jet::current_index(),
+        vault_output_index,
+        param::VAULT_ASSET_ID,
+        amount_to_supply
+    );
 }
 
 // TODO: Add goal logic to finalization flow
@@ -166,7 +160,12 @@ fn final_supply(
 
     ensure_output_script_hash(finalized_vault_output_index, param::FINALIZED_VAULT_COV_HASH);
 
-    ensure_vault_amount_after_supplying(finalized_vault_output_index, amount_to_supply);
+    ensure_asset_transition_with_additional_amount(
+        jet::current_index(),
+        finalized_vault_output_index,
+        param::VAULT_ASSET_ID,
+        amount_to_supply
+    );
 }
 
 fn main() {
