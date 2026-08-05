@@ -1,0 +1,75 @@
+use std::lib::asserts::{
+    assert_eq_1,
+    assert_eq_64,
+    assert_eq_256
+};
+
+// Helper getters
+
+pub fn get_explicit_asset_and_amount(
+    index: u32,
+    is_input_index: bool
+) -> (u256, u64) {
+    let pair: (Asset1, Amount1) = match is_input_index {
+        true => {
+            unwrap(jet::input_amount(index))
+        },
+        false => {
+            unwrap(jet::output_amount(index))
+        }
+    };
+
+    let (asset, amount): (Asset1, Amount1) = pair;
+    let asset_bits: u256 = unwrap_right::<(u1, u256)>(asset);
+    let amount: u64 = unwrap_right::<(u1, u256)>(amount);
+    (asset_bits, amount)
+}
+
+pub fn get_input_explicit_asset_and_amount(input_index: u32) -> (u256, u64) {
+    get_explicit_asset_and_amount(input_index, true)
+}
+
+pub fn get_output_explicit_asset_and_amount(output_index: u32) -> (u256, u64) {
+    get_explicit_asset_and_amount(output_index, false)
+}
+
+pub fn get_script_hash(index: u32, is_input_index: bool) -> u256 {
+    match is_input_index {
+        true => {
+            unwrap(jet::input_script_hash(index))
+        },
+        false => {
+            unwrap(jet::output_script_hash(index))
+        }
+    }
+}
+
+pub fn get_input_script_hash(input_index: u32) -> u256 {
+    get_script_hash(input_index, true)
+}
+
+pub fn get_output_script_hash(output_index: u32) -> u256 {
+    get_script_hash(output_index, false)
+}
+
+// Check helpers
+
+pub fn check_asset_amounts_eq(asset_amount_1: u64, asset_amount_2: u64) {
+    assert_eq_64(asset_amount_1, asset_amount_2);
+}
+
+pub fn check_assets_eq(asset_bits_1: u256, asset_bits_2: u256) {
+    assert_eq_256(asset_bits_1, asset_bits_2);
+}
+
+pub fn check_script_hashes_eq(script_1: u256, script_2: u256) {
+    assert_eq_256(script_1, script_2);
+}
+
+// TODO(std): use `assert_eq_bool` when it becomes available 
+pub fn check_flags_eq(
+    flag_1: bool,
+    flag_2: bool
+) {
+    assert_eq_1(<bool>::into(flag_1), <bool>::into(flag_2));
+}

@@ -16,7 +16,7 @@ env:
   SQLX_VERSION: 0.8.0
   SQLX_FEATURES: "rustls,postgres"
   SQLX_FEATURES_KEY: "rustls-postgres"
-  SIMPLEX_COMMIT: 1945d11b47fff8838c3e99c210133519a9522324
+  SIMPLEX_VERSION: 0.0.9
   APP_USER: app
   APP_USER_PWD: secret
   APP_DB_NAME: lending-indexer
@@ -84,7 +84,7 @@ jobs:
           BASE_DIR="${XDG_CONFIG_HOME:-$HOME}"
           SIMPLEX_DIR="${SIMPLEX_DIR:-$BASE_DIR/.simplex}"
           SIMPLEX_BIN_DIR="$SIMPLEX_DIR/bin"
-          "$SIMPLEX_BIN_DIR/simplexup" --commit "$SIMPLEX_COMMIT"
+          "$SIMPLEX_BIN_DIR/simplexup" --install "$SIMPLEX_VERSION"
           echo "$SIMPLEX_BIN_DIR" >> "$GITHUB_PATH"
           "$SIMPLEX_BIN_DIR/simplex" --version
 
@@ -92,6 +92,7 @@ jobs:
         shell: bash
         run: |
           cd crates/contracts
+          simplex install
           simplex build
           test -f src/artifacts/mod.rs
 
@@ -120,8 +121,31 @@ jobs:
       - name: Run simplex tests
         shell: bash
         run: |
+          set -euo pipefail
           cd crates/contracts
-          simplex test
+          
+          # `simplex test` wraps `cargo nextest` but currently swallows the
+          # child's non-zero exit code, so a failing test run still exits 0
+          # and CI reports success. Until that is fixed upstream, guard the
+          # step two ways:
+          #   1. Capture the real exit code of `simplex test` via
+          #      ${PIPESTATUS[0]} — `tee` would otherwise mask it, since a
+          #      pipeline's exit status is the last command's.
+          #   2. Grep the captured log for nextest's own failure markers, in
+          #      case the wrapper ever exits 0 while nextest reported FAILs
+          #      (belt-and-braces; becomes redundant once the wrapper is
+          #      fixed, but harmless).
+          # `set +e` around the pipeline is required so the script does not
+          # abort before we can read $rc.
+
+          set +e
+          simplex test --test-threads 2 2>&1 | tee simplex.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ] || grep -Eq '^(error: test run failed|Exit Status: [1-9]|[[:space:]]*FAIL[[:space:]]*\[)' simplex.log; then
+            echo "::error::simplex test failed (rc=$rc)"
+            exit 1
+          fi
 
       - name: Check that queries are fresh
         run: cargo sqlx prepare --workspace --check -- --all-targets
