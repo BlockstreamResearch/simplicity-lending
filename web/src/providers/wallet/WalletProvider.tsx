@@ -1,10 +1,4 @@
-import {
-  type Pset,
-  Registry,
-  type Transaction,
-  type Wollet,
-  WolletBuilder,
-} from '@lilbonekit/lwk-web'
+import { type Pset, Registry, type Transaction, type Wollet } from '@lilbonekit/lwk-web'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -14,6 +8,7 @@ import { JadeConnector } from '@/lib/wallet-core/connector/jade'
 import { SeedConnector } from '@/lib/wallet-core/connector/seed'
 import { SideSwapConnector } from '@/lib/wallet-core/connector/sideswap'
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
+import { createCachedWollet, type WalletCache } from '@/lib/wallet-core/store/walletCache'
 import { DEFAULT_WALLET_TYPE, type WalletType } from '@/lib/wallet-core/types'
 import {
   applyBroadcastTransaction,
@@ -35,6 +30,8 @@ import {
 import { WalletContext } from './WalletContext'
 
 const SESSION_STORAGE_KEY = 'jade_wallet_session'
+const BALANCE_POLL_INTERVAL_MS = 180_000
+const MIN_SYNC_GAP_MS = 15_000
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const { lwkNetwork } = useLwk()
@@ -50,12 +47,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const connectionChangeCounterRef = useRef(0)
   // Registry metadata cache for signPset, keyed by the owned-asset set that seeded it.
   const registryRef = useRef<{ key: string; registry: Registry } | null>(null)
+  // Throttle state shared by the poll, the focus/visibility handlers and manual syncs.
+  const lastSyncAtRef = useRef(0)
+  const syncInFlightRef = useRef(false)
 
   const [state, setState] = useState<WalletState>(INITIAL_WALLET_STATE)
   const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
 
   const disconnect = useCallback(
-    async (error?: string) => {
+    async ({ error, keepCache }: { error?: string; keepCache?: boolean } = {}) => {
       connectionChangeCounterRef.current++
       const session = sessionRef.current
       sessionRef.current = null
@@ -69,6 +69,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         error: error ?? null,
         isError: error !== undefined,
       }))
+      await (keepCache ? session?.cache.close() : session?.cache.wipe())?.catch(console.warn)
     },
     [setSavedSession],
   )
@@ -78,7 +79,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const cancelPendingRequest = useCallback(async () => {
     const cancel = pendingCancelRef.current
     pendingCancelRef.current = null
-    await disconnect()
+    await disconnect({ keepCache: true })
     if (cancel) await cancel().catch(console.warn)
   }, [disconnect])
 
@@ -97,7 +98,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (sessionRef.current || connectingRef.current) {
         const err = new JadeDisconnectedError()
         ErrorHandler.process(err)
-        disconnect(err.message).catch(console.warn)
+        disconnect({ error: err.message, keepCache: true }).catch(console.warn)
       }
     }
 
@@ -123,7 +124,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         .then(status => {
           if (status === 'locked' && state.connectionStatus !== 'locked') {
             // Force a clean reconnect so the PIN flow restarts from scratch.
-            disconnect().catch(console.warn)
+            disconnect({ keepCache: true }).catch(console.warn)
             return
           }
           setState(s => (s.connectionStatus === status ? s : { ...s, connectionStatus: status }))
@@ -131,7 +132,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         .catch((err: unknown) => {
           if (err instanceof JadeBusyError) return
           ErrorHandler.process(err)
-          disconnect(new JadeDisconnectedError().message).catch(console.warn)
+          disconnect({ error: new JadeDisconnectedError().message, keepCache: true }).catch(
+            console.warn,
+          )
         })
     }, 3_000)
 
@@ -144,6 +147,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const refreshBalances = () => {
       const session = sessionRef.current
       if (!session) return
+      // A scan re-downloads the whole history listing even when nothing changed, and a tab
+      // activation fires both listeners below, so repeated triggers are collapsed here.
+      if (syncInFlightRef.current) return
+      if (Date.now() - lastSyncAtRef.current < MIN_SYNC_GAP_MS) return
+      syncInFlightRef.current = true
       syncBalances(session.wollet, session.esploraClient)
         .then(() => {
           const confirmedTxids = reconcilePendingBroadcasts(
@@ -161,9 +169,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           }))
         })
         .catch(console.warn)
+        .finally(() => {
+          syncInFlightRef.current = false
+          lastSyncAtRef.current = Date.now()
+        })
     }
 
-    const id = setInterval(refreshBalances, 60_000)
+    const id = setInterval(refreshBalances, BALANCE_POLL_INTERVAL_MS)
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -196,6 +208,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setState(s => ({ ...s, syncing: true, error: null, isError: false }))
 
       let connector: WalletConnector | null = null
+      // Set once the cache holds the cross-tab persist lock, so an attempt invalidated
+      // after that point releases it instead of blocking the next connect.
+      let cacheToRelease: WalletCache | null = null
       try {
         if (useSideSwap && !env.VITE_SIDESWAP_WS_URL) {
           throw new Error('VITE_SIDESWAP_WS_URL is not set')
@@ -262,10 +277,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           setState(s => ({ ...s, connectionStatus: 'disconnected' }))
         }
 
-        const wollet = new WolletBuilder(lwkNetwork, descriptor).utxoOnly(true).build()
+        const { wollet, cache } = await createCachedWollet(lwkNetwork, descriptor)
+        cacheToRelease = cache
         const esploraClient = createEsploraClient(lwkNetwork)
 
-        sessionRef.current = { connector, descriptor, wollet, esploraClient }
+        sessionRef.current = { connector, descriptor, wollet, esploraClient, cache }
 
         const saved: SavedSession = {
           connectorId: connector.id,
@@ -281,7 +297,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           confirmed: confirmedBalances,
           pending: pendingBalances,
         } = await syncBalances(wollet, esploraClient)
-        if (attempt !== connectionChangeCounterRef.current) return
+        lastSyncAtRef.current = Date.now()
+        if (attempt !== connectionChangeCounterRef.current) {
+          cacheToRelease.close().catch(console.warn)
+          return
+        }
 
         const address = wollet.address(0).address()
         const receiveAddress = address.toString()
@@ -300,6 +320,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           scriptPubkey,
         }))
       } catch (err) {
+        cacheToRelease?.close().catch(console.warn)
         if (attempt !== connectionChangeCounterRef.current) {
           connector?.disconnect().catch(console.warn)
           return
@@ -338,7 +359,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     autoResumedRef.current = true
     setState(s => ({ ...s, reconnecting: true }))
     resumeSession()
-      .catch(() => disconnect().catch(console.warn))
+      .catch(() => disconnect({ keepCache: true }).catch(console.warn))
       .finally(() => setState(s => ({ ...s, reconnecting: false })))
   }, [savedSession, state.connectionStatus, resumeSession, disconnect])
 
@@ -347,6 +368,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!session) throw new Error('WalletProvider: not connected')
 
     setState(s => ({ ...s, syncing: true, error: null }))
+    // A manual sync follows a broadcast, so it runs regardless of the throttle, but still
+    // feeds it so the poll doesn't repeat the same scan seconds later.
+    syncInFlightRef.current = true
 
     try {
       await syncBalances(session.wollet, session.esploraClient)
@@ -367,6 +391,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       ErrorHandler.process(err)
       const error = err instanceof Error ? err.message : String(err)
       setState(s => ({ ...s, syncing: false, error, isError: true }))
+    } finally {
+      syncInFlightRef.current = false
+      lastSyncAtRef.current = Date.now()
     }
   }, [])
 

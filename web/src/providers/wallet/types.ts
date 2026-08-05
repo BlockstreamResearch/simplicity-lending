@@ -8,6 +8,7 @@ import type {
 } from '@lilbonekit/lwk-web'
 
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
+import type { WalletCache } from '@/lib/wallet-core/store/walletCache'
 import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
 
 export interface ConnectOptions {
@@ -39,6 +40,7 @@ export interface WalletSession {
   descriptor: WolletDescriptor
   wollet: Wollet
   esploraClient: EsploraClient
+  cache: WalletCache
 }
 
 export interface SavedSession {
