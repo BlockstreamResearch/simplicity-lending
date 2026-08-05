@@ -394,6 +394,7 @@ impl LendingOffer {
                     ft,
                     lender_vault_utxo.unwrap(),
                     borrower_nft_indexes,
+                    current_borrower_debt,
                     amount_to_repay,
                 );
             }
@@ -450,8 +451,10 @@ impl LendingOffer {
             .offer_parameters
             .get_repaid_protocol_fee(current_borrower_debt, amount_to_repay);
 
-        let mut lender_vault = self.get_lender_vault();
-        let mut protocol_fee_vault = self.get_protocol_fee_vault();
+        let mut lender_vault = self.parameters.get_lender_vault(current_borrower_debt);
+        let mut protocol_fee_vault = self
+            .parameters
+            .get_protocol_fee_vault(current_borrower_debt);
 
         lender_vault.attach_supplying(
             ft,
@@ -475,9 +478,12 @@ impl LendingOffer {
         ft: &mut FinalTransaction,
         lender_vault_utxo: UTXO,
         borrower_debt_nft_indexes: (u32, u32),
+        current_borrower_debt: u64,
         amount_to_repay: u64,
     ) {
-        self.get_lender_vault().attach_supplying(
+        let mut lender_vault = self.parameters.get_lender_vault(current_borrower_debt);
+
+        lender_vault.attach_supplying(
             ft,
             lender_vault_utxo,
             borrower_debt_nft_indexes.0,

@@ -281,7 +281,7 @@ fn partial_repayment_succeeds_in_repayment_offer_fee_phase_with_amount_less_than
     let borrower_nft_utxo =
         borrower.get_utxos_asset(offer_parameters.borrower_nft_asset_id)?[0].clone();
     let (lender_vault_utxo, protocol_fee_vault_utxo) =
-        get_active_offer_vaults_utxos(&context, offer_parameters)?;
+        get_active_offer_vaults_utxos(&context, &offer)?;
 
     let borrower_principal_utxo =
         borrower.get_utxos_asset(offer_parameters.principal_asset_id)?[0].clone();
@@ -390,7 +390,7 @@ fn partial_repayment_succeeds_in_principal_repayment_phase(
     let borrower_nft_utxo =
         borrower.get_utxos_asset(offer_parameters.borrower_nft_asset_id)?[0].clone();
     let (lender_vault_utxo, protocol_fee_vault_utxo) =
-        get_active_offer_vaults_utxos(&context, offer_parameters)?;
+        get_active_offer_vaults_utxos(&context, &offer)?;
 
     let borrower_principal_utxo =
         borrower.get_utxos_asset(offer_parameters.principal_asset_id)?[0].clone();
