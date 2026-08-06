@@ -16,11 +16,9 @@ use crate::checks::{
     ensure_asset_transition_with_additional_amount
 };
 
-// Check helpers
+use crate::storage::{get_bool_slot_leaf, get_u64_slot_leaf, get_script_hash_from_tap_node};
 
-fn ensure_active_status(expected_status: bool) {
-    check_flags_eq(expected_status, param::IS_ACTIVE);
-}
+// Check helpers
 
 fn ensure_vault_asset(index: u32, is_input_index: bool) -> u64 {
     let (
@@ -43,44 +41,14 @@ fn ensure_output_vault_asset(output_index: u32) -> u64 {
 
 // Storage logic
 
-fn get_is_active_slot_leaf(is_active: bool) -> u256 {
-    let is_active_num: u64 = jet::left_pad_low_1_64(<bool>::into(is_active));
-    let is_active_num: u256 = <(u128, u128)>::into((0, <(u64, u64)>::into((0, is_active_num))));
-
-    let state_ctx1: Ctx8 = jet::tapdata_init();
-    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, is_active_num);
-
-    jet::sha_256_ctx_8_finalize(state_ctx2)
-}
-
-fn get_already_supplied_slot_leaf(already_supplied: u64) -> u256 {
-    let already_supplied: u256 = <(u128, u128)>::into(
-        (0, <(u64, u64)>::into((0, already_supplied)))
-    );
-
-    let state_ctx1: Ctx8 = jet::tapdata_init();
-    let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, already_supplied);
-
-    jet::sha_256_ctx_8_finalize(state_ctx2)
-}
-
 fn get_script_hash_for_storage(is_active: bool, already_supplied: u64) -> u256 {
-    let is_active_slot_leaf: u256 = get_is_active_slot_leaf(is_active);
-    let already_supplied_slot_leaf: u256 = get_already_supplied_slot_leaf(already_supplied);
+    let is_active_slot_leaf: u256 = get_bool_slot_leaf(is_active);
+    let already_supplied_slot_leaf: u256 = get_u64_slot_leaf(already_supplied);
 
     let first_tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), is_active_slot_leaf);
     let tap_node: u256 = jet::build_tapbranch(first_tap_node, already_supplied_slot_leaf);
 
-    // Compute a TapTweak
-    let bip0341_key: u256 = 0x50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0;
-    let tweaked_key: u256 = jet::build_taptweak(bip0341_key, tap_node);
-
-    // Turn the TapTweak into a script hash
-    let hash_ctx1: Ctx8 = jet::sha_256_ctx_8_init();
-    let hash_ctx2: Ctx8 = jet::sha_256_ctx_8_add_2(hash_ctx1, 0x5120); // Segwit v1, length 32
-    let hash_ctx3: Ctx8 = jet::sha_256_ctx_8_add_32(hash_ctx2, tweaked_key);
-
-    jet::sha_256_ctx_8_finalize(hash_ctx3)
+    get_script_hash_from_tap_node(tap_node)
 }
 
 // Auth logic
