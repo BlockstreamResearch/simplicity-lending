@@ -26,16 +26,18 @@ export function createLwkNetwork(network: NetworkName): Network {
 }
 
 /**
- * Creates an EsploraClient configured for waterfalls + utxoOnly scanning.
- * Waterfalls provides fast indexed encrypted UTXO discovery vs slow sequential HD scan.
+ * Creates an EsploraClient configured for waterfalls scanning.
+ * utxoOnly is off: waterfalls caps a reused script at MAX_TXS_SEEN (100) in that mode and
+ * fails the whole scan. The full history it downloads instead is deduped against the
+ * persistent wallet cache, so only the first scan pays for it.
  */
 export function createEsploraClient(lwkNetwork: Network): EsploraClient {
   const client = new EsploraClient(
     lwkNetwork,
     env.VITE_WATERFALLS_URL,
     true, // waterfalls
-    4, // concurrency
-    true, // utxoOnly
+    8, // concurrency
+    false, // utxoOnly
   )
   if (lwkNetwork.isMainnet() || lwkNetwork.isTestnet()) {
     client.setWaterfallsServerRecipient(env.VITE_WATERFALLS_RECIPIENT)

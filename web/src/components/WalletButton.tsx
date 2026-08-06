@@ -27,7 +27,7 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
   const handleDisconnect = async () => {
     setDisconnecting(true)
     try {
-      await disconnect()
+      await disconnect({ cachePolicy: 'clear' })
     } finally {
       setDisconnecting(false)
       setIsMenuOpen(false)
