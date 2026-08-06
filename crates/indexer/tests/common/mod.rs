@@ -109,6 +109,8 @@ pub fn offer_model(
         protocol_fee_keeper_asset_id: vec![5; 32],
         collateral_amount: 1_000,
         principal_amount: 500,
+        current_debt: 506,
+        collateral_remaining: 1_000,
         interest_rate: 120,
         loan_expiration_time: 1_234_567,
         current_status: OfferStatus::Pending,
@@ -129,6 +131,16 @@ pub async fn seed_factory_row(pool: &PgPool, factory: &FactoryModel) -> anyhow::
 }
 
 pub async fn seed_offer_row(pool: &PgPool, offer: &mut OfferModel) -> anyhow::Result<i64> {
+    let is_open = matches!(
+        offer.current_status,
+        OfferStatus::Pending | OfferStatus::Active
+    );
+
+    if !is_open {
+        offer.current_debt = 0;
+        offer.collateral_remaining = 0;
+    }
+
     let mut sql_tx = pool.begin().await?;
     let Some(id) = insert_offer(&mut sql_tx, offer).await? else {
         anyhow::bail!("offer with the same created_at_txid already exists");

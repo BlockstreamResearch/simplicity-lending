@@ -84,6 +84,8 @@ pub struct OfferModel {
     pub protocol_fee_keeper_asset_id: Vec<u8>,
     pub collateral_amount: i64,
     pub principal_amount: i64,
+    pub current_debt: i64,
+    pub collateral_remaining: i64,
     pub interest_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
@@ -99,6 +101,11 @@ impl OfferModel {
         block_height: u64,
         txid: Txid,
     ) -> Self {
+        let collateral_amount = offer_parameters.offer_parameters.collateral_amount as i64;
+        let current_debt = offer_parameters
+            .offer_parameters
+            .get_total_amount_to_repay() as i64;
+
         Self {
             id: 0,
             issuance_factory_id: factory_id,
@@ -115,8 +122,10 @@ impl OfferModel {
                 .into_inner()
                 .0
                 .to_vec(),
-            collateral_amount: offer_parameters.offer_parameters.collateral_amount as i64,
+            collateral_amount,
             principal_amount: offer_parameters.offer_parameters.principal_amount as i64,
+            current_debt,
+            collateral_remaining: collateral_amount,
             interest_rate: offer_parameters.offer_parameters.principal_interest_rate as i32,
             loan_expiration_time: offer_parameters.offer_parameters.loan_expiration_time as i32,
             current_status: OfferStatus::Pending,
@@ -135,6 +144,8 @@ pub struct OfferModelShort {
     pub principal_asset_id: Vec<u8>,
     pub collateral_amount: i64,
     pub principal_amount: i64,
+    pub current_debt: i64,
+    pub collateral_remaining: i64,
     pub interest_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
@@ -202,6 +213,8 @@ mod tests {
         );
         assert_eq!(model.collateral_amount, 1_000);
         assert_eq!(model.principal_amount, 500);
+        assert_eq!(model.current_debt, 512);
+        assert_eq!(model.collateral_remaining, 1_000);
         assert_eq!(model.interest_rate, 250);
         assert_eq!(model.loan_expiration_time, 12_345);
         assert_eq!(model.current_status, OfferStatus::Pending);

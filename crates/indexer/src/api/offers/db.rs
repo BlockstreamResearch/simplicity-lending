@@ -96,6 +96,8 @@ async fn fetch_full_info_by_id(
             protocol_fee_keeper_asset_id,
             collateral_amount,
             principal_amount,
+            current_debt,
+            collateral_remaining,
             interest_rate,
             loan_expiration_time,
             updated_at_height,
