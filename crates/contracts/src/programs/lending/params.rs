@@ -4,9 +4,7 @@ use crate::{
     artifacts::lending::derived_lending::LendingArguments,
     programs::{
         asset_auth::{AssetAuth, AssetAuthParameters},
-        asset_auth_vault::{
-            ActiveAssetAuthVault, FinalizedAssetAuthVault, FinalizedAssetAuthVaultParameters,
-        },
+        asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters},
         lending::OfferParameters,
         program::SimplexProgram,
     },
@@ -33,22 +31,64 @@ impl LendingOfferParameters {
         })
     }
 
-    pub fn get_active_lender_vault(&self) -> ActiveAssetAuthVault {
-        ActiveAssetAuthVault::from_finalized_vault(self.get_lender_vault_finalized_parameters())
+    pub fn get_lender_vault(&self, current_debt: u64) -> AssetAuthVault {
+        let parameters = self.get_lender_vault_parameters();
+        let protocol_fee_left = self
+            .offer_parameters
+            .get_protocol_fee_to_repay(current_debt);
+
+        let already_repaid_amount = self
+            .offer_parameters
+            .get_already_repaid_amount(current_debt);
+        let already_repaid_protocol_fee =
+            self.offer_parameters.get_total_protocol_fee() - protocol_fee_left;
+        let already_supplied = already_repaid_amount - already_repaid_protocol_fee;
+
+        if already_supplied >= parameters.supply_goal {
+            AssetAuthVault::new_finalized(parameters)
+        } else {
+            AssetAuthVault::new_active(parameters, already_supplied)
+        }
     }
 
-    pub fn get_active_protocol_fee_vault(&self) -> ActiveAssetAuthVault {
-        ActiveAssetAuthVault::from_finalized_vault(
-            self.get_protocol_fee_vault_finalized_parameters(),
-        )
+    pub fn get_protocol_fee_vault(&self, current_debt: u64) -> AssetAuthVault {
+        let parameters = self.get_protocol_fee_vault_parameters();
+        let protocol_fee_left = self
+            .offer_parameters
+            .get_protocol_fee_to_repay(current_debt);
+        let already_repaid_protocol_fee =
+            self.offer_parameters.get_total_protocol_fee() - protocol_fee_left;
+
+        if already_repaid_protocol_fee >= parameters.supply_goal {
+            AssetAuthVault::new_finalized(parameters)
+        } else {
+            AssetAuthVault::new_active(parameters, already_repaid_protocol_fee)
+        }
     }
 
-    pub fn get_finalized_lender_vault(&self) -> FinalizedAssetAuthVault {
-        FinalizedAssetAuthVault::new(self.get_lender_vault_finalized_parameters())
+    pub fn get_lender_vault_parameters(&self) -> AssetAuthVaultParameters {
+        AssetAuthVaultParameters {
+            vault_asset_id: self.principal_asset_id,
+            keeper_asset_id: self.lender_nft_asset_id,
+            supplier_asset_id: self.borrower_nft_asset_id,
+            supply_goal: self.offer_parameters.get_total_amount_to_repay()
+                - self.offer_parameters.get_total_protocol_fee(),
+            with_keeper_asset_burn: true,
+            with_supplier_asset_burn: true,
+            network: self.network,
+        }
     }
 
-    pub fn get_finalized_protocol_fee_vault(&self) -> FinalizedAssetAuthVault {
-        FinalizedAssetAuthVault::new(self.get_protocol_fee_vault_finalized_parameters())
+    pub fn get_protocol_fee_vault_parameters(&self) -> AssetAuthVaultParameters {
+        AssetAuthVaultParameters {
+            vault_asset_id: self.principal_asset_id,
+            keeper_asset_id: self.protocol_fee_keeper_asset_id,
+            supplier_asset_id: self.borrower_nft_asset_id,
+            supply_goal: self.offer_parameters.get_total_protocol_fee(),
+            with_keeper_asset_burn: false,
+            with_supplier_asset_burn: true,
+            network: self.network,
+        }
     }
 
     pub fn build_arguments(&self) -> LendingArguments {
@@ -61,37 +101,17 @@ impl LendingOfferParameters {
             principal_amount: self.offer_parameters.principal_amount,
             principal_interest_rate: self.offer_parameters.principal_interest_rate as u64,
             loan_expiration_time: self.offer_parameters.loan_expiration_time,
-            lender_vault_cov_hash: self.get_active_lender_vault().get_script_hash(),
-            finalized_lender_vault_cov_hash: self.get_finalized_lender_vault().get_script_hash(),
-            protocol_fee_vault_cov_hash: self.get_active_protocol_fee_vault().get_script_hash(),
-            finalized_protocol_fee_vault_cov_hash: self
-                .get_finalized_protocol_fee_vault()
-                .get_script_hash(),
+            lender_vault_tapleaf_hash: self.get_lender_vault_tapleaf_hash(),
+            protocol_fee_vault_tapleaf_hash: self.get_protocol_fee_vault_tapleaf_hash(),
             principal_output_script_hash: self.get_principal_output_asset_auth().get_script_hash(),
         }
     }
 
-    fn get_lender_vault_finalized_parameters(&self) -> FinalizedAssetAuthVaultParameters {
-        FinalizedAssetAuthVaultParameters {
-            vault_asset_id: self.principal_asset_id,
-            keeper_asset_id: self.lender_nft_asset_id,
-            keeper_min_asset_amount: 1,
-            with_keeper_asset_burn: true,
-            supplier_asset_id: self.borrower_nft_asset_id,
-            with_supplier_asset_burn: true,
-            network: self.network,
-        }
+    fn get_lender_vault_tapleaf_hash(&self) -> [u8; 32] {
+        AssetAuthVault::new_active(self.get_lender_vault_parameters(), 0).get_tapleaf_hash()
     }
 
-    fn get_protocol_fee_vault_finalized_parameters(&self) -> FinalizedAssetAuthVaultParameters {
-        FinalizedAssetAuthVaultParameters {
-            vault_asset_id: self.principal_asset_id,
-            keeper_asset_id: self.protocol_fee_keeper_asset_id,
-            keeper_min_asset_amount: 1,
-            with_keeper_asset_burn: false,
-            supplier_asset_id: self.borrower_nft_asset_id,
-            with_supplier_asset_burn: true,
-            network: self.network,
-        }
+    fn get_protocol_fee_vault_tapleaf_hash(&self) -> [u8; 32] {
+        AssetAuthVault::new_active(self.get_protocol_fee_vault_parameters(), 0).get_tapleaf_hash()
     }
 }

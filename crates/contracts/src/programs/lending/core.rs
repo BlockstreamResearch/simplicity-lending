@@ -8,6 +8,7 @@ use simplex::{
 use crate::{
     artifacts::lending::LendingProgram,
     programs::{
+        asset_auth_vault::AssetAuthVault,
         lending::{
             LendingOfferError, LendingOfferParameters, LendingOfferWitnessBranch, OfferParameters,
             OfferRepaymentPhase,
@@ -80,7 +81,7 @@ impl LendingOffer {
 
     fn new(parameters: LendingOfferParameters, storage: LendingOfferStorage) -> Self {
         let mut lending_offer_program =
-            LendingProgram::new(parameters.build_arguments()).with_storage_capacity(2);
+            LendingProgram::new(&parameters.build_arguments()).with_storage_capacity(2);
 
         storage.set_storage_slots(&mut lending_offer_program);
 
@@ -136,6 +137,15 @@ impl LendingOffer {
 
     pub fn get_parameters(&self) -> &LendingOfferParameters {
         &self.parameters
+    }
+
+    pub fn get_lender_vault(&self) -> AssetAuthVault {
+        self.parameters.get_lender_vault(self.get_current_debt())
+    }
+
+    pub fn get_protocol_fee_vault(&self) -> AssetAuthVault {
+        self.parameters
+            .get_protocol_fee_vault(self.get_current_debt())
     }
 
     pub fn is_active_offer(&self) -> bool {
@@ -403,25 +413,28 @@ impl LendingOffer {
             .offer_parameters
             .get_repaid_protocol_fee(current_borrower_debt, amount_to_repay);
 
-        if amount_to_repay < current_borrower_debt {
-            self.parameters
-                .get_active_lender_vault()
-                .attach_creation(ft, amount_to_repay - repaid_protocol_fee);
+        let lender_vault = if amount_to_repay < current_borrower_debt {
+            AssetAuthVault::new_active(
+                self.parameters.get_lender_vault_parameters(),
+                amount_to_repay - repaid_protocol_fee,
+            )
         } else {
-            self.parameters
-                .get_finalized_lender_vault()
-                .attach_creation(ft, amount_to_repay - repaid_protocol_fee);
-        }
+            AssetAuthVault::new_finalized(self.parameters.get_lender_vault_parameters())
+        };
 
-        if repaid_protocol_fee < self.parameters.offer_parameters.get_total_protocol_fee() {
-            self.parameters
-                .get_active_protocol_fee_vault()
-                .attach_creation(ft, repaid_protocol_fee);
-        } else {
-            self.parameters
-                .get_finalized_protocol_fee_vault()
-                .attach_creation(ft, repaid_protocol_fee);
-        }
+        lender_vault.attach_creation(ft);
+
+        let protocol_fee_vault =
+            if repaid_protocol_fee < self.parameters.offer_parameters.get_total_protocol_fee() {
+                AssetAuthVault::new_active(
+                    self.parameters.get_protocol_fee_vault_parameters(),
+                    repaid_protocol_fee,
+                )
+            } else {
+                AssetAuthVault::new_finalized(self.parameters.get_protocol_fee_vault_parameters())
+            };
+
+        protocol_fee_vault.attach_creation(ft);
     }
 
     fn attach_vaults_for_repaying_offer_fee_phase(
@@ -437,30 +450,26 @@ impl LendingOffer {
             .parameters
             .offer_parameters
             .get_repaid_protocol_fee(current_borrower_debt, amount_to_repay);
-        let protocol_fee_left = self
+
+        let mut lender_vault = self.parameters.get_lender_vault(current_borrower_debt);
+        let mut protocol_fee_vault = self
             .parameters
-            .offer_parameters
-            .get_protocol_fee_to_repay(current_borrower_debt);
+            .get_protocol_fee_vault(current_borrower_debt);
 
-        let active_lender_vault = self.parameters.get_active_lender_vault();
-        let active_protocol_fee_vault = self.parameters.get_active_protocol_fee_vault();
-
-        active_lender_vault.attach_supplying_with_goal(
+        lender_vault.attach_supplying(
             ft,
             lender_vault_utxo,
             borrower_debt_nft_indexes.0,
             borrower_debt_nft_indexes.1,
             amount_to_repay - repaid_protocol_fee,
-            current_borrower_debt - protocol_fee_left,
         );
 
-        active_protocol_fee_vault.attach_supplying_with_goal(
+        protocol_fee_vault.attach_supplying(
             ft,
             protocol_fee_vault_utxo,
             borrower_debt_nft_indexes.0,
             borrower_debt_nft_indexes.1,
             repaid_protocol_fee,
-            protocol_fee_left,
         );
     }
 
@@ -472,15 +481,14 @@ impl LendingOffer {
         current_borrower_debt: u64,
         amount_to_repay: u64,
     ) {
-        let active_lender_vault = self.parameters.get_active_lender_vault();
+        let mut lender_vault = self.parameters.get_lender_vault(current_borrower_debt);
 
-        active_lender_vault.attach_supplying_with_goal(
+        lender_vault.attach_supplying(
             ft,
             lender_vault_utxo,
             borrower_debt_nft_indexes.0,
             borrower_debt_nft_indexes.1,
             amount_to_repay,
-            current_borrower_debt,
         );
     }
 

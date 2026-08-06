@@ -166,7 +166,7 @@ fn full_repayment_succeeds_in_repaying_offer_fees_phase(
     let borrower_nft_utxo =
         borrower.get_utxos_asset(offer_parameters.borrower_nft_asset_id)?[0].clone();
     let (lender_vault_utxo, protocol_fee_vault_utxo) =
-        get_active_offer_vaults_utxos(&context, offer_parameters)?;
+        get_active_offer_vaults_utxos(&context, &offer)?;
 
     let current_debt = offer.get_current_debt();
 
@@ -249,7 +249,7 @@ fn full_repayment_succeeds_in_repaying_principal_phase(
     let borrower_nft_utxo =
         borrower.get_utxos_asset(offer_parameters.borrower_nft_asset_id)?[0].clone();
     let (lender_vault_utxo, protocol_fee_vault_utxo) =
-        get_active_offer_vaults_utxos(&context, offer_parameters)?;
+        get_active_offer_vaults_utxos(&context, &offer)?;
 
     let current_debt = offer.get_current_debt();
 

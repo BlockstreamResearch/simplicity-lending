@@ -12,19 +12,21 @@ pub enum AssetAuthVaultWitnessBranch {
         input_keeper_index: u32,
         output_keeper_index: u32,
         vault_output_index: u32,
+        already_supplied: u64,
         amount_to_withdraw: u64,
     },
     Supply {
         input_supplier_index: u32,
         output_supplier_index: u32,
         vault_output_index: u32,
+        already_supplied: u64,
         amount_to_supply: u64,
     },
     FinalSupply {
         input_supplier_index: u32,
         output_supplier_index: u32,
         vault_output_index: u32,
-        amount_to_supply: u64,
+        already_supplied: u64,
     },
 }
 
@@ -39,34 +41,38 @@ impl AssetAuthVaultWitnessBranch {
                 input_keeper_index,
                 output_keeper_index,
                 vault_output_index,
+                already_supplied,
                 amount_to_withdraw,
             } => Left(Right((
                 *input_keeper_index,
                 *output_keeper_index,
                 *vault_output_index,
+                *already_supplied,
                 *amount_to_withdraw,
             ))),
             AssetAuthVaultWitnessBranch::Supply {
                 input_supplier_index,
                 output_supplier_index,
                 vault_output_index,
+                already_supplied,
                 amount_to_supply,
             } => Right(Left((
                 *input_supplier_index,
                 *output_supplier_index,
                 *vault_output_index,
+                *already_supplied,
                 *amount_to_supply,
             ))),
             AssetAuthVaultWitnessBranch::FinalSupply {
                 input_supplier_index,
                 output_supplier_index,
                 vault_output_index,
-                amount_to_supply,
+                already_supplied,
             } => Right(Right((
                 *input_supplier_index,
                 *output_supplier_index,
                 *vault_output_index,
-                *amount_to_supply,
+                *already_supplied,
             ))),
         };
 

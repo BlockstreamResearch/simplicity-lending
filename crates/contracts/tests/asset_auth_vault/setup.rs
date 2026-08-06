@@ -1,6 +1,4 @@
-use lending_contracts::programs::asset_auth_vault::{
-    ActiveAssetAuthVault, FinalizedAssetAuthVault, FinalizedAssetAuthVaultParameters,
-};
+use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
 
 use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::utils::get_random_seed;
@@ -113,13 +111,16 @@ pub(super) fn make_confidential(
 
 pub(super) fn setup_asset_auth_vault(
     context: &simplex::TestContext,
-    vault_parameters: FinalizedAssetAuthVaultParameters,
-) -> anyhow::Result<ActiveAssetAuthVault> {
+    vault_parameters: AssetAuthVaultParameters,
+    already_supplied: u64,
+) -> anyhow::Result<AssetAuthVault> {
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
     let vault_asset_utxo = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
     let vault_asset_amount = vault_asset_utxo.explicit_amount();
+
+    assert!(vault_asset_amount >= already_supplied);
 
     let mut ft = FinalTransaction::new();
 
@@ -128,16 +129,27 @@ pub(super) fn setup_asset_auth_vault(
         RequiredSignature::NativeEcdsa,
     );
 
-    let asset_auth_vault = ActiveAssetAuthVault::from_finalized_vault(vault_parameters);
+    let asset_auth_vault = AssetAuthVault::new_active(vault_parameters, already_supplied);
 
-    asset_auth_vault.attach_creation(&mut ft, vault_asset_amount);
+    asset_auth_vault.attach_creation(&mut ft);
+
+    if vault_asset_amount > already_supplied {
+        ft.add_output(
+            PartialOutput::new(
+                signer.get_confidential_address().script_pubkey(),
+                vault_asset_amount - already_supplied,
+                vault_parameters.vault_asset_id,
+            )
+            .with_blinding_key(signer.get_blinding_public_key()),
+        );
+    }
 
     signer.broadcast(&ft)?.wait()?;
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
 
-    assert_eq!(asset_auth_vault_utxo.explicit_amount(), vault_asset_amount);
+    assert_eq!(asset_auth_vault_utxo.explicit_amount(), already_supplied);
 
     Ok(asset_auth_vault)
 }
@@ -184,13 +196,15 @@ pub(super) fn fund_keeper(
 
 pub(super) fn final_supply(
     context: &simplex::TestContext,
-    asset_auth_vault: &ActiveAssetAuthVault,
-    amount_to_supply: u64,
-) -> anyhow::Result<FinalizedAssetAuthVault> {
+    asset_auth_vault: &mut AssetAuthVault,
+) -> anyhow::Result<()> {
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
     let vault_parameters = *asset_auth_vault.get_parameters();
+
+    let amount_to_goal =
+        vault_parameters.supply_goal - asset_auth_vault.get_already_supplied_amount();
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
@@ -198,7 +212,10 @@ pub(super) fn final_supply(
     let utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
     let vault_asset_utxo_amount = utxo_to_supply.explicit_amount();
 
-    assert!(vault_asset_utxo_amount >= amount_to_supply);
+    assert!(
+        vault_asset_utxo_amount >= amount_to_goal,
+        "Not enough vault assets to do the final supply"
+    );
 
     let supplier_auth_utxo = signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
 
@@ -213,13 +230,7 @@ pub(super) fn final_supply(
         RequiredSignature::NativeEcdsa,
     );
 
-    let finalized_vault = asset_auth_vault.attach_final_supplying(
-        &mut ft,
-        asset_auth_vault_utxo,
-        0,
-        1,
-        amount_to_supply,
-    );
+    asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 1);
 
     ft.add_output(PartialOutput::new(
         signer.get_address().script_pubkey(),
@@ -227,22 +238,22 @@ pub(super) fn final_supply(
         supplier_auth_utxo.explicit_asset(),
     ));
 
-    if vault_asset_utxo_amount > amount_to_supply {
+    if vault_asset_utxo_amount > amount_to_goal {
         ft.add_output(PartialOutput::new(
             signer.get_address().script_pubkey(),
-            vault_asset_utxo_amount - amount_to_supply,
+            vault_asset_utxo_amount - amount_to_goal,
             vault_parameters.vault_asset_id,
         ));
     }
 
     signer.broadcast(&ft)?.wait()?;
 
-    Ok(finalized_vault)
+    Ok(())
 }
 
 pub(super) fn supply(
     context: &simplex::TestContext,
-    asset_auth_vault: &ActiveAssetAuthVault,
+    asset_auth_vault: &mut AssetAuthVault,
     amount_to_supply: u64,
 ) -> anyhow::Result<()> {
     let provider = context.get_default_provider();

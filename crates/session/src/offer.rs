@@ -649,7 +649,7 @@ impl Session {
 
         let parameters =
             lending_offer_parameters_from_indexer(&offer_details.info, self.network())?;
-        let finalized_lender_vault = parameters.get_finalized_lender_vault();
+        let finalized_lender_vault = parameters.get_lender_vault(0);
 
         let lender_vault_utxo = self
             .provider()

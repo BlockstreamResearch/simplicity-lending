@@ -273,7 +273,7 @@ pub(super) fn partial_repay_offer(
     let borrower_nft_utxo =
         borrower.get_utxos_asset(active_offer_parameters.borrower_nft_asset_id)?[0].clone();
     let (lender_vault_utxo, protocol_fee_vault_utxo) =
-        get_active_offer_vaults_utxos(context, active_offer_parameters)?;
+        get_active_offer_vaults_utxos(context, active_offer)?;
 
     let borrower_principal_utxo =
         borrower.get_utxos_asset(active_offer_parameters.principal_asset_id)?[0].clone();
@@ -382,25 +382,9 @@ pub(super) fn get_lender_vault_utxo(
     offer: &LendingOffer,
 ) -> anyhow::Result<UTXO> {
     let provider = context.get_default_provider();
-    let offer_parameters = offer.get_parameters();
+    let lender_vault = offer.get_lender_vault();
 
-    let lender_vault_utxo = if offer.get_current_debt() > 0 {
-        provider.fetch_scripthash_utxos(
-            &offer_parameters
-                .get_active_lender_vault()
-                .get_script_pubkey(),
-        )?[0]
-            .clone()
-    } else {
-        provider.fetch_scripthash_utxos(
-            &offer_parameters
-                .get_finalized_lender_vault()
-                .get_script_pubkey(),
-        )?[0]
-            .clone()
-    };
-
-    Ok(lender_vault_utxo)
+    Ok(provider.fetch_scripthash_utxos(&lender_vault.get_script_pubkey())?[0].clone())
 }
 
 pub(super) fn get_protocol_fee_vault_utxo(
@@ -408,50 +392,36 @@ pub(super) fn get_protocol_fee_vault_utxo(
     offer: &LendingOffer,
 ) -> anyhow::Result<UTXO> {
     let provider = context.get_default_provider();
-    let offer_parameters = offer.get_parameters();
+    let protocol_fee_vault = offer.get_protocol_fee_vault();
 
-    let total_amount_to_repay = offer_parameters
-        .offer_parameters
-        .get_total_amount_to_repay();
-    let total_fee_to_repay = offer_parameters.offer_parameters.get_total_fee();
-
-    let protocol_fee_vault_utxo =
-        if offer.get_current_debt() >= total_amount_to_repay - total_fee_to_repay {
-            provider.fetch_scripthash_utxos(
-                &offer_parameters
-                    .get_active_protocol_fee_vault()
-                    .get_script_pubkey(),
-            )?[0]
-                .clone()
-        } else {
-            provider.fetch_scripthash_utxos(
-                &offer_parameters
-                    .get_finalized_protocol_fee_vault()
-                    .get_script_pubkey(),
-            )?[0]
-                .clone()
-        };
-
-    Ok(protocol_fee_vault_utxo)
+    Ok(provider.fetch_scripthash_utxos(&protocol_fee_vault.get_script_pubkey())?[0].clone())
 }
 
 pub(super) fn get_active_offer_vaults_utxos(
     context: &simplex::TestContext,
-    offer_parameters: LendingOfferParameters,
+    offer: &LendingOffer,
 ) -> anyhow::Result<(Option<UTXO>, Option<UTXO>)> {
     let provider = context.get_default_provider();
 
-    let active_lender_vault = offer_parameters.get_active_lender_vault();
-    let active_protocol_fee_vault = offer_parameters.get_active_protocol_fee_vault();
+    let lender_vault = offer.get_lender_vault();
+    let lender_vault_utxo = if lender_vault.is_active_offer() {
+        provider
+            .fetch_scripthash_utxos(&lender_vault.get_script_pubkey())?
+            .first()
+            .cloned()
+    } else {
+        None
+    };
 
-    let lender_vault_utxo = provider
-        .fetch_scripthash_utxos(&active_lender_vault.get_script_pubkey())?
-        .first()
-        .cloned();
-    let protocol_fee_vault_utxo = provider
-        .fetch_scripthash_utxos(&active_protocol_fee_vault.get_script_pubkey())?
-        .first()
-        .cloned();
+    let protocol_fee_vault = offer.get_protocol_fee_vault();
+    let protocol_fee_vault_utxo = if protocol_fee_vault.is_active_offer() {
+        provider
+            .fetch_scripthash_utxos(&protocol_fee_vault.get_script_pubkey())?
+            .first()
+            .cloned()
+    } else {
+        None
+    };
 
     Ok((lender_vault_utxo, protocol_fee_vault_utxo))
 }
