@@ -80,10 +80,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
     assert_eq!(outputs[1].amount, expected_lender_vault_amount);
     assert_eq!(
         outputs[1].script_pubkey,
-        offer
-            .parameters
-            .get_finalized_lender_vault()
-            .get_script_pubkey()
+        offer.parameters.get_lender_vault(0).get_script_pubkey()
     );
 
     assert_eq!(outputs[2].asset, offer.parameters.principal_asset_id);
@@ -92,7 +89,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
         outputs[2].script_pubkey,
         offer
             .parameters
-            .get_finalized_protocol_fee_vault()
+            .get_protocol_fee_vault(0)
             .get_script_pubkey()
     );
 
@@ -147,7 +144,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
             .fetch_scripthash_utxos(
                 &offer
                     .parameters
-                    .get_finalized_lender_vault()
+                    .get_lender_vault(0)
                     .get_script_pubkey()
             )?
             .iter()
@@ -164,7 +161,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
             .fetch_scripthash_utxos(
                 &offer
                     .parameters
-                    .get_finalized_protocol_fee_vault()
+                    .get_protocol_fee_vault(0)
                     .get_script_pubkey()
             )?
             .iter()

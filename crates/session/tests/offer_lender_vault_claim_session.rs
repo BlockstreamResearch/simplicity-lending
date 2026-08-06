@@ -49,7 +49,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
         .offer_parameters
         .get_total_amount_to_repay()
         - offer.parameters.offer_parameters.get_total_protocol_fee();
-    let lender_vault = offer.parameters.get_finalized_lender_vault();
+    let lender_vault = offer.parameters.get_lender_vault(0);
 
     assert!(
         !lender
