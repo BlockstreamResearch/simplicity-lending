@@ -63,7 +63,7 @@ export function WalletDemo() {
   const handleDisconnect = async () => {
     setDisconnecting(true)
     try {
-      await disconnect()
+      await disconnect({ cachePolicy: 'clear' })
     } finally {
       setDisconnecting(false)
     }

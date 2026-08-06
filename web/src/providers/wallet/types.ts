@@ -19,12 +19,14 @@ export interface ConnectOptions {
   resumeOnly?: boolean
 }
 
+export type CachePolicy = 'preserve' | 'clear'
+
 export interface WalletContextValue extends WalletState {
   isReady: boolean
   connect(variant: WalletType, options?: ConnectOptions): Promise<void>
   /** Cancels an in-flight SideSwap login/sign request and resets the connection. */
   cancelPendingRequest(): Promise<void>
-  disconnect(): Promise<void>
+  disconnect(options?: { cachePolicy?: CachePolicy }): Promise<void>
   syncWallet(): Promise<void>
   /** Applies a just-broadcast tx to local wallet state instantly, without a network scan. */
   applyBroadcastTransaction(tx: Transaction): void

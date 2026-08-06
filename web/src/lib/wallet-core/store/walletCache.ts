@@ -5,8 +5,10 @@ import {
   type WolletDescriptor,
 } from '@lilbonekit/lwk-web'
 
+import type { NetworkName } from '@/constants/env'
 import { type KvBackend, openIdbBackend } from '@/lib/sync-kv/idbBackend'
-import { PersistentKv, type SyncKv } from '@/lib/sync-kv/persistentKv'
+import { PersistentKv } from '@/lib/sync-kv/persistentKv'
+import { sha256 } from '@/utils/sha256'
 
 const DB_NAME = 'lwk-wallet-cache'
 const STORE_NAME = 'kv'
@@ -21,24 +23,44 @@ const LAST_OPENED_KEY = 'm:lastOpened'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-export interface WalletCache {
-  wipe(): Promise<void>
-  close(): Promise<void>
+/** Storage contract LWK calls synchronously from wasm. */
+interface LwkStore {
+  get(key: string): Uint8Array | undefined
+  put(key: string, value: Uint8Array): void
+  remove(key: string): void
+  isPersisted(): boolean
 }
 
-async function walletNamespace(descriptor: WolletDescriptor): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(descriptor.toString()))
-  return [...new Uint8Array(digest).slice(0, 16)]
+export interface WalletCache {
+  close(): Promise<void>
+  clearAndClose(): Promise<void>
+}
+
+async function walletNamespace(
+  networkName: NetworkName,
+  descriptor: WolletDescriptor,
+): Promise<string> {
+  const digest = await sha256(encoder.encode(descriptor.toString()))
+  const hash = [...new Uint8Array(digest).slice(0, 16)]
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
+  return `${networkName}:${hash}:`
 }
 
-function prefixed(kv: SyncKv, prefix: string): SyncKv {
+function namespaceOf(key: string): string | null {
+  const afterNetwork = key.indexOf(':')
+  if (afterNetwork === -1) return null
+  const afterHash = key.indexOf(':', afterNetwork + 1)
+  if (afterHash === -1) return null
+  return key.slice(0, afterHash + 1)
+}
+
+function prefixed(kv: PersistentKv, prefix: string): LwkStore {
   return {
     get: key => kv.get(prefix + key),
     put: (key, value) => kv.put(prefix + key, value),
     remove: key => kv.remove(prefix + key),
-    isPersisted: () => kv.isPersisted(),
+    isPersisted: () => kv.persisted,
   }
 }
 
@@ -65,10 +87,8 @@ function acquirePersistLock(name: string): Promise<(() => void) | null> {
 async function evictStaleNamespaces(backend: KvBackend, current: string): Promise<void> {
   const namespaces = new Set<string>()
   for (const key of await backend.allKeys()) {
-    const end = key.indexOf(':')
-    if (end === -1) continue
-    const prefix = key.slice(0, end + 1)
-    if (prefix !== current) namespaces.add(prefix)
+    const prefix = namespaceOf(key)
+    if (prefix !== null && prefix !== current) namespaces.add(prefix)
   }
 
   const now = Date.now()
@@ -101,9 +121,10 @@ function buildWollet(network: Network, descriptor: WolletDescriptor, kv: Persist
  */
 export async function createCachedWollet(
   network: Network,
+  networkName: NetworkName,
   descriptor: WolletDescriptor,
 ): Promise<{ wollet: Wollet; cache: WalletCache }> {
-  const namespace = `${await walletNamespace(descriptor)}:`
+  const namespace = await walletNamespace(networkName, descriptor)
   const backend = await openIdbBackend(DB_NAME, STORE_NAME)
   const release = backend ? await acquirePersistLock(`sync-kv:${namespace}`) : null
   const kv = new PersistentKv(backend, namespace, release !== null)
@@ -132,14 +153,20 @@ export async function createCachedWollet(
     wollet = buildWollet(network, descriptor, kv)
   }
 
-  const cache: WalletCache = {
-    wipe: () => kv.wipe(),
-    close: async () => {
-      await kv.close()
-      release?.()
-      backend?.close()
-    },
+  const close = async () => {
+    await kv.close()
+    release?.()
+    backend?.close()
   }
 
-  return { wollet, cache }
+  return {
+    wollet,
+    cache: {
+      close,
+      clearAndClose: async () => {
+        await kv.wipe()
+        await close()
+      },
+    },
+  }
 }

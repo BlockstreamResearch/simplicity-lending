@@ -2,15 +2,7 @@ import type { KvBackend } from './idbBackend'
 
 const FLUSH_DEBOUNCE_MS = 250
 
-/** Storage contract LWK calls synchronously from wasm. */
-export interface SyncKv {
-  get(key: string): Uint8Array | undefined
-  put(key: string, value: Uint8Array): void
-  remove(key: string): void
-  isPersisted(): boolean
-}
-
-export class PersistentKv implements SyncKv {
+export class PersistentKv {
   private readonly entries = new Map<string, Uint8Array>()
   private readonly dirty = new Set<string>()
   private readonly deleted = new Set<string>()
@@ -32,28 +24,28 @@ export class PersistentKv implements SyncKv {
   }
 
   put(key: string, value: Uint8Array): void {
-    const full = this.prefix + key
-    this.entries.set(full, value.slice())
+    const storageKey = this.prefix + key
+    this.entries.set(storageKey, value.slice())
     if (!this.writable) return
-    this.dirty.add(full)
-    this.deleted.delete(full)
+    this.dirty.add(storageKey)
+    this.deleted.delete(storageKey)
     this.scheduleFlush()
   }
 
   remove(key: string): void {
-    const full = this.prefix + key
-    this.entries.delete(full)
+    const storageKey = this.prefix + key
+    this.entries.delete(storageKey)
     if (!this.writable) return
-    this.deleted.add(full)
-    this.dirty.delete(full)
+    this.deleted.add(storageKey)
+    this.dirty.delete(storageKey)
     this.scheduleFlush()
   }
 
-  isPersisted(): boolean {
-    return true
+  get persisted(): boolean {
+    return this.writable
   }
 
-  /** Loads the namespace into memory. Must complete before LWK reads through this store. */
+  /** Loads the namespace into memory. Must complete before the first read. */
   async hydrate(): Promise<void> {
     if (!this.backend) return
     try {
@@ -124,7 +116,7 @@ export class PersistentKv implements SyncKv {
     this.writable = false
     this.dirty.clear()
     this.deleted.clear()
-    console.warn('sync-kv: write failed, wallet cache is memory-only from now on', err)
+    console.warn('sync-kv: write failed, this namespace is memory-only from now on', err)
   }
 
   private attachListeners(): void {
