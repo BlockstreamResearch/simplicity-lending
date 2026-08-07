@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT collateral_asset_id, collateral_remaining\n        FROM offers\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "collateral_asset_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "collateral_remaining",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "af55f48bcda20b500e5f3d3d3e12d1f3925af2d1547b378957bfa7bdf3dd8d6c"
+}

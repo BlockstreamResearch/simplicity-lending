@@ -1,11 +1,12 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
+use simplex::simplicityhl::elements::{AssetId, OutPoint, Transaction, Txid, hashes::Hash};
 
 use crate::{
     db::DbTx,
     indexer::cache::WatchCache,
     indexer::trackers::offers::{
+        ActiveOfferSpendKind, classify_active_offer_spend, fetch_offer_collateral_state,
         insert_offer_utxo, load_offer_utxos_cache, spend_offer_utxo, update_offer_status,
     },
     models::{OfferStatus, OfferUtxoModel, UtxoType},
@@ -145,12 +146,47 @@ impl OffersTracker {
                 }
             }
             UtxoType::ActiveOffer => {
-                if Self::is_loan_repayment_tx(tx) {
-                    self.handle_loan_repayment(sql_tx, old_outpoint, offer_id, txid, block_height)
+                let (collateral_asset_id, collateral_remaining) =
+                    fetch_offer_collateral_state(sql_tx, offer_id).await?;
+                let collateral_asset_id = AssetId::from_slice(&collateral_asset_id)
+                    .map_err(|e| anyhow::anyhow!("invalid collateral_asset_id: {e}"))?;
+
+                match classify_active_offer_spend(
+                    tx,
+                    &collateral_asset_id,
+                    collateral_remaining as u64,
+                ) {
+                    ActiveOfferSpendKind::FullRepayment => {
+                        self.handle_loan_repayment(
+                            sql_tx,
+                            old_outpoint,
+                            offer_id,
+                            txid,
+                            block_height,
+                        )
                         .await
-                } else {
-                    self.handle_loan_liquidation(sql_tx, old_outpoint, offer_id, txid, block_height)
+                    }
+                    ActiveOfferSpendKind::PartialRepayment { continuing_vout } => {
+                        self.handle_partial_repayment(
+                            sql_tx,
+                            old_outpoint,
+                            offer_id,
+                            txid,
+                            continuing_vout,
+                            block_height,
+                        )
                         .await
+                    }
+                    ActiveOfferSpendKind::Liquidation => {
+                        self.handle_loan_liquidation(
+                            sql_tx,
+                            old_outpoint,
+                            offer_id,
+                            txid,
+                            block_height,
+                        )
+                        .await
+                    }
                 }
             }
             UtxoType::Repayment => {
@@ -298,7 +334,55 @@ impl OffersTracker {
         Ok(())
     }
 
-    // TODO: Add partial repayment handling
+    #[tracing::instrument(
+        name = "Handling partial offer repayment",
+        skip(self, sql_tx, old_outpoint, offer_id, txid, block_height),
+        fields(%offer_id, %txid, %continuing_vout, %block_height),
+    )]
+    async fn handle_partial_repayment(
+        &mut self,
+        sql_tx: &mut DbTx<'_>,
+        old_outpoint: &OutPoint,
+        offer_id: i64,
+        txid: Txid,
+        continuing_vout: u32,
+        block_height: u64,
+    ) -> anyhow::Result<()> {
+        spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
+        self.cache.remove(old_outpoint);
+
+        // Offer stays `active`; only re-watch the reduced-collateral covenant for now.
+        let continuing_outpoint = OutPoint {
+            txid,
+            vout: continuing_vout,
+        };
+        let continuing_utxo = Self::new_offer_utxo_model(
+            offer_id,
+            txid,
+            continuing_vout,
+            UtxoType::ActiveOffer,
+            block_height,
+        );
+
+        insert_offer_utxo(sql_tx, &continuing_utxo).await?;
+        self.cache.insert(
+            continuing_outpoint,
+            OffersWatchEntry {
+                offer_id,
+                utxo_type: UtxoType::ActiveOffer,
+            },
+        );
+
+        tracing::info!(
+            %offer_id,
+            %txid,
+            %continuing_vout,
+            "Partial repayment detected; continuing active offer UTXO indexed (amounts TODO)"
+        );
+
+        Ok(())
+    }
+
     #[tracing::instrument(
         name = "Handling offer repayment",
         skip(self, sql_tx, old_outpoint, offer_id, txid, block_height),
@@ -426,16 +510,5 @@ impl OffersTracker {
         }
 
         tx.output[0].is_null_data() && tx.output[1].is_null_data() && !tx.output[2].is_null_data()
-    }
-
-    fn is_loan_repayment_tx(tx: &Transaction) -> bool {
-        if tx.output.len() < 5 {
-            return false;
-        }
-
-        tx.output[0].is_null_data()
-            && !tx.output[1].is_null_data()
-            && !tx.output[2].is_null_data()
-            && !tx.output[3].is_null_data()
     }
 }

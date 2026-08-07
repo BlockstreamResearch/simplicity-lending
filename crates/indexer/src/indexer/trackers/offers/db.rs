@@ -135,6 +135,33 @@ pub async fn update_offer_status(
 }
 
 #[tracing::instrument(
+    name = "Fetching offer collateral state for repayment classification",
+    skip(sql_tx),
+    fields(offer_id = %offer_id)
+)]
+pub async fn fetch_offer_collateral_state(
+    sql_tx: &mut DbTx<'_>,
+    offer_id: i64,
+) -> Result<(Vec<u8>, i64), sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT collateral_asset_id, collateral_remaining
+        FROM offers
+        WHERE id = $1
+        "#,
+        offer_id,
+    )
+    .fetch_one(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch offer collateral state: {e:?}");
+        e
+    })?;
+
+    Ok((row.collateral_asset_id, row.collateral_remaining))
+}
+
+#[tracing::instrument(
     name = "Inserting offer UTXO into DB",
     skip(sql_tx, offer_utxo),
     fields(offer_id = %offer_utxo.offer_id, txid = %offer_utxo.txid.to_hex(), vout = %offer_utxo.vout)
