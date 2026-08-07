@@ -141,12 +141,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
         borrower
             .signer()
             .get_provider()
-            .fetch_scripthash_utxos(
-                &offer
-                    .parameters
-                    .get_lender_vault(0)
-                    .get_script_pubkey()
-            )?
+            .fetch_scripthash_utxos(&offer.parameters.get_lender_vault(0).get_script_pubkey())?
             .iter()
             .any(|utxo| {
                 utxo.outpoint.txid == repay_txid
