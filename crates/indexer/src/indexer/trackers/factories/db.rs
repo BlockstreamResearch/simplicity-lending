@@ -158,7 +158,11 @@ pub async fn get_factory_identity(
     let factory_row = sqlx::query_as!(
         FactoryIdentity,
         r#"
-        SELECT factory_asset_id, program_script_pubkey
+        SELECT
+            factory_asset_id,
+            program_script_pubkey,
+            issuing_utxos_count,
+            reissuance_flags
         FROM factories
         WHERE id = $1
         "#,
@@ -174,5 +178,7 @@ pub async fn get_factory_identity(
     Ok(FactoryIdentity {
         factory_asset_id: factory_row.factory_asset_id,
         program_script_pubkey: factory_row.program_script_pubkey,
+        issuing_utxos_count: factory_row.issuing_utxos_count,
+        reissuance_flags: factory_row.reissuance_flags,
     })
 }

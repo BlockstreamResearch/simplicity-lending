@@ -9,6 +9,8 @@ use lending_contracts::programs::{issuance_factory::IssuanceFactory, program::Si
 pub struct FactoryIdentity {
     pub factory_asset_id: Vec<u8>,
     pub program_script_pubkey: Vec<u8>,
+    pub issuing_utxos_count: i16,
+    pub reissuance_flags: i64,
 }
 
 impl FactoryIdentity {
@@ -16,6 +18,8 @@ impl FactoryIdentity {
         Self {
             factory_asset_id: model.factory_asset_id.clone(),
             program_script_pubkey: model.program_script_pubkey.clone(),
+            issuing_utxos_count: model.issuing_utxos_count,
+            reissuance_flags: model.reissuance_flags,
         }
     }
 }

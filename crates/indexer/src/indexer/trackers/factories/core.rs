@@ -1,8 +1,14 @@
-use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::tx_outputs::{ProgramOutputMatch, find_program_output};
+use simplex::{
+    provider::SimplicityNetwork,
+    simplicityhl::elements::{AssetId, OutPoint, Transaction, Txid, hashes::Hash},
+};
+
+use lending_contracts::programs::issuance_factory::{
+    IssuanceFactory, IssuanceFactoryParameters, IssuanceFactoryTxKind,
+};
 
 use crate::{
     db::DbTx,
@@ -40,12 +46,14 @@ impl FactoryProgramTxEffect {
 
 pub struct FactoriesTracker {
     cache: WatchCache<Uuid>,
+    network: SimplicityNetwork,
 }
 
 impl FactoriesTracker {
-    pub async fn load(db_pool: &PgPool) -> anyhow::Result<Self> {
+    pub async fn load(db_pool: &PgPool, network: SimplicityNetwork) -> anyhow::Result<Self> {
         Ok(Self {
             cache: load_factory_utxos_cache(db_pool).await?,
+            network,
         })
     }
 
@@ -115,35 +123,57 @@ impl FactoriesTracker {
         self.cache.remove(old_outpoint);
 
         let factory_identity = get_factory_identity(sql_tx, factory_id).await?;
+        let factory_asset_id = AssetId::from_slice(&factory_identity.factory_asset_id)
+            .map_err(|e| anyhow::anyhow!("invalid factory_asset_id: {e}"))?;
 
-        if let Some(program_match) = find_program_output(&factory_identity, tx) {
-            if let ProgramOutputMatch::Ambiguous { count, .. } = &program_match {
-                tracing::warn!(
-                    count,
-                    "Multiple factory program outputs in tx, using the first match"
+        let factory = IssuanceFactory::new(IssuanceFactoryParameters {
+            issuing_utxos_count: factory_identity.issuing_utxos_count as u8,
+            reissuance_flags: factory_identity.reissuance_flags as u64,
+            network: self.network,
+        });
+
+        match factory.classify_tx(tx, factory_asset_id) {
+            Some(IssuanceFactoryTxKind::AssetsIssuance) => {
+                let scan = factory
+                    .scan_assets_issuance(tx, factory_asset_id)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "assets issuance classified but unique program output missing for {factory_id}"
+                        )
+                    })?;
+
+                self.insert_factory_program_utxo(
+                    sql_tx,
+                    factory_id,
+                    txid,
+                    scan.program_vout,
+                    block_height,
+                    "Factory program UTXO moved to new location",
+                )
+                .await?;
+
+                Ok(FactoryProgramTxEffect::AssetsIssued(factory_id))
+            }
+            Some(IssuanceFactoryTxKind::FactoryRemoval) => {
+                update_factory_status(sql_tx, factory_id, FactoryStatus::Removed).await?;
+                tracing::info!(
+                    %factory_id,
+                    %txid,
+                    "Factory removal detected, program UTXO not recreated"
+                );
+
+                Ok(FactoryProgramTxEffect::Removed(factory_id))
+            }
+            Some(IssuanceFactoryTxKind::Creation) => {
+                anyhow::bail!(
+                    "unexpected factory creation layout while spending program UTXO for {factory_id}"
                 );
             }
-
-            self.insert_factory_program_utxo(
-                sql_tx,
-                factory_id,
-                txid,
-                program_match.vout(),
-                block_height,
-                "Factory program UTXO moved to new location",
-            )
-            .await?;
-
-            Ok(FactoryProgramTxEffect::AssetsIssued(factory_id))
-        } else {
-            update_factory_status(sql_tx, factory_id, FactoryStatus::Removed).await?;
-            tracing::info!(
-                %factory_id,
-                %txid,
-                "Factory removal detected, program UTXO not recreated"
-            );
-
-            Ok(FactoryProgramTxEffect::Removed(factory_id))
+            None => {
+                anyhow::bail!(
+                    "spent factory program UTXO for {factory_id} in {txid} but tx was not classified as issuance or removal"
+                );
+            }
         }
     }
 
