@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO offer_repayments (\n            offer_id, txid, height, amount_repaid, collateral_unlocked,\n            debt_before, debt_after, collateral_before, collateral_after, is_full\n        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c7a7fdd4ff778cf9a0a828a3dda80531f8b9685b2de8f6efef1a7379861d9a6f"
+}

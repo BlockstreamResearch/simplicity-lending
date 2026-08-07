@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE offers\n        SET current_debt = $1,\n            collateral_remaining = $2,\n            updated_at_height = $3\n        WHERE id = $4\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aea86927a479cf29ae05ccd2264e92144df7dcd30c8e287cd9249c17c90bb4a8"
+}

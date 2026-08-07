@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT collateral_asset_id, collateral_remaining\n        FROM offers\n        WHERE id = $1\n        ",
+  "query": "\n        SELECT collateral_asset_id, collateral_remaining, current_debt\n        FROM offers\n        WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,11 @@
         "ordinal": 1,
         "name": "collateral_remaining",
         "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "current_debt",
+        "type_info": "Int8"
       }
     ],
     "parameters": {
@@ -21,8 +26,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "af55f48bcda20b500e5f3d3d3e12d1f3925af2d1547b378957bfa7bdf3dd8d6c"
+  "hash": "df7195679e1f4fc55d0753ef7e29b583318a00e4feb2f5cc592647914b9a1052"
 }
