@@ -2,6 +2,8 @@
 
 A pure SimplicityHL implementation of a peer-to-peer lending protocol.
 
+> Testing the waterfalls `utxo_only` fix locally? See [FIX_WATERFALLS.md](FIX_WATERFALLS.md).
+
 ## High-level mechanics
 
 Borrowers create "borrowing offers" with specified _collateral amount_, _lending duration_, and _principal asset amount_ (interest) they are willing to pay for the credit settlement. They also specify the _amount of principal_ they are willing to receive for the pledged collateral.

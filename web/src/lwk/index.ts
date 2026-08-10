@@ -37,7 +37,7 @@ export function createEsploraClient(lwkNetwork: Network): EsploraClient {
     env.VITE_WATERFALLS_URL,
     true, // waterfalls
     8, // concurrency
-    false, // utxoOnly
+    true, // utxoOnly — TEMP: local regtest verification of the waterfalls fix, revert to false
   )
   if (lwkNetwork.isMainnet() || lwkNetwork.isTestnet()) {
     client.setWaterfallsServerRecipient(env.VITE_WATERFALLS_RECIPIENT)

@@ -108,7 +108,7 @@ function stampMeta(kv: PersistentKv): void {
 
 function buildWollet(network: Network, descriptor: WolletDescriptor, kv: PersistentKv): Wollet {
   return new WolletBuilder(network, descriptor)
-    .utxoOnly(false)
+    .utxoOnly(true) // TEMP: local regtest verification of the waterfalls fix, revert to false
     .withExperimentalStore(prefixed(kv, UPDATES_PREFIX))
     .withTxsStore(prefixed(kv, TXS_PREFIX))
     .withMergeThreshold(1)
