@@ -150,13 +150,28 @@ fn supplies_to_vault_with_confidential_input(context: simplex::TestContext) -> a
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
 
-    let utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
+    let utxo_to_supply = signer
+        .get_utxos_asset(vault_parameters.vault_asset_id)?
+        .into_iter()
+        .find(|utxo| utxo.txout.value.is_explicit())
+        .expect("explicit vault asset utxo to confidentialize");
     let amount_to_supply = utxo_to_supply.explicit_amount();
 
     make_confidential(&context, utxo_to_supply)?;
 
-    let conf_utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
+    let conf_utxo_to_supply = signer
+        .get_utxos_asset(vault_parameters.vault_asset_id)?
+        .into_iter()
+        .find(|utxo| utxo.amount() == amount_to_supply)
+        .expect("confidentialized vault asset utxo");
     let supplier_auth_utxo = signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
+
+    let amount_to_goal =
+        vault_parameters.supply_goal - asset_auth_vault.get_already_supplied_amount();
+    assert!(
+        amount_to_supply < amount_to_goal,
+        "partial supply requires amount_to_supply < amount remaining to goal"
+    );
 
     let mut ft = FinalTransaction::new();
 
