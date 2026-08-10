@@ -20,11 +20,7 @@ fn main() -> Result<()> {
         ("script_auth", ScriptAuthProgram::SOURCE),
     ]);
 
-    let artifacts_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/artifacts");
-    fs::create_dir_all(&artifacts_dir)
-        .with_context(|| format!("failed to create {}", artifacts_dir.display()))?;
-
-    let out_path = artifacts_dir.join(OUTPUT_FILE_NAME);
+    let out_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(OUTPUT_FILE_NAME);
     let json = serde_json::to_string_pretty(&sources).context("failed to serialize sources")?;
     let new_contents = format!("{json}\n");
 
