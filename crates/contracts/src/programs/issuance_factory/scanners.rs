@@ -278,11 +278,11 @@ impl IssuanceFactory {
 }
 
 fn is_factory_asset_utxo(output: &TxOut, factory_asset_id: AssetId) -> bool {
-    let (Some(asset_id), Some(amount)) = (output.asset.explicit(), output.value.explicit()) else {
-        return false;
-    };
-
-    asset_id == factory_asset_id && amount == 1 && !output.script_pubkey.is_op_return()
+    crate::utils::TxOutFilter::new()
+        .asset(factory_asset_id)
+        .amount(1)
+        .require_op_return(false)
+        .matches(output)
 }
 
 #[cfg(test)]

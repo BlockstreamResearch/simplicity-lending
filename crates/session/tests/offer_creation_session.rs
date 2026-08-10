@@ -98,9 +98,9 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
         .signer()
         .get_provider()
         .fetch_transaction(&offer_creation_txid)?;
-    let decoded_offer =
+    let decoded =
         LendingOffer::try_from_tx(&chain_tx, expected_protocol_fee_asset, session.network())?;
-    let decoded_parameters = decoded_offer.get_parameters();
+    let decoded_parameters = decoded.offer.get_parameters();
 
     assert_eq!(
         decoded_parameters.principal_asset_id,

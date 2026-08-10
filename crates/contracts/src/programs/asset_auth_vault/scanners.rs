@@ -2,6 +2,7 @@ use simplex::simplicityhl::elements::{AssetId, Transaction, TxOut};
 
 use crate::programs::asset_auth_vault::AssetAuthVault;
 use crate::programs::program::SimplexProgram;
+use crate::utils::{TxOutFilter, find_unique_vout, has_matching_vout};
 
 /// Vault covenant UTXO roles relative to a known vault instance / params.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,11 +224,11 @@ impl AssetAuthVault {
 }
 
 fn is_vault_asset_utxo(output: &TxOut, vault_asset_id: AssetId) -> bool {
-    let (Some(asset_id), Some(amount)) = (output.asset.explicit(), output.value.explicit()) else {
-        return false;
-    };
-
-    asset_id == vault_asset_id && amount > 0 && !output.script_pubkey.is_op_return()
+    TxOutFilter::new()
+        .asset(vault_asset_id)
+        .min_amount(1)
+        .require_op_return(false)
+        .matches(output)
 }
 
 fn find_unique_matching_vout(
@@ -235,25 +236,14 @@ fn find_unique_matching_vout(
     vault_asset_id: AssetId,
     script_pubkey: &simplex::simplicityhl::elements::Script,
 ) -> Option<(u32, u64)> {
-    let matches: Vec<(u32, u64)> = tx
-        .output
-        .iter()
-        .enumerate()
-        .filter_map(|(vout, output)| {
-            if !is_vault_asset_utxo(output, vault_asset_id) {
-                return None;
-            }
-            if output.script_pubkey != *script_pubkey {
-                return None;
-            }
-            Some((vout as u32, output.value.explicit()?))
-        })
-        .collect();
-
-    match matches.as_slice() {
-        [(vout, amount)] => Some((*vout, *amount)),
-        _ => None,
-    }
+    find_unique_vout(
+        tx,
+        TxOutFilter::new()
+            .asset(vault_asset_id)
+            .min_amount(1)
+            .script_pubkey(script_pubkey)
+            .require_op_return(false),
+    )
 }
 
 fn has_any_matching_vout(
@@ -261,9 +251,14 @@ fn has_any_matching_vout(
     vault_asset_id: AssetId,
     script_pubkey: &simplex::simplicityhl::elements::Script,
 ) -> bool {
-    tx.output.iter().any(|output| {
-        is_vault_asset_utxo(output, vault_asset_id) && output.script_pubkey == *script_pubkey
-    })
+    has_matching_vout(
+        tx,
+        TxOutFilter::new()
+            .asset(vault_asset_id)
+            .min_amount(1)
+            .script_pubkey(script_pubkey)
+            .require_op_return(false),
+    )
 }
 
 #[cfg(test)]

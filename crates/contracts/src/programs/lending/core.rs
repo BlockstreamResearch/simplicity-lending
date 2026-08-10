@@ -1,7 +1,7 @@
 use simplex::{
     program::Program,
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, LockTime, Script, Sequence, Transaction},
+    simplicityhl::elements::{LockTime, Script, Sequence},
     transaction::{FinalTransaction, PartialInput, PartialOutput, UTXO},
 };
 
@@ -9,17 +9,11 @@ use crate::{
     artifacts::lending::LendingProgram,
     programs::{
         asset_auth_vault::AssetAuthVault,
-        lending::{
-            LendingOfferError, LendingOfferParameters, LendingOfferWitnessBranch, OfferParameters,
-            OfferRepaymentPhase,
-        },
+        lending::{LendingOfferParameters, LendingOfferWitnessBranch, OfferRepaymentPhase},
         program::{MetadataProgram, SimplexProgram},
         script_auth::{ScriptAuth, ScriptAuthWitnessParams},
     },
-    utils::op_return_payload,
 };
-
-const CREATION_METADATA_OUTPUT_INDEX: usize = 4;
 
 pub struct LendingOfferStorage {
     pub is_active: bool,
@@ -56,6 +50,13 @@ pub struct LendingOffer {
 }
 
 impl LendingOffer {
+    /// Output indexes in a canonical offer creation tx:
+    /// borrower NFT @2, lender NFT @3, metadata @4, pending offer @5.
+    pub const CREATION_BORROWER_NFT_OUTPUT_INDEX: usize = 2;
+    pub const CREATION_LENDER_NFT_OUTPUT_INDEX: usize = 3;
+    pub const CREATION_METADATA_OUTPUT_INDEX: usize = 4;
+    pub const CREATION_PENDING_OFFER_OUTPUT_INDEX: usize = 5;
+
     pub fn new_pending(parameters: LendingOfferParameters) -> Self {
         let storage = LendingOfferStorage {
             is_active: false,
@@ -90,49 +91,6 @@ impl LendingOffer {
             parameters,
             storage,
         }
-    }
-
-    pub fn try_from_tx(
-        tx: &Transaction,
-        protocol_fee_keeper_asset_id: AssetId,
-        network: SimplicityNetwork,
-    ) -> Result<Self, LendingOfferError> {
-        if tx.output.len() <= 6 || !tx.output[CREATION_METADATA_OUTPUT_INDEX].is_null_data() {
-            return Err(LendingOfferError::NotALendingOfferCreationTx(tx.txid()));
-        }
-
-        let op_return_bytes =
-            op_return_payload(&tx.output[CREATION_METADATA_OUTPUT_INDEX].script_pubkey)
-                .ok_or_else(|| LendingOfferError::NotALendingOfferCreationTx(tx.txid()))?;
-
-        let creation_metadata = LendingOffer::decode_metadata_op_return(op_return_bytes.to_vec())?;
-
-        if creation_metadata.program_id != Self::get_program_id() {
-            return Err(LendingOfferError::NotALendingOfferCreationTx(tx.txid()));
-        }
-
-        let borrower_nft_tx_out = tx.output[2].clone();
-        let lender_nft_tx_out = tx.output[3].clone();
-        let pending_offer_tx_out = tx.output[5].clone();
-
-        let offer_parameters = OfferParameters {
-            collateral_amount: pending_offer_tx_out.value.explicit().unwrap(),
-            principal_amount: creation_metadata.principal_amount,
-            loan_expiration_time: creation_metadata.loan_expiration_time,
-            principal_interest_rate: creation_metadata.principal_interest_rate,
-        };
-
-        let offer_parameters = LendingOfferParameters {
-            collateral_asset_id: pending_offer_tx_out.asset.explicit().unwrap(),
-            principal_asset_id: creation_metadata.principal_asset_id,
-            protocol_fee_keeper_asset_id,
-            borrower_nft_asset_id: borrower_nft_tx_out.asset.explicit().unwrap(),
-            lender_nft_asset_id: lender_nft_tx_out.asset.explicit().unwrap(),
-            offer_parameters,
-            network,
-        };
-
-        Ok(Self::new_pending(offer_parameters))
     }
 
     pub fn get_parameters(&self) -> &LendingOfferParameters {
