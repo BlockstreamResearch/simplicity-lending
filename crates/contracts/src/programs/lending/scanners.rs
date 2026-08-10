@@ -9,6 +9,7 @@ use crate::programs::lending::{
     LendingOffer, LendingOfferError, LendingOfferParameters, OfferParameters, OfferRepaymentPhase,
 };
 use crate::programs::program::{MetadataProgram, SimplexProgram};
+use crate::programs::script_auth::ScriptAuth;
 use crate::utils::{TxOutFilter, find_unique_vout, op_return_payload};
 
 /// Offer UTXO roles relative to a known [`LendingOffer`] instance.
@@ -116,24 +117,31 @@ impl LendingOffer {
         })
     }
 
-    /// Scan creation layout: unique pending offer + unique borrower/lender NFT outs.
+    /// Scan creation layout: unique pending offer + borrower NFT + ScriptAuth-locked lender NFT.
     pub fn scan_creation(&self, tx: &Transaction) -> Option<LendingOfferCreationScan> {
         if !self.is_pending_offer() {
             return None;
         }
 
+        let params = self.get_parameters();
         let (pending_offer_vout, _) = self.find_unique_vout_matching(tx)?;
 
         let (borrower_nft_vout, borrower_nft_script_pubkey) =
-            self.find_unique_participant_nft(tx, self.get_parameters().borrower_nft_asset_id)?;
-        let (lender_nft_vout, lender_nft_script_pubkey) =
-            self.find_unique_participant_nft(tx, self.get_parameters().lender_nft_asset_id)?;
+            self.find_unique_participant_nft(tx, params.borrower_nft_asset_id)?;
+
+        let lender_nft_auth = ScriptAuth::from_simplex_program(self);
+        let lender_scan = lender_nft_auth.scan_creation(tx, params.lender_nft_asset_id, Some(1))?;
+        let lender_nft_script_pubkey = tx
+            .output
+            .get(lender_scan.program_vout as usize)?
+            .script_pubkey
+            .clone();
 
         Some(LendingOfferCreationScan {
             pending_offer_vout,
             borrower_nft_vout,
             borrower_nft_script_pubkey,
-            lender_nft_vout,
+            lender_nft_vout: lender_scan.program_vout,
             lender_nft_script_pubkey,
         })
     }
@@ -316,16 +324,18 @@ impl LendingOffer {
         None
     }
 
-    /// Pending -> active: unique continuing active offer + borrower principal auth out.
+    /// Pending -> active: ScriptAuth lender-NFT unlock + active offer + borrower principal.
     pub fn scan_acceptance(&self, tx: &Transaction) -> Option<LendingOfferAcceptanceScan> {
         if !self.is_pending_offer() {
             return None;
         }
 
         let params = self.get_parameters();
+        let lender_nft_auth = ScriptAuth::from_simplex_program(self);
+        lender_nft_auth.scan_unlock_with_authorizing_script(tx, &self.get_script_pubkey())?;
 
         let total_debt = params.offer_parameters.get_total_amount_to_repay();
-        let active = LendingOffer::new_active(*self.get_parameters(), total_debt);
+        let active = LendingOffer::new_active(*params, total_debt);
 
         let (active_offer_vout, collateral_amount) = active.find_unique_vout_matching(tx)?;
 
@@ -344,7 +354,7 @@ impl LendingOffer {
         })
     }
 
-    /// Pending cancellation: lender + borrower NFT burns, no continuing offer.
+    /// Pending cancellation: ScriptAuth lender-NFT unlock + lender/borrower NFT burns.
     pub fn scan_cancellation(&self, tx: &Transaction) -> Option<LendingOfferCancellationScan> {
         if !self.is_pending_offer() {
             return None;
@@ -354,13 +364,14 @@ impl LendingOffer {
             return None;
         }
 
+        let lender_nft_auth = ScriptAuth::from_simplex_program(self);
+        lender_nft_auth.scan_unlock_with_authorizing_script(tx, &self.get_script_pubkey())?;
+
         let params = self.get_parameters();
-
-        let lender = params.lender_nft_asset_id;
-        let borrower = params.borrower_nft_asset_id;
-
-        let lender_nft_burn_vout = find_unique_op_return_asset_vout(tx, lender)?;
-        let borrower_nft_burn_vout = find_unique_op_return_asset_vout(tx, borrower)?;
+        let lender_nft_burn_vout =
+            find_unique_op_return_asset_vout(tx, params.lender_nft_asset_id)?;
+        let borrower_nft_burn_vout =
+            find_unique_op_return_asset_vout(tx, params.borrower_nft_asset_id)?;
 
         Some(LendingOfferCancellationScan {
             lender_nft_burn_vout,
