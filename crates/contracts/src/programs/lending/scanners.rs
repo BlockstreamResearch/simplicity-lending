@@ -329,15 +329,13 @@ impl LendingOffer {
 
         let (active_offer_vout, collateral_amount) = active.find_unique_vout_matching(tx)?;
 
-        let principal_auth = params.get_principal_output_asset_auth().get_script_pubkey();
-        let (borrower_principal_vout, _) = find_unique_vout(
-            tx,
-            TxOutFilter::new()
-                .asset(params.principal_asset_id)
-                .amount(params.offer_parameters.principal_amount)
-                .script_pubkey(&principal_auth)
-                .require_op_return(false),
-        )?;
+        let (borrower_principal_vout, _) = params
+            .get_principal_output_asset_auth()
+            .find_unique_locked_vout(
+                tx,
+                params.principal_asset_id,
+                Some(params.offer_parameters.principal_amount),
+            )?;
 
         Some(LendingOfferAcceptanceScan {
             active_offer_vout,
