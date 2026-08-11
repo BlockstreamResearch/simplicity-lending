@@ -18,7 +18,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [
       simplicitySourcesPlugin({
-        configPath: './simplicity-covenants.config.json',
+        sourcesPath: '../crates/contracts/contract_sources.json',
       }),
       react(),
       checker({
