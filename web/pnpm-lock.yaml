@@ -18,8 +18,8 @@ importers:
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.80.0(react@19.2.7))
       '@lilbonekit/lwk-web':
-        specifier: 0.17.2-31fdeca.1
-        version: 0.17.2-31fdeca.1
+        specifier: 0.17.2-d614989.1
+        version: 0.17.2-d614989.1
       '@tanstack/react-query':
         specifier: ^5.100.10
         version: 5.101.1(react@19.2.7)
@@ -689,8 +689,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@lilbonekit/lwk-web@0.17.2-31fdeca.1':
-    resolution: {integrity: sha512-QTbU+taq/kceHFbBvYkAoHh2T8pDO1SEj/nQf9v9Kb7JquM2th3gv/TUAIBLNWoHdCpvcSriKRO609RoJMsh3g==}
+  '@lilbonekit/lwk-web@0.17.2-d614989.1':
+    resolution: {integrity: sha512-s/ITSuN1sfqqSeF39+uesWlzF6gLFMi0XMc4TANHonj7TcIPK5PDNNspzWOljjfnxCxU1hzByjVdyElgwJzv8g==}
 
   '@napi-rs/wasm-runtime@1.1.6':
     resolution: {integrity: sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg==}
@@ -3520,7 +3520,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@lilbonekit/lwk-web@0.17.2-31fdeca.1': {}
+  '@lilbonekit/lwk-web@0.17.2-d614989.1': {}
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
