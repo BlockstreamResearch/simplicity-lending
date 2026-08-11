@@ -117,8 +117,8 @@ impl Factory {
     ) -> Result<(), FactoryCommandError> {
         let creation_tx = context.esplora_provider.fetch_transaction(&creation_txid)?;
 
-        let (issuance_factory, factory_asset_id) =
-            IssuanceFactory::try_from_tx(&creation_tx, context.get_network())?;
+        let created = IssuanceFactory::try_from_tx(&creation_tx, context.get_network())?;
+        let (issuance_factory, factory_asset_id) = (created.factory, created.factory_asset_id);
 
         let program_tx = context
             .esplora_provider

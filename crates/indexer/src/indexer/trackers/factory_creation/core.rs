@@ -1,18 +1,19 @@
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, Transaction, hex::ToHex},
+    simplicityhl::elements::{Transaction, hex::ToHex},
 };
 
-use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
+use lending_contracts::programs::issuance_factory::{
+    IssuanceFactory, IssuanceFactoryCreation, IssuanceFactoryParameters,
+};
 
 use crate::{
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{
-        AssetContractKind, AssetRegistration, FactoriesTracker, FactoryAuthsTracker,
-        insert_factory, scan_factory_creation_outputs,
+        AssetContractKind, AssetRegistration, FactoriesTracker, FactoryAuthsTracker, insert_factory,
     },
-    models::{FactoryIdentity, FactoryModel},
+    models::FactoryModel,
 };
 
 pub struct FactoryCreationsTracker {
@@ -45,11 +46,12 @@ impl FactoryCreationsTracker {
         factories: &mut FactoriesTracker,
         factory_auths: &mut FactoryAuthsTracker,
     ) -> anyhow::Result<()> {
-        if let Some((issuance_factory, factory_asset_id)) = self.is_factory_creation_tx(tx) {
+        if let Some(created) = self.is_factory_creation_tx(tx) {
+            let factory_asset_id = created.factory_asset_id;
+
             Self::handle_factory_creation(
                 sql_tx,
-                issuance_factory,
-                factory_asset_id,
+                created,
                 tx,
                 block_height,
                 factories,
@@ -73,35 +75,34 @@ impl FactoryCreationsTracker {
 
     async fn handle_factory_creation(
         sql_tx: &mut DbTx<'_>,
-        issuance_factory: IssuanceFactory,
-        factory_asset_id: AssetId,
+        created: IssuanceFactoryCreation,
         tx: &Transaction,
         block_height: u64,
         factories: &mut FactoriesTracker,
         factory_auths: &mut FactoryAuthsTracker,
     ) -> anyhow::Result<()> {
         let txid = tx.txid();
+        let auth_script_pubkey = created.auth_script_pubkey.to_bytes();
 
-        let factory_model =
-            FactoryModel::new(&issuance_factory, factory_asset_id, block_height, txid);
+        let factory_model = FactoryModel::new(
+            &created.factory,
+            created.factory_asset_id,
+            block_height,
+            txid,
+        );
 
         let Some(factory_id) = insert_factory(sql_tx, &factory_model).await? else {
             tracing::debug!(%txid, "Factory already indexed, skipping");
             return Ok(());
         };
 
-        let identity = FactoryIdentity::from_factory_model(&factory_model);
-        let outputs = scan_factory_creation_outputs(&identity, tx).ok_or_else(|| {
-            anyhow::anyhow!("Factory outputs not found in validated creation tx {txid}")
-        })?;
-
         factory_auths
             .seed_creation_auth_utxo(
                 sql_tx,
                 factory_id,
                 txid,
-                outputs.auth_vout,
-                &outputs.auth_script_pubkey,
+                created.auth_vout,
+                &auth_script_pubkey,
                 block_height,
             )
             .await?;
@@ -111,7 +112,7 @@ impl FactoryCreationsTracker {
                 sql_tx,
                 factory_id,
                 txid,
-                outputs.program_vout,
+                created.program_vout,
                 block_height,
             )
             .await?;
@@ -121,7 +122,7 @@ impl FactoryCreationsTracker {
             &IndexerEvent::FactoryCreated {
                 id: factory_id,
                 height: block_height,
-                factory_auth_script_pubkey: outputs.auth_script_pubkey.to_hex(),
+                factory_auth_script_pubkey: auth_script_pubkey.to_hex(),
             },
         )
         .await?;
@@ -129,15 +130,14 @@ impl FactoryCreationsTracker {
         Ok(())
     }
 
-    fn is_factory_creation_tx(&self, tx: &Transaction) -> Option<(IssuanceFactory, AssetId)> {
-        let (issuance_factory, factory_asset_id) =
-            IssuanceFactory::try_from_tx(tx, self.network).ok()?;
+    fn is_factory_creation_tx(&self, tx: &Transaction) -> Option<IssuanceFactoryCreation> {
+        let created = IssuanceFactory::try_from_tx(tx, self.network).ok()?;
 
-        if !self.verify_factory_parameters(issuance_factory.get_parameters()) {
+        if !self.verify_factory_parameters(created.factory.get_parameters()) {
             return None;
         }
 
-        Some((issuance_factory, factory_asset_id))
+        Some(created)
     }
 
     fn verify_factory_parameters(&self, factory_parameters: &IssuanceFactoryParameters) -> bool {

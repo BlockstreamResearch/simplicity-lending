@@ -5,10 +5,7 @@ use simplex::{
     simplicityhl::elements::{AssetId, Transaction, hex::ToHex},
 };
 
-use lending_contracts::programs::{
-    lending::{LendingOffer, LendingOfferParameters},
-    program::SimplexProgram,
-};
+use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters};
 
 use crate::{
     api::utils::format_hex,
@@ -16,8 +13,7 @@ use crate::{
     events::{IndexerEvent, notify_indexer_event},
     indexer::{
         AssetContractKind, AssetRegistration, OfferCreationOutputs, OfferParticipantsTracker,
-        OffersTracker, ParticipantCreationUtxo, scan_offer_creation_outputs,
-        trackers::offers_creation::insert_offer,
+        OffersTracker, ParticipantCreationUtxo, trackers::offers_creation::insert_offer,
     },
     models::{OfferModel, ParticipantType},
 };
@@ -166,11 +162,17 @@ impl OfferCreationsTracker {
     }
 
     fn parse_offer_creation_tx(&self, tx: &Transaction) -> Option<ParsedOfferCreation> {
-        let offer =
+        let created =
             LendingOffer::try_from_tx(tx, self.protocol_fee_keeper_asset_id, self.network).ok()?;
 
-        let parameters = *offer.get_parameters();
-        let outputs = scan_offer_creation_outputs(&parameters, &offer.get_script_pubkey(), tx)?;
+        let parameters = *created.offer.get_parameters();
+        let outputs = OfferCreationOutputs {
+            pending_offer_vout: created.pending_offer_vout,
+            borrower_nft_vout: created.borrower_nft_vout,
+            borrower_nft_script_pubkey: created.borrower_nft_script_pubkey.to_bytes(),
+            lender_nft_vout: created.lender_nft_vout,
+            lender_nft_script_pubkey: created.lender_nft_script_pubkey.to_bytes(),
+        };
 
         Some(ParsedOfferCreation {
             parameters,

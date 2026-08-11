@@ -31,7 +31,7 @@ impl TrackerRegistry {
     ) -> anyhow::Result<Self> {
         // TODO: move factory parameters to config
         Ok(Self {
-            factories: FactoriesTracker::load(db_pool).await?,
+            factories: FactoriesTracker::load(db_pool, network).await?,
             factory_auths: FactoryAuthsTracker::load(db_pool).await?,
             factory_creations: FactoryCreationsTracker::new(
                 2,
