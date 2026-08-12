@@ -4,7 +4,9 @@ use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::api::offers::dto::{OfferUtxoDto, OfferUtxoOutpointShort, ParticipantDto};
+use crate::api::offers::dto::{
+    OfferRepaymentDto, OfferUtxoDto, OfferUtxoOutpointShort, ParticipantDto,
+};
 use crate::models::OfferStatus;
 
 #[derive(Serialize, ToSchema)]
@@ -28,12 +30,18 @@ pub struct OfferDetailsResponseSchema {
     pub status: OfferStatus,
     pub collateral_asset: String,
     pub principal_asset: String,
-    /// Collateral amount in satoshis (decimal string).
+    /// Collateral amount at offer creation, in satoshis (decimal string).
     #[schema(example = "1000")]
     pub collateral_amount: String,
-    /// Principal amount in satoshis (decimal string).
+    /// Principal amount at offer creation, in satoshis (decimal string).
     #[schema(example = "500")]
     pub principal_amount: String,
+    /// Remaining debt to repay, in satoshis (decimal string).
+    #[schema(example = "512")]
+    pub current_debt: String,
+    /// Remaining locked collateral, in satoshis (decimal string).
+    #[schema(example = "1000")]
+    pub collateral_remaining: String,
     /// Interest rate in basis points.
     #[schema(example = 120)]
     pub interest_rate: u32,
@@ -48,4 +56,5 @@ pub struct OfferDetailsResponseSchema {
     pub borrower_principal_utxo: Option<OfferUtxoOutpointShort>,
     pub participants: Vec<ParticipantDto>,
     pub utxos: Vec<OfferUtxoDto>,
+    pub repayments: Vec<OfferRepaymentDto>,
 }

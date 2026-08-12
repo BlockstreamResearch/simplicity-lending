@@ -5,12 +5,13 @@ use simplex::simplicityhl::elements::hex::ToHex;
 use crate::api::OfferListQuery;
 use crate::api::db::{AssetSumRow, asset_amounts_from_rows};
 use crate::models::{
-    OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType, UtxoType,
+    OfferModel, OfferParticipantModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel,
+    ParticipantType, UtxoType,
 };
 
 use super::dto::{
-    OfferDetailsResponse, OfferListItemFull, OfferListResponse, OfferUtxoDto, OffersOverview,
-    ParticipantDto, borrower_principal_outpoint_from_utxos,
+    OfferDetailsResponse, OfferListItemFull, OfferListResponse, OfferRepaymentDto, OfferUtxoDto,
+    OffersOverview, ParticipantDto, borrower_principal_outpoint_from_utxos,
 };
 use super::list_query::fetch_all_offers_list;
 
@@ -21,7 +22,7 @@ pub async fn fetch_overview(db: &PgPool) -> Result<OffersOverview, sqlx::Error> 
     let (collateral_rows, principal_rows, active_loans_count) = tokio::try_join!(
         sqlx::query_as::<_, AssetSumRow>(
             r#"
-            SELECT collateral_asset_id AS asset_id, SUM(collateral_amount)::BIGINT AS amount
+            SELECT collateral_asset_id AS asset_id, SUM(collateral_remaining)::BIGINT AS amount
             FROM offers
             WHERE current_status = ANY($1)
             GROUP BY collateral_asset_id
@@ -31,7 +32,7 @@ pub async fn fetch_overview(db: &PgPool) -> Result<OffersOverview, sqlx::Error> 
         .fetch_all(db),
         sqlx::query_as::<_, AssetSumRow>(
             r#"
-            SELECT principal_asset_id AS asset_id, SUM(principal_amount)::BIGINT AS amount
+            SELECT principal_asset_id AS asset_id, SUM(current_debt)::BIGINT AS amount
             FROM offers
             WHERE current_status = $1
             GROUP BY principal_asset_id
@@ -167,6 +168,37 @@ async fn fetch_unspent_utxos(db: &PgPool, offer_id: i64) -> Result<Vec<OfferUtxo
     Ok(rows.into_iter().map(OfferUtxoDto::from).collect())
 }
 
+async fn fetch_offer_repayments(
+    db: &PgPool,
+    offer_id: i64,
+) -> Result<Vec<OfferRepaymentDto>, sqlx::Error> {
+    let rows = sqlx::query_as!(
+        OfferRepaymentModel,
+        r#"
+        SELECT
+            id,
+            offer_id,
+            txid,
+            height,
+            amount_repaid,
+            collateral_unlocked,
+            debt_before,
+            debt_after,
+            collateral_before,
+            collateral_after,
+            is_full
+        FROM offer_repayments
+        WHERE offer_id = $1
+        ORDER BY height DESC, id DESC
+        "#,
+        offer_id,
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows.into_iter().map(OfferRepaymentDto::from).collect())
+}
+
 #[tracing::instrument(
     name = "Fetching offer details from DB",
     skip(db, offer_id),
@@ -180,9 +212,10 @@ pub async fn fetch_details_by_id(
         return Ok(None);
     };
 
-    let (participants, utxos) = tokio::try_join!(
+    let (participants, utxos, repayments) = tokio::try_join!(
         fetch_latest_participants(db, offer_id),
         fetch_unspent_utxos(db, offer_id),
+        fetch_offer_repayments(db, offer_id),
     )?;
 
     let mut info = info;
@@ -192,6 +225,7 @@ pub async fn fetch_details_by_id(
         info,
         participants,
         utxos,
+        repayments,
     }))
 }
 

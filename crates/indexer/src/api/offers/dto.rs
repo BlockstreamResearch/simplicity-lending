@@ -7,8 +7,8 @@ use simplex::simplicityhl::elements::hex::ToHex;
 use crate::api::dto::AssetAmount;
 use crate::api::utils::{format_hex, format_offer_id, format_satoshis};
 use crate::models::{
-    OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
-    ParticipantType, UtxoType,
+    OfferModel, OfferModelShort, OfferParticipantModel, OfferRepaymentModel, OfferStatus,
+    OfferUtxoModel, ParticipantType, UtxoType,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -62,12 +62,18 @@ pub struct OfferListItemShort {
     pub status: OfferStatus,
     pub collateral_asset: String,
     pub principal_asset: String,
-    /// Collateral amount in satoshis (decimal string).
+    /// Collateral amount at offer creation, in satoshis (decimal string).
     #[schema(example = "1000")]
     pub collateral_amount: String,
-    /// Principal amount in satoshis (decimal string).
+    /// Principal amount at offer creation, in satoshis (decimal string).
     #[schema(example = "500")]
     pub principal_amount: String,
+    /// Remaining debt to repay, in satoshis (decimal string).
+    #[schema(example = "512")]
+    pub current_debt: String,
+    /// Remaining locked collateral, in satoshis (decimal string).
+    #[schema(example = "1000")]
+    pub collateral_remaining: String,
     /// Interest rate in basis points.
     #[schema(example = 120)]
     pub interest_rate: u32,
@@ -92,7 +98,9 @@ pub struct OfferListResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct OffersOverview {
+    /// Remaining locked collateral for pending + active offers, grouped by asset.
     pub collateral_locked: Vec<AssetAmount>,
+    /// Outstanding debt (`current_debt`) for active offers, grouped by asset.
     pub active_loan_principal: Vec<AssetAmount>,
     pub active_loans_count: u64,
 }
@@ -107,6 +115,8 @@ impl From<OfferModelShort> for OfferListItemShort {
             principal_asset: format_hex(value.principal_asset_id),
             collateral_amount: format_satoshis(value.collateral_amount),
             principal_amount: format_satoshis(value.principal_amount),
+            current_debt: format_satoshis(value.current_debt),
+            collateral_remaining: format_satoshis(value.collateral_remaining),
             interest_rate: value.interest_rate as u32,
             loan_expiration_height: value.loan_expiration_time as u32,
             updated_at_height: value.updated_at_height as u64,
@@ -139,6 +149,8 @@ impl From<OfferModel> for OfferListItemFull {
                 principal_asset: format_hex(value.principal_asset_id),
                 collateral_amount: format_satoshis(value.collateral_amount),
                 principal_amount: format_satoshis(value.principal_amount),
+                current_debt: format_satoshis(value.current_debt),
+                collateral_remaining: format_satoshis(value.collateral_remaining),
                 interest_rate: value.interest_rate as u32,
                 loan_expiration_height: value.loan_expiration_time as u32,
                 updated_at_height: value.updated_at_height as u64,
@@ -210,23 +222,61 @@ impl From<OfferUtxoModel> for OfferUtxoDto {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct OfferRepaymentDto {
+    pub txid: String,
+    pub height: u64,
+    /// Amount repaid in this tx, in satoshis (decimal string).
+    #[schema(example = "500")]
+    pub amount_repaid: String,
+    /// Collateral unlocked in this tx, in satoshis (decimal string).
+    #[schema(example = "136")]
+    pub collateral_unlocked: String,
+    #[schema(example = "11000")]
+    pub debt_before: String,
+    #[schema(example = "10500")]
+    pub debt_after: String,
+    #[schema(example = "3000")]
+    pub collateral_before: String,
+    #[schema(example = "2864")]
+    pub collateral_after: String,
+    pub is_full: bool,
+}
+
+impl From<OfferRepaymentModel> for OfferRepaymentDto {
+    fn from(value: OfferRepaymentModel) -> Self {
+        Self {
+            txid: format_hex(value.txid),
+            height: value.height as u64,
+            amount_repaid: format_satoshis(value.amount_repaid),
+            collateral_unlocked: format_satoshis(value.collateral_unlocked),
+            debt_before: format_satoshis(value.debt_before),
+            debt_after: format_satoshis(value.debt_after),
+            collateral_before: format_satoshis(value.collateral_before),
+            collateral_after: format_satoshis(value.collateral_after),
+            is_full: value.is_full,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfferDetailsResponse {
     #[serde(flatten)]
     pub info: OfferListItemFull,
     pub participants: Vec<ParticipantDto>,
     pub utxos: Vec<OfferUtxoDto>,
+    pub repayments: Vec<OfferRepaymentDto>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        OfferListItemFull, OfferListItemShort, OfferUtxoDto, OfferUtxoOutpointShort,
-        ParticipantDto, ParticipantShort,
+        OfferListItemFull, OfferListItemShort, OfferRepaymentDto, OfferUtxoDto,
+        OfferUtxoOutpointShort, ParticipantDto, ParticipantShort,
     };
     use crate::models::{
-        OfferModel, OfferModelShort, OfferParticipantModel, OfferStatus, OfferUtxoModel,
-        ParticipantType, UtxoType,
+        OfferModel, OfferModelShort, OfferParticipantModel, OfferRepaymentModel, OfferStatus,
+        OfferUtxoModel, ParticipantType, UtxoType,
     };
     use uuid::Uuid;
 
@@ -258,6 +308,8 @@ mod tests {
         assert_eq!(dto.principal_asset, "060504");
         assert_eq!(dto.collateral_amount, "1000");
         assert_eq!(dto.principal_amount, "500");
+        assert_eq!(dto.current_debt, "512");
+        assert_eq!(dto.collateral_remaining, "1000");
         assert_eq!(dto.interest_rate, 250);
         assert_eq!(dto.loan_expiration_height, 123);
         assert_eq!(dto.created_at_height, 456);
@@ -332,6 +384,8 @@ mod tests {
         assert_eq!(dto.base.status, OfferStatus::Pending);
         assert_eq!(dto.base.collateral_asset, "0201");
         assert_eq!(dto.base.principal_asset, "0403");
+        assert_eq!(dto.base.current_debt, "77");
+        assert_eq!(dto.base.collateral_remaining, "99");
         assert_eq!(dto.base.created_at_txid, "adde");
         assert_eq!(dto.borrower_nft_asset, "0a09");
         assert_eq!(dto.lender_nft_asset, "0c0b");
@@ -472,6 +526,35 @@ mod tests {
         assert_eq!(dto.utxo_type, UtxoType::BorrowerPrincipal);
         assert_eq!(dto.spent_txid, None);
         assert_eq!(dto.spent_at_height, None);
+    }
+
+    #[test]
+    fn offer_repayment_dto_from_model_maps_and_formats_fields() {
+        let model = OfferRepaymentModel {
+            id: 1,
+            offer_id: 42,
+            txid: vec![0xaa, 0xbb],
+            height: 900,
+            amount_repaid: 500,
+            collateral_unlocked: 136,
+            debt_before: 11_000,
+            debt_after: 10_500,
+            collateral_before: 3_000,
+            collateral_after: 2_864,
+            is_full: false,
+        };
+
+        let dto = OfferRepaymentDto::from(model);
+
+        assert_eq!(dto.txid, "bbaa");
+        assert_eq!(dto.height, 900);
+        assert_eq!(dto.amount_repaid, "500");
+        assert_eq!(dto.collateral_unlocked, "136");
+        assert_eq!(dto.debt_before, "11000");
+        assert_eq!(dto.debt_after, "10500");
+        assert_eq!(dto.collateral_before, "3000");
+        assert_eq!(dto.collateral_after, "2864");
+        assert!(!dto.is_full);
     }
 
     #[test]

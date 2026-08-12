@@ -3,6 +3,7 @@ use sqlx::PgPool;
 use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 
 use crate::{
+    api::utils::{format_hex, format_offer_id, format_satoshis},
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{OffersWatchEntry, WatchCache},
@@ -251,6 +252,20 @@ pub async fn insert_offer_repayment(
         tracing::error!("Failed to insert offer repayment: {e:?}");
         e
     })?;
+
+    notify_indexer_event(
+        sql_tx,
+        &IndexerEvent::OfferRepaymentIndexed {
+            id: format_offer_id(repayment.offer_id),
+            txid: format_hex(repayment.txid.clone()),
+            height: repayment.height as u64,
+            amount_repaid: format_satoshis(repayment.amount_repaid),
+            debt_after: format_satoshis(repayment.debt_after),
+            collateral_after: format_satoshis(repayment.collateral_after),
+            is_full: repayment.is_full,
+        },
+    )
+    .await?;
 
     Ok(())
 }

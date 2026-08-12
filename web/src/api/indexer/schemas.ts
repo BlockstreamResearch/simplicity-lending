@@ -46,6 +46,8 @@ export const offerShortSchema = zod.object({
   principal_asset: zod.string(),
   collateral_amount: u64AsBigint,
   principal_amount: u64AsBigint,
+  current_debt: u64AsBigint,
+  collateral_remaining: u64AsBigint,
   interest_rate: finiteNumber.default(0),
   loan_expiration_height: finiteNumber.default(0),
   created_at_height: blockHeightSchema,
@@ -85,9 +87,23 @@ export const offerUtxoSchema = zod.object({
 })
 export type OfferUtxo = zod.infer<typeof offerUtxoSchema>
 
+export const offerRepaymentSchema = zod.object({
+  txid: zod.string(),
+  height: blockHeightSchema,
+  amount_repaid: u64AsBigint,
+  collateral_unlocked: u64AsBigint,
+  debt_before: u64AsBigint,
+  debt_after: u64AsBigint,
+  collateral_before: u64AsBigint,
+  collateral_after: u64AsBigint,
+  is_full: zod.boolean(),
+})
+export type OfferRepayment = zod.infer<typeof offerRepaymentSchema>
+
 export const offerDetailsSchema = offerFullSchema.extend({
   participants: zod.array(participantDtoSchema).default([]),
   utxos: zod.array(offerUtxoSchema).default([]),
+  repayments: zod.array(offerRepaymentSchema).default([]),
 })
 export type OfferDetails = zod.infer<typeof offerDetailsSchema>
 

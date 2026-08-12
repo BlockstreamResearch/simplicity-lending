@@ -29,7 +29,7 @@ pub async fn fetch_overview(
 ) -> Result<BorrowerOverview, sqlx::Error> {
     let mut collateral_builder: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"
-        SELECT collateral_asset_id AS asset_id, SUM(collateral_amount)::BIGINT AS amount
+        SELECT collateral_asset_id AS asset_id, SUM(collateral_remaining)::BIGINT AS amount
         FROM offers
         WHERE 1=1
         "#,
@@ -49,7 +49,7 @@ pub async fn fetch_overview(
 
     let mut borrowings_builder: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"
-        SELECT principal_asset_id AS asset_id, SUM(principal_amount)::BIGINT AS amount
+        SELECT principal_asset_id AS asset_id, SUM(current_debt)::BIGINT AS amount
         FROM offers
         WHERE 1=1
         "#,
