@@ -1,18 +1,20 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::{AssetId, OutPoint, Transaction, Txid, hashes::Hash};
+use lending_contracts::programs::lending::LendingOfferRepaymentScan;
+use simplex::{
+    provider::SimplicityNetwork,
+    simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash},
+};
 
 use crate::{
     db::DbTx,
     indexer::cache::WatchCache,
     indexer::trackers::offers::{
-        ActiveOfferSpendKind, OfferRepaymentState, classify_active_offer_spend,
-        compute_partial_repayment_amounts, continuing_offer_collateral_at_vout,
-        fetch_offer_repayment_state, insert_offer_repayment, insert_offer_utxo,
-        load_offer_utxos_cache, spend_offer_utxo, update_offer_debt_and_collateral,
-        update_offer_status,
+        ActiveOfferSpendKind, classify_active_offer_spend, fetch_offer, insert_offer_repayment,
+        insert_offer_utxo, load_offer_utxos_cache, partial_repayment_amounts_from_scan,
+        spend_offer_utxo, update_offer_debt_and_collateral, update_offer_status,
     },
-    models::{OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
+    models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -23,12 +25,14 @@ pub struct OffersWatchEntry {
 
 pub struct OffersTracker {
     cache: WatchCache<OffersWatchEntry>,
+    network: SimplicityNetwork,
 }
 
 impl OffersTracker {
-    pub async fn load(db_pool: &PgPool) -> anyhow::Result<Self> {
+    pub async fn load(db_pool: &PgPool, network: SimplicityNetwork) -> anyhow::Result<Self> {
         Ok(Self {
             cache: load_offer_utxos_cache(db_pool).await?,
+            network,
         })
     }
 
@@ -149,35 +153,32 @@ impl OffersTracker {
                 }
             }
             UtxoType::ActiveOffer => {
-                let state = fetch_offer_repayment_state(sql_tx, offer_id).await?;
-                let collateral_asset_id = AssetId::from_slice(&state.collateral_asset_id)
-                    .map_err(|e| anyhow::anyhow!("invalid collateral_asset_id: {e}"))?;
+                let offer_model = fetch_offer(sql_tx, offer_id).await?;
+                let offer = offer_model.to_active_lending_offer(self.network)?;
 
-                match classify_active_offer_spend(
-                    tx,
-                    &collateral_asset_id,
-                    state.collateral_remaining as u64,
-                ) {
-                    ActiveOfferSpendKind::FullRepayment => {
+                // TODO: pass vault prevout amounts once vault UTXOs are tracked.
+                // `None` only discovers NoRepayments-phase (first) partials.
+                match classify_active_offer_spend(&offer, tx, None)? {
+                    ActiveOfferSpendKind::FullRepayment { scan } => {
                         self.handle_loan_repayment(
                             sql_tx,
                             old_outpoint,
                             offer_id,
                             txid,
-                            &state,
+                            &offer_model,
+                            &scan,
                             block_height,
                         )
                         .await
                     }
-                    ActiveOfferSpendKind::PartialRepayment { continuing_vout } => {
+                    ActiveOfferSpendKind::PartialRepayment { scan } => {
                         self.handle_partial_repayment(
                             sql_tx,
-                            tx,
                             old_outpoint,
                             offer_id,
                             txid,
-                            continuing_vout,
-                            &state,
+                            &offer_model,
+                            &scan,
                             block_height,
                         )
                         .await
@@ -343,39 +344,25 @@ impl OffersTracker {
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(
         name = "Handling partial offer repayment",
-        skip(self, sql_tx, tx, old_outpoint, state, block_height),
-        fields(%offer_id, %txid, %continuing_vout, %block_height),
+        skip(self, sql_tx, old_outpoint, offer_model, scan, block_height),
+        fields(%offer_id, %txid, %block_height),
     )]
     async fn handle_partial_repayment(
         &mut self,
         sql_tx: &mut DbTx<'_>,
-        tx: &Transaction,
         old_outpoint: &OutPoint,
         offer_id: i64,
         txid: Txid,
-        continuing_vout: u32,
-        state: &OfferRepaymentState,
+        offer_model: &OfferModel,
+        scan: &LendingOfferRepaymentScan,
         block_height: u64,
     ) -> anyhow::Result<()> {
-        let collateral_asset_id = AssetId::from_slice(&state.collateral_asset_id)
-            .map_err(|e| anyhow::anyhow!("invalid collateral_asset_id: {e}"))?;
-
-        let collateral_after = continuing_offer_collateral_at_vout(
-            tx,
-            continuing_vout,
-            &collateral_asset_id,
-        )
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "partial repayment missing explicit collateral on continuing vout {continuing_vout}"
-            )
+        let continuing_vout = scan.continuing_offer_vout.ok_or_else(|| {
+            anyhow::anyhow!("partial repayment scan missing continuing_offer_vout")
         })?;
 
-        let amounts = compute_partial_repayment_amounts(
-            state.current_debt as u64,
-            state.collateral_remaining as u64,
-            collateral_after,
-        )?;
+        let amounts =
+            partial_repayment_amounts_from_scan(scan, offer_model.collateral_remaining as u64)?;
 
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
@@ -441,9 +428,10 @@ impl OffersTracker {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(
         name = "Handling offer repayment",
-        skip(self, sql_tx, old_outpoint, offer_id, txid, state, block_height),
+        skip(self, sql_tx, old_outpoint, offer_id, txid, offer_model, scan, block_height),
         fields(%offer_id, %txid, %block_height),
     )]
     async fn handle_loan_repayment(
@@ -452,7 +440,8 @@ impl OffersTracker {
         old_outpoint: &OutPoint,
         offer_id: i64,
         txid: Txid,
-        state: &OfferRepaymentState,
+        offer_model: &OfferModel,
+        scan: &LendingOfferRepaymentScan,
         block_height: u64,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
@@ -465,11 +454,11 @@ impl OffersTracker {
                 offer_id,
                 txid: txid.to_byte_array().to_vec(),
                 height: block_height as i64,
-                amount_repaid: state.current_debt,
-                collateral_unlocked: state.collateral_remaining,
-                debt_before: state.current_debt,
-                debt_after: 0,
-                collateral_before: state.collateral_remaining,
+                amount_repaid: scan.amount_to_repay as i64,
+                collateral_unlocked: offer_model.collateral_remaining,
+                debt_before: scan.debt_before as i64,
+                debt_after: scan.debt_after as i64,
+                collateral_before: offer_model.collateral_remaining,
                 collateral_after: 0,
                 is_full: true,
             },

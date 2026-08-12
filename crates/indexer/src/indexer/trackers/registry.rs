@@ -39,7 +39,7 @@ impl TrackerRegistry {
                 network,
                 asset_registration.clone(),
             ),
-            offers: OffersTracker::load(db_pool).await?,
+            offers: OffersTracker::load(db_pool, network).await?,
             participants: OfferParticipantsTracker::load(db_pool).await?,
             creations: OfferCreationsTracker::new(
                 protocol_fee_keeper_asset_id,

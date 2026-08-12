@@ -6,16 +6,8 @@ use crate::{
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{OffersWatchEntry, WatchCache},
-    models::{OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
+    models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
 };
-
-/// Snapshot of offer fields needed to classify and apply repayments.
-#[derive(Debug, Clone)]
-pub struct OfferRepaymentState {
-    pub collateral_asset_id: Vec<u8>,
-    pub collateral_remaining: i64,
-    pub current_debt: i64,
-}
 
 #[tracing::instrument(name = "Loading all active offer UTXOs from DB", skip(db))]
 pub async fn load_offer_utxos_cache(db: &PgPool) -> anyhow::Result<WatchCache<OffersWatchEntry>> {
@@ -143,17 +135,32 @@ pub async fn update_offer_status(
 }
 
 #[tracing::instrument(
-    name = "Fetching offer repayment state",
+    name = "Fetching offer by id",
     skip(sql_tx),
     fields(offer_id = %offer_id)
 )]
-pub async fn fetch_offer_repayment_state(
-    sql_tx: &mut DbTx<'_>,
-    offer_id: i64,
-) -> Result<OfferRepaymentState, sqlx::Error> {
-    let row = sqlx::query!(
+pub async fn fetch_offer(sql_tx: &mut DbTx<'_>, offer_id: i64) -> Result<OfferModel, sqlx::Error> {
+    sqlx::query_as!(
+        OfferModel,
         r#"
-        SELECT collateral_asset_id, collateral_remaining, current_debt
+        SELECT
+            id,
+            issuance_factory_id,
+            current_status AS "current_status: OfferStatus",
+            collateral_asset_id,
+            principal_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+            protocol_fee_keeper_asset_id,
+            collateral_amount,
+            principal_amount,
+            current_debt,
+            collateral_remaining,
+            interest_rate,
+            loan_expiration_time,
+            updated_at_height,
+            created_at_height,
+            created_at_txid
         FROM offers
         WHERE id = $1
         "#,
@@ -162,14 +169,8 @@ pub async fn fetch_offer_repayment_state(
     .fetch_one(&mut **sql_tx)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to fetch offer repayment state: {e:?}");
+        tracing::error!("Failed to fetch offer: {e:?}");
         e
-    })?;
-
-    Ok(OfferRepaymentState {
-        collateral_asset_id: row.collateral_asset_id,
-        collateral_remaining: row.collateral_remaining,
-        current_debt: row.current_debt,
     })
 }
 

@@ -1,14 +1,15 @@
-use simplex::simplicityhl::elements::{AssetId, Transaction, TxOut};
+use lending_contracts::programs::lending::{LendingOffer, LendingOfferRepaymentScan};
+use simplex::simplicityhl::elements::Transaction;
 
 /// How an `active_offer` UTXO spend should be interpreted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveOfferSpendKind {
-    FullRepayment,
-    PartialRepayment { continuing_vout: u32 },
+    FullRepayment { scan: LendingOfferRepaymentScan },
+    PartialRepayment { scan: LendingOfferRepaymentScan },
     Liquidation,
 }
 
-/// Amounts reconstructed from a partial repayment for DB updates / history.
+/// Amounts for DB updates / history after a partial repayment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PartialRepaymentAmounts {
     pub debt_before: u64,
@@ -19,149 +20,81 @@ pub struct PartialRepaymentAmounts {
     pub collateral_unlocked: u64,
 }
 
-/// Classify a spend of an active lending offer UTXO.
+/// Classify a spend of an active lending offer UTXO using contract scanners.
+///
+/// `vault_amounts_before` is `(lender_vault_amount, protocol_vault_amount)` from prevouts.
+/// Pass `None` for the first (`NoRepayments`) partial; fee/principal supply phases need
+/// `Some(...)` once vault UTXO amounts are tracked in the indexer.
 pub fn classify_active_offer_spend(
+    offer: &LendingOffer,
     tx: &Transaction,
-    collateral_asset_id: &AssetId,
-    collateral_remaining: u64,
-) -> ActiveOfferSpendKind {
-    if is_full_repayment_tx(tx) {
-        return ActiveOfferSpendKind::FullRepayment;
+    vault_amounts_before: Option<(u64, Option<u64>)>,
+) -> anyhow::Result<ActiveOfferSpendKind> {
+    if let Some(scan) = offer.scan_full_repayment(tx, 0, 0) {
+        return Ok(ActiveOfferSpendKind::FullRepayment { scan });
     }
 
-    if let Some(continuing_vout) =
-        find_continuing_offer_vout(tx, collateral_asset_id, collateral_remaining)
-    {
-        return ActiveOfferSpendKind::PartialRepayment { continuing_vout };
+    if let Some(scan) = offer.discover_partial_repayment(tx, 0, 0, vault_amounts_before) {
+        return Ok(ActiveOfferSpendKind::PartialRepayment { scan });
     }
 
-    ActiveOfferSpendKind::Liquidation
-}
-
-/// Full repayment burns the borrower NFT to OP_RETURN at output 0.
-pub fn is_full_repayment_tx(tx: &Transaction) -> bool {
-    if tx.output.len() < 5 {
-        return false;
+    if offer.scan_liquidation(tx).is_some() {
+        return Ok(ActiveOfferSpendKind::Liquidation);
     }
 
-    tx.output[0].is_null_data()
-        && !tx.output[1].is_null_data()
-        && !tx.output[2].is_null_data()
-        && !tx.output[3].is_null_data()
+    anyhow::bail!("unclassified active offer spend")
 }
 
-/// Read explicit collateral amount on the continuing offer output.
-pub fn continuing_offer_collateral_at_vout(
-    tx: &Transaction,
-    continuing_vout: u32,
-    collateral_asset_id: &AssetId,
-) -> Option<u64> {
-    let output = tx.output.get(continuing_vout as usize)?;
-
-    continuing_offer_collateral_amount(output, collateral_asset_id)
-}
-
-/// Reconstruct repaid amounts from remaining collateral after a partial repay.
-pub fn compute_partial_repayment_amounts(
-    debt_before: u64,
+/// Map a partial repayment scan (+ DB collateral before) into history amounts.
+pub fn partial_repayment_amounts_from_scan(
+    scan: &LendingOfferRepaymentScan,
     collateral_before: u64,
-    collateral_after: u64,
 ) -> anyhow::Result<PartialRepaymentAmounts> {
+    let collateral_after = scan
+        .collateral_after
+        .ok_or_else(|| anyhow::anyhow!("partial repayment scan missing collateral_after"))?;
+
     if collateral_after >= collateral_before {
         anyhow::bail!(
             "partial repayment collateral_after ({collateral_after}) must be < collateral_before ({collateral_before})"
         );
     }
-    if collateral_before == 0 {
-        anyhow::bail!("partial repayment with zero collateral_before");
-    }
-    if debt_before == 0 {
-        anyhow::bail!("partial repayment with zero debt_before");
-    }
-
-    let collateral_unlocked = collateral_before - collateral_after;
-    let amount_repaid = collateral_unlocked * debt_before / collateral_before;
-
-    if amount_repaid == 0 || amount_repaid >= debt_before {
-        anyhow::bail!(
-            "invalid reconstructed amount_repaid={amount_repaid} for debt_before={debt_before}"
-        );
-    }
 
     Ok(PartialRepaymentAmounts {
-        debt_before,
-        debt_after: debt_before - amount_repaid,
+        debt_before: scan.debt_before,
+        debt_after: scan.debt_after,
         collateral_before,
         collateral_after,
-        amount_repaid,
-        collateral_unlocked,
+        amount_repaid: scan.amount_to_repay,
+        collateral_unlocked: collateral_before - collateral_after,
     })
-}
-
-fn find_continuing_offer_vout(
-    tx: &Transaction,
-    collateral_asset_id: &AssetId,
-    collateral_remaining: u64,
-) -> Option<u32> {
-    if tx.output.is_empty() || tx.output[0].is_null_data() {
-        return None;
-    }
-
-    if collateral_remaining == 0 {
-        return None;
-    }
-
-    tx.output.iter().enumerate().find_map(|(vout, output)| {
-        let amount = continuing_offer_collateral_amount(output, collateral_asset_id)?;
-        if amount > 0 && amount < collateral_remaining {
-            Some(vout as u32)
-        } else {
-            None
-        }
-    })
-}
-
-fn continuing_offer_collateral_amount(
-    output: &TxOut,
-    collateral_asset_id: &AssetId,
-) -> Option<u64> {
-    if output.script_pubkey.is_op_return() {
-        return None;
-    }
-
-    let asset = output.asset.explicit()?;
-    let amount = output.value.explicit()?;
-
-    if asset == *collateral_asset_id {
-        Some(amount)
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        ActiveOfferSpendKind, classify_active_offer_spend, compute_partial_repayment_amounts,
-        is_full_repayment_tx,
+        ActiveOfferSpendKind, classify_active_offer_spend, partial_repayment_amounts_from_scan,
     };
-    use simplex::simplicityhl::elements::{
-        AssetId, LockTime, Script, Transaction, TxIn, TxOut, confidential,
+    use lending_contracts::programs::{
+        asset_auth_vault::AssetAuthVault,
+        lending::{
+            LendingOffer, LendingOfferParameters, LendingOfferRepaymentScan, OfferParameters,
+        },
+        program::SimplexProgram,
+    };
+    use simplex::{
+        provider::SimplicityNetwork,
+        simplicityhl::elements::{
+            AssetId, LockTime, Script, Transaction, TxIn, TxOut, confidential,
+        },
     };
 
     fn asset(byte: u8) -> AssetId {
         AssetId::from_slice(&[byte; 32]).expect("asset")
     }
 
-    fn script(byte: u8) -> Script {
-        Script::from(vec![byte])
-    }
-
-    fn op_return_output() -> TxOut {
-        TxOut {
-            script_pubkey: Script::new_op_return(b"burn"),
-            ..Default::default()
-        }
+    fn script(bytes: &[u8]) -> Script {
+        Script::from(bytes.to_vec())
     }
 
     fn explicit_output(asset_id: AssetId, amount: u64, script_pubkey: Script) -> TxOut {
@@ -171,6 +104,16 @@ mod tests {
         };
         output.asset = confidential::Asset::Explicit(asset_id);
         output.value = confidential::Value::Explicit(amount);
+        output
+    }
+
+    fn op_return_asset(asset_id: AssetId) -> TxOut {
+        let mut output = TxOut {
+            script_pubkey: Script::new_op_return(b"burn"),
+            ..Default::default()
+        };
+        output.asset = confidential::Asset::Explicit(asset_id);
+        output.value = confidential::Value::Explicit(1);
         output
     }
 
@@ -186,103 +129,156 @@ mod tests {
         }
     }
 
-    #[test]
-    fn full_repayment_layout_matches_existing_heuristic() {
-        let tx = tx_with_outputs(vec![
-            op_return_output(),
-            explicit_output(asset(1), 1, script(0x51)),
-            explicit_output(asset(2), 100, script(0x52)),
-            explicit_output(asset(2), 50, script(0x53)),
-            explicit_output(asset(3), 10, script(0x54)),
-        ]);
-
-        assert!(is_full_repayment_tx(&tx));
-        assert_eq!(
-            classify_active_offer_spend(&tx, &asset(9), 1_000),
-            ActiveOfferSpendKind::FullRepayment
-        );
+    fn test_params() -> LendingOfferParameters {
+        LendingOfferParameters {
+            collateral_asset_id: asset(1),
+            principal_asset_id: asset(2),
+            borrower_nft_asset_id: asset(3),
+            lender_nft_asset_id: asset(4),
+            protocol_fee_keeper_asset_id: asset(5),
+            offer_parameters: OfferParameters {
+                collateral_amount: 3_000,
+                principal_amount: 10_000,
+                loan_expiration_time: 12_345,
+                principal_interest_rate: 1_000,
+            },
+            network: SimplicityNetwork::default_regtest(),
+        }
     }
 
     #[test]
-    fn partial_repayment_finds_earliest_reduced_collateral_output() {
-        let collateral = asset(0xaa);
+    fn classify_partial_uses_vault_derived_amount() {
+        let params = test_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let active = LendingOffer::new_active(params, total);
+        let amount_to_repay = 500_u64;
+        let debt_after = total - amount_to_repay;
+        let continuing = LendingOffer::new_active(params, debt_after);
+
+        let protocol_fee = params
+            .offer_parameters
+            .get_repaid_protocol_fee(total, amount_to_repay);
+        let lender_amount = amount_to_repay - protocol_fee;
+        let lender_vault =
+            AssetAuthVault::new_active(params.get_lender_vault_parameters(), lender_amount);
+        let protocol_vault =
+            AssetAuthVault::new_active(params.get_protocol_fee_vault_parameters(), protocol_fee);
+
         let tx = tx_with_outputs(vec![
-            explicit_output(asset(0xbb), 1, script(0x51)),
-            explicit_output(collateral, 700, script(0x52)),
-            explicit_output(asset(0xcc), 200, script(0x53)),
-            explicit_output(collateral, 300, script(0x54)),
+            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+            explicit_output(
+                params.collateral_asset_id,
+                3_000 - 136,
+                continuing.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                lender_amount,
+                lender_vault.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                protocol_fee,
+                protocol_vault.get_script_pubkey(),
+            ),
         ]);
 
-        assert_eq!(
-            classify_active_offer_spend(&tx, &collateral, 1_000),
-            ActiveOfferSpendKind::PartialRepayment { continuing_vout: 1 }
-        );
-    }
-
-    #[test]
-    fn partial_ignores_confidential_unlock_and_picks_explicit_covenant() {
-        let collateral = asset(0xaa);
-        let mut unlock = TxOut {
-            script_pubkey: script(0x54),
-            ..Default::default()
+        let kind = classify_active_offer_spend(&active, &tx, None).unwrap();
+        let ActiveOfferSpendKind::PartialRepayment { scan } = kind else {
+            panic!("expected partial repayment, got {kind:?}");
         };
-        unlock.asset = confidential::Asset::Explicit(collateral);
 
-        let tx = tx_with_outputs(vec![
-            explicit_output(asset(0xbb), 1, script(0x51)),
-            explicit_output(collateral, 800, script(0x52)),
-            unlock,
-        ]);
+        assert_eq!(scan.amount_to_repay, amount_to_repay);
+        assert_eq!(scan.continuing_offer_vout, Some(1));
 
-        assert_eq!(
-            classify_active_offer_spend(&tx, &collateral, 1_000),
-            ActiveOfferSpendKind::PartialRepayment { continuing_vout: 1 }
-        );
+        let amounts = partial_repayment_amounts_from_scan(&scan, 3_000).unwrap();
+        assert_eq!(amounts.amount_repaid, 500);
+        assert_eq!(amounts.debt_after, debt_after);
+        assert_eq!(amounts.collateral_unlocked, 136);
+        // Vault truth, not collateral reverse-math (which truncates to 1998 for 545 unlocked).
+        assert_ne!(amounts.amount_repaid, 136 * total / 3_000);
     }
 
     #[test]
-    fn liquidation_when_no_reduced_collateral_covenant() {
-        let collateral = asset(0xaa);
+    fn classify_full_repayment() {
+        let params = test_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let active = LendingOffer::new_active(params, total);
+
+        let protocol_fee = params.offer_parameters.get_total_protocol_fee();
+        let lender_amount = total - protocol_fee;
+        let lender_vault = AssetAuthVault::new_finalized(params.get_lender_vault_parameters());
+        let protocol_vault =
+            AssetAuthVault::new_finalized(params.get_protocol_fee_vault_parameters());
+
         let tx = tx_with_outputs(vec![
-            explicit_output(collateral, 1_000, script(0x51)),
-            explicit_output(asset(0x01), 1, script(0x52)),
+            op_return_asset(params.borrower_nft_asset_id),
+            explicit_output(
+                params.principal_asset_id,
+                lender_amount,
+                lender_vault.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                protocol_fee,
+                protocol_vault.get_script_pubkey(),
+            ),
+            explicit_output(params.collateral_asset_id, 10, script(&[0x99])),
+        ]);
+
+        let kind = classify_active_offer_spend(&active, &tx, None).unwrap();
+        let ActiveOfferSpendKind::FullRepayment { scan } = kind else {
+            panic!("expected full repayment, got {kind:?}");
+        };
+        assert_eq!(scan.amount_to_repay, total);
+        assert_eq!(scan.debt_after, 0);
+    }
+
+    #[test]
+    fn classify_liquidation() {
+        let params = test_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let active = LendingOffer::new_active(params, total);
+
+        let tx = tx_with_outputs(vec![
+            op_return_asset(params.lender_nft_asset_id),
+            explicit_output(params.collateral_asset_id, 3_000, script(&[0x51])),
         ]);
 
         assert_eq!(
-            classify_active_offer_spend(&tx, &collateral, 1_000),
+            classify_active_offer_spend(&active, &tx, None).unwrap(),
             ActiveOfferSpendKind::Liquidation
         );
     }
 
     #[test]
-    fn liquidation_when_first_output_is_op_return_but_layout_too_short() {
-        let collateral = asset(0xaa);
-        let tx = tx_with_outputs(vec![
-            op_return_output(),
-            explicit_output(collateral, 500, script(0x51)),
-        ]);
+    fn unclassified_spend_is_error_not_liquidation() {
+        let params = test_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let active = LendingOffer::new_active(params, total);
+        let tx = tx_with_outputs(vec![explicit_output(
+            params.collateral_asset_id,
+            3_000,
+            script(&[0x51]),
+        )]);
 
-        assert!(!is_full_repayment_tx(&tx));
-        assert_eq!(
-            classify_active_offer_spend(&tx, &collateral, 1_000),
-            ActiveOfferSpendKind::Liquidation
-        );
+        let err = classify_active_offer_spend(&active, &tx, None).unwrap_err();
+        assert!(err.to_string().contains("unclassified"));
     }
 
     #[test]
-    fn compute_partial_amounts_matches_contracts_integer_division() {
-        // debt=11000, collateral=3000, unlocked=545 -> remaining=2455
-        // reconstructed repaid = 545 * 11000 / 3000 = 1998 (truncation)
-        let amounts = compute_partial_repayment_amounts(11_000, 3_000, 2_455).unwrap();
-        assert_eq!(amounts.collateral_unlocked, 545);
-        assert_eq!(amounts.amount_repaid, 1_998);
-        assert_eq!(amounts.debt_after, 9_002);
-        assert_eq!(amounts.collateral_after, 2_455);
-    }
+    fn partial_amounts_reject_non_decreasing_collateral() {
+        let scan = LendingOfferRepaymentScan {
+            amount_to_repay: 100,
+            debt_before: 1_000,
+            debt_after: 900,
+            collateral_after: Some(500),
+            continuing_offer_vout: Some(1),
+            lender_vault_vout: 2,
+            protocol_fee_vault_vout: Some(3),
+        };
 
-    #[test]
-    fn compute_partial_amounts_rejects_non_decreasing_collateral() {
-        assert!(compute_partial_repayment_amounts(1_000, 500, 500).is_err());
-        assert!(compute_partial_repayment_amounts(1_000, 500, 600).is_err());
+        assert!(partial_repayment_amounts_from_scan(&scan, 500).is_err());
+        assert!(partial_repayment_amounts_from_scan(&scan, 400).is_err());
     }
 }
