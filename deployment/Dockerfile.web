@@ -9,7 +9,7 @@ COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY web ./
-COPY crates/contracts/simf /app/crates/contracts/simf
+COPY crates/contracts/contract_sources.json /app/crates/contracts/contract_sources.json
 
 ARG VITE_API_URL
 ARG VITE_ESPLORA_BASE_URL
