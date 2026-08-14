@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id,\n            offer_id,\n            txid,\n            height,\n            amount_repaid,\n            collateral_unlocked,\n            debt_before,\n            debt_after,\n            collateral_before,\n            collateral_after,\n            is_full\n        FROM offer_repayments\n        WHERE offer_id = $1\n        ORDER BY height DESC, id DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "offer_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "amount_repaid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "collateral_unlocked",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "debt_before",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "debt_after",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "collateral_before",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "collateral_after",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_full",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4b36c037608be568e4dec9e0d9dc0e56db8b4c0ab612f170d11a2913f05fdf90"
+}
