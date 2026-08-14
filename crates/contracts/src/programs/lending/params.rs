@@ -86,7 +86,7 @@ impl LendingOfferParameters {
             supplier_asset_id: self.borrower_nft_asset_id,
             supply_goal: self.offer_parameters.get_total_protocol_fee(),
             with_keeper_asset_burn: false,
-            with_supplier_asset_burn: true,
+            with_supplier_asset_burn: false,
             network: self.network,
         }
     }
