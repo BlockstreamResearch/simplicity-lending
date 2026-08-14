@@ -33,13 +33,19 @@ impl OfferParameters {
         calculate_protocol_fee(self.get_total_fee())
     }
 
-    pub fn get_fee_to_repay(&self, current_debt: u64) -> u64 {
+    pub fn get_already_repaid_fee(&self, current_debt: u64) -> u64 {
         let total_fee = self.get_total_fee();
-
         let already_repaid_amount = self.get_already_repaid_amount(current_debt);
-        let already_repaid_fee = min(total_fee, already_repaid_amount);
 
-        total_fee - already_repaid_fee
+        min(total_fee, already_repaid_amount)
+    }
+
+    pub fn get_already_repaid_protocol_fee(&self, current_debt: u64) -> u64 {
+        calculate_protocol_fee(self.get_already_repaid_fee(current_debt))
+    }
+
+    pub fn get_fee_to_repay(&self, current_debt: u64) -> u64 {
+        self.get_total_fee() - self.get_already_repaid_fee(current_debt)
     }
 
     pub fn get_protocol_fee_to_repay(&self, current_debt: u64) -> u64 {
