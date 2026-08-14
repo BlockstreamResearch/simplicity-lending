@@ -33,15 +33,14 @@ impl LendingOfferParameters {
 
     pub fn get_lender_vault(&self, current_debt: u64) -> AssetAuthVault {
         let parameters = self.get_lender_vault_parameters();
-        let protocol_fee_left = self
-            .offer_parameters
-            .get_protocol_fee_to_repay(current_debt);
 
         let already_repaid_amount = self
             .offer_parameters
             .get_already_repaid_amount(current_debt);
-        let already_repaid_protocol_fee =
-            self.offer_parameters.get_total_protocol_fee() - protocol_fee_left;
+        let already_repaid_protocol_fee = self
+            .offer_parameters
+            .get_already_repaid_protocol_fee(current_debt);
+
         let already_supplied = already_repaid_amount - already_repaid_protocol_fee;
 
         if already_supplied >= parameters.supply_goal {
@@ -53,11 +52,10 @@ impl LendingOfferParameters {
 
     pub fn get_protocol_fee_vault(&self, current_debt: u64) -> AssetAuthVault {
         let parameters = self.get_protocol_fee_vault_parameters();
-        let protocol_fee_left = self
+
+        let already_repaid_protocol_fee = self
             .offer_parameters
-            .get_protocol_fee_to_repay(current_debt);
-        let already_repaid_protocol_fee =
-            self.offer_parameters.get_total_protocol_fee() - protocol_fee_left;
+            .get_already_repaid_protocol_fee(current_debt);
 
         if already_repaid_protocol_fee >= parameters.supply_goal {
             AssetAuthVault::new_finalized(parameters)
@@ -113,5 +111,72 @@ impl LendingOfferParameters {
 
     fn get_protocol_fee_vault_tapleaf_hash(&self) -> [u8; 32] {
         AssetAuthVault::new_active(self.get_protocol_fee_vault_parameters(), 0).get_tapleaf_hash()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use simplex::{provider::SimplicityNetwork, simplicityhl::elements::AssetId};
+
+    use crate::programs::lending::{OfferParameters, calculate_protocol_fee};
+
+    use super::LendingOfferParameters;
+
+    fn asset(byte: u8) -> AssetId {
+        AssetId::from_slice(&[byte; 32]).expect("asset")
+    }
+
+    fn test_params() -> LendingOfferParameters {
+        LendingOfferParameters {
+            collateral_asset_id: asset(1),
+            principal_asset_id: asset(2),
+            borrower_nft_asset_id: asset(3),
+            lender_nft_asset_id: asset(4),
+            protocol_fee_keeper_asset_id: asset(5),
+            offer_parameters: OfferParameters {
+                collateral_amount: 1_000,
+                principal_amount: 1_000,
+                loan_expiration_time: 100_000,
+                principal_interest_rate: 1_000, // total_fee = 100, total_protocol_fee = 10
+            },
+            network: SimplicityNetwork::default_regtest(),
+        }
+    }
+
+    #[test]
+    fn get_protocol_fee_vault_already_supplied_matches_onchain_floor() {
+        let params = test_params();
+        let current_debt = 1_100 - 45; // already_repaid_fee = 45, still in RepayingOfferFee phase
+
+        let onchain_already_repaid_protocol_fee = calculate_protocol_fee(45);
+        assert_eq!(onchain_already_repaid_protocol_fee, 4);
+
+        let reconstructed_already_supplied = params
+            .get_protocol_fee_vault(current_debt)
+            .get_already_supplied_amount();
+
+        assert_eq!(
+            reconstructed_already_supplied,
+            onchain_already_repaid_protocol_fee
+        );
+    }
+
+    #[test]
+    fn get_lender_vault_already_supplied_matches_onchain_floor() {
+        let params = test_params();
+        let current_debt = 1_100 - 45;
+
+        let onchain_already_repaid_protocol_fee = calculate_protocol_fee(45);
+        let onchain_lender_vault_already_supplied = 45 - onchain_already_repaid_protocol_fee;
+        assert_eq!(onchain_lender_vault_already_supplied, 41);
+
+        let reconstructed_already_supplied = params
+            .get_lender_vault(current_debt)
+            .get_already_supplied_amount();
+
+        assert_eq!(
+            reconstructed_already_supplied,
+            onchain_lender_vault_already_supplied,
+        );
     }
 }
