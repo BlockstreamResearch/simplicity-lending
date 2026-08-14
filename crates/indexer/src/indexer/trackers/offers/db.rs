@@ -3,10 +3,11 @@ use sqlx::PgPool;
 use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 
 use crate::{
+    api::utils::{format_hex, format_offer_id, format_satoshis},
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{OffersWatchEntry, WatchCache},
-    models::{OfferStatus, OfferUtxoModel, UtxoType},
+    models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
 };
 
 #[tracing::instrument(name = "Loading all active offer UTXOs from DB", skip(db))]
@@ -127,6 +128,141 @@ pub async fn update_offer_status(
             id: offer_id.to_string(),
             status: new_status,
             height: block_height,
+        },
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[tracing::instrument(
+    name = "Fetching offer by id",
+    skip(sql_tx),
+    fields(offer_id = %offer_id)
+)]
+pub async fn fetch_offer(sql_tx: &mut DbTx<'_>, offer_id: i64) -> Result<OfferModel, sqlx::Error> {
+    sqlx::query_as!(
+        OfferModel,
+        r#"
+        SELECT
+            id,
+            issuance_factory_id,
+            current_status AS "current_status: OfferStatus",
+            collateral_asset_id,
+            principal_asset_id,
+            borrower_nft_asset_id,
+            lender_nft_asset_id,
+            protocol_fee_keeper_asset_id,
+            collateral_amount,
+            principal_amount,
+            current_debt,
+            collateral_remaining,
+            interest_rate,
+            loan_expiration_time,
+            updated_at_height,
+            created_at_height,
+            created_at_txid
+        FROM offers
+        WHERE id = $1
+        "#,
+        offer_id,
+    )
+    .fetch_one(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch offer: {e:?}");
+        e
+    })
+}
+
+#[tracing::instrument(
+    name = "Updating offer debt and remaining collateral",
+    skip(sql_tx),
+    fields(
+        offer_id = %offer_id,
+        current_debt = %current_debt,
+        collateral_remaining = %collateral_remaining,
+        block_height = %block_height
+    )
+)]
+pub async fn update_offer_debt_and_collateral(
+    sql_tx: &mut DbTx<'_>,
+    offer_id: i64,
+    current_debt: i64,
+    collateral_remaining: i64,
+    block_height: u64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE offers
+        SET current_debt = $1,
+            collateral_remaining = $2,
+            updated_at_height = $3
+        WHERE id = $4
+        "#,
+        current_debt,
+        collateral_remaining,
+        block_height as i64,
+        offer_id,
+    )
+    .execute(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to update offer debt/collateral: {e:?}");
+        e
+    })?;
+
+    Ok(())
+}
+
+#[tracing::instrument(
+    name = "Inserting offer repayment history row",
+    skip(sql_tx, repayment),
+    fields(
+        offer_id = %repayment.offer_id,
+        height = %repayment.height,
+        is_full = %repayment.is_full
+    )
+)]
+pub async fn insert_offer_repayment(
+    sql_tx: &mut DbTx<'_>,
+    repayment: &OfferRepaymentModel,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO offer_repayments (
+            offer_id, txid, height, amount_repaid, collateral_unlocked,
+            debt_before, debt_after, collateral_before, collateral_after, is_full
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        "#,
+        repayment.offer_id,
+        repayment.txid,
+        repayment.height,
+        repayment.amount_repaid,
+        repayment.collateral_unlocked,
+        repayment.debt_before,
+        repayment.debt_after,
+        repayment.collateral_before,
+        repayment.collateral_after,
+        repayment.is_full,
+    )
+    .execute(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to insert offer repayment: {e:?}");
+        e
+    })?;
+
+    notify_indexer_event(
+        sql_tx,
+        &IndexerEvent::OfferRepaymentIndexed {
+            id: format_offer_id(repayment.offer_id),
+            txid: format_hex(repayment.txid.clone()),
+            height: repayment.height as u64,
+            amount_repaid: format_satoshis(repayment.amount_repaid),
+            debt_after: format_satoshis(repayment.debt_after),
+            collateral_after: format_satoshis(repayment.collateral_after),
+            is_full: repayment.is_full,
         },
     )
     .await?;

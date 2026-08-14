@@ -1,11 +1,14 @@
 use std::str::FromStr;
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use simplex::simplicityhl::elements::{Txid, hashes::Hash};
-
-use lending_contracts::programs::lending::LendingOfferParameters;
+use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters, OfferParameters};
+use simplex::{
+    provider::SimplicityNetwork,
+    simplicityhl::elements::{AssetId, Txid, hashes::Hash},
+};
 
 use crate::models::{ParticipantType, UtxoType};
 
@@ -84,6 +87,8 @@ pub struct OfferModel {
     pub protocol_fee_keeper_asset_id: Vec<u8>,
     pub collateral_amount: i64,
     pub principal_amount: i64,
+    pub current_debt: i64,
+    pub collateral_remaining: i64,
     pub interest_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
@@ -99,6 +104,11 @@ impl OfferModel {
         block_height: u64,
         txid: Txid,
     ) -> Self {
+        let collateral_amount = offer_parameters.offer_parameters.collateral_amount as i64;
+        let current_debt = offer_parameters
+            .offer_parameters
+            .get_total_amount_to_repay() as i64;
+
         Self {
             id: 0,
             issuance_factory_id: factory_id,
@@ -115,8 +125,10 @@ impl OfferModel {
                 .into_inner()
                 .0
                 .to_vec(),
-            collateral_amount: offer_parameters.offer_parameters.collateral_amount as i64,
+            collateral_amount,
             principal_amount: offer_parameters.offer_parameters.principal_amount as i64,
+            current_debt,
+            collateral_remaining: collateral_amount,
             interest_rate: offer_parameters.offer_parameters.principal_interest_rate as i32,
             loan_expiration_time: offer_parameters.offer_parameters.loan_expiration_time as i32,
             current_status: OfferStatus::Pending,
@@ -124,6 +136,51 @@ impl OfferModel {
             created_at_height: block_height as i64,
             created_at_txid: txid.as_byte_array().to_vec(),
         }
+    }
+
+    pub fn to_lending_offer_parameters(
+        &self,
+        network: SimplicityNetwork,
+    ) -> anyhow::Result<LendingOfferParameters> {
+        let asset = |bytes: &[u8], field: &str| -> anyhow::Result<AssetId> {
+            AssetId::from_slice(bytes).map_err(|e| anyhow::anyhow!("invalid {field}: {e}"))
+        };
+
+        let interest_rate = u16::try_from(self.interest_rate)
+            .with_context(|| format!("interest_rate out of range: {}", self.interest_rate))?;
+        let loan_expiration_time = u32::try_from(self.loan_expiration_time).with_context(|| {
+            format!(
+                "loan_expiration_time out of range: {}",
+                self.loan_expiration_time
+            )
+        })?;
+
+        Ok(LendingOfferParameters {
+            collateral_asset_id: asset(&self.collateral_asset_id, "collateral_asset_id")?,
+            principal_asset_id: asset(&self.principal_asset_id, "principal_asset_id")?,
+            borrower_nft_asset_id: asset(&self.borrower_nft_asset_id, "borrower_nft_asset_id")?,
+            lender_nft_asset_id: asset(&self.lender_nft_asset_id, "lender_nft_asset_id")?,
+            protocol_fee_keeper_asset_id: asset(
+                &self.protocol_fee_keeper_asset_id,
+                "protocol_fee_keeper_asset_id",
+            )?,
+            offer_parameters: OfferParameters {
+                collateral_amount: self.collateral_amount as u64,
+                principal_amount: self.principal_amount as u64,
+                loan_expiration_time,
+                principal_interest_rate: interest_rate,
+            },
+            network,
+        })
+    }
+
+    pub fn to_active_lending_offer(
+        &self,
+        network: SimplicityNetwork,
+    ) -> anyhow::Result<LendingOffer> {
+        let params = self.to_lending_offer_parameters(network)?;
+
+        Ok(LendingOffer::new_active(params, self.current_debt as u64))
     }
 }
 
@@ -135,6 +192,8 @@ pub struct OfferModelShort {
     pub principal_asset_id: Vec<u8>,
     pub collateral_amount: i64,
     pub principal_amount: i64,
+    pub current_debt: i64,
+    pub collateral_remaining: i64,
     pub interest_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
@@ -202,12 +261,32 @@ mod tests {
         );
         assert_eq!(model.collateral_amount, 1_000);
         assert_eq!(model.principal_amount, 500);
+        assert_eq!(model.current_debt, 512);
+        assert_eq!(model.collateral_remaining, 1_000);
         assert_eq!(model.interest_rate, 250);
         assert_eq!(model.loan_expiration_time, 12_345);
         assert_eq!(model.current_status, OfferStatus::Pending);
         assert_eq!(model.updated_at_height, block_height as i64);
         assert_eq!(model.created_at_height, block_height as i64);
         assert_eq!(model.created_at_txid, txid.as_byte_array().to_vec());
+    }
+
+    #[test]
+    fn offer_model_to_active_lending_offer_roundtrips_script_and_debt() {
+        use lending_contracts::programs::{lending::LendingOffer, program::SimplexProgram};
+
+        let params = make_offer_params();
+        let debt = params.offer_parameters.get_total_amount_to_repay();
+        let mut model = OfferModel::new(&params, Uuid::nil(), 0, Txid::from_byte_array([0u8; 32]));
+        model.current_debt = debt as i64;
+
+        let from_model = model
+            .to_active_lending_offer(SimplicityNetwork::LiquidTestnet)
+            .unwrap();
+        let expected = LendingOffer::new_active(params, debt);
+
+        assert_eq!(from_model.get_script_pubkey(), expected.get_script_pubkey());
+        assert_eq!(from_model.get_current_debt(), expected.get_current_debt());
     }
 
     #[test]

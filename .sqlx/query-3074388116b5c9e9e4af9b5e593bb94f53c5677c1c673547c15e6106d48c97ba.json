@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id,\n            issuance_factory_id,\n            current_status AS \"current_status: OfferStatus\",\n            collateral_asset_id,\n            principal_asset_id,\n            borrower_nft_asset_id,\n            lender_nft_asset_id,\n            protocol_fee_keeper_asset_id,\n            collateral_amount,\n            principal_amount,\n            interest_rate,\n            loan_expiration_time,\n            updated_at_height,\n            created_at_height,\n            created_at_txid\n        FROM offers\n        WHERE id = $1\n        ",
+  "query": "\n        SELECT\n            id,\n            issuance_factory_id,\n            current_status AS \"current_status: OfferStatus\",\n            collateral_asset_id,\n            principal_asset_id,\n            borrower_nft_asset_id,\n            lender_nft_asset_id,\n            protocol_fee_keeper_asset_id,\n            collateral_amount,\n            principal_amount,\n            current_debt,\n            collateral_remaining,\n            interest_rate,\n            loan_expiration_time,\n            updated_at_height,\n            created_at_height,\n            created_at_txid\n        FROM offers\n        WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -69,26 +69,36 @@
       },
       {
         "ordinal": 10,
+        "name": "current_debt",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 11,
+        "name": "collateral_remaining",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
         "name": "interest_rate",
         "type_info": "Int4"
       },
       {
-        "ordinal": 11,
+        "ordinal": 13,
         "name": "loan_expiration_time",
         "type_info": "Int4"
       },
       {
-        "ordinal": 12,
+        "ordinal": 14,
         "name": "updated_at_height",
         "type_info": "Int8"
       },
       {
-        "ordinal": 13,
+        "ordinal": 15,
         "name": "created_at_height",
         "type_info": "Int8"
       },
       {
-        "ordinal": 14,
+        "ordinal": 16,
         "name": "created_at_txid",
         "type_info": "Bytea"
       }
@@ -113,8 +123,10 @@
       false,
       false,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "cc20678c609f7c41e42819b530e10dbc6d37c84ccacb41257cd84a5afab49757"
+  "hash": "3074388116b5c9e9e4af9b5e593bb94f53c5677c1c673547c15e6106d48c97ba"
 }

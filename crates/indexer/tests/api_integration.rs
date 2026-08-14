@@ -612,7 +612,7 @@ async fn get_offers_overview_returns_active_totals_only() -> anyhow::Result<()> 
             .map_or(0, Vec::len),
         1
     );
-    assert_eq!(overview["active_loan_principal"][0]["amount"], "500");
+    assert_eq!(overview["active_loan_principal"][0]["amount"], "506");
 
     server_handle.abort();
     Ok(())
@@ -962,6 +962,8 @@ struct ExpectedOfferDetailsDto {
     principal_asset: String,
     collateral_amount: String,
     principal_amount: String,
+    current_debt: String,
+    collateral_remaining: String,
     interest_rate: u32,
     loan_expiration_height: u32,
     updated_at_height: u64,
@@ -973,6 +975,21 @@ struct ExpectedOfferDetailsDto {
     borrower_principal_utxo: Option<ExpectedOfferUtxoOutpointShort>,
     utxos: Vec<ExpectedOfferUtxoDto>,
     participants: Vec<ExpectedParticipantDto>,
+    repayments: Vec<ExpectedOfferRepaymentDto>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[allow(dead_code)]
+struct ExpectedOfferRepaymentDto {
+    txid: String,
+    height: u64,
+    amount_repaid: String,
+    collateral_unlocked: String,
+    debt_before: String,
+    debt_after: String,
+    collateral_before: String,
+    collateral_after: String,
+    is_full: bool,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -1039,6 +1056,8 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.status, "pending");
     assert_eq!(dto.collateral_amount, "1000");
     assert_eq!(dto.principal_amount, "500");
+    assert_eq!(dto.current_debt, "506");
+    assert_eq!(dto.collateral_remaining, "1000");
     assert_eq!(dto.interest_rate, 120);
     assert_eq!(dto.loan_expiration_height, 1_234_567);
     assert_eq!(dto.updated_at_height, PENDING_OFFER_HEIGHT as u64);
@@ -1053,6 +1072,7 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.utxos[0].utxo_type, "active_offer");
     assert!(dto.utxos[0].spent_txid.is_none());
     assert!(dto.borrower_principal_utxo.is_none());
+    assert!(dto.repayments.is_empty());
     assert_eq!(dto.participants.len(), 2);
     assert!(
         dto.participants
@@ -1117,7 +1137,7 @@ async fn borrower_overview_returns_totals_for_script() -> anyhow::Result<()> {
     );
     assert_eq!(overview["collateral_locked"][0]["amount"], "2000");
     assert_eq!(overview["borrowings"].as_array().map_or(0, Vec::len), 1);
-    assert_eq!(overview["borrowings"][0]["amount"], "1000");
+    assert_eq!(overview["borrowings"][0]["amount"], "1012");
 
     let unknown_wallet = get_json(
         &http,
@@ -1261,7 +1281,7 @@ async fn lender_overview_returns_active_and_repaid_totals() -> anyhow::Result<()
     assert_eq!(overview["active_loans"], 1);
     assert_eq!(overview["to_be_claimed"], 1);
     assert_eq!(overview["supplied_loans"].as_array().map_or(0, Vec::len), 1);
-    assert_eq!(overview["supplied_loans"][0]["amount"], "500");
+    assert_eq!(overview["supplied_loans"][0]["amount"], "506");
     assert_eq!(
         overview["interest_outstanding"]
             .as_array()

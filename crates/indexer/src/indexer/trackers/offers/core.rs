@@ -1,14 +1,20 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
+use lending_contracts::programs::lending::LendingOfferRepaymentScan;
+use simplex::{
+    provider::SimplicityNetwork,
+    simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash},
+};
 
 use crate::{
     db::DbTx,
     indexer::cache::WatchCache,
     indexer::trackers::offers::{
-        insert_offer_utxo, load_offer_utxos_cache, spend_offer_utxo, update_offer_status,
+        ActiveOfferSpendKind, classify_active_offer_spend, fetch_offer, insert_offer_repayment,
+        insert_offer_utxo, load_offer_utxos_cache, partial_repayment_amounts_from_scan,
+        spend_offer_utxo, update_offer_debt_and_collateral, update_offer_status,
     },
-    models::{OfferStatus, OfferUtxoModel, UtxoType},
+    models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -19,12 +25,14 @@ pub struct OffersWatchEntry {
 
 pub struct OffersTracker {
     cache: WatchCache<OffersWatchEntry>,
+    network: SimplicityNetwork,
 }
 
 impl OffersTracker {
-    pub async fn load(db_pool: &PgPool) -> anyhow::Result<Self> {
+    pub async fn load(db_pool: &PgPool, network: SimplicityNetwork) -> anyhow::Result<Self> {
         Ok(Self {
             cache: load_offer_utxos_cache(db_pool).await?,
+            network,
         })
     }
 
@@ -145,12 +153,46 @@ impl OffersTracker {
                 }
             }
             UtxoType::ActiveOffer => {
-                if Self::is_loan_repayment_tx(tx) {
-                    self.handle_loan_repayment(sql_tx, old_outpoint, offer_id, txid, block_height)
+                let offer_model = fetch_offer(sql_tx, offer_id).await?;
+                let offer = offer_model.to_active_lending_offer(self.network)?;
+
+                // TODO: pass vault prevout amounts once vault UTXOs are tracked.
+                // `None` only discovers NoRepayments-phase (first) partials.
+                match classify_active_offer_spend(&offer, tx, None)? {
+                    ActiveOfferSpendKind::FullRepayment { scan } => {
+                        self.handle_loan_repayment(
+                            sql_tx,
+                            old_outpoint,
+                            offer_id,
+                            txid,
+                            &offer_model,
+                            &scan,
+                            block_height,
+                        )
                         .await
-                } else {
-                    self.handle_loan_liquidation(sql_tx, old_outpoint, offer_id, txid, block_height)
+                    }
+                    ActiveOfferSpendKind::PartialRepayment { scan } => {
+                        self.handle_partial_repayment(
+                            sql_tx,
+                            old_outpoint,
+                            offer_id,
+                            txid,
+                            &offer_model,
+                            &scan,
+                            block_height,
+                        )
                         .await
+                    }
+                    ActiveOfferSpendKind::Liquidation => {
+                        self.handle_loan_liquidation(
+                            sql_tx,
+                            old_outpoint,
+                            offer_id,
+                            txid,
+                            block_height,
+                        )
+                        .await
+                    }
                 }
             }
             UtxoType::Repayment => {
@@ -192,6 +234,7 @@ impl OffersTracker {
         self.cache.remove(old_outpoint);
 
         update_offer_status(sql_tx, offer_id, OfferStatus::Cancelled, block_height).await?;
+        update_offer_debt_and_collateral(sql_tx, offer_id, 0, 0, block_height).await?;
 
         let cancellation_outpoint = OutPoint { txid, vout: 0 };
 
@@ -298,10 +341,97 @@ impl OffersTracker {
         Ok(())
     }
 
-    // TODO: Add partial repayment handling
+    #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument(
+        name = "Handling partial offer repayment",
+        skip(self, sql_tx, old_outpoint, offer_model, scan, block_height),
+        fields(%offer_id, %txid, %block_height),
+    )]
+    async fn handle_partial_repayment(
+        &mut self,
+        sql_tx: &mut DbTx<'_>,
+        old_outpoint: &OutPoint,
+        offer_id: i64,
+        txid: Txid,
+        offer_model: &OfferModel,
+        scan: &LendingOfferRepaymentScan,
+        block_height: u64,
+    ) -> anyhow::Result<()> {
+        let continuing_vout = scan.continuing_offer_vout.ok_or_else(|| {
+            anyhow::anyhow!("partial repayment scan missing continuing_offer_vout")
+        })?;
+
+        let amounts =
+            partial_repayment_amounts_from_scan(scan, offer_model.collateral_remaining as u64)?;
+
+        spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
+        self.cache.remove(old_outpoint);
+
+        update_offer_debt_and_collateral(
+            sql_tx,
+            offer_id,
+            amounts.debt_after as i64,
+            amounts.collateral_after as i64,
+            block_height,
+        )
+        .await?;
+
+        insert_offer_repayment(
+            sql_tx,
+            &OfferRepaymentModel {
+                id: 0,
+                offer_id,
+                txid: txid.to_byte_array().to_vec(),
+                height: block_height as i64,
+                amount_repaid: amounts.amount_repaid as i64,
+                collateral_unlocked: amounts.collateral_unlocked as i64,
+                debt_before: amounts.debt_before as i64,
+                debt_after: amounts.debt_after as i64,
+                collateral_before: amounts.collateral_before as i64,
+                collateral_after: amounts.collateral_after as i64,
+                is_full: false,
+            },
+        )
+        .await?;
+
+        let continuing_outpoint = OutPoint {
+            txid,
+            vout: continuing_vout,
+        };
+        let continuing_utxo = Self::new_offer_utxo_model(
+            offer_id,
+            txid,
+            continuing_vout,
+            UtxoType::ActiveOffer,
+            block_height,
+        );
+
+        insert_offer_utxo(sql_tx, &continuing_utxo).await?;
+        self.cache.insert(
+            continuing_outpoint,
+            OffersWatchEntry {
+                offer_id,
+                utxo_type: UtxoType::ActiveOffer,
+            },
+        );
+
+        tracing::info!(
+            %offer_id,
+            %txid,
+            %continuing_vout,
+            amount_repaid = amounts.amount_repaid,
+            debt_after = amounts.debt_after,
+            collateral_after = amounts.collateral_after,
+            "Partial repayment indexed"
+        );
+
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(
         name = "Handling offer repayment",
-        skip(self, sql_tx, old_outpoint, offer_id, txid, block_height),
+        skip(self, sql_tx, old_outpoint, offer_id, txid, offer_model, scan, block_height),
         fields(%offer_id, %txid, %block_height),
     )]
     async fn handle_loan_repayment(
@@ -310,11 +440,32 @@ impl OffersTracker {
         old_outpoint: &OutPoint,
         offer_id: i64,
         txid: Txid,
+        offer_model: &OfferModel,
+        scan: &LendingOfferRepaymentScan,
         block_height: u64,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
+        insert_offer_repayment(
+            sql_tx,
+            &OfferRepaymentModel {
+                id: 0,
+                offer_id,
+                txid: txid.to_byte_array().to_vec(),
+                height: block_height as i64,
+                amount_repaid: scan.amount_to_repay as i64,
+                collateral_unlocked: offer_model.collateral_remaining,
+                debt_before: scan.debt_before as i64,
+                debt_after: scan.debt_after as i64,
+                collateral_before: offer_model.collateral_remaining,
+                collateral_after: 0,
+                is_full: true,
+            },
+        )
+        .await?;
+
+        update_offer_debt_and_collateral(sql_tx, offer_id, 0, 0, block_height).await?;
         update_offer_status(sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
 
         let repayment_outpoint = OutPoint { txid, vout: 1 };
@@ -357,6 +508,7 @@ impl OffersTracker {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
 
+        update_offer_debt_and_collateral(sql_tx, offer_id, 0, 0, block_height).await?;
         update_offer_status(sql_tx, offer_id, OfferStatus::Liquidated, block_height).await?;
 
         let repayment_outpoint = OutPoint { txid, vout: 0 };
@@ -426,16 +578,5 @@ impl OffersTracker {
         }
 
         tx.output[0].is_null_data() && tx.output[1].is_null_data() && !tx.output[2].is_null_data()
-    }
-
-    fn is_loan_repayment_tx(tx: &Transaction) -> bool {
-        if tx.output.len() < 5 {
-            return false;
-        }
-
-        tx.output[0].is_null_data()
-            && !tx.output[1].is_null_data()
-            && !tx.output[2].is_null_data()
-            && !tx.output[3].is_null_data()
     }
 }

@@ -27,7 +27,7 @@ pub async fn fetch_overview(
 ) -> Result<LenderOverview, sqlx::Error> {
     let mut supplied_builder: QueryBuilder<Postgres> = QueryBuilder::new(
         r#"
-        SELECT principal_asset_id AS asset_id, SUM(principal_amount)::BIGINT AS amount
+        SELECT principal_asset_id AS asset_id, SUM(current_debt)::BIGINT AS amount
         FROM offers
         WHERE current_status = "#,
     );

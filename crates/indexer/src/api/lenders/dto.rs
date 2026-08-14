@@ -5,7 +5,9 @@ use crate::api::dto::AssetAmount;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct LenderOverview {
+    /// Outstanding debt (`current_debt`) on active loans.
     pub supplied_loans: Vec<AssetAmount>,
+    /// Contracted interest on active loans (creation principal × rate).
     pub interest_outstanding: Vec<AssetAmount>,
     pub active_loans: u64,
     pub to_be_claimed: u64,

@@ -29,6 +29,15 @@ pub enum IndexerEvent {
         status: OfferStatus,
         height: u64,
     },
+    OfferRepaymentIndexed {
+        id: String,
+        txid: String,
+        height: u64,
+        amount_repaid: String,
+        debt_after: String,
+        collateral_after: String,
+        is_full: bool,
+    },
 }
 
 impl IndexerEvent {
@@ -38,6 +47,7 @@ impl IndexerEvent {
             Self::FactoryCreated { .. } => "factory_created",
             Self::OfferCreated { .. } => "offer_created",
             Self::OfferStatusUpdated { .. } => "offer_status_updated",
+            Self::OfferRepaymentIndexed { .. } => "offer_repayment_indexed",
         }
     }
 }
@@ -104,6 +114,24 @@ mod tests {
     }
 
     #[test]
+    fn offer_repayment_indexed_serializes_with_type_tag() {
+        let event = IndexerEvent::OfferRepaymentIndexed {
+            id: "7".to_string(),
+            txid: "aabb".to_string(),
+            height: 400,
+            amount_repaid: "500".to_string(),
+            debt_after: "10500".to_string(),
+            collateral_after: "2864".to_string(),
+            is_full: false,
+        };
+        let json = serde_json::to_value(&event).expect("serialize");
+
+        assert_eq!(json["type"], "offer_repayment_indexed");
+        assert_eq!(json["amount_repaid"], "500");
+        assert_eq!(json["is_full"], false);
+    }
+
+    #[test]
     fn events_roundtrip() {
         let events = [
             IndexerEvent::BlockIndexed { height: 42 },
@@ -123,6 +151,15 @@ mod tests {
                 id: "1".to_string(),
                 status: OfferStatus::Repaid,
                 height: 3,
+            },
+            IndexerEvent::OfferRepaymentIndexed {
+                id: "1".to_string(),
+                txid: "dd".to_string(),
+                height: 4,
+                amount_repaid: "100".to_string(),
+                debt_after: "900".to_string(),
+                collateral_after: "800".to_string(),
+                is_full: false,
             },
         ];
 

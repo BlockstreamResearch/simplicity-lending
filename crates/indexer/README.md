@@ -301,44 +301,46 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 - `borrower_principal_utxo`: unspent `borrower_principal` UTXO outpoint (`txid`, `vout`), or omitted when none
 - `participants`: latest participant UTXO per role (`borrower`, `lender`); each entry includes `offer_id` (decimal string)
 - `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`); each entry includes `offer_id` (decimal string). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
+- `current_debt` / `collateral_remaining`: remaining debt and locked collateral after any partial repayments (creation terms remain in `principal_amount` / `collateral_amount`)
+- `repayments`: history rows from `offer_repayments` (newest first), including amounts and before/after debt/collateral
 
 **Offers overview** (`GET /offers/overview`):
 
 ```json
 {
   "collateral_locked": [{ "asset": "…", "amount": "1000" }],
-  "active_loan_principal": [{ "asset": "…", "amount": "500" }],
+  "active_loan_principal": [{ "asset": "…", "amount": "506" }],
   "active_loans_count": 1
 }
 ```
 
-Aggregates **active** offers for `active_loan_principal` and `active_loans_count`. `collateral_locked` includes **pending** and **active** offers. Amounts are grouped by asset; each `amount` is a decimal satoshi string.
+`collateral_locked` sums `collateral_remaining` for **pending** and **active** offers. `active_loan_principal` sums outstanding `current_debt` for **active** offers (field name kept for compatibility). Amounts are grouped by asset; each `amount` is a decimal satoshi string.
 
 **Borrower overview** (`GET /borrowers/overview`):
 
 ```json
 {
   "collateral_locked": [{ "asset": "…", "amount": "1000" }],
-  "borrowings": [{ "asset": "…", "amount": "500" }],
+  "borrowings": [{ "asset": "…", "amount": "506" }],
   "active_loans": 1,
   "pending_offers": 2
 }
 ```
 
-Overview sums (`collateral_locked`, `borrowings`) are per asset across the borrower's open offers (`pending` and `active`); each `amount` is a decimal satoshi string. Counts (`active_loans`, `pending_offers`) are totals by status. Overview is not affected by offer-list filters on `GET /borrowers/offers`.
+Overview sums use remaining state (`collateral_remaining`, `current_debt`) across the borrower's open offers (`pending` and `active`); each `amount` is a decimal satoshi string. Counts (`active_loans`, `pending_offers`) are totals by status. Overview is not affected by offer-list filters on `GET /borrowers/offers`.
 
 **Lender overview** (`GET /lenders/overview`):
 
 ```json
 {
-  "supplied_loans": [{ "asset": "…", "amount": "500" }],
+  "supplied_loans": [{ "asset": "…", "amount": "506" }],
   "interest_outstanding": [{ "asset": "…", "amount": "6" }],
   "active_loans": 1,
   "to_be_claimed": 1
 }
 ```
 
-`supplied_loans` and `interest_outstanding` aggregate **active** offers only, grouped by principal asset. Interest uses the full fee formula `principal_amount * interest_rate / 10000` (basis points). `to_be_claimed` counts offers in `repaid` status. Overview is not affected by offer-list filters on `GET /lenders/offers`.
+`supplied_loans` sums outstanding `current_debt` on **active** offers. `interest_outstanding` uses contracted interest `principal_amount * interest_rate / 10000` (basis points) on active offers. `to_be_claimed` counts offers in `repaid` status. Overview is not affected by offer-list filters on `GET /lenders/offers`.
 
 ### Borrowers Endpoints
 
