@@ -67,9 +67,7 @@ fn auth_with_burn_check(
         true => {
             assert!(is_output_op_return(output_asset_index));
         },
-        false => {
-            assert!(not(is_output_op_return(output_asset_index)));
-        }
+        false => {}
     }
 }
 
