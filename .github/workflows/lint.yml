@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SQLX_OFFLINE: true
-      SIMPLEX_COMMIT: "ba9c93579fdd7c6210b0518efbc1e155a346411b"
+      SIMPLEX_COMMIT: "c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b"
 
     steps:
       - name: Checkout

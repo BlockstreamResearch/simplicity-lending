@@ -121,7 +121,7 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
     assert!(
         borrower
             .signer()
-            .get_provider()
+            .get_provider()?
             .fetch_scripthash_utxos(&accept.active_offer.get_script_pubkey())?
             .iter()
             .any(|utxo| utxo.outpoint.txid == accept_txid),
@@ -132,7 +132,7 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
     assert!(
         borrower
             .signer()
-            .get_provider()
+            .get_provider()?
             .fetch_scripthash_utxos(&principal_auth.get_script_pubkey())?
             .iter()
             .any(|utxo| {

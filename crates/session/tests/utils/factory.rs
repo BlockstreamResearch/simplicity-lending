@@ -90,7 +90,7 @@ pub async fn create_and_broadcast_factory(
 
     let tx = session
         .signer()
-        .get_provider()
+        .get_provider()?
         .fetch_transaction(&create_txid)?;
     let auth_vout = tx
         .output

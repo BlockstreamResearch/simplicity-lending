@@ -44,7 +44,7 @@ async fn claim_principal_unlocks_principal_and_returns_borrower_nft() -> anyhow:
     assert!(
         !borrower
             .signer()
-            .get_provider()
+            .get_provider()?
             .fetch_scripthash_utxos(&principal_auth.get_script_pubkey())?
             .is_empty(),
         "borrower principal must be locked under AssetAuth after acceptance"
@@ -83,7 +83,7 @@ async fn claim_principal_unlocks_principal_and_returns_borrower_nft() -> anyhow:
     assert!(
         borrower
             .signer()
-            .get_provider()
+            .get_provider()?
             .fetch_scripthash_utxos(&principal_auth.get_script_pubkey())?
             .is_empty(),
         "AssetAuth principal UTXO must be spent by the claim"

@@ -19,7 +19,7 @@ fn new_context() -> anyhow::Result<simplex::TestContext> {
 }
 
 fn esplora_url_from_signer(signer: &Signer) -> String {
-    let provider = signer.get_provider();
+    let provider = signer.get_provider().unwrap();
     let simplex = unsafe { &*(provider as *const dyn ProviderTrait as *const SimplexProvider) };
     simplex.esplora.esplora_url.clone()
 }
