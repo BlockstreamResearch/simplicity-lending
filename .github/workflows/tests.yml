@@ -123,7 +123,7 @@ jobs:
         run: |
           set -euo pipefail
           cd crates/contracts
-          
+
           # `simplex test` wraps `cargo nextest` but currently swallows the
           # child's non-zero exit code, so a failing test run still exits 0
           # and CI reports success. Until that is fixed upstream, guard the
@@ -138,14 +138,24 @@ jobs:
           # `set +e` around the pipeline is required so the script does not
           # abort before we can read $rc.
 
-          set +e
-          simplex test --test-threads 2 2>&1 | tee simplex.log
-          rc=${PIPESTATUS[0]}
-          set -e
-          if [ "$rc" -ne 0 ] || grep -Eq '^(error: test run failed|Exit Status: [1-9]|[[:space:]]*FAIL[[:space:]]*\[)' simplex.log; then
-            echo "::error::simplex test failed (rc=$rc)"
-            exit 1
-          fi
+          run_simplex_test() {
+            local label="$1"
+            shift
+            local log="simplex-${label}.log"
+
+            set +e
+            simplex test --test-threads 2 "$@" 2>&1 | tee "$log"
+            local rc=${PIPESTATUS[0]}
+            set -e
+
+            if [ "$rc" -ne 0 ] || grep -Eq '^(error: test run failed|Exit Status: [1-9]|[[:space:]]*FAIL[[:space:]]*\[)' "$log"; then
+              echo "::error::simplex test (${label}) failed (rc=$rc)"
+              exit 1
+            fi
+          }
+
+          run_simplex_test default
+          run_simplex_test no-simplex --no-simplex
 
       - name: Check that queries are fresh
         run: cargo sqlx prepare --workspace --check -- --all-targets
