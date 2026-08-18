@@ -110,6 +110,7 @@ fn validate_collateral_input(input_index: u32, current_debt: u64) -> u64 {
 
     let already_paid_debt: u64 = safe_sub_64(get_total_amount_to_repay(), current_debt);
     let already_unlocked_collateral: u64 = get_collateral_for_principal(already_paid_debt);
+
     let total_collateral_amount: u64 = safe_add_64(
         current_collateral_amount,
         already_unlocked_collateral
@@ -274,7 +275,14 @@ fn partial_repay_offer(current_debt: u64, amount_to_repay: u64) {
     assert!(jet::lt_64(amount_to_repay, current_debt));
 
     let current_collateral_amount: u64 = validate_collateral_input(offer_input_index, current_debt);
-    let collateral_to_unlock: u64 = get_collateral_for_principal(amount_to_repay);
+
+    let already_paid_debt_before: u64 = safe_sub_64(get_total_amount_to_repay(), current_debt);
+    let already_paid_debt_after: u64 = safe_add_64(already_paid_debt_before, amount_to_repay);
+
+    let already_unlocked_collateral_before: u64 = get_collateral_for_principal(already_paid_debt_before);
+    let already_unlocked_collateral_after: u64 = get_collateral_for_principal(already_paid_debt_after);
+
+    let collateral_to_unlock: u64 = safe_sub_64(already_unlocked_collateral_after, already_unlocked_collateral_before);
     let new_collateral_amount: u64 = safe_sub_64(current_collateral_amount, collateral_to_unlock);
 
     ensure_output_asset_and_amount(
