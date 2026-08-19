@@ -17,6 +17,7 @@ pub struct OfferVaultModel {
     pub txid: Vec<u8>,
     pub vout: i32,
     pub amount: i64,
+    pub already_supplied: i64,
     pub is_finalized: bool,
     pub created_at_height: i64,
     pub updated_at_height: i64,

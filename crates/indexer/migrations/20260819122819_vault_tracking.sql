@@ -11,6 +11,7 @@ CREATE TABLE offer_vaults (
     txid BYTEA NOT NULL,
     vout INTEGER NOT NULL,
     amount BIGINT NOT NULL,
+    already_supplied BIGINT NOT NULL,
     is_finalized BOOLEAN NOT NULL DEFAULT false,
 
     created_at_height BIGINT NOT NULL,

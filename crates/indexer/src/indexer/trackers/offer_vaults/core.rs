@@ -264,6 +264,7 @@ impl VaultsTracker {
             txid: outpoint.txid.to_byte_array().to_vec(),
             vout: outpoint.vout as i32,
             amount: entry.amount as i64,
+            already_supplied: entry.already_supplied as i64,
             is_finalized: entry.is_finalized,
             created_at_height: block_height as i64,
             updated_at_height: block_height as i64,

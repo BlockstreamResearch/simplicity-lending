@@ -13,6 +13,7 @@ use crate::{
         offer_id = %vault.offer_id,
         vault_type = ?vault.vault_type,
         amount = %vault.amount,
+        already_supplied = %vault.already_supplied,
         is_finalized = %vault.is_finalized
     )
 )]
@@ -23,9 +24,9 @@ pub async fn insert_offer_vault(
     let row = sqlx::query!(
         r#"
         INSERT INTO offer_vaults (
-            offer_id, vault_type, txid, vout, amount, is_finalized,
+            offer_id, vault_type, txid, vout, amount, already_supplied, is_finalized,
             created_at_height, updated_at_height, spent_txid, spent_at_height
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id
         "#,
         vault.offer_id,
@@ -33,6 +34,7 @@ pub async fn insert_offer_vault(
         vault.txid,
         vault.vout,
         vault.amount,
+        vault.already_supplied,
         vault.is_finalized,
         vault.created_at_height,
         vault.updated_at_height,
@@ -99,6 +101,7 @@ pub async fn load_offer_vaults_cache(
             txid,
             vout,
             amount,
+            already_supplied,
             is_finalized,
             created_at_height,
             updated_at_height,
@@ -129,7 +132,7 @@ pub async fn load_offer_vaults_cache(
                 offer_id: row.offer_id,
                 vault_type: row.vault_type,
                 amount: row.amount as u64,
-                already_supplied: row.amount as u64,
+                already_supplied: row.already_supplied as u64,
                 is_finalized: row.is_finalized,
             },
         );
