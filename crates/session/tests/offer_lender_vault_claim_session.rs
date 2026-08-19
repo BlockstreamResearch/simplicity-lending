@@ -152,7 +152,7 @@ async fn claim_lender_vault_returns_offer_not_repaid_for_pending_offer() -> anyh
 
 #[tokio::test]
 #[serial]
-async fn claim_lender_vault_returns_repayment_utxo_not_found_when_missing() -> anyhow::Result<()> {
+async fn claim_lender_vault_returns_lender_vault_not_found_when_missing() -> anyhow::Result<()> {
     let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
@@ -174,7 +174,7 @@ async fn claim_lender_vault_returns_repayment_utxo_not_found_when_missing() -> a
 
     let result = borrower.claim_lender_vault("1").await;
 
-    assert!(matches!(result, Err(SessionError::RepaymentUtxoNotFound)));
+    assert!(matches!(result, Err(SessionError::LenderVaultNotFound)));
 
     server_handle.abort();
     Ok(())

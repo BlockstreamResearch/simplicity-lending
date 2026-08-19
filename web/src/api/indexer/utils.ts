@@ -25,9 +25,9 @@ export function resolveActiveOutpoint(offer: OfferDetails): string | null {
   return utxo ? toOutpoint(utxo) : null
 }
 
-export function resolveRepaymentOutpoint(offer: OfferDetails): string | null {
-  const utxo = offer.utxos.find(u => u.utxo_type === 'repayment')
-  return utxo ? toOutpoint(utxo) : null
+export function resolveLenderVaultOutpoint(offer: OfferDetails): string | null {
+  const vault = offer.vaults.find(v => v.vault_type === 'lender' && v.is_finalized)
+  return vault ? toOutpoint(vault) : null
 }
 
 export function resolveLenderNftOutpoint(offer: OfferDetails): string | null {

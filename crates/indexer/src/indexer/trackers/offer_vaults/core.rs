@@ -10,9 +10,9 @@ use crate::{
     indexer::{
         cache::WatchCache,
         trackers::offer_vaults::{insert_offer_vault, load_offer_vaults_cache, spend_offer_vault},
-        trackers::offers::fetch_offer_parameters,
+        trackers::offers::{fetch_offer_parameters, update_offer_status},
     },
-    models::{OfferVaultModel, VaultType},
+    models::{OfferStatus, OfferVaultModel, VaultType},
 };
 use lending_contracts::programs::{
     asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters, AssetAuthVaultTxKind},
@@ -202,6 +202,11 @@ impl VaultsTracker {
                     %txid,
                     "Vault fully withdrawn"
                 );
+
+                if entry.vault_type == VaultType::Lender {
+                    update_offer_status(sql_tx, entry.offer_id, OfferStatus::Claimed, block_height)
+                        .await?;
+                }
             }
 
             Some(AssetAuthVaultTxKind::WithdrawPart) => {

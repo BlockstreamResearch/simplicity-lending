@@ -1,6 +1,3 @@
-ALTER TYPE utxo_type ADD VALUE IF NOT EXISTS 'lender_vault';
-ALTER TYPE utxo_type ADD VALUE IF NOT EXISTS 'protocol_fee_vault';
-
 CREATE TYPE vault_type AS ENUM ('lender', 'protocol_fee');
 
 CREATE TABLE offer_vaults (

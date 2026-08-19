@@ -637,7 +637,7 @@ impl Session {
             .vaults
             .iter()
             .find(|vault| vault.vault_type == VaultType::Lender && vault.is_finalized)
-            .ok_or(SessionError::RepaymentUtxoNotFound)?;
+            .ok_or(SessionError::LenderVaultNotFound)?;
         let lender_nft_outpoint = offer_details
             .participants
             .iter()
@@ -660,7 +660,7 @@ impl Session {
                     && utxo.outpoint.txid.to_string() == lender_vault_outpoint.txid
                     && utxo.txout.asset.explicit() == Some(parameters.principal_asset_id)
             })
-            .ok_or(SessionError::RepaymentUtxoNotFound)?;
+            .ok_or(SessionError::LenderVaultNotFound)?;
 
         let lender_nft_utxo = self
             .signer()

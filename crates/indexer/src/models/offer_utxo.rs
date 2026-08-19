@@ -19,11 +19,7 @@ pub enum UtxoType {
     ActiveOffer,
     BorrowerPrincipal,
     Cancellation,
-    Repayment,
     Liquidation,
-    Claim,
-    LenderVault,
-    ProtocolFeeVault,
 }
 
 #[derive(Debug, sqlx::FromRow)]

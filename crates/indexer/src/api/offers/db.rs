@@ -199,7 +199,10 @@ async fn fetch_offer_repayments(
     Ok(rows.into_iter().map(OfferRepaymentDto::from).collect())
 }
 
-async fn fetch_active_vaults(db: &PgPool, offer_id: i64) -> Result<Vec<OfferVaultDto>, sqlx::Error> {
+async fn fetch_active_vaults(
+    db: &PgPool,
+    offer_id: i64,
+) -> Result<Vec<OfferVaultDto>, sqlx::Error> {
     let rows = sqlx::query_as!(
         OfferVaultModel,
         r#"

@@ -481,7 +481,7 @@ mod tests {
             offer_id,
             txid: vec![0x01, 0x02, 0x03],
             vout: 7,
-            utxo_type: UtxoType::Repayment,
+            utxo_type: UtxoType::ActiveOffer,
             created_at_height: 123,
             spent_txid: Some(vec![0xaa, 0xbb]),
             spent_at_height: Some(456),
@@ -492,7 +492,7 @@ mod tests {
         assert_eq!(dto.offer_id, "123");
         assert_eq!(dto.txid, "030201");
         assert_eq!(dto.vout, 7);
-        assert_eq!(dto.utxo_type, UtxoType::Repayment);
+        assert_eq!(dto.utxo_type, UtxoType::ActiveOffer);
         assert_eq!(dto.created_at_height, 123);
         assert_eq!(dto.spent_txid, Some("bbaa".to_string()));
         assert_eq!(dto.spent_at_height, Some(456));

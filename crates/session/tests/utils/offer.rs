@@ -306,9 +306,7 @@ pub async fn repay_active_offer(
     let total_to_repay = offer_parameters
         .offer_parameters
         .get_total_amount_to_repay();
-    let protocol_fee = offer_parameters
-        .offer_parameters
-        .get_total_protocol_fee();
+    let protocol_fee = offer_parameters.offer_parameters.get_total_protocol_fee();
     let lender_vault_amount = total_to_repay - protocol_fee;
 
     // First full repayment: borrower NFT burn @0, lender vault @1, protocol vault @2.

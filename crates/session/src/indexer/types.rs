@@ -4,4 +4,6 @@ pub use lending_indexer::api::{
     OfferListItemShort, OfferListResponse, OfferRepaymentDto, OfferUtxoDto, OfferUtxoOutpointShort,
     OfferVaultDto, OffersOverview, ParticipantDto, ParticipantShort,
 };
-pub use lending_indexer::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType, VaultType};
+pub use lending_indexer::models::{
+    FactoryStatus, OfferStatus, ParticipantType, UtxoType, VaultType,
+};
