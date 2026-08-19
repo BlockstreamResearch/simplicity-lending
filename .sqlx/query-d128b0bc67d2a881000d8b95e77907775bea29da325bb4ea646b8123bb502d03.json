@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id,\n            offer_id,\n            vault_type AS \"vault_type: VaultType\",\n            txid,\n            vout,\n            amount,\n            is_finalized,\n            created_at_height,\n            updated_at_height,\n            spent_txid,\n            spent_at_height\n        FROM offer_vaults\n        WHERE spent_txid IS NULL\n        ",
+  "query": "\n        SELECT\n            id,\n            offer_id,\n            vault_type AS \"vault_type: VaultType\",\n            txid,\n            vout,\n            amount,\n            already_supplied,\n            is_finalized,\n            created_at_height,\n            updated_at_height,\n            spent_txid,\n            spent_at_height\n        FROM offer_vaults\n        WHERE spent_txid IS NULL\n        ",
   "describe": {
     "columns": [
       {
@@ -45,26 +45,31 @@
       },
       {
         "ordinal": 6,
+        "name": "already_supplied",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
         "name": "is_finalized",
         "type_info": "Bool"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "created_at_height",
         "type_info": "Int8"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "updated_at_height",
         "type_info": "Int8"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "spent_txid",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "spent_at_height",
         "type_info": "Int8"
       }
@@ -82,9 +87,10 @@
       false,
       false,
       false,
+      false,
       true,
       true
     ]
   },
-  "hash": "6258b77a79acde942b48d5df0bf01c62dcb6b3033dc42152ed9abb9c3e93db75"
+  "hash": "d128b0bc67d2a881000d8b95e77907775bea29da325bb4ea646b8123bb502d03"
 }

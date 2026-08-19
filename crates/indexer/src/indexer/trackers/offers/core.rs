@@ -9,7 +9,7 @@ use simplex::{
 use crate::{
     db::DbTx,
     indexer::cache::WatchCache,
-    indexer::trackers::offer_vaults::{VaultWatchEntry, VaultsTracker},
+    indexer::trackers::offer_vaults::{VaultSnapshotsByOffer, VaultWatchEntry, VaultsTracker},
     indexer::trackers::offers::{
         ActiveOfferSpendKind, classify_active_offer_spend, fetch_offer, insert_offer_repayment,
         insert_offer_utxo, load_offer_utxos_cache, partial_repayment_amounts_from_scan,
@@ -43,6 +43,7 @@ impl OffersTracker {
         tx: &Transaction,
         block_height: u64,
         vaults: &mut VaultsTracker,
+        vault_snapshots: &VaultSnapshotsByOffer,
     ) -> anyhow::Result<bool> {
         let mut offer_spent = false;
 
@@ -56,6 +57,7 @@ impl OffersTracker {
                     entry.utxo_type,
                     block_height,
                     vaults,
+                    vault_snapshots,
                 )
                 .await?;
 
@@ -64,6 +66,26 @@ impl OffersTracker {
         }
 
         Ok(offer_spent)
+    }
+
+    pub fn vault_snapshots_for_tx(
+        &self,
+        tx: &Transaction,
+        vaults: &VaultsTracker,
+    ) -> VaultSnapshotsByOffer {
+        let mut snapshots = VaultSnapshotsByOffer::new();
+
+        for input in &tx.input {
+            if let Some(entry) = self.cache.get(&input.previous_output)
+                && entry.utxo_type == UtxoType::ActiveOffer
+            {
+                snapshots
+                    .entry(entry.offer_id)
+                    .or_insert_with(|| vaults.snapshot_vault_amounts(entry.offer_id));
+            }
+        }
+
+        snapshots
     }
 
     pub fn begin_block(&mut self) {
@@ -137,6 +159,7 @@ impl OffersTracker {
         utxo_type: UtxoType,
         block_height: u64,
         vaults: &mut VaultsTracker,
+        vault_snapshots: &VaultSnapshotsByOffer,
     ) -> anyhow::Result<()> {
         let txid = tx.txid();
 
@@ -160,14 +183,11 @@ impl OffersTracker {
                 let offer_model = fetch_offer(sql_tx, offer_id).await?;
                 let offer = offer_model.to_active_lending_offer(self.network)?;
 
-                // Pull vault amounts from the cache so that 2nd+ partial repayments
-                // (RepayingOfferFee / RepayingPrincipal phase) can be correctly classified.
-                // On the first partial (NoRepayments phase) both vaults are None and the
-                // classifier still works via output-only matching.
-                let lender_amount = vaults.get_vault_amount(offer_id, VaultType::Lender);
-                let protocol_amount = vaults.get_vault_amount(offer_id, VaultType::ProtocolFee);
-                let vault_amounts_before = lender_amount.map(|l| (l, protocol_amount));
-
+                // Pre-spend vault amounts are snapshotted before VaultsTracker processes
+                // inputs in this tx (see `vault_snapshots_for_tx`). On the first partial
+                // (NoRepayments phase) the snapshot is None and the classifier works via
+                // output-only matching.
+                let vault_amounts_before = vault_snapshots.get(&offer_id).copied().flatten();
                 let is_first_repayment = vault_amounts_before.is_none();
 
                 match classify_active_offer_spend(&offer, tx, vault_amounts_before)? {

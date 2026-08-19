@@ -3,6 +3,7 @@ use simplex::{
     simplicityhl::elements::{OutPoint, Transaction, hashes::Hash},
 };
 use sqlx::PgPool;
+use std::collections::HashMap;
 
 use crate::{
     db::DbTx,
@@ -17,6 +18,12 @@ use lending_contracts::programs::{
     asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters, AssetAuthVaultTxKind},
     lending::LendingOfferParameters,
 };
+
+/// Pre-spend vault UTXO amounts: `(lender_amount, protocol_fee_amount)`.
+pub type VaultAmountsBefore = (u64, Option<u64>);
+
+/// Pre-spend vault amounts keyed by offer_id for active offers in a transaction.
+pub type VaultSnapshotsByOffer = HashMap<i64, Option<VaultAmountsBefore>>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct VaultWatchEntry {
@@ -55,9 +62,10 @@ impl VaultsTracker {
         self.cache.abort_block();
     }
 
-    /// Process all inputs in `tx` that are vault UTXOs we track.
-    /// Must be called **before** `OffersTracker::process_tx_spends` so that
-    /// `get_vault_amount` reflects pre-spend state when `classify_active_offer_spend` runs.
+    /// Process vault inputs in `tx`. Must run before `OffersTracker` inserts the
+    /// continuing vault outputs (`supply_vault`) so the unique active-vault index
+    /// is satisfied. Pre-spend amounts for classification are taken from a snapshot
+    /// captured earlier in `TrackerRegistry::process_tx`.
     pub async fn process_tx_spends(
         &mut self,
         sql_tx: &mut DbTx<'_>,
@@ -79,6 +87,14 @@ impl VaultsTracker {
         self.cache
             .find(|_, e| e.offer_id == offer_id && e.vault_type == vault_type)
             .map(|(_, e)| e.amount)
+    }
+
+    /// Snapshot pre-spend vault amounts for an offer. Returns `None` when no lender vault exists.
+    pub fn snapshot_vault_amounts(&self, offer_id: i64) -> Option<VaultAmountsBefore> {
+        let lender = self.get_vault_amount(offer_id, VaultType::Lender)?;
+        let protocol = self.get_vault_amount(offer_id, VaultType::ProtocolFee);
+
+        Some((lender, protocol))
     }
 
     /// Index a newly created vault output — called by `OffersTracker` on the **first** repayment,

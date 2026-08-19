@@ -94,15 +94,15 @@ impl TrackerRegistry {
             .process_tx_spends(sql_tx, tx, block_height)
             .await?;
 
-        // Vaults must be processed before offers so that vault amounts are
-        // current when classify_active_offer_spend runs inside OffersTracker.
+        let vault_snapshots = self.offers.vault_snapshots_for_tx(tx, &self.vaults);
+
         self.vaults
             .process_tx_spends(sql_tx, tx, block_height)
             .await?;
 
         let offer_spent = self
             .offers
-            .process_tx_spends(sql_tx, tx, block_height, &mut self.vaults)
+            .process_tx_spends(sql_tx, tx, block_height, &mut self.vaults, &vault_snapshots)
             .await?;
         self.participants
             .process_tx_spends(sql_tx, tx, block_height)
