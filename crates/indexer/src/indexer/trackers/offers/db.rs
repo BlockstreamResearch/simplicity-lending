@@ -1,6 +1,9 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
+use simplex::{
+    provider::SimplicityNetwork,
+    simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex},
+};
 
 use crate::{
     api::utils::{format_hex, format_offer_id, format_satoshis},
@@ -9,6 +12,7 @@ use crate::{
     indexer::{OffersWatchEntry, WatchCache},
     models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
 };
+use lending_contracts::programs::lending::LendingOfferParameters;
 
 #[tracing::instrument(name = "Loading all active offer UTXOs from DB", skip(db))]
 pub async fn load_offer_utxos_cache(db: &PgPool) -> anyhow::Result<WatchCache<OffersWatchEntry>> {
@@ -173,6 +177,21 @@ pub async fn fetch_offer(sql_tx: &mut DbTx<'_>, offer_id: i64) -> Result<OfferMo
         tracing::error!("Failed to fetch offer: {e:?}");
         e
     })
+}
+
+#[tracing::instrument(
+    name = "Fetching offer lending parameters",
+    skip(sql_tx),
+    fields(offer_id = %offer_id)
+)]
+pub async fn fetch_offer_parameters(
+    sql_tx: &mut DbTx<'_>,
+    offer_id: i64,
+    network: SimplicityNetwork,
+) -> anyhow::Result<LendingOfferParameters> {
+    let model = fetch_offer(sql_tx, offer_id).await?;
+
+    model.to_lending_offer_parameters(network)
 }
 
 #[tracing::instrument(

@@ -32,7 +32,9 @@
                 "repayment",
                 "liquidation",
                 "claim",
-                "borrower_principal"
+                "borrower_principal",
+                "lender_vault",
+                "protocol_fee_vault"
               ]
             }
           }

@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id,\n            offer_id,\n            vault_type AS \"vault_type: VaultType\",\n            txid,\n            vout,\n            amount,\n            is_finalized,\n            created_at_height,\n            updated_at_height,\n            spent_txid,\n            spent_at_height\n        FROM offer_vaults\n        WHERE spent_txid IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "offer_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "vault_type: VaultType",
+        "type_info": {
+          "Custom": {
+            "name": "vault_type",
+            "kind": {
+              "Enum": [
+                "lender",
+                "protocol_fee"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "vout",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "amount",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_finalized",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "spent_txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 10,
+        "name": "spent_at_height",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "6258b77a79acde942b48d5df0bf01c62dcb6b3033dc42152ed9abb9c3e93db75"
+}
