@@ -974,8 +974,21 @@ struct ExpectedOfferDetailsDto {
     protocol_fee_keeper_asset: String,
     borrower_principal_utxo: Option<ExpectedOfferUtxoOutpointShort>,
     utxos: Vec<ExpectedOfferUtxoDto>,
+    vaults: Vec<ExpectedOfferVaultDto>,
     participants: Vec<ExpectedParticipantDto>,
     repayments: Vec<ExpectedOfferRepaymentDto>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[allow(dead_code)]
+struct ExpectedOfferVaultDto {
+    offer_id: String,
+    vault_type: String,
+    txid: String,
+    vout: u32,
+    amount: String,
+    already_supplied: String,
+    is_finalized: bool,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -1072,6 +1085,7 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.utxos[0].utxo_type, "active_offer");
     assert!(dto.utxos[0].spent_txid.is_none());
     assert!(dto.borrower_principal_utxo.is_none());
+    assert!(dto.vaults.is_empty());
     assert!(dto.repayments.is_empty());
     assert_eq!(dto.participants.len(), 2);
     assert!(

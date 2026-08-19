@@ -42,7 +42,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
     let (_, accept_txid) = accept_pending_offer(&lender, &pool, 1, &offer).await?;
-    repay_active_offer(&borrower, &pool, 1, accept_txid).await?;
+    repay_active_offer(&borrower, &pool, 1, accept_txid, &offer.parameters).await?;
 
     let expected_principal = offer
         .parameters

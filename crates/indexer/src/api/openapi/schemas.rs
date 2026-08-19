@@ -5,7 +5,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::offers::dto::{
-    OfferRepaymentDto, OfferUtxoDto, OfferUtxoOutpointShort, ParticipantDto,
+    OfferRepaymentDto, OfferUtxoDto, OfferUtxoOutpointShort, OfferVaultDto, ParticipantDto,
 };
 use crate::models::OfferStatus;
 
@@ -56,5 +56,6 @@ pub struct OfferDetailsResponseSchema {
     pub borrower_principal_utxo: Option<OfferUtxoOutpointShort>,
     pub participants: Vec<ParticipantDto>,
     pub utxos: Vec<OfferUtxoDto>,
+    pub vaults: Vec<OfferVaultDto>,
     pub repayments: Vec<OfferRepaymentDto>,
 }

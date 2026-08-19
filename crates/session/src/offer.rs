@@ -13,7 +13,7 @@ use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
 use crate::error::SessionError;
-use crate::indexer::{OfferListItemFull, OfferStatus, ParticipantType, UtxoType};
+use crate::indexer::{OfferListItemFull, OfferStatus, ParticipantType, UtxoType, VaultType};
 use crate::session::Session;
 use crate::utxo::select_utxos_for_amount;
 
@@ -634,9 +634,9 @@ impl Session {
         }
 
         let lender_vault_outpoint = offer_details
-            .utxos
+            .vaults
             .iter()
-            .find(|utxo| utxo.utxo_type == UtxoType::Repayment)
+            .find(|vault| vault.vault_type == VaultType::Lender && vault.is_finalized)
             .ok_or(SessionError::RepaymentUtxoNotFound)?;
         let lender_nft_outpoint = offer_details
             .participants
