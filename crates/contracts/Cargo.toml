@@ -28,8 +28,3 @@ smplx-std = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"
-serde_json = "1.0.151"
-
-[[example]]
-name = "export_contract_sources"
-path = "external/export_contract_sources.rs"
