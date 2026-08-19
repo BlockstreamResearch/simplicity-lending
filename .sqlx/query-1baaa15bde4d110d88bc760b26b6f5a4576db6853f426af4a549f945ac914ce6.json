@@ -15,13 +15,9 @@
               "Enum": [
                 "pending_offer",
                 "active_offer",
-                "cancellation",
-                "repayment",
-                "liquidation",
-                "claim",
                 "borrower_principal",
-                "lender_vault",
-                "protocol_fee_vault"
+                "cancellation",
+                "liquidation"
               ]
             }
           }
