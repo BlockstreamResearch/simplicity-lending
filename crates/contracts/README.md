@@ -2,22 +2,21 @@
 
 SimplicityHL contracts and covenant logic for the Simplicity Lending protocol.
 
+## Installation
+
+To use the `contracts` crate, the [`simplex`](https://github.com/BlockstreamResearch/smplx) development framework must be installed:
+
+```bash
+curl -L https://smplx.simplicity-lang.org | bash
+simplexup
+```
+
 ## Setup
 
-Generated Rust artifacts under `src/artifacts` are gitignored. Create them before building or running external tools:
+To build the contracts and update artifacts use the following commands:
 
 ```bash
 cd crates/contracts
 simplex install
 simplex build
 ```
-
-## Export contract sources
-
-Generate a JSON map of compiled contract `SOURCE` strings:
-
-```bash
-cargo run -p lending-contracts --example export_contract_sources
-```
-
-Output: `contract_sources.json` in the crate root.
