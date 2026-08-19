@@ -54,7 +54,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
     assert!(
         !lender
             .signer()
-            .get_provider()
+            .get_provider()?
             .fetch_scripthash_utxos(&lender_vault.get_script_pubkey())?
             .is_empty(),
         "finalized lender vault must exist after repayment"
@@ -95,7 +95,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
     assert!(
         lender
             .signer()
-            .get_provider()
+            .get_provider()?
             .fetch_scripthash_utxos(&lender_vault.get_script_pubkey())?
             .is_empty(),
         "finalized lender vault UTXO must be spent by the claim"

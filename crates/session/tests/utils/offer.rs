@@ -34,7 +34,7 @@ pub fn offer_params(
     principal_asset_id: AssetId,
     loan_expiration_offset: u32,
 ) -> anyhow::Result<CreateOfferParams> {
-    let current_height = session.signer().get_provider().fetch_tip_height()?;
+    let current_height = session.signer().get_provider()?.fetch_tip_height()?;
 
     Ok(CreateOfferParams {
         principal_asset_id,
@@ -104,7 +104,7 @@ pub async fn create_and_broadcast_offer(
 
     let tx = session
         .signer()
-        .get_provider()
+        .get_provider()?
         .fetch_transaction(&creation_txid)?;
 
     let pending_offer_vout =

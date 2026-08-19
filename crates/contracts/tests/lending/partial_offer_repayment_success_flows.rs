@@ -72,6 +72,43 @@ fn check_vault_balances(
     Ok(())
 }
 
+fn check_offer_and_vault_utxos(
+    context: &simplex::TestContext,
+    offer: &LendingOffer,
+) -> anyhow::Result<()> {
+    let provider = context.get_default_provider();
+    let params = offer.get_parameters();
+    let debt = offer.get_current_debt();
+    let terms = params.offer_parameters;
+
+    let remaining_collateral =
+        terms.collateral_amount - terms.get_already_unlocked_collateral(debt);
+    let protocol_fee = terms.get_already_repaid_protocol_fee(debt);
+    let lender_supplied = terms.get_already_repaid_amount(debt) - protocol_fee;
+
+    let offer_utxos = provider.fetch_scripthash_utxos(&offer.get_script_pubkey())?;
+    assert_eq!(offer_utxos.len(), 1);
+    assert_eq!(offer_utxos[0].explicit_amount(), remaining_collateral);
+    assert_eq!(offer_utxos[0].explicit_asset(), params.collateral_asset_id);
+
+    let lender_utxos =
+        provider.fetch_scripthash_utxos(&offer.get_lender_vault().get_script_pubkey())?;
+    assert_eq!(lender_utxos.len(), 1);
+    assert_eq!(lender_utxos[0].explicit_amount(), lender_supplied);
+    assert_eq!(lender_utxos[0].explicit_asset(), params.principal_asset_id);
+
+    let protocol_utxos =
+        provider.fetch_scripthash_utxos(&offer.get_protocol_fee_vault().get_script_pubkey())?;
+    assert_eq!(protocol_utxos.len(), 1);
+    assert_eq!(protocol_utxos[0].explicit_amount(), protocol_fee);
+    assert_eq!(
+        protocol_utxos[0].explicit_asset(),
+        params.principal_asset_id
+    );
+
+    Ok(())
+}
+
 #[simplex::test]
 fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_less_than_the_total_fee_amount(
     context: simplex::TestContext,
@@ -560,6 +597,23 @@ fn partial_repayment_succeeds_after_several_repayments(
         already_repaid_amount - already_repaid_protocol_fee,
         already_repaid_protocol_fee,
     )?;
+
+    Ok(())
+}
+
+#[simplex::test]
+fn partial_repayment_succeeds_after_several_repayments_with_different_amounts(
+    context: simplex::TestContext,
+) -> anyhow::Result<()> {
+    let borrower = context.get_default_signer();
+    let lender = context.random_signer();
+
+    let (mut offer, _offer_parameters) = default_partial_repayment_setup(&context, &lender)?;
+
+    for amount in [16, 30, 55, 264, 733, 2065] {
+        partial_repay_offer(&context, &mut offer, borrower, amount)?;
+        check_offer_and_vault_utxos(&context, &offer)?;
+    }
 
     Ok(())
 }

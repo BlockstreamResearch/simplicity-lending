@@ -72,6 +72,16 @@ impl OfferParameters {
         total_amount_to_repay.saturating_sub(current_debt)
     }
 
+    pub fn get_already_unlocked_collateral(&self, current_debt: u64) -> u64 {
+        let already_repaid_debt = self.get_already_repaid_amount(current_debt);
+
+        self.get_collateral_for_principal(already_repaid_debt)
+    }
+
+    pub fn get_collateral_for_principal(&self, principal_amount: u64) -> u64 {
+        principal_amount * self.collateral_amount / self.get_total_amount_to_repay()
+    }
+
     pub fn get_repayment_phase(&self, offer_debt: u64) -> OfferRepaymentPhase {
         let total_amount_to_repay = self.get_total_amount_to_repay();
 
@@ -333,5 +343,55 @@ mod tests {
             params.get_repaid_protocol_fee(total_debt - repaid_amount, amount_to_repay),
             0
         );
+    }
+
+    #[test]
+    fn get_collateral_for_principal_uses_integer_division() {
+        let params = dummy_lending_offer_parameters(1000, 500);
+        let total_debt = params.get_total_amount_to_repay();
+
+        assert_eq!(params.get_collateral_for_principal(0), 0);
+        assert_eq!(params.get_collateral_for_principal(total_debt), 1_000_000);
+        // 10 * 1_000_000 / 1050 = 9523
+        assert_eq!(params.get_collateral_for_principal(10), 9523);
+
+        let params = OfferParameters {
+            collateral_amount: 3_000,
+            principal_amount: 10_000,
+            loan_expiration_time: 100_000,
+            principal_interest_rate: 1_000,
+        };
+        let total_debt = params.get_total_amount_to_repay();
+
+        assert_eq!(total_debt, 11_000);
+        assert_eq!(params.get_collateral_for_principal(16), 4);
+        assert_eq!(params.get_collateral_for_principal(46), 12);
+        assert_eq!(params.get_collateral_for_principal(total_debt), 3_000);
+    }
+
+    #[test]
+    fn get_already_unlocked_collateral_tracks_repaid_debt() {
+        let params = dummy_lending_offer_parameters(1000, 500);
+        let total_debt = params.get_total_amount_to_repay();
+
+        assert_eq!(params.get_already_unlocked_collateral(total_debt), 0);
+        assert_eq!(params.get_already_unlocked_collateral(0), 1_000_000);
+        assert_eq!(
+            params.get_already_unlocked_collateral(total_debt - 10),
+            params.get_collateral_for_principal(10)
+        );
+
+        let params = OfferParameters {
+            collateral_amount: 3_000,
+            principal_amount: 10_000,
+            loan_expiration_time: 100_000,
+            principal_interest_rate: 1_000,
+        };
+        let total_debt = params.get_total_amount_to_repay();
+
+        assert_eq!(params.get_already_unlocked_collateral(total_debt), 0);
+        assert_eq!(params.get_already_unlocked_collateral(total_debt - 16), 4);
+        assert_eq!(params.get_already_unlocked_collateral(total_debt - 46), 12);
+        assert_eq!(params.get_already_unlocked_collateral(0), 3_000);
     }
 }

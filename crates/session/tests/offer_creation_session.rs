@@ -96,7 +96,7 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
 
     let chain_tx = session
         .signer()
-        .get_provider()
+        .get_provider()?
         .fetch_transaction(&offer_creation_txid)?;
     let decoded =
         LendingOffer::try_from_tx(&chain_tx, expected_protocol_fee_asset, session.network())?;
@@ -127,7 +127,7 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
     assert!(
         !session
             .signer()
-            .get_provider()
+            .get_provider()?
             .fetch_scripthash_utxos(&create.pending_offer.get_script_pubkey())?
             .is_empty()
     );

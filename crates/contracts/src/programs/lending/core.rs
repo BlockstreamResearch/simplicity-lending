@@ -262,7 +262,17 @@ impl LendingOffer {
         self.update_offer_debt(current_debt - amount_to_repay);
 
         if amount_to_repay < current_debt {
-            let collateral_to_unlock = amount_to_repay * current_collateral_amount / current_debt;
+            let already_unlocked_collateral_before = self
+                .parameters
+                .offer_parameters
+                .get_already_unlocked_collateral(current_debt);
+            let already_unlocked_collateral_after = self
+                .parameters
+                .offer_parameters
+                .get_already_unlocked_collateral(self.get_current_debt());
+
+            let collateral_to_unlock =
+                already_unlocked_collateral_after - already_unlocked_collateral_before;
 
             self.add_program_output(
                 ft,
@@ -322,18 +332,18 @@ impl LendingOffer {
         lender_vault_utxo: Option<UTXO>,
         protocol_fee_vault_utxo: Option<UTXO>,
         borrower_nft_indexes: (u32, u32),
-        current_borrower_debt: u64,
+        borrower_debt_before: u64,
         amount_to_repay: u64,
     ) {
         match self
             .parameters
             .offer_parameters
-            .get_repayment_phase(current_borrower_debt)
+            .get_repayment_phase(borrower_debt_before)
         {
             OfferRepaymentPhase::NoRepayments => {
                 self.attach_vaults_for_no_repayments_phase(
                     ft,
-                    current_borrower_debt,
+                    borrower_debt_before,
                     amount_to_repay,
                 );
             }
@@ -343,7 +353,7 @@ impl LendingOffer {
                     lender_vault_utxo.unwrap(),
                     protocol_fee_vault_utxo.unwrap(),
                     borrower_nft_indexes,
-                    current_borrower_debt,
+                    borrower_debt_before,
                     amount_to_repay,
                 );
             }
@@ -352,7 +362,7 @@ impl LendingOffer {
                     ft,
                     lender_vault_utxo.unwrap(),
                     borrower_nft_indexes,
-                    current_borrower_debt,
+                    borrower_debt_before,
                     amount_to_repay,
                 );
             }
@@ -401,18 +411,23 @@ impl LendingOffer {
         lender_vault_utxo: UTXO,
         protocol_fee_vault_utxo: UTXO,
         borrower_debt_nft_indexes: (u32, u32),
-        current_borrower_debt: u64,
+        borrower_debt_before: u64,
         amount_to_repay: u64,
     ) {
-        let repaid_protocol_fee = self
+        let already_repaid_protocol_fee_before = self
             .parameters
             .offer_parameters
-            .get_repaid_protocol_fee(current_borrower_debt, amount_to_repay);
-
-        let mut lender_vault = self.parameters.get_lender_vault(current_borrower_debt);
-        let mut protocol_fee_vault = self
+            .get_already_repaid_protocol_fee(borrower_debt_before);
+        let already_repaid_protocol_fee_after = self
             .parameters
-            .get_protocol_fee_vault(current_borrower_debt);
+            .offer_parameters
+            .get_already_repaid_protocol_fee(self.get_current_debt());
+
+        let repaid_protocol_fee =
+            already_repaid_protocol_fee_after - already_repaid_protocol_fee_before;
+
+        let mut lender_vault = self.parameters.get_lender_vault(borrower_debt_before);
+        let mut protocol_fee_vault = self.parameters.get_protocol_fee_vault(borrower_debt_before);
 
         lender_vault.attach_supplying(
             ft,

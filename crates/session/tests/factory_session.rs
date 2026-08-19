@@ -46,7 +46,7 @@ fn issue_only_program_factory_utxo(
     let txid = receipt.txid();
     receipt.wait()?;
 
-    let chain_tx = signer.get_provider().fetch_transaction(&txid)?;
+    let chain_tx = signer.get_provider()?.fetch_transaction(&txid)?;
     let program_vout = chain_tx
         .output
         .iter()

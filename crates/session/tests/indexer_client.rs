@@ -27,6 +27,8 @@ fn offer_list_body() -> String {
                     "principal_asset": "060504",
                     "collateral_amount": "1000",
                     "principal_amount": "500",
+                    "current_debt": "500",
+                    "collateral_remaining": "1000",
                     "interest_rate": 250,
                     "loan_expiration_height": 123,
                     "updated_at_height": 456,
@@ -66,6 +68,8 @@ async fn list_offers_parses_paginated_response() {
     assert_eq!(item.id, OFFER_ID);
     assert_eq!(item.status, OfferStatus::Active);
     assert_eq!(item.collateral_amount, "1000");
+    assert_eq!(item.current_debt, "500");
+    assert_eq!(item.collateral_remaining, "1000");
     assert_eq!(item.interest_rate, 250);
     assert_eq!(item.updated_at_height, 456);
     assert!(item.participants.is_empty());
@@ -127,6 +131,8 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
             "principal_asset": "0403",
             "collateral_amount": "99",
             "principal_amount": "77",
+            "current_debt": "77",
+            "collateral_remaining": "99",
             "interest_rate": 12,
             "loan_expiration_height": 321,
             "updated_at_height": 55,
@@ -158,7 +164,8 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
                     "spent_txid": "bbaa",
                     "spent_at_height": 456
                 }}
-            ]
+            ],
+            "repayments": []
         }}"#
     );
 
@@ -184,6 +191,9 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
     assert_eq!(details.participants[0].spent_at_height, Some(777));
     assert_eq!(details.utxos.len(), 1);
     assert_eq!(details.utxos[0].utxo_type, UtxoType::Repayment);
+    assert_eq!(details.info.base.current_debt, "77");
+    assert_eq!(details.info.base.collateral_remaining, "99");
+    assert!(details.repayments.is_empty());
 }
 
 #[tokio::test]
