@@ -1,6 +1,6 @@
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash},
+    simplicityhl::elements::{OutPoint, Transaction, hashes::Hash},
 };
 use sqlx::PgPool;
 
@@ -86,55 +86,12 @@ impl VaultsTracker {
     pub async fn create_vault(
         &mut self,
         sql_tx: &mut DbTx<'_>,
-        offer_id: i64,
-        vault_type: VaultType,
-        txid: Txid,
-        vout: u32,
-        amount: u64,
-        already_supplied: u64,
-        is_finalized: bool,
+        outpoint: OutPoint,
+        entry: VaultWatchEntry,
         block_height: u64,
     ) -> anyhow::Result<()> {
-        let model = OfferVaultModel {
-            id: 0,
-            offer_id,
-            vault_type,
-            txid: txid.to_byte_array().to_vec(),
-            vout: vout as i32,
-            amount: amount as i64,
-            is_finalized,
-            created_at_height: block_height as i64,
-            updated_at_height: block_height as i64,
-            spent_txid: None,
-            spent_at_height: None,
-        };
-
-        insert_offer_vault(sql_tx, &model).await?;
-
-        let outpoint = OutPoint { txid, vout };
-        self.cache.insert(
-            outpoint,
-            VaultWatchEntry {
-                offer_id,
-                vault_type,
-                amount,
-                already_supplied,
-                is_finalized,
-            },
-        );
-
-        tracing::info!(
-            %offer_id,
-            vault_type = ?vault_type,
-            %txid,
-            %vout,
-            %amount,
-            %already_supplied,
-            %is_finalized,
-            "Vault UTXO created"
-        );
-
-        Ok(())
+        self.index_vault(sql_tx, outpoint, entry, block_height)
+            .await
     }
 
     /// Handle a Supply/FinalSupply spend of an existing vault — called by `OffersTracker` on the
@@ -181,24 +138,9 @@ impl VaultsTracker {
             )
         };
 
-        let new_outpoint = OutPoint { txid, vout };
-        let model = OfferVaultModel {
-            id: 0,
-            offer_id,
-            vault_type,
-            txid: txid.to_byte_array().to_vec(),
-            vout: vout as i32,
-            amount: amount as i64,
-            is_finalized,
-            created_at_height: block_height as i64,
-            updated_at_height: block_height as i64,
-            spent_txid: None,
-            spent_at_height: None,
-        };
-        insert_offer_vault(sql_tx, &model).await?;
-
-        self.cache.insert(
-            new_outpoint,
+        self.index_vault(
+            sql_tx,
+            OutPoint { txid, vout },
             VaultWatchEntry {
                 offer_id,
                 vault_type,
@@ -206,20 +148,9 @@ impl VaultsTracker {
                 already_supplied,
                 is_finalized,
             },
-        );
-
-        tracing::info!(
-            %offer_id,
-            vault_type = ?vault_type,
-            %txid,
-            %vout,
-            %amount,
-            %already_supplied,
-            %is_finalized,
-            "Vault UTXO supplied (continuing)"
-        );
-
-        Ok(())
+            block_height,
+        )
+        .await
     }
 
     async fn on_vault_spend(
@@ -262,14 +193,19 @@ impl VaultsTracker {
                     anyhow::anyhow!("WithdrawPart classified but scan returned None")
                 })?;
 
-                self.insert_continuing_vault(
+                self.index_vault(
                     sql_tx,
-                    entry,
-                    txid,
-                    scan.vault_vout,
-                    scan.vault_amount_after,
-                    scan.already_supplied,
-                    false,
+                    OutPoint {
+                        txid,
+                        vout: scan.vault_vout,
+                    },
+                    VaultWatchEntry {
+                        offer_id: entry.offer_id,
+                        vault_type: entry.vault_type,
+                        amount: scan.vault_amount_after,
+                        already_supplied: scan.already_supplied,
+                        is_finalized: false,
+                    },
                     block_height,
                 )
                 .await?;
@@ -280,14 +216,19 @@ impl VaultsTracker {
                     anyhow::anyhow!("FinalSupply classified but scan returned None")
                 })?;
 
-                self.insert_continuing_vault(
+                self.index_vault(
                     sql_tx,
-                    entry,
-                    txid,
-                    scan.vault_vout,
-                    scan.vault_amount_after,
-                    vault_params.supply_goal,
-                    true,
+                    OutPoint {
+                        txid,
+                        vout: scan.vault_vout,
+                    },
+                    VaultWatchEntry {
+                        offer_id: entry.offer_id,
+                        vault_type: entry.vault_type,
+                        amount: scan.vault_amount_after,
+                        already_supplied: vault_params.supply_goal,
+                        is_finalized: true,
+                    },
                     block_height,
                 )
                 .await?;
@@ -309,53 +250,39 @@ impl VaultsTracker {
         Ok(())
     }
 
-    async fn insert_continuing_vault(
+    async fn index_vault(
         &mut self,
         sql_tx: &mut DbTx<'_>,
+        outpoint: OutPoint,
         entry: VaultWatchEntry,
-        txid: Txid,
-        vout: u32,
-        amount: u64,
-        already_supplied: u64,
-        is_finalized: bool,
         block_height: u64,
     ) -> anyhow::Result<()> {
         let model = OfferVaultModel {
             id: 0,
             offer_id: entry.offer_id,
             vault_type: entry.vault_type,
-            txid: txid.to_byte_array().to_vec(),
-            vout: vout as i32,
-            amount: amount as i64,
-            is_finalized,
+            txid: outpoint.txid.to_byte_array().to_vec(),
+            vout: outpoint.vout as i32,
+            amount: entry.amount as i64,
+            is_finalized: entry.is_finalized,
             created_at_height: block_height as i64,
             updated_at_height: block_height as i64,
             spent_txid: None,
             spent_at_height: None,
         };
-        insert_offer_vault(sql_tx, &model).await?;
 
-        let new_outpoint = OutPoint { txid, vout };
-        self.cache.insert(
-            new_outpoint,
-            VaultWatchEntry {
-                offer_id: entry.offer_id,
-                vault_type: entry.vault_type,
-                amount,
-                already_supplied,
-                is_finalized,
-            },
-        );
+        insert_offer_vault(sql_tx, &model).await?;
+        self.cache.insert(outpoint, entry);
 
         tracing::info!(
             offer_id = %entry.offer_id,
             vault_type = ?entry.vault_type,
-            %txid,
-            %vout,
-            %amount,
-            %already_supplied,
-            %is_finalized,
-            "Vault continuing UTXO indexed"
+            txid = %outpoint.txid,
+            vout = %outpoint.vout,
+            amount = %entry.amount,
+            already_supplied = %entry.already_supplied,
+            is_finalized = %entry.is_finalized,
+            "Vault UTXO indexed"
         );
 
         Ok(())

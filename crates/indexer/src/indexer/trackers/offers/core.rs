@@ -9,7 +9,7 @@ use simplex::{
 use crate::{
     db::DbTx,
     indexer::cache::WatchCache,
-    indexer::trackers::offer_vaults::VaultsTracker,
+    indexer::trackers::offer_vaults::{VaultWatchEntry, VaultsTracker},
     indexer::trackers::offers::{
         ActiveOfferSpendKind, classify_active_offer_spend, fetch_offer, insert_offer_repayment,
         insert_offer_utxo, load_offer_utxos_cache, partial_repayment_amounts_from_scan,
@@ -427,13 +427,17 @@ impl OffersTracker {
             vaults
                 .create_vault(
                     sql_tx,
-                    offer_id,
-                    VaultType::Lender,
-                    txid,
-                    scan.lender_vault_vout,
-                    lender_amount,
-                    lender_vault_after.get_already_supplied_amount(),
-                    false,
+                    OutPoint {
+                        txid,
+                        vout: scan.lender_vault_vout,
+                    },
+                    VaultWatchEntry {
+                        offer_id,
+                        vault_type: VaultType::Lender,
+                        amount: lender_amount,
+                        already_supplied: lender_vault_after.get_already_supplied_amount(),
+                        is_finalized: false,
+                    },
                     block_height,
                 )
                 .await?;
@@ -444,13 +448,17 @@ impl OffersTracker {
                 vaults
                     .create_vault(
                         sql_tx,
-                        offer_id,
-                        VaultType::ProtocolFee,
-                        txid,
-                        protocol_vout,
-                        protocol_amount,
-                        protocol_vault_after.get_already_supplied_amount(),
-                        false,
+                        OutPoint {
+                            txid,
+                            vout: protocol_vout,
+                        },
+                        VaultWatchEntry {
+                            offer_id,
+                            vault_type: VaultType::ProtocolFee,
+                            amount: protocol_amount,
+                            already_supplied: protocol_vault_after.get_already_supplied_amount(),
+                            is_finalized: false,
+                        },
                         block_height,
                     )
                     .await?;
@@ -575,13 +583,17 @@ impl OffersTracker {
             vaults
                 .create_vault(
                     sql_tx,
-                    offer_id,
-                    VaultType::Lender,
-                    txid,
-                    scan.lender_vault_vout,
-                    lender_amount,
-                    lender_params.supply_goal,
-                    true,
+                    OutPoint {
+                        txid,
+                        vout: scan.lender_vault_vout,
+                    },
+                    VaultWatchEntry {
+                        offer_id,
+                        vault_type: VaultType::Lender,
+                        amount: lender_amount,
+                        already_supplied: lender_params.supply_goal,
+                        is_finalized: true,
+                    },
                     block_height,
                 )
                 .await?;
@@ -594,13 +606,17 @@ impl OffersTracker {
                 vaults
                     .create_vault(
                         sql_tx,
-                        offer_id,
-                        VaultType::ProtocolFee,
-                        txid,
-                        protocol_vout,
-                        protocol_amount,
-                        protocol_params.supply_goal,
-                        true,
+                        OutPoint {
+                            txid,
+                            vout: protocol_vout,
+                        },
+                        VaultWatchEntry {
+                            offer_id,
+                            vault_type: VaultType::ProtocolFee,
+                            amount: protocol_amount,
+                            already_supplied: protocol_params.supply_goal,
+                            is_finalized: true,
+                        },
                         block_height,
                     )
                     .await?;
