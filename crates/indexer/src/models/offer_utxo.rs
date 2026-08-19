@@ -22,6 +22,8 @@ pub enum UtxoType {
     Repayment,
     Liquidation,
     Claim,
+    LenderVault,
+    ProtocolFeeVault,
 }
 
 #[derive(Debug, sqlx::FromRow)]
