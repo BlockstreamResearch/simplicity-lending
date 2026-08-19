@@ -150,6 +150,7 @@ impl OffersTracker {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn on_spend(
         &mut self,
         sql_tx: &mut DbTx<'_>,

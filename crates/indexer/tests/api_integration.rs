@@ -18,7 +18,7 @@ use crate::common::{
     factory_model, offer_model, outpoint_from_offer_id, seed_factory_row, seed_offer_row,
     seed_offer_utxo_row, seed_participant_utxo_row, seed_sync_state, spent_offer_utxo,
     spent_participant, test_pool, unique_32_bytes_from_uuid, unspent_offer_utxo,
-    unspent_participant,
+    unspent_participant, vault_tracking,
 };
 
 fn participant_script<'a>(item: &'a Value, role: &str) -> Option<&'a str> {
@@ -1121,11 +1121,90 @@ async fn active_offer_details_includes_borrower_principal_utxo() -> anyhow::Resu
     assert!(utxo_types.contains(&"active_offer"));
     assert!(utxo_types.contains(&"borrower_principal"));
     assert!(dto.utxos.iter().all(|u| u.spent_txid.is_none()));
+    assert!(dto.vaults.is_empty());
 
     let principal = dto
         .borrower_principal_utxo
         .expect("active offer should include borrower_principal_utxo");
     assert_eq!(principal.vout, 1);
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn repaid_offer_details_includes_active_vaults() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = vault_tracking::seed_minimal_factory(&pool).await?;
+    let mut offer = vault_tracking::repaid_offer_model(10, factory_id, 500);
+    let offer_id = seed_offer_row(&pool, &mut offer).await?;
+
+    let repay_txid = vec![0xab; 32];
+    let params = vault_tracking::offer_lending_params(&offer)?;
+    let total = params.offer_parameters.get_total_amount_to_repay();
+    let protocol_fee = params.offer_parameters.get_total_protocol_fee();
+    let lender_amount = total - protocol_fee;
+
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &lending_indexer::models::OfferVaultModel {
+            id: 0,
+            offer_id,
+            vault_type: lending_indexer::models::VaultType::Lender,
+            txid: repay_txid.clone(),
+            vout: 1,
+            amount: lender_amount as i64,
+            already_supplied: params.get_lender_vault_parameters().supply_goal as i64,
+            is_finalized: true,
+            created_at_height: 501,
+            updated_at_height: 501,
+            spent_txid: None,
+            spent_at_height: None,
+        },
+    )
+    .await?;
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &lending_indexer::models::OfferVaultModel {
+            id: 0,
+            offer_id,
+            vault_type: lending_indexer::models::VaultType::ProtocolFee,
+            txid: repay_txid,
+            vout: 2,
+            amount: protocol_fee as i64,
+            already_supplied: params.get_protocol_fee_vault_parameters().supply_goal as i64,
+            is_finalized: true,
+            created_at_height: 501,
+            updated_at_height: 501,
+            spent_txid: None,
+            spent_at_height: None,
+        },
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let raw = get_json(&http, format!("{base_url}/offers/{offer_id}")).await?;
+    let dto: ExpectedOfferDetailsDto =
+        serde_json::from_value(raw).expect("response must match full DTO shape");
+
+    assert_eq!(dto.status, "repaid");
+    assert_eq!(dto.vaults.len(), 2);
+    assert!(
+        dto.vaults
+            .iter()
+            .any(|vault| vault.vault_type == "lender" && vault.is_finalized && vault.vout == 1)
+    );
+    assert!(
+        dto.vaults
+            .iter()
+            .any(|vault| vault.vault_type == "protocol_fee"
+                && vault.is_finalized
+                && vault.vout == 2)
+    );
+    assert_eq!(dto.vaults[0].amount, lender_amount.to_string());
 
     server_handle.abort();
     Ok(())

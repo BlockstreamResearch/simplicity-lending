@@ -116,6 +116,7 @@ impl VaultsTracker {
     ///
     /// At this point the old vault is already marked spent in the DB and removed from the cache by
     /// `on_vault_spend`. This method inserts the new continuing vault output.
+    #[allow(clippy::too_many_arguments)]
     pub async fn supply_vault(
         &mut self,
         sql_tx: &mut DbTx<'_>,
