@@ -24,7 +24,7 @@ import {
 import { isPolicyAssetUtxo, requireWalletUtxo, WALLET_INPUT_RBF_SEQUENCE } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
 import {

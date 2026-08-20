@@ -3,7 +3,7 @@ import { Spinner } from '@heroui/react'
 import BackLink from '@/components/BackLink'
 import UserBalances from '@/components/UserBalances'
 import { WalletButton } from '@/components/WalletButton'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 import BorrowOverview from './components/BorrowOverview'
 import YourBorrows from './components/YourBorrows'

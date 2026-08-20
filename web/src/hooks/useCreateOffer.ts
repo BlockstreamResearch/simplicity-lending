@@ -31,7 +31,7 @@ import {
 } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import {
   buildIssuanceFactoryWitness,
   ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY,
