@@ -10,7 +10,7 @@ import { useTxStatus } from '@/hooks/useTxStatus'
 import { type ChopUtxoResult, useUtxoChopper } from '@/hooks/useUtxoChopper'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 import { formatCollateralUtxoOption } from './helpers'
 import { TxResult } from './TxResult'

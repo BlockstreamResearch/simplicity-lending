@@ -1,4 +1,4 @@
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 import { BorrowCard } from './components/BorrowCard'
 import OverviewStats from './components/OverviewStats'

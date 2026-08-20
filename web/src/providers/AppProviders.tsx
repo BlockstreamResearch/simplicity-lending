@@ -12,13 +12,13 @@ import { PendingTransactionsProvider } from './pendingTransactions/PendingTransa
 import { pendingTxToastQueue } from './pendingTransactions/pendingTxToastQueue'
 import { queryClient } from './queryClient'
 import { TxProgressProvider } from './txProgress/TxProgressProvider'
-import { WalletProvider } from './wallet/WalletProvider'
+import { WalletFacadeProvider } from './walletFacade/WalletFacadeProvider'
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
       <LwkProvider>
-        <WalletProvider>
+        <WalletFacadeProvider>
           <IndexerSubscription />
           <TxProgressProvider>
             <AssetDenominationProvider>
@@ -27,7 +27,7 @@ export function AppProviders({ children }: PropsWithChildren) {
             <ToastProvider placement='top end' />
             <ToastProvider queue={pendingTxToastQueue} placement='bottom' />
           </TxProgressProvider>
-        </WalletProvider>
+        </WalletFacadeProvider>
       </LwkProvider>
       {env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>

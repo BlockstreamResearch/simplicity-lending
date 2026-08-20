@@ -14,7 +14,7 @@ import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { useNow } from '@/hooks/useNow'
 import CardAlert from '@/pages/Dashboard/components/CardAlert'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { truncateAddress } from '@/utils/format'
 import { resolveOfferAction } from '@/utils/offerActions'
 import {

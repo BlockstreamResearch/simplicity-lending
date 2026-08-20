@@ -3,7 +3,6 @@ import { Link, Outlet } from 'react-router-dom'
 
 import { BellNotificationButton } from '@/components/BellNotificationButton'
 import ArrowSquareOutIcon from '@/components/icons/ArrowSquareOutIcon'
-import { JadeUnlockModal } from '@/components/JadeUnlockModal'
 import OfferActionModal from '@/components/modals/OfferActionModal'
 import { WalletButton } from '@/components/WalletButton'
 import { env } from '@/constants/env'
@@ -56,7 +55,6 @@ export default function AppLayout() {
 
         <OfferActionModal offer={lastOffer} isOpen={isOpen} onClose={close} onSuccess={close} />
         <Outlet />
-        <JadeUnlockModal />
 
         <footer className='text-muted flex flex-col gap-3 text-xs'>
           <nav className='flex flex-wrap items-center gap-4 font-medium'>

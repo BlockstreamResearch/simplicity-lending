@@ -2,12 +2,12 @@ import { buttonVariants, Chip, Dropdown, Spinner, Tabs } from '@heroui/react'
 import { useState } from 'react'
 
 import CopyButton from '@/components/CopyButton'
-import { ConnectWalletModal } from '@/components/modals/ConnectWalletModal'
+import { WalletConnectModal } from '@/components/modals/WalletConnectModal'
 import { UiButton } from '@/components/ui/UiButton'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { truncateAddress } from '@/utils/format'
 
 const NETWORK_LABEL: Record<'liquidtestnet' | 'regtest', string> = {
@@ -16,7 +16,9 @@ const NETWORK_LABEL: Record<'liquidtestnet' | 'regtest', string> = {
 }
 
 export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
-  const { connectionStatus, syncing, receiveAddress, disconnect, reconnecting, pendingRequest } =
+  // The account, not an address. The wallet names an account by an identifier and serves no
+  // address at all, so this is what a person sees and what identifies the session to them.
+  const { connectionStatus, syncing, account, disconnect, reconnecting, pendingRequest } =
     useWallet()
   const { network, isMainnet } = useLwk()
   const [disconnecting, setDisconnecting] = useState(false)
@@ -50,11 +52,11 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
     )
   }
 
-  if (connectionStatus === 'ready' && receiveAddress) {
+  if (connectionStatus === 'ready' && account) {
     return (
       <Dropdown.Root isOpen={isMenuOpen} onOpenChange={setIsMenuOpen}>
         <Dropdown.Trigger className={buttonVariants({ variant: 'secondary' })}>
-          {truncateAddress(receiveAddress)}
+          {truncateAddress(account)}
         </Dropdown.Trigger>
         <Dropdown.Popover placement='bottom end' className='p-4'>
           <div className='flex flex-col gap-3'>
@@ -64,8 +66,8 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
               </Chip>
             )}
             <div className='bg-surface-secondary flex items-center justify-between gap-2 rounded-lg p-1 px-2'>
-              <span className='font-mono text-xs'>{truncateAddress(receiveAddress)}</span>
-              <CopyButton value={receiveAddress} aria-label='Copy address' />
+              <span className='font-mono text-xs'>{truncateAddress(account)}</span>
+              <CopyButton value={account} aria-label='Copy account' />
             </div>
             <div className='flex flex-col gap-1.5'>
               <span className='text-muted text-[11px] font-semibold tracking-wide'>
@@ -138,7 +140,7 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
           </UiButton>
         )
       })()}
-      <ConnectWalletModal isOpen={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
+      <WalletConnectModal isOpen={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
     </>
   )
 }

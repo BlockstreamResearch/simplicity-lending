@@ -1,28 +1,26 @@
-import AcceptOfferDemo from './AcceptOfferDemo'
-import CancelOfferDemo from './CancelOfferDemo'
-import ClaimPrincipalDemo from './ClaimPrincipalDemo'
+import AcceptOfferActionDemo from './AcceptOfferActionDemo'
+import CancelOfferActionDemo from './CancelOfferActionDemo'
+import ClaimPrincipalActionDemo from './ClaimPrincipalActionDemo'
 import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
-import CreateOfferDemo from './CreateOfferDemo'
-import LenderVaultClaimDemo from './LenderVaultClaimDemo'
-import LiquidateOfferDemo from './LiquidateOfferDemo'
-import RepayOfferDemo from './RepayOfferDemo'
+import CreateOfferActionDemo from './CreateOfferActionDemo'
+import LenderVaultClaimActionDemo from './LenderVaultClaimActionDemo'
+import LiquidateOfferActionDemo from './LiquidateOfferActionDemo'
+import RepayOfferActionDemo from './RepayOfferActionDemo'
 import UtxoChopperDemo from './UtxoChopperDemo'
-import { WalletDemo } from './WalletDemo'
 
 export default function DemoPage() {
   return (
     <div className='space-y-4 p-6'>
       <h1 className='text-3xl font-semibold'>Demo</h1>
-      <WalletDemo />
       <UtxoChopperDemo />
       <CreateBorrowerAccountDemo />
-      <CreateOfferDemo />
-      <AcceptOfferDemo />
-      <ClaimPrincipalDemo />
-      <CancelOfferDemo />
-      <LiquidateOfferDemo />
-      <RepayOfferDemo />
-      <LenderVaultClaimDemo />
+      <CreateOfferActionDemo />
+      <AcceptOfferActionDemo />
+      <ClaimPrincipalActionDemo />
+      <CancelOfferActionDemo />
+      <LiquidateOfferActionDemo />
+      <RepayOfferActionDemo />
+      <LenderVaultClaimActionDemo />
     </div>
   )
 }
