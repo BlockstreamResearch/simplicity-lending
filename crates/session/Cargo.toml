@@ -27,3 +27,7 @@ serial_test = "3"
 sqlx = { version = "0.8.3", features = ["postgres", "runtime-tokio-rustls", "migrate"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6"
+
+[[test]]
+name = "e2e_full_loan_lifecycle"
+path = "tests/e2e/full_loan_lifecycle.rs"
