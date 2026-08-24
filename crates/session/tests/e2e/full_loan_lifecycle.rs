@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use lending_indexer::models::OfferStatus;
-use lending_session::Session;
+use lending_session::{Session, SessionError};
 use serial_test::serial;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::hex::ToHex;
@@ -16,9 +16,10 @@ use utils::{
     DEFAULT_LOAN_EXPIRATION_OFFSET, IndexedFactoryState, OfferCreation, TEST_PRINCIPAL_AMOUNT,
     accept_pending_offer, assert_offer_status, build_session, build_session_with_signer,
     cancel_pending_offer, claim_borrower_principal, claim_lender_vault, create_active_factory,
-    fund_asset_outputs, fund_policy_output, issue_asset, liquidate_active_offer, offer_params,
-    remove_factory_and_index_it, repay_active_offer, setup_it_context_pool, setup_pending_offer,
-    setup_pending_offer_with_existing_factory, start_indexer_api, transfer_factory_auth_and_index,
+    dummy_principal_asset_id, fund_asset_outputs, fund_policy_output, issue_asset,
+    liquidate_active_offer, offer_params, remove_factory_and_index_it, repay_active_offer,
+    setup_it_context_pool, setup_pending_offer, setup_pending_offer_with_existing_factory,
+    start_indexer_api, transfer_factory_auth_and_index,
 };
 
 const BORROWER_PRINCIPAL_ASSET_SUPPLY: u64 = 30_000;
@@ -482,6 +483,120 @@ async fn recreate_factory_after_remove_allows_create_offer() -> anyhow::Result<(
         DEFAULT_LOAN_EXPIRATION_OFFSET,
     )
     .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn claim_principal_fails_on_pending_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+
+    let (offer_id, _) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    let result = borrower.claim_principal(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::OfferNotActive)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn repay_offer_fails_on_pending_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+
+    let (offer_id, _) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    let result = borrower.repay_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::OfferNotActive)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn liquidate_offer_fails_on_pending_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let (offer_id, _) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    let result = lender.liquidate_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::OfferNotActive)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn claim_lender_vault_fails_on_pending_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let (offer_id, _) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    let result = lender.claim_lender_vault(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::OfferNotRepaid)));
     assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
 
     server_handle.abort();
