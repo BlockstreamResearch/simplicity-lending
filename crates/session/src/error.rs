@@ -31,6 +31,9 @@ pub enum SessionError {
     #[error("Offer is not pending")]
     OfferNotPending,
 
+    #[error("Borrower cannot accept own offer")]
+    BorrowerCannotAcceptOwnOffer,
+
     #[error("Offer is not active")]
     OfferNotActive,
 

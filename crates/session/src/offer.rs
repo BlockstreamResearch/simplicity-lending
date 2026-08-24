@@ -301,6 +301,16 @@ impl Session {
         if offer_details.info.base.status != OfferStatus::Pending {
             return Err(SessionError::OfferNotPending);
         }
+        let signer_script_hex = self.signer().get_address().script_pubkey().to_hex();
+        if offer_details.participants.iter().any(|participant| {
+            participant.participant_type == ParticipantType::Borrower
+                && participant.spent_txid.is_none()
+                && participant
+                    .script_pubkey
+                    .eq_ignore_ascii_case(&signer_script_hex)
+        }) {
+            return Err(SessionError::BorrowerCannotAcceptOwnOffer);
+        }
 
         let pending_outpoint = offer_details
             .utxos

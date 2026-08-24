@@ -248,16 +248,14 @@ fn transfer_factory_auth(
     factory: &IndexedFactoryState,
 ) -> anyhow::Result<(Txid, i32)> {
     let policy_asset = factory_owner.network().policy_asset();
+    const FEE_RESERVE: u64 = 500;
     let policy_utxo = factory_owner
         .signer()
         .get_utxos_asset(policy_asset)?
         .into_iter()
-        .next()
-        .context("owner policy UTXO not found for auth transfer fee")?;
-    let policy_change = policy_utxo
-        .amount()
-        .checked_sub(500)
+        .find(|utxo| utxo.amount() >= FEE_RESERVE)
         .context("owner policy UTXO too small to fund auth transfer fee")?;
+    let policy_change = policy_utxo.amount() - FEE_RESERVE;
     let owner_auth_utxo = factory_owner
         .signer()
         .get_utxos_asset(factory.asset_id)?
