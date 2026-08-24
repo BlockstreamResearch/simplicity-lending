@@ -453,7 +453,7 @@ impl OffersTracker {
                         vault_type: VaultType::Lender,
                         amount: lender_amount,
                         already_supplied: lender_vault_after.get_already_supplied_amount(),
-                        is_finalized: false,
+                        is_finalized: lender_vault_after.is_finalized_offer(),
                     },
                     block_height,
                 )
@@ -474,7 +474,7 @@ impl OffersTracker {
                             vault_type: VaultType::ProtocolFee,
                             amount: protocol_amount,
                             already_supplied: protocol_vault_after.get_already_supplied_amount(),
-                            is_finalized: false,
+                            is_finalized: protocol_vault_after.is_finalized_offer(),
                         },
                         block_height,
                     )

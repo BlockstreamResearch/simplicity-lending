@@ -1212,6 +1212,69 @@ async fn repaid_offer_details_includes_active_vaults() -> anyhow::Result<()> {
 
 #[tokio::test]
 #[serial]
+async fn active_offer_details_after_partial_includes_vaults_and_repayment() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = vault_tracking::seed_minimal_factory(&pool).await?;
+    let (offer_id, active_outpoint, offer) =
+        vault_tracking::seed_trackable_active_offer(&pool, factory_id, 11, 100).await?;
+
+    let (tx, debt_after) = vault_tracking::build_first_partial_repayment_tx(
+        active_outpoint,
+        &offer,
+        vault_tracking::FIRST_PARTIAL_AMOUNT,
+    )?;
+    let mut registry = vault_tracking::load_registry(&pool).await?;
+    vault_tracking::process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &tx,
+        vault_tracking::TRACKABLE_REPAYMENT_HEIGHT,
+    )
+    .await?;
+
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &lending_indexer::models::OfferVaultModel {
+            id: 0,
+            offer_id,
+            vault_type: lending_indexer::models::VaultType::Lender,
+            txid: vec![0xcd; 32],
+            vout: 9,
+            amount: 1,
+            already_supplied: 1,
+            is_finalized: false,
+            created_at_height: 1,
+            updated_at_height: 1,
+            spent_txid: Some(vec![0xee; 32]),
+            spent_at_height: Some(2),
+        },
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let raw = get_json(&http, format!("{base_url}/offers/{offer_id}")).await?;
+    let dto: ExpectedOfferDetailsDto =
+        serde_json::from_value(raw).expect("response must match full DTO shape");
+
+    assert_eq!(dto.status, "active");
+    assert_eq!(dto.current_debt, debt_after.to_string());
+    assert_eq!(dto.vaults.len(), 2);
+    assert!(dto.vaults.iter().all(|vault| vault.vout != 9));
+    assert_eq!(dto.repayments.len(), 1);
+    assert!(!dto.repayments[0].is_full);
+    assert_eq!(
+        dto.repayments[0].amount_repaid,
+        vault_tracking::FIRST_PARTIAL_AMOUNT.to_string()
+    );
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
 async fn borrower_overview_returns_totals_for_script() -> anyhow::Result<()> {
     let (base_url, server_handle, _pending, _active) = setup_seeded_api().await?;
     let http = reqwest::Client::new();

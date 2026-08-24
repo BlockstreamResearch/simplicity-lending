@@ -132,12 +132,16 @@ impl VaultsTracker {
         let vault_after = vault_type.get_vault(offer_params, debt_after);
 
         let (vout, amount, already_supplied, is_finalized) = if vault_after.is_finalized_offer() {
-            let scan = vault_after
-                .scan_final_supply(tx)
-                .ok_or_else(|| anyhow::anyhow!("supply_vault: FinalSupply scan failed"))?;
+            // `scan_final_supply` must be called on the *pre-supply active* vault. After
+            // reconstruction from `debt_after` the vault is already finalized, so match the
+            // finalized script in the tx instead.
+            let (vault_vout, vault_amount_after) =
+                vault_after.find_unique_vout_matching(tx).ok_or_else(|| {
+                    anyhow::anyhow!("supply_vault: could not find finalized vault output in tx")
+                })?;
             (
-                scan.vault_vout,
-                scan.vault_amount_after,
+                vault_vout,
+                vault_amount_after,
                 vault_params.supply_goal,
                 true,
             )
@@ -233,34 +237,7 @@ impl VaultsTracker {
                 .await?;
             }
 
-            Some(AssetAuthVaultTxKind::FinalSupply) => {
-                let scan = vault.scan_final_supply(tx).ok_or_else(|| {
-                    anyhow::anyhow!("FinalSupply classified but scan returned None")
-                })?;
-
-                self.index_vault(
-                    sql_tx,
-                    OutPoint {
-                        txid,
-                        vout: scan.vault_vout,
-                    },
-                    VaultWatchEntry {
-                        offer_id: entry.offer_id,
-                        vault_type: entry.vault_type,
-                        amount: scan.vault_amount_after,
-                        already_supplied: vault_params.supply_goal,
-                        is_finalized: true,
-                    },
-                    block_height,
-                )
-                .await?;
-            }
-
-            // `Supply` is never returned by `classify_tx` (requires `classify_supply_tx` with a
-            // known amount). Vault Supply spends happen during repayments and are handled by
-            // `OffersTracker` via `supply_vault` — the old UTXO is spent here, the new one is
-            // inserted there.
-            Some(AssetAuthVaultTxKind::Supply) | None => {
+            Some(AssetAuthVaultTxKind::Supply | AssetAuthVaultTxKind::FinalSupply) | None => {
                 tracing::debug!(
                     offer_id = %entry.offer_id,
                     vault_type = ?entry.vault_type,

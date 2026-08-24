@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT current_debt, collateral_remaining\n        FROM offers\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "current_debt",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "collateral_remaining",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "06864babb7ab1e20d75aa85074b46e082c32f90e681e220778f137e03fcd2f35"
+}

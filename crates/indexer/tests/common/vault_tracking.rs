@@ -227,10 +227,8 @@ pub fn build_first_partial_repayment_tx(
         .offer_parameters
         .get_repaid_protocol_fee(debt_before, amount_to_repay);
     let lender_amount = amount_to_repay - protocol_fee;
-    let lender_vault =
-        AssetAuthVault::new_active(params.get_lender_vault_parameters(), lender_amount);
-    let protocol_vault =
-        AssetAuthVault::new_active(params.get_protocol_fee_vault_parameters(), protocol_fee);
+    let lender_vault = params.get_lender_vault(debt_after);
+    let protocol_vault = params.get_protocol_fee_vault(debt_after);
 
     let collateral_before = offer.collateral_remaining as u64;
     let collateral_unlocked = params
@@ -287,14 +285,8 @@ pub fn build_second_partial_repayment_tx(
     let lender_before = lender_before_vault.get_already_supplied_amount();
     let protocol_before = protocol_before_vault.get_already_supplied_amount();
 
-    let lender_after_supplied = lender_before + lender_delta;
-    let protocol_after_supplied = protocol_before + protocol_fee;
-    let lender_after =
-        AssetAuthVault::new_active(params.get_lender_vault_parameters(), lender_after_supplied);
-    let protocol_after = AssetAuthVault::new_active(
-        params.get_protocol_fee_vault_parameters(),
-        protocol_after_supplied,
-    );
+    let lender_after = params.get_lender_vault(debt_after);
+    let protocol_after = params.get_protocol_fee_vault(debt_after);
 
     let collateral_before = offer.collateral_remaining as u64;
     let already_repaid = params
@@ -330,6 +322,152 @@ pub fn build_second_partial_repayment_tx(
             ),
         ],
     ))
+}
+
+pub fn apply_repayment_to_offer(
+    offer: &mut OfferModel,
+    amount_to_repay: u64,
+) -> anyhow::Result<()> {
+    let params = offer_lending_params(offer)?;
+    let debt_before = offer.current_debt as u64;
+    let already_repaid = params
+        .offer_parameters
+        .get_already_repaid_amount(debt_before);
+    let unlocked_total = params
+        .offer_parameters
+        .get_collateral_for_principal(already_repaid + amount_to_repay);
+    let unlocked_before = params
+        .offer_parameters
+        .get_collateral_for_principal(already_repaid);
+
+    offer.current_debt = (debt_before - amount_to_repay) as i64;
+    offer.collateral_remaining -= (unlocked_total - unlocked_before) as i64;
+    Ok(())
+}
+
+pub fn build_principal_phase_partial_repayment_tx(
+    active_input: OutPoint,
+    lender_vault_input: OutPoint,
+    offer: &OfferModel,
+    debt_before: u64,
+    amount_to_repay: u64,
+) -> anyhow::Result<Transaction> {
+    let params = offer_lending_params(offer)?;
+    let debt_after = debt_before - amount_to_repay;
+    let continuing = LendingOffer::new_active(params, debt_after);
+
+    let lender_before = params
+        .get_lender_vault(debt_before)
+        .get_already_supplied_amount();
+    let lender_after = params.get_lender_vault(debt_after);
+
+    let collateral_before = offer.collateral_remaining as u64;
+    let already_repaid = params
+        .offer_parameters
+        .get_already_repaid_amount(debt_before);
+    let collateral_unlocked_total = params
+        .offer_parameters
+        .get_collateral_for_principal(already_repaid + amount_to_repay);
+    let collateral_unlocked_before = params
+        .offer_parameters
+        .get_collateral_for_principal(already_repaid);
+    let collateral_after =
+        collateral_before - (collateral_unlocked_total - collateral_unlocked_before);
+
+    Ok(tx_with_inputs(
+        vec![lender_vault_input, active_input],
+        vec![
+            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+            explicit_output(
+                params.collateral_asset_id,
+                collateral_after,
+                continuing.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                lender_before + amount_to_repay,
+                lender_after.get_script_pubkey(),
+            ),
+        ],
+    ))
+}
+
+pub fn build_full_repayment_after_partials_tx(
+    active_input: OutPoint,
+    lender_vault_input: OutPoint,
+    protocol_vault_input: Option<OutPoint>,
+    offer: &OfferModel,
+) -> anyhow::Result<Transaction> {
+    let params = offer_lending_params(offer)?;
+    let lender_vault = AssetAuthVault::new_finalized(params.get_lender_vault_parameters());
+    let protocol_vault = AssetAuthVault::new_finalized(params.get_protocol_fee_vault_parameters());
+    let protocol_fee = params.offer_parameters.get_total_protocol_fee();
+    let lender_amount = params.offer_parameters.get_total_amount_to_repay() - protocol_fee;
+
+    let mut inputs = vec![lender_vault_input, active_input];
+    if let Some(protocol_input) = protocol_vault_input {
+        inputs.push(protocol_input);
+    }
+
+    let mut outputs = vec![
+        op_return_asset(params.borrower_nft_asset_id),
+        explicit_output(
+            params.principal_asset_id,
+            lender_amount,
+            lender_vault.get_script_pubkey(),
+        ),
+    ];
+
+    if protocol_vault_input.is_some() {
+        outputs.push(explicit_output(
+            params.principal_asset_id,
+            protocol_fee,
+            protocol_vault.get_script_pubkey(),
+        ));
+    }
+
+    outputs.push(explicit_output(
+        params.collateral_asset_id,
+        offer.collateral_remaining as u64,
+        script(&[0x99]),
+    ));
+
+    Ok(tx_with_inputs(inputs, outputs))
+}
+
+pub async fn fetch_offer_balances(pool: &PgPool, offer_id: i64) -> anyhow::Result<(i64, i64)> {
+    let row = sqlx::query!(
+        r#"
+        SELECT current_debt, collateral_remaining
+        FROM offers
+        WHERE id = $1
+        "#,
+        offer_id
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok((row.current_debt, row.collateral_remaining))
+}
+
+pub async fn count_offer_repayments(
+    pool: &PgPool,
+    offer_id: i64,
+    is_full: Option<bool>,
+) -> anyhow::Result<i64> {
+    let count = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*)::BIGINT
+        FROM offer_repayments
+        WHERE offer_id = $1
+          AND ($2::BOOLEAN IS NULL OR is_full = $2)
+        "#,
+        offer_id,
+        is_full
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+    Ok(count)
 }
 
 pub fn build_lender_vault_withdraw_all_tx(
