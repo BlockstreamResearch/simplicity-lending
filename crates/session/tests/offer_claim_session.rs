@@ -3,13 +3,13 @@ mod utils;
 use lending_contracts::programs::program::SimplexProgram;
 use lending_indexer::indexer::update_offer_status;
 use lending_indexer::models::OfferStatus;
-use lending_session::SessionError;
+use lending_session::{IndexerClientError, SessionError};
 use serial_test::serial;
 
 use utils::{
     DEFAULT_LOAN_EXPIRATION_OFFSET, TEST_PRINCIPAL_AMOUNT, accept_pending_offer, build_session,
-    build_session_with_signer, dummy_principal_asset_id, fund_asset_outputs, issue_asset,
-    offer_params, setup_it_context_pool, setup_pending_offer, start_indexer_api,
+    build_session_with_signer, create_active_factory, dummy_principal_asset_id, fund_asset_outputs,
+    issue_asset, offer_params, setup_it_context_pool, setup_pending_offer, start_indexer_api,
 };
 
 #[tokio::test]
@@ -167,6 +167,26 @@ async fn claim_principal_returns_borrower_principal_utxo_not_found_when_missing(
     assert!(matches!(
         result,
         Err(SessionError::BorrowerPrincipalUtxoNotFound)
+    ));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn claim_principal_fails_for_unknown_offer_id() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+
+    let _factory = create_active_factory(&borrower, &pool).await?;
+
+    let result = borrower.claim_principal("999999").await;
+
+    assert!(matches!(
+        result,
+        Err(SessionError::Indexer(IndexerClientError::NotFound(_)))
     ));
 
     server_handle.abort();

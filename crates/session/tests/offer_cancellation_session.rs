@@ -6,9 +6,9 @@ use lending_session::SessionError;
 use serial_test::serial;
 
 use utils::{
-    DEFAULT_LOAN_EXPIRATION_OFFSET, build_session, create_active_factory,
-    create_and_broadcast_offer, dummy_principal_asset_id, offer_params, seed_pending_offer,
-    setup_it_context_pool, setup_pending_offer, start_indexer_api,
+    DEFAULT_LOAN_EXPIRATION_OFFSET, build_session, build_session_with_signer,
+    create_active_factory, create_and_broadcast_offer, dummy_principal_asset_id, offer_params,
+    seed_pending_offer, setup_it_context_pool, setup_pending_offer, start_indexer_api,
 };
 
 #[tokio::test]
@@ -141,6 +141,33 @@ async fn cancel_offer_returns_pending_offer_utxo_not_found_for_mismatched_outpoi
         result,
         Err(SessionError::PendingOfferUtxoNotFound)
     ));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn borrower_cannot_cancel_another_borrowers_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower_a = build_session(&context, &indexer_url);
+    let borrower_b = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let (offer_id, _) = setup_pending_offer(
+        &borrower_a,
+        &pool,
+        offer_params(
+            &borrower_a,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+
+    let result = borrower_b.cancel_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::BorrowerNftUtxoNotFound)));
 
     server_handle.abort();
     Ok(())
