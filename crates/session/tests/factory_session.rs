@@ -170,6 +170,25 @@ async fn create_factory_rejects_when_indexer_reports_existing_factory() -> anyho
 
 #[tokio::test]
 #[serial]
+async fn create_factory_fails_when_factory_already_exists() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let session = build_session(&context, &indexer_url);
+
+    create_active_factory(&session, &pool).await?;
+
+    let result = session.create_factory().await;
+    assert!(matches!(
+        result,
+        Err(SessionError::BorrowerAccountAlreadyExists)
+    ));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
 async fn remove_factory_builds_and_broadcasts_transaction_when_factory_exists() -> anyhow::Result<()>
 {
     let (context, pool) = setup_it_context_pool().await?;

@@ -8,7 +8,8 @@ use serial_test::serial;
 use utils::{
     DEFAULT_LOAN_EXPIRATION_OFFSET, FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS,
     build_session, create_active_factory, create_and_broadcast_factory, dummy_principal_asset_id,
-    offer_params, seed_active_factory, setup_it_context_pool, start_indexer_api,
+    offer_params, remove_factory_and_index_it, seed_active_factory, setup_it_context_pool,
+    start_indexer_api,
 };
 
 #[tokio::test]
@@ -127,7 +128,7 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
 
 #[tokio::test]
 #[serial]
-async fn create_offer_returns_factory_not_found_when_indexer_is_empty() -> anyhow::Result<()> {
+async fn create_offer_fails_without_factory() -> anyhow::Result<()> {
     let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool).await?;
     let session = build_session(&context, &indexer_url);
@@ -140,6 +141,29 @@ async fn create_offer_returns_factory_not_found_when_indexer_is_empty() -> anyho
         )?)
         .await;
 
+    assert!(matches!(result, Err(SessionError::FactoryNotFound)));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn create_offer_fails_after_factory_removed() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let session = build_session(&context, &indexer_url);
+
+    let factory = create_active_factory(&session, &pool).await?;
+    remove_factory_and_index_it(&session, &pool, &factory).await?;
+
+    let result = session
+        .create_offer(offer_params(
+            &session,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?)
+        .await;
     assert!(matches!(result, Err(SessionError::FactoryNotFound)));
 
     server_handle.abort();
