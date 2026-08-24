@@ -7,10 +7,10 @@ use serial_test::serial;
 
 use utils::{
     DEFAULT_LOAN_EXPIRATION_OFFSET, TEST_PRINCIPAL_AMOUNT, accept_pending_offer,
-    assert_offer_status, build_session, build_session_with_signer, claim_lender_vault,
-    dummy_principal_asset_id, fund_asset_outputs, issue_asset, liquidate_active_offer,
-    offer_params, repay_active_offer, setup_it_context_pool, setup_pending_offer,
-    start_indexer_api,
+    assert_offer_status, build_session, build_session_with_signer, claim_borrower_principal,
+    claim_lender_vault, dummy_principal_asset_id, fund_asset_outputs, issue_asset,
+    liquidate_active_offer, offer_params, repay_active_offer, setup_it_context_pool,
+    setup_pending_offer, start_indexer_api,
 };
 
 const BORROWER_PRINCIPAL_ASSET_SUPPLY: u64 = 30_000;
@@ -238,6 +238,169 @@ async fn repay_offer_returns_principal_utxo_not_found_without_funds() -> anyhow:
     let result = borrower.repay_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::PrincipalUtxoNotFound)));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn repay_offer_fails_with_insufficient_principal_plus_interest() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let principal_asset_id = issue_asset(&borrower, TEST_PRINCIPAL_AMOUNT * 2)?;
+    let (offer_id, offer) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    fund_asset_outputs(
+        &borrower,
+        lender.signer(),
+        principal_asset_id,
+        &[TEST_PRINCIPAL_AMOUNT],
+    )?;
+    let (_, _accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    let borrower_principal_balance = borrower
+        .signer()
+        .get_utxos_asset(principal_asset_id)?
+        .iter()
+        .map(|utxo| utxo.amount())
+        .sum::<u64>();
+    let total_amount_to_repay = offer
+        .parameters
+        .offer_parameters
+        .get_total_amount_to_repay();
+    assert_eq!(borrower_principal_balance, TEST_PRINCIPAL_AMOUNT);
+    assert!(borrower_principal_balance < total_amount_to_repay);
+
+    let result = borrower.repay_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::PrincipalUtxoNotFound)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn repay_offer_fails_after_borrower_spends_claimed_principal() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let principal_asset_id = issue_asset(&borrower, TEST_PRINCIPAL_AMOUNT)?;
+    let (offer_id, offer) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    fund_asset_outputs(
+        &borrower,
+        lender.signer(),
+        principal_asset_id,
+        &[TEST_PRINCIPAL_AMOUNT],
+    )?;
+    let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    claim_borrower_principal(&borrower, &pool, offer_id, &offer, accept_txid).await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    fund_asset_outputs(
+        &borrower,
+        lender.signer(),
+        principal_asset_id,
+        &[TEST_PRINCIPAL_AMOUNT],
+    )?;
+    assert!(
+        borrower
+            .signer()
+            .get_utxos_asset(principal_asset_id)?
+            .is_empty(),
+        "borrower should have spent all claimed principal before repayment"
+    );
+
+    let result = borrower.repay_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::PrincipalUtxoNotFound)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn repay_offer_fails_when_wallet_has_principal_but_no_interest() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let principal_asset_id = issue_asset(&borrower, TEST_PRINCIPAL_AMOUNT)?;
+    let (offer_id, offer) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    fund_asset_outputs(
+        &borrower,
+        lender.signer(),
+        principal_asset_id,
+        &[TEST_PRINCIPAL_AMOUNT],
+    )?;
+    let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    claim_borrower_principal(&borrower, &pool, offer_id, &offer, accept_txid).await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    let borrower_principal_balance = borrower
+        .signer()
+        .get_utxos_asset(principal_asset_id)?
+        .iter()
+        .map(|utxo| utxo.amount())
+        .sum::<u64>();
+    let total_amount_to_repay = offer
+        .parameters
+        .offer_parameters
+        .get_total_amount_to_repay();
+    assert_eq!(borrower_principal_balance, TEST_PRINCIPAL_AMOUNT);
+    assert!(borrower_principal_balance < total_amount_to_repay);
+
+    let result = borrower.repay_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::PrincipalUtxoNotFound)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
 
     server_handle.abort();
     Ok(())

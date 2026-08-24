@@ -7,9 +7,9 @@ use serial_test::serial;
 
 use utils::{
     DEFAULT_LOAN_EXPIRATION_OFFSET, FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS,
-    build_session, create_active_factory, create_and_broadcast_factory, dummy_principal_asset_id,
-    offer_params, remove_factory_and_index_it, seed_active_factory, setup_it_context_pool,
-    start_indexer_api,
+    build_session, build_session_with_signer, create_active_factory, create_and_broadcast_factory,
+    dummy_principal_asset_id, fund_policy_output, offer_params, remove_factory_and_index_it,
+    seed_active_factory, setup_it_context_pool, start_indexer_api,
 };
 
 #[tokio::test]
@@ -165,6 +165,71 @@ async fn create_offer_fails_after_factory_removed() -> anyhow::Result<()> {
         )?)
         .await;
     assert!(matches!(result, Err(SessionError::FactoryNotFound)));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn create_offer_fails_with_insufficient_collateral() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let donor = build_session(&context, &indexer_url);
+    let borrower = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    fund_policy_output(&donor, borrower.signer(), 1_000_000)?;
+    let _factory = create_active_factory(&borrower, &pool).await?;
+
+    let policy_asset = borrower.network().policy_asset();
+    let collateral_amount = offer_params(
+        &borrower,
+        dummy_principal_asset_id(),
+        DEFAULT_LOAN_EXPIRATION_OFFSET,
+    )?
+    .offer_parameters
+    .collateral_amount;
+
+    let mut drain_attempts = 0_u8;
+    loop {
+        let policy_utxos = borrower.signer().get_utxos_asset(policy_asset)?;
+        let total_policy_amount = policy_utxos.iter().map(|utxo| utxo.amount()).sum::<u64>();
+        if total_policy_amount < collateral_amount {
+            break;
+        }
+
+        let largest_utxo_amount = policy_utxos
+            .iter()
+            .map(|utxo| utxo.amount())
+            .max()
+            .expect("at least one policy UTXO must exist while draining");
+        let drain_amount = largest_utxo_amount.saturating_sub(500);
+        assert!(
+            drain_amount > 0,
+            "policy UTXO too small to drain collateral balance"
+        );
+        fund_policy_output(&borrower, donor.signer(), drain_amount)?;
+
+        drain_attempts += 1;
+        assert!(
+            drain_attempts <= 16,
+            "failed to drain borrower policy balance below collateral threshold"
+        );
+    }
+
+    let result = borrower
+        .create_offer(offer_params(
+            &borrower,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?)
+        .await;
+
+    match result {
+        Err(SessionError::CollateralUtxoNotFound) => {}
+        Err(other) => panic!("unexpected create_offer error: {other:?}"),
+        Ok(_) => panic!("create_offer unexpectedly succeeded without collateral"),
+    }
 
     server_handle.abort();
     Ok(())
