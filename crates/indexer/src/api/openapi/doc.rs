@@ -16,8 +16,8 @@ use crate::api::health::{self, HealthResponse};
 use crate::api::lenders::dto::LenderOverview;
 use crate::api::lenders::handlers as lender_handlers;
 use crate::api::offers::dto::{
-    OfferListItemShort, OfferListResponse, OfferRepaymentDto, OfferUtxoDto, OfferUtxoOutpointShort,
-    OfferVaultDto, OffersOverview, ParticipantDto, ParticipantShort,
+    OfferListItemShort, OfferListResponse, OfferRepaymentDto, OfferRepaymentPhaseDto, OfferUtxoDto,
+    OfferUtxoOutpointShort, OfferVaultDto, OffersOverview, ParticipantDto, ParticipantShort,
 };
 use crate::api::offers::handlers as offer_handlers;
 use crate::api::params::{OfferSortBy, SortDir};
@@ -68,6 +68,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         OfferListItemShort,
         OfferListResponse,
         OfferRepaymentDto,
+        OfferRepaymentPhaseDto,
         OffersOverview,
         OfferSortBy,
         OfferStatus,

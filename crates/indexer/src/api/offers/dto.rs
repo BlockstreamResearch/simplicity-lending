@@ -4,12 +4,34 @@ use uuid::Uuid;
 
 use simplex::simplicityhl::elements::hex::ToHex;
 
+use lending_contracts::programs::lending::{OfferParameters, OfferRepaymentPhase};
+
 use crate::api::dto::AssetAmount;
 use crate::api::utils::{format_hex, format_offer_id, format_satoshis};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferRepaymentModel, OfferStatus,
     OfferUtxoModel, OfferVaultModel, ParticipantType, UtxoType, VaultType,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OfferRepaymentPhaseDto {
+    NoRepayments,
+    RepayingOfferFee,
+    RepayingPrincipal,
+    Repaid,
+}
+
+impl From<OfferRepaymentPhase> for OfferRepaymentPhaseDto {
+    fn from(value: OfferRepaymentPhase) -> Self {
+        match value {
+            OfferRepaymentPhase::NoRepayments => Self::NoRepayments,
+            OfferRepaymentPhase::RepayingOfferFee => Self::RepayingOfferFee,
+            OfferRepaymentPhase::RepayingPrincipal => Self::RepayingPrincipal,
+            OfferRepaymentPhase::Repaid => Self::Repaid,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ParticipantShort {
@@ -241,10 +263,14 @@ pub struct OfferRepaymentDto {
     #[schema(example = "2864")]
     pub collateral_after: String,
     pub is_full: bool,
+    /// Contract repayment phase at `debt_before` (when this tx happened).
+    pub phase: OfferRepaymentPhaseDto,
 }
 
-impl From<OfferRepaymentModel> for OfferRepaymentDto {
-    fn from(value: OfferRepaymentModel) -> Self {
+impl OfferRepaymentDto {
+    pub fn from_model(value: OfferRepaymentModel, offer_parameters: &OfferParameters) -> Self {
+        let phase = offer_parameters.get_repayment_phase(value.debt_before as u64);
+
         Self {
             txid: format_hex(value.txid),
             height: value.height as u64,
@@ -255,6 +281,7 @@ impl From<OfferRepaymentModel> for OfferRepaymentDto {
             collateral_before: format_satoshis(value.collateral_before),
             collateral_after: format_satoshis(value.collateral_after),
             is_full: value.is_full,
+            phase: OfferRepaymentPhaseDto::from(phase),
         }
     }
 }
@@ -308,14 +335,40 @@ pub struct OfferDetailsResponse {
 #[cfg(test)]
 mod tests {
     use super::{
-        OfferListItemFull, OfferListItemShort, OfferRepaymentDto, OfferUtxoDto,
-        OfferUtxoOutpointShort, OfferVaultDto, ParticipantDto, ParticipantShort,
+        OfferListItemFull, OfferListItemShort, OfferRepaymentDto, OfferRepaymentPhaseDto,
+        OfferUtxoDto, OfferUtxoOutpointShort, OfferVaultDto, ParticipantDto, ParticipantShort,
     };
     use crate::models::{
         OfferModel, OfferModelShort, OfferParticipantModel, OfferRepaymentModel, OfferStatus,
         OfferUtxoModel, OfferVaultModel, ParticipantType, UtxoType, VaultType,
     };
+    use lending_contracts::programs::lending::OfferParameters;
     use uuid::Uuid;
+
+    fn trackable_offer_parameters() -> OfferParameters {
+        OfferParameters {
+            collateral_amount: 3_000,
+            principal_amount: 10_000,
+            loan_expiration_time: 1_234_567,
+            principal_interest_rate: 1_000,
+        }
+    }
+
+    fn sample_repayment(debt_before: i64, debt_after: i64, is_full: bool) -> OfferRepaymentModel {
+        OfferRepaymentModel {
+            id: 1,
+            offer_id: 42,
+            txid: vec![0xaa, 0xbb],
+            height: 900,
+            amount_repaid: 500,
+            collateral_unlocked: 136,
+            debt_before,
+            debt_after,
+            collateral_before: 3_000,
+            collateral_after: 2_864,
+            is_full,
+        }
+    }
 
     #[test]
     fn offer_list_item_short_from_model_short_maps_and_formats_fields() {
@@ -567,21 +620,10 @@ mod tests {
 
     #[test]
     fn offer_repayment_dto_from_model_maps_and_formats_fields() {
-        let model = OfferRepaymentModel {
-            id: 1,
-            offer_id: 42,
-            txid: vec![0xaa, 0xbb],
-            height: 900,
-            amount_repaid: 500,
-            collateral_unlocked: 136,
-            debt_before: 11_000,
-            debt_after: 10_500,
-            collateral_before: 3_000,
-            collateral_after: 2_864,
-            is_full: false,
-        };
-
-        let dto = OfferRepaymentDto::from(model);
+        let dto = OfferRepaymentDto::from_model(
+            sample_repayment(11_000, 10_500, false),
+            &trackable_offer_parameters(),
+        );
 
         assert_eq!(dto.txid, "bbaa");
         assert_eq!(dto.height, 900);
@@ -592,6 +634,29 @@ mod tests {
         assert_eq!(dto.collateral_before, "3000");
         assert_eq!(dto.collateral_after, "2864");
         assert!(!dto.is_full);
+        assert_eq!(dto.phase, OfferRepaymentPhaseDto::NoRepayments);
+    }
+
+    #[test]
+    fn offer_repayment_dto_phase_from_debt_before() {
+        let params = trackable_offer_parameters();
+
+        assert_eq!(
+            OfferRepaymentDto::from_model(sample_repayment(11_000, 10_500, false), &params).phase,
+            OfferRepaymentPhaseDto::NoRepayments
+        );
+        assert_eq!(
+            OfferRepaymentDto::from_model(sample_repayment(10_500, 10_000, false), &params).phase,
+            OfferRepaymentPhaseDto::RepayingOfferFee
+        );
+        assert_eq!(
+            OfferRepaymentDto::from_model(sample_repayment(9_000, 8_500, false), &params).phase,
+            OfferRepaymentPhaseDto::RepayingPrincipal
+        );
+        assert_eq!(
+            OfferRepaymentDto::from_model(sample_repayment(0, 0, true), &params).phase,
+            OfferRepaymentPhaseDto::Repaid
+        );
     }
 
     #[test]

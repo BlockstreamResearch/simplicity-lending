@@ -1003,6 +1003,7 @@ struct ExpectedOfferRepaymentDto {
     collateral_before: String,
     collateral_after: String,
     is_full: bool,
+    phase: String,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -1264,6 +1265,7 @@ async fn active_offer_details_after_partial_includes_vaults_and_repayment() -> a
     assert!(dto.vaults.iter().all(|vault| vault.vout != 9));
     assert_eq!(dto.repayments.len(), 1);
     assert!(!dto.repayments[0].is_full);
+    assert_eq!(dto.repayments[0].phase, "no_repayments");
     assert_eq!(
         dto.repayments[0].amount_repaid,
         vault_tracking::FIRST_PARTIAL_AMOUNT.to_string()

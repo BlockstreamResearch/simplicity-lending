@@ -22,8 +22,8 @@ pub use factories::dto::{FactoryAuthUtxoDto, FactoryDetailsResponse, FactoryProg
 pub use lenders::dto::LenderOverview;
 pub use offers::dto::{
     OfferDetailsResponse, OfferListItemFull, OfferListItemShort, OfferListResponse,
-    OfferRepaymentDto, OfferUtxoDto, OfferUtxoOutpointShort, OfferVaultDto, OffersOverview,
-    ParticipantDto, ParticipantShort,
+    OfferRepaymentDto, OfferRepaymentPhaseDto, OfferUtxoDto, OfferUtxoOutpointShort, OfferVaultDto,
+    OffersOverview, ParticipantDto, ParticipantShort,
 };
 pub use openapi::ApiDoc;
 pub use params::*;
