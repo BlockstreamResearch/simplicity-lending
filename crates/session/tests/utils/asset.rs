@@ -105,3 +105,37 @@ pub fn fund_asset_outputs(
 
     Ok(())
 }
+
+pub fn fund_policy_output(from: &Session, to: &Signer, amount: u64) -> anyhow::Result<()> {
+    let policy_asset = from.network().policy_asset();
+    let from_signer = from.signer();
+    const FEE_RESERVE: u64 = 500;
+    let policy_utxo = from_signer
+        .get_utxos_asset(policy_asset)?
+        .into_iter()
+        .find(|utxo| utxo.amount() >= amount + FEE_RESERVE)
+        .context("sender does not have enough policy asset to fund recipient")?;
+
+    let input_amount = policy_utxo.amount();
+    let mut tx = FinalTransaction::new();
+    tx.add_input(
+        PartialInput::new(policy_utxo),
+        RequiredSignature::NativeEcdsa,
+    );
+    tx.add_output(PartialOutput::new(
+        to.get_address().script_pubkey(),
+        amount,
+        policy_asset,
+    ));
+
+    if input_amount > amount + FEE_RESERVE {
+        tx.add_output(PartialOutput::new(
+            from_signer.get_address().script_pubkey(),
+            input_amount - amount - FEE_RESERVE,
+            policy_asset,
+        ));
+    }
+
+    from_signer.broadcast(&tx)?.wait()?;
+    Ok(())
+}

@@ -14,8 +14,8 @@ use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, Requir
 
 use utils::{
     FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, build_session,
-    build_session_with_signer, create_and_broadcast_factory, issuance_factory_for_network,
-    seed_active_factory, setup_it_context_pool, start_indexer_api,
+    build_session_with_signer, create_active_factory, create_and_broadcast_factory,
+    issuance_factory_for_network, seed_active_factory, setup_it_context_pool, start_indexer_api,
 };
 
 fn issue_only_program_factory_utxo(
@@ -176,30 +176,15 @@ async fn remove_factory_builds_and_broadcasts_transaction_when_factory_exists() 
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
-    let (factory_asset_id, creation_txid, auth_vout, program_vout, program_script) =
-        create_and_broadcast_factory(&session).await?;
-    let signer_script = session.signer().get_address().script_pubkey().to_bytes();
+    let factory = create_active_factory(&session, &pool).await?;
 
-    seed_active_factory(
-        &pool,
-        signer_script,
-        factory_asset_id,
-        program_script,
-        FACTORY_ISSUING_UTXOS_COUNT as i16,
-        FACTORY_REISSUANCE_FLAGS as i64,
-        creation_txid,
-        (creation_txid, auth_vout),
-        (creation_txid, program_vout),
-    )
-    .await?;
-
-    let remove_tx = session.remove_factory(factory_asset_id).await?;
+    let remove_tx = session.remove_factory(factory.asset_id).await?;
     assert_eq!(remove_tx.n_inputs(), 2);
 
     let remove_receipt = session.signer().broadcast(&remove_tx)?;
     remove_receipt.wait()?;
 
-    let auth_nft_utxos_after = session.signer().get_utxos_asset(factory_asset_id)?;
+    let auth_nft_utxos_after = session.signer().get_utxos_asset(factory.asset_id)?;
     assert!(
         auth_nft_utxos_after.is_empty(),
         "auth NFT should be consumed by remove transaction"

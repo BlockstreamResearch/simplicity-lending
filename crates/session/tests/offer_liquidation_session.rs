@@ -21,7 +21,7 @@ async fn liquidate_offer_burns_lender_nft_and_returns_collateral_after_expiratio
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, 20_000)?;
-    let offer = setup_pending_offer(
+    let (offer_id, offer) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -38,7 +38,7 @@ async fn liquidate_offer_burns_lender_nft_and_returns_collateral_after_expiratio
         principal_asset_id,
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
-    accept_pending_offer(&lender, &pool, 1, &offer).await?;
+    accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
 
     fund_asset_outputs(&borrower, lender.signer(), principal_asset_id, &[1])?;
 
@@ -46,7 +46,7 @@ async fn liquidate_offer_burns_lender_nft_and_returns_collateral_after_expiratio
         .get_network_utils()
         .mine_until_height((offer.parameters.offer_parameters.loan_expiration_time + 1) as u64)?;
 
-    let liquidation_tx = lender.liquidate_offer("1").await?;
+    let liquidation_tx = lender.liquidate_offer(&offer_id.to_string()).await?;
 
     assert_eq!(liquidation_tx.n_inputs(), 2);
     assert_eq!(liquidation_tx.n_outputs(), 2);
@@ -102,7 +102,7 @@ async fn liquidate_offer_returns_loan_not_expired_before_expiration_height() -> 
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, 20_000)?;
-    let offer = setup_pending_offer(
+    let (offer_id, offer) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -119,9 +119,9 @@ async fn liquidate_offer_returns_loan_not_expired_before_expiration_height() -> 
         principal_asset_id,
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
-    accept_pending_offer(&lender, &pool, 1, &offer).await?;
+    accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
 
-    let result = lender.liquidate_offer("1").await;
+    let result = lender.liquidate_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::LoanNotExpired)));
 
@@ -136,7 +136,7 @@ async fn liquidate_offer_returns_offer_not_active_for_pending_offer() -> anyhow:
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
 
-    setup_pending_offer(
+    let (offer_id, _) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -147,7 +147,7 @@ async fn liquidate_offer_returns_offer_not_active_for_pending_offer() -> anyhow:
     )
     .await?;
 
-    let result = borrower.liquidate_offer("1").await;
+    let result = borrower.liquidate_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::OfferNotActive)));
 

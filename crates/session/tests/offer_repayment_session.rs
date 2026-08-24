@@ -21,7 +21,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
-    let offer = setup_pending_offer(
+    let (offer_id, offer) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -38,7 +38,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
         principal_asset_id,
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
-    accept_pending_offer(&lender, &pool, 1, &offer).await?;
+    accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
 
     let borrower_principal_before = borrower
         .signer()
@@ -58,7 +58,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
 
     assert!(borrower_principal_before >= total_amount_to_repay);
 
-    let repay_tx = borrower.repay_offer("1").await?;
+    let repay_tx = borrower.repay_offer(&offer_id.to_string()).await?;
 
     assert_eq!(
         repay_tx.n_inputs(),
@@ -177,7 +177,7 @@ async fn repay_offer_returns_offer_not_active_for_pending_offer() -> anyhow::Res
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
 
-    setup_pending_offer(
+    let (offer_id, _) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -188,7 +188,7 @@ async fn repay_offer_returns_offer_not_active_for_pending_offer() -> anyhow::Res
     )
     .await?;
 
-    let result = borrower.repay_offer("1").await;
+    let result = borrower.repay_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::OfferNotActive)));
 
@@ -205,7 +205,7 @@ async fn repay_offer_returns_principal_utxo_not_found_without_funds() -> anyhow:
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, TEST_PRINCIPAL_AMOUNT)?;
-    let offer = setup_pending_offer(
+    let (offer_id, offer) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -222,7 +222,7 @@ async fn repay_offer_returns_principal_utxo_not_found_without_funds() -> anyhow:
         principal_asset_id,
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
-    accept_pending_offer(&lender, &pool, 1, &offer).await?;
+    accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
 
     assert!(
         borrower
@@ -232,7 +232,7 @@ async fn repay_offer_returns_principal_utxo_not_found_without_funds() -> anyhow:
         "borrower must have spent the entire principal asset supply funding the lender"
     );
 
-    let result = borrower.repay_offer("1").await;
+    let result = borrower.repay_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::PrincipalUtxoNotFound)));
 

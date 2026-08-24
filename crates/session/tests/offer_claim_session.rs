@@ -21,7 +21,7 @@ async fn claim_principal_unlocks_principal_and_returns_borrower_nft() -> anyhow:
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, 20_000)?;
-    let offer = setup_pending_offer(
+    let (offer_id, offer) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -38,7 +38,7 @@ async fn claim_principal_unlocks_principal_and_returns_borrower_nft() -> anyhow:
         principal_asset_id,
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
-    accept_pending_offer(&lender, &pool, 1, &offer).await?;
+    accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
 
     let principal_auth = offer.parameters.get_principal_output_asset_auth();
     assert!(
@@ -50,7 +50,7 @@ async fn claim_principal_unlocks_principal_and_returns_borrower_nft() -> anyhow:
         "borrower principal must be locked under AssetAuth after acceptance"
     );
 
-    let claim_tx = borrower.claim_principal("1").await?;
+    let claim_tx = borrower.claim_principal(&offer_id.to_string()).await?;
 
     assert_eq!(claim_tx.n_inputs(), 2, "AssetAuth principal + borrower NFT");
     assert_eq!(claim_tx.n_outputs(), 2, "borrower NFT + unlocked principal");
@@ -120,7 +120,7 @@ async fn claim_principal_returns_offer_not_active_for_pending_offer() -> anyhow:
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
 
-    setup_pending_offer(
+    let (offer_id, _) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -131,7 +131,7 @@ async fn claim_principal_returns_offer_not_active_for_pending_offer() -> anyhow:
     )
     .await?;
 
-    let result = borrower.claim_principal("1").await;
+    let result = borrower.claim_principal(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::OfferNotActive)));
 
@@ -147,7 +147,7 @@ async fn claim_principal_returns_borrower_principal_utxo_not_found_when_missing(
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
 
-    setup_pending_offer(
+    let (offer_id, _) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -159,10 +159,10 @@ async fn claim_principal_returns_borrower_principal_utxo_not_found_when_missing(
     .await?;
 
     let mut sql_tx = pool.begin().await?;
-    update_offer_status(&mut sql_tx, 1, OfferStatus::Active, 100).await?;
+    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Active, 100).await?;
     sql_tx.commit().await?;
 
-    let result = borrower.claim_principal("1").await;
+    let result = borrower.claim_principal(&offer_id.to_string()).await;
 
     assert!(matches!(
         result,

@@ -7,8 +7,8 @@ use serial_test::serial;
 
 use utils::{
     DEFAULT_LOAN_EXPIRATION_OFFSET, FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS,
-    build_session, create_and_broadcast_factory, dummy_principal_asset_id, offer_params,
-    seed_active_factory, setup_it_context_pool, start_indexer_api,
+    build_session, create_active_factory, create_and_broadcast_factory, dummy_principal_asset_id,
+    offer_params, seed_active_factory, setup_it_context_pool, start_indexer_api,
 };
 
 #[tokio::test]
@@ -18,21 +18,7 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let session = build_session(&context, &indexer_url);
 
-    let (factory_asset_id, creation_txid, auth_vout, program_vout, program_script) =
-        create_and_broadcast_factory(&session).await?;
-    let signer_script = session.signer().get_address().script_pubkey().to_bytes();
-    seed_active_factory(
-        &pool,
-        signer_script,
-        factory_asset_id,
-        program_script.clone(),
-        FACTORY_ISSUING_UTXOS_COUNT as i16,
-        FACTORY_REISSUANCE_FLAGS as i64,
-        creation_txid,
-        (creation_txid, auth_vout),
-        (creation_txid, program_vout),
-    )
-    .await?;
+    let factory = create_active_factory(&session, &pool).await?;
 
     let params = offer_params(
         &session,
@@ -75,10 +61,13 @@ async fn create_offer_builds_and_broadcasts_pending_offer() -> anyhow::Result<()
     );
 
     let outputs = create.transaction.outputs();
-    assert_eq!(outputs[0].asset, factory_asset_id);
+    assert_eq!(outputs[0].asset, factory.asset_id);
     assert_eq!(outputs[0].amount, 1);
-    assert_eq!(outputs[1].asset, factory_asset_id);
-    assert_eq!(outputs[1].script_pubkey.to_bytes(), program_script);
+    assert_eq!(outputs[1].asset, factory.asset_id);
+    assert_eq!(
+        outputs[1].script_pubkey.to_bytes(),
+        factory.program_script_pubkey
+    );
     assert_eq!(outputs[2].asset, pending_parameters.borrower_nft_asset_id);
     assert_eq!(outputs[2].amount, 1);
     assert_eq!(outputs[3].asset, pending_parameters.lender_nft_asset_id);

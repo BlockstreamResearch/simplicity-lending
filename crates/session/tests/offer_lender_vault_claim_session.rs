@@ -24,7 +24,7 @@ async fn repaid_offer_api_returns_lender_vault_for_claim() -> anyhow::Result<()>
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
-    let offer = setup_pending_offer(
+    let (offer_id, offer) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -41,9 +41,9 @@ async fn repaid_offer_api_returns_lender_vault_for_claim() -> anyhow::Result<()>
         principal_asset_id,
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
-    let (_, accept_txid) = accept_pending_offer(&lender, &pool, 1, &offer).await?;
+    let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
     let repay_txid =
-        repay_active_offer(&borrower, &pool, 1, accept_txid, &offer.parameters).await?;
+        repay_active_offer(&borrower, &pool, offer_id, accept_txid, &offer.parameters).await?;
 
     let expected_lender_amount = offer
         .parameters
@@ -52,7 +52,7 @@ async fn repaid_offer_api_returns_lender_vault_for_claim() -> anyhow::Result<()>
         - offer.parameters.offer_parameters.get_total_protocol_fee();
 
     let client = IndexerClient::new(&indexer_url)?;
-    let details = client.get_offer("1").await?;
+    let details = client.get_offer(&offer_id.to_string()).await?;
 
     assert_eq!(details.info.base.status, OfferStatus::Repaid);
 
@@ -78,7 +78,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
-    let offer = setup_pending_offer(
+    let (offer_id, offer) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -95,8 +95,8 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
         principal_asset_id,
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
-    let (_, accept_txid) = accept_pending_offer(&lender, &pool, 1, &offer).await?;
-    repay_active_offer(&borrower, &pool, 1, accept_txid, &offer.parameters).await?;
+    let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
+    repay_active_offer(&borrower, &pool, offer_id, accept_txid, &offer.parameters).await?;
 
     let expected_principal = offer
         .parameters
@@ -114,7 +114,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
         "finalized lender vault must exist after repayment"
     );
 
-    let claim_tx = lender.claim_lender_vault("1").await?;
+    let claim_tx = lender.claim_lender_vault(&offer_id.to_string()).await?;
 
     assert_eq!(
         claim_tx.n_inputs(),
@@ -185,7 +185,7 @@ async fn claim_lender_vault_returns_offer_not_repaid_for_pending_offer() -> anyh
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
 
-    setup_pending_offer(
+    let (offer_id, _) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -196,7 +196,7 @@ async fn claim_lender_vault_returns_offer_not_repaid_for_pending_offer() -> anyh
     )
     .await?;
 
-    let result = borrower.claim_lender_vault("1").await;
+    let result = borrower.claim_lender_vault(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::OfferNotRepaid)));
 
@@ -211,7 +211,7 @@ async fn claim_lender_vault_returns_lender_vault_not_found_when_missing() -> any
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
 
-    setup_pending_offer(
+    let (offer_id, _) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -223,10 +223,10 @@ async fn claim_lender_vault_returns_lender_vault_not_found_when_missing() -> any
     .await?;
 
     let mut sql_tx = pool.begin().await?;
-    update_offer_status(&mut sql_tx, 1, OfferStatus::Repaid, 100).await?;
+    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Repaid, 100).await?;
     sql_tx.commit().await?;
 
-    let result = borrower.claim_lender_vault("1").await;
+    let result = borrower.claim_lender_vault(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::LenderVaultNotFound)));
 

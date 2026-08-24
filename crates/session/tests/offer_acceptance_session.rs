@@ -61,7 +61,7 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
     let lender = build_session_with_signer(&context, lender_signer, &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, 20_000)?;
-    let offer = setup_pending_offer(
+    let (offer_id, offer) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -99,7 +99,7 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
         PRINCIPAL_PARTS.iter().sum::<u64>()
     );
 
-    let accept = lender.accept_offer("1").await?;
+    let accept = lender.accept_offer(&offer_id.to_string()).await?;
     let expected_change =
         PRINCIPAL_PARTS.iter().sum::<u64>() - offer.parameters.offer_parameters.principal_amount;
 
@@ -172,7 +172,7 @@ async fn accept_offer_returns_offer_not_pending_for_active_offer() -> anyhow::Re
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, 20_000)?;
-    setup_pending_offer(
+    let (offer_id, _) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -184,10 +184,10 @@ async fn accept_offer_returns_offer_not_pending_for_active_offer() -> anyhow::Re
     .await?;
 
     let mut sql_tx = pool.begin().await?;
-    update_offer_status(&mut sql_tx, 1, OfferStatus::Active, 100).await?;
+    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Active, 100).await?;
     sql_tx.commit().await?;
 
-    let result = lender.accept_offer("1").await;
+    let result = lender.accept_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::OfferNotPending)));
 
@@ -204,7 +204,7 @@ async fn accept_offer_returns_principal_utxo_not_found_without_funds() -> anyhow
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
     let principal_asset_id = issue_asset(&borrower, 20_000)?;
-    setup_pending_offer(
+    let (offer_id, _) = setup_pending_offer(
         &borrower,
         &pool,
         offer_params(
@@ -215,7 +215,7 @@ async fn accept_offer_returns_principal_utxo_not_found_without_funds() -> anyhow
     )
     .await?;
 
-    let result = lender.accept_offer("1").await;
+    let result = lender.accept_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::PrincipalUtxoNotFound)));
 
