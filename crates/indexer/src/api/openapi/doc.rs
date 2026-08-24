@@ -17,12 +17,12 @@ use crate::api::lenders::dto::LenderOverview;
 use crate::api::lenders::handlers as lender_handlers;
 use crate::api::offers::dto::{
     OfferListItemShort, OfferListResponse, OfferRepaymentDto, OfferUtxoDto, OfferUtxoOutpointShort,
-    OffersOverview, ParticipantDto, ParticipantShort,
+    OfferVaultDto, OffersOverview, ParticipantDto, ParticipantShort,
 };
 use crate::api::offers::handlers as offer_handlers;
 use crate::api::params::{OfferSortBy, SortDir};
 use crate::events::IndexerEvent;
-use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
+use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType, VaultType};
 
 use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
 
@@ -73,11 +73,13 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         OfferStatus,
         OfferUtxoDto,
         OfferUtxoOutpointShort,
+        OfferVaultDto,
         ParticipantDto,
         ParticipantShort,
         ParticipantType,
         SortDir,
         UtxoType,
+        VaultType,
     )),
     tags(
         (name = "offers", description = "Lending offer queries"),

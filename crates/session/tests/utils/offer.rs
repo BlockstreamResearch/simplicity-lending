@@ -5,11 +5,12 @@ use lending_contracts::programs::lending::LendingOfferParameters;
 use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::programs::script_auth::ScriptAuth;
 use lending_indexer::indexer::{
-    insert_offer, insert_offer_utxo, insert_participant_utxo, spend_offer_utxo,
+    insert_offer, insert_offer_utxo, insert_offer_vault, insert_participant_utxo, spend_offer_utxo,
     spend_participant_utxo, update_offer_status,
 };
 use lending_indexer::models::{
-    OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, ParticipantType, UtxoType,
+    OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, OfferVaultModel,
+    ParticipantType, UtxoType, VaultType,
 };
 use lending_session::{AcceptOfferTx, CreateOfferParams, OfferParameters, Session};
 use simplex::simplicityhl::elements::hashes::Hash;
@@ -292,6 +293,7 @@ pub async fn repay_active_offer(
     pool: &PgPool,
     offer_id: i64,
     accept_txid: Txid,
+    offer_parameters: &LendingOfferParameters,
 ) -> anyhow::Result<Txid> {
     let repay = borrower.repay_offer(&offer_id.to_string()).await?;
 
@@ -301,6 +303,15 @@ pub async fn repay_active_offer(
 
     let block_height = 300_u64;
     let active_offer_outpoint = OutPoint::new(accept_txid, 0);
+    let total_to_repay = offer_parameters
+        .offer_parameters
+        .get_total_amount_to_repay();
+    let protocol_fee = offer_parameters.offer_parameters.get_total_protocol_fee();
+    let lender_vault_amount = total_to_repay - protocol_fee;
+
+    // First full repayment: borrower NFT burn @0, lender vault @1, protocol vault @2.
+    const LENDER_VAULT_VOUT: i32 = 1;
+    const PROTOCOL_FEE_VAULT_VOUT: i32 = 2;
 
     let mut sql_tx = pool.begin().await?;
 
@@ -313,19 +324,45 @@ pub async fn repay_active_offer(
     .await?;
     update_offer_status(&mut sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
 
-    insert_offer_utxo(
+    insert_offer_vault(
         &mut sql_tx,
-        &OfferUtxoModel {
+        &OfferVaultModel {
+            id: 0,
             offer_id,
+            vault_type: VaultType::Lender,
             txid: repay_txid.as_byte_array().to_vec(),
-            vout: 1,
-            utxo_type: UtxoType::Repayment,
+            vout: LENDER_VAULT_VOUT,
+            amount: lender_vault_amount as i64,
+            already_supplied: 0,
+            is_finalized: true,
             created_at_height: block_height as i64,
+            updated_at_height: block_height as i64,
             spent_txid: None,
             spent_at_height: None,
         },
     )
     .await?;
+
+    if protocol_fee > 0 {
+        insert_offer_vault(
+            &mut sql_tx,
+            &OfferVaultModel {
+                id: 0,
+                offer_id,
+                vault_type: VaultType::ProtocolFee,
+                txid: repay_txid.as_byte_array().to_vec(),
+                vout: PROTOCOL_FEE_VAULT_VOUT,
+                amount: protocol_fee as i64,
+                already_supplied: 0,
+                is_finalized: true,
+                created_at_height: block_height as i64,
+                updated_at_height: block_height as i64,
+                spent_txid: None,
+                spent_at_height: None,
+            },
+        )
+        .await?;
+    }
 
     sql_tx.commit().await?;
 

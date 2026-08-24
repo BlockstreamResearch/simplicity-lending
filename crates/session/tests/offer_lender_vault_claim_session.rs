@@ -2,8 +2,8 @@ mod utils;
 
 use lending_contracts::programs::program::SimplexProgram;
 use lending_indexer::indexer::update_offer_status;
-use lending_indexer::models::OfferStatus;
 use lending_session::SessionError;
+use lending_session::indexer::{IndexerClient, OfferStatus, VaultType};
 use serial_test::serial;
 
 use utils::{
@@ -14,6 +14,60 @@ use utils::{
 };
 
 const BORROWER_PRINCIPAL_ASSET_SUPPLY: u64 = 30_000;
+
+#[tokio::test]
+#[serial]
+async fn repaid_offer_api_returns_lender_vault_for_claim() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
+    let offer = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+
+    fund_asset_outputs(
+        &borrower,
+        lender.signer(),
+        principal_asset_id,
+        &[TEST_PRINCIPAL_AMOUNT],
+    )?;
+    let (_, accept_txid) = accept_pending_offer(&lender, &pool, 1, &offer).await?;
+    let repay_txid =
+        repay_active_offer(&borrower, &pool, 1, accept_txid, &offer.parameters).await?;
+
+    let expected_lender_amount = offer
+        .parameters
+        .offer_parameters
+        .get_total_amount_to_repay()
+        - offer.parameters.offer_parameters.get_total_protocol_fee();
+
+    let client = IndexerClient::new(&indexer_url)?;
+    let details = client.get_offer("1").await?;
+
+    assert_eq!(details.info.base.status, OfferStatus::Repaid);
+
+    let lender_vault = details
+        .vaults
+        .iter()
+        .find(|vault| vault.vault_type == VaultType::Lender && vault.is_finalized)
+        .expect("repaid offer must expose finalized lender vault");
+    assert_eq!(lender_vault.vout, 1);
+    assert_eq!(lender_vault.txid, repay_txid.to_string());
+    assert_eq!(lender_vault.amount, expected_lender_amount.to_string());
+
+    server_handle.abort();
+    Ok(())
+}
 
 #[tokio::test]
 #[serial]
@@ -42,7 +96,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
         &[TEST_PRINCIPAL_AMOUNT],
     )?;
     let (_, accept_txid) = accept_pending_offer(&lender, &pool, 1, &offer).await?;
-    repay_active_offer(&borrower, &pool, 1, accept_txid).await?;
+    repay_active_offer(&borrower, &pool, 1, accept_txid, &offer.parameters).await?;
 
     let expected_principal = offer
         .parameters
@@ -152,7 +206,7 @@ async fn claim_lender_vault_returns_offer_not_repaid_for_pending_offer() -> anyh
 
 #[tokio::test]
 #[serial]
-async fn claim_lender_vault_returns_repayment_utxo_not_found_when_missing() -> anyhow::Result<()> {
+async fn claim_lender_vault_returns_lender_vault_not_found_when_missing() -> anyhow::Result<()> {
     let (context, pool) = setup_it_context_pool().await?;
     let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
     let borrower = build_session(&context, &indexer_url);
@@ -174,7 +228,7 @@ async fn claim_lender_vault_returns_repayment_utxo_not_found_when_missing() -> a
 
     let result = borrower.claim_lender_vault("1").await;
 
-    assert!(matches!(result, Err(SessionError::RepaymentUtxoNotFound)));
+    assert!(matches!(result, Err(SessionError::LenderVaultNotFound)));
 
     server_handle.abort();
     Ok(())

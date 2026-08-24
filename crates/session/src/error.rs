@@ -58,8 +58,8 @@ pub enum SessionError {
     #[error("Borrower principal UTXO not found")]
     BorrowerPrincipalUtxoNotFound,
 
-    #[error("Repayment UTXO not found")]
-    RepaymentUtxoNotFound,
+    #[error("Lender vault not found")]
+    LenderVaultNotFound,
 
     #[error("Indexer returned invalid `{field}` value for offer: {value}")]
     InvalidOfferData { field: &'static str, value: String },

@@ -28,11 +28,9 @@
               "Enum": [
                 "pending_offer",
                 "active_offer",
+                "borrower_principal",
                 "cancellation",
-                "repayment",
-                "liquidation",
-                "claim",
-                "borrower_principal"
+                "liquidation"
               ]
             }
           }

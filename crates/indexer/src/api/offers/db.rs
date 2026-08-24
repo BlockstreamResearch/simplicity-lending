@@ -6,12 +6,12 @@ use crate::api::OfferListQuery;
 use crate::api::db::{AssetSumRow, asset_amounts_from_rows};
 use crate::models::{
     OfferModel, OfferParticipantModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel,
-    ParticipantType, UtxoType,
+    OfferVaultModel, ParticipantType, UtxoType, VaultType,
 };
 
 use super::dto::{
     OfferDetailsResponse, OfferListItemFull, OfferListResponse, OfferRepaymentDto, OfferUtxoDto,
-    OffersOverview, ParticipantDto, borrower_principal_outpoint_from_utxos,
+    OfferVaultDto, OffersOverview, ParticipantDto, borrower_principal_outpoint_from_utxos,
 };
 use super::list_query::fetch_all_offers_list;
 
@@ -199,6 +199,39 @@ async fn fetch_offer_repayments(
     Ok(rows.into_iter().map(OfferRepaymentDto::from).collect())
 }
 
+async fn fetch_active_vaults(
+    db: &PgPool,
+    offer_id: i64,
+) -> Result<Vec<OfferVaultDto>, sqlx::Error> {
+    let rows = sqlx::query_as!(
+        OfferVaultModel,
+        r#"
+        SELECT
+            id,
+            offer_id,
+            vault_type AS "vault_type: VaultType",
+            txid,
+            vout,
+            amount,
+            already_supplied,
+            is_finalized,
+            created_at_height,
+            updated_at_height,
+            spent_txid,
+            spent_at_height
+        FROM offer_vaults
+        WHERE offer_id = $1
+          AND spent_txid IS NULL
+        ORDER BY vault_type ASC, created_at_height ASC
+        "#,
+        offer_id,
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows.into_iter().map(OfferVaultDto::from).collect())
+}
+
 #[tracing::instrument(
     name = "Fetching offer details from DB",
     skip(db, offer_id),
@@ -212,9 +245,10 @@ pub async fn fetch_details_by_id(
         return Ok(None);
     };
 
-    let (participants, utxos, repayments) = tokio::try_join!(
+    let (participants, utxos, vaults, repayments) = tokio::try_join!(
         fetch_latest_participants(db, offer_id),
         fetch_unspent_utxos(db, offer_id),
+        fetch_active_vaults(db, offer_id),
         fetch_offer_repayments(db, offer_id),
     )?;
 
@@ -225,6 +259,7 @@ pub async fn fetch_details_by_id(
         info,
         participants,
         utxos,
+        vaults,
         repayments,
     }))
 }

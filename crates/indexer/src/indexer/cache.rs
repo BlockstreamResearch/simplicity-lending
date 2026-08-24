@@ -83,6 +83,39 @@ impl<V> WatchCache<V> {
             self.inner.remove(outpoint);
         }
     }
+
+    /// Find the first entry (and its outpoint) matching a predicate.
+    /// Pending (within-block) state is taken into account: pending upserts
+    /// shadow committed values, pending deletes hide them.
+    pub fn find<F>(&self, mut pred: F) -> Option<(&OutPoint, &V)>
+    where
+        F: FnMut(&OutPoint, &V) -> bool,
+    {
+        // Collect all keys visible in the current view.
+        // Pending entries override committed ones.
+        if let Some(pending) = self.block_pending.as_ref() {
+            for (op, pending_op) in pending {
+                if let PendingOp::Upsert(v) = pending_op
+                    && pred(op, v)
+                {
+                    return Some((op, v));
+                }
+            }
+
+            for (op, v) in &self.inner {
+                if pending.contains_key(op) {
+                    continue;
+                }
+                if pred(op, v) {
+                    return Some((op, v));
+                }
+            }
+
+            None
+        } else {
+            self.inner.iter().find(|(op, v)| pred(op, v))
+        }
+    }
 }
 
 impl<V> Default for WatchCache<V> {

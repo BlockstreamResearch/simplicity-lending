@@ -5,6 +5,7 @@ pub mod offer;
 pub mod offer_participants;
 pub mod offer_repayment;
 pub mod offer_utxo;
+pub mod offer_vault;
 pub mod sync;
 
 pub use factories::*;
@@ -14,4 +15,5 @@ pub use offer::*;
 pub use offer_participants::*;
 pub use offer_repayment::*;
 pub use offer_utxo::*;
+pub use offer_vault::*;
 pub use sync::*;

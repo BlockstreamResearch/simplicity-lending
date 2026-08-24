@@ -8,7 +8,7 @@ use crate::api::dto::AssetAmount;
 use crate::api::utils::{format_hex, format_offer_id, format_satoshis};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferRepaymentModel, OfferStatus,
-    OfferUtxoModel, ParticipantType, UtxoType,
+    OfferUtxoModel, OfferVaultModel, ParticipantType, UtxoType, VaultType,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -259,12 +259,49 @@ impl From<OfferRepaymentModel> for OfferRepaymentDto {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct OfferVaultDto {
+    /// Internal database offer ID (auto-increment), as a decimal string.
+    #[schema(example = "1")]
+    pub offer_id: String,
+    pub vault_type: VaultType,
+    pub txid: String,
+    pub vout: u32,
+    /// Current vault balance, in satoshis (decimal string).
+    #[schema(example = "1000")]
+    pub amount: String,
+    /// Principal already supplied into this vault, in satoshis (decimal string).
+    #[schema(example = "0")]
+    pub already_supplied: String,
+    pub is_finalized: bool,
+    pub created_at_height: u64,
+    pub updated_at_height: u64,
+}
+
+impl From<OfferVaultModel> for OfferVaultDto {
+    fn from(value: OfferVaultModel) -> Self {
+        Self {
+            offer_id: format_offer_id(value.offer_id),
+            vault_type: value.vault_type,
+            txid: format_hex(value.txid),
+            vout: value.vout as u32,
+            amount: format_satoshis(value.amount),
+            already_supplied: format_satoshis(value.already_supplied),
+            is_finalized: value.is_finalized,
+            created_at_height: value.created_at_height as u64,
+            updated_at_height: value.updated_at_height as u64,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfferDetailsResponse {
     #[serde(flatten)]
     pub info: OfferListItemFull,
     pub participants: Vec<ParticipantDto>,
     pub utxos: Vec<OfferUtxoDto>,
+    #[serde(default)]
+    pub vaults: Vec<OfferVaultDto>,
     pub repayments: Vec<OfferRepaymentDto>,
 }
 
@@ -272,11 +309,11 @@ pub struct OfferDetailsResponse {
 mod tests {
     use super::{
         OfferListItemFull, OfferListItemShort, OfferRepaymentDto, OfferUtxoDto,
-        OfferUtxoOutpointShort, ParticipantDto, ParticipantShort,
+        OfferUtxoOutpointShort, OfferVaultDto, ParticipantDto, ParticipantShort,
     };
     use crate::models::{
         OfferModel, OfferModelShort, OfferParticipantModel, OfferRepaymentModel, OfferStatus,
-        OfferUtxoModel, ParticipantType, UtxoType,
+        OfferUtxoModel, OfferVaultModel, ParticipantType, UtxoType, VaultType,
     };
     use uuid::Uuid;
 
@@ -444,7 +481,7 @@ mod tests {
             offer_id,
             txid: vec![0x01, 0x02, 0x03],
             vout: 7,
-            utxo_type: UtxoType::Repayment,
+            utxo_type: UtxoType::ActiveOffer,
             created_at_height: 123,
             spent_txid: Some(vec![0xaa, 0xbb]),
             spent_at_height: Some(456),
@@ -455,7 +492,7 @@ mod tests {
         assert_eq!(dto.offer_id, "123");
         assert_eq!(dto.txid, "030201");
         assert_eq!(dto.vout, 7);
-        assert_eq!(dto.utxo_type, UtxoType::Repayment);
+        assert_eq!(dto.utxo_type, UtxoType::ActiveOffer);
         assert_eq!(dto.created_at_height, 123);
         assert_eq!(dto.spent_txid, Some("bbaa".to_string()));
         assert_eq!(dto.spent_at_height, Some(456));
@@ -573,5 +610,35 @@ mod tests {
 
         assert_eq!(dto.spent_txid, None);
         assert_eq!(dto.spent_at_height, None);
+    }
+
+    #[test]
+    fn offer_vault_dto_from_model_maps_and_formats_fields() {
+        let model = OfferVaultModel {
+            id: 1,
+            offer_id: 42,
+            vault_type: VaultType::Lender,
+            txid: vec![0xaa, 0xbb],
+            vout: 2,
+            amount: 950,
+            already_supplied: 100,
+            is_finalized: true,
+            created_at_height: 300,
+            updated_at_height: 301,
+            spent_txid: None,
+            spent_at_height: None,
+        };
+
+        let dto = OfferVaultDto::from(model);
+
+        assert_eq!(dto.offer_id, "42");
+        assert_eq!(dto.vault_type, VaultType::Lender);
+        assert_eq!(dto.txid, "bbaa");
+        assert_eq!(dto.vout, 2);
+        assert_eq!(dto.amount, "950");
+        assert_eq!(dto.already_supplied, "100");
+        assert!(dto.is_finalized);
+        assert_eq!(dto.created_at_height, 300);
+        assert_eq!(dto.updated_at_height, 301);
     }
 }

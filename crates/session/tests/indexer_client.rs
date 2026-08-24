@@ -159,13 +159,14 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
                     "offer_id": "{OFFER_ID}",
                     "txid": "030201",
                     "vout": 7,
-                    "utxo_type": "repayment",
+                    "utxo_type": "active_offer",
                     "created_at_height": 123,
                     "spent_txid": "bbaa",
                     "spent_at_height": 456
                 }}
             ],
-            "repayments": []
+            "repayments": [],
+            "vaults": []
         }}"#
     );
 
@@ -190,10 +191,11 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
     );
     assert_eq!(details.participants[0].spent_at_height, Some(777));
     assert_eq!(details.utxos.len(), 1);
-    assert_eq!(details.utxos[0].utxo_type, UtxoType::Repayment);
+    assert_eq!(details.utxos[0].utxo_type, UtxoType::ActiveOffer);
     assert_eq!(details.info.base.current_debt, "77");
     assert_eq!(details.info.base.collateral_remaining, "99");
     assert!(details.repayments.is_empty());
+    assert!(details.vaults.is_empty());
 }
 
 #[tokio::test]

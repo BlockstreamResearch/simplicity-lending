@@ -9,7 +9,7 @@ use crate::{
     db::DbTx,
     indexer::{
         AssetRegistration, FactoriesTracker, FactoryAuthsTracker, FactoryCreationsTracker,
-        OfferCreationsTracker, OfferParticipantsTracker, OffersTracker,
+        OfferCreationsTracker, OfferParticipantsTracker, OffersTracker, VaultsTracker,
     },
 };
 
@@ -17,6 +17,7 @@ pub struct TrackerRegistry {
     factories: FactoriesTracker,
     factory_auths: FactoryAuthsTracker,
     factory_creations: FactoryCreationsTracker,
+    vaults: VaultsTracker,
     offers: OffersTracker,
     participants: OfferParticipantsTracker,
     creations: OfferCreationsTracker,
@@ -39,6 +40,7 @@ impl TrackerRegistry {
                 network,
                 asset_registration.clone(),
             ),
+            vaults: VaultsTracker::load(db_pool, network).await?,
             offers: OffersTracker::load(db_pool, network).await?,
             participants: OfferParticipantsTracker::load(db_pool).await?,
             creations: OfferCreationsTracker::new(
@@ -52,6 +54,7 @@ impl TrackerRegistry {
     pub fn begin_block(&mut self) {
         self.factories.begin_block();
         self.factory_auths.begin_block();
+        self.vaults.begin_block();
         self.offers.begin_block();
         self.participants.begin_block();
     }
@@ -59,6 +62,7 @@ impl TrackerRegistry {
     pub fn commit_block(&mut self) {
         self.factories.commit_block();
         self.factory_auths.commit_block();
+        self.vaults.commit_block();
         self.offers.commit_block();
         self.participants.commit_block();
     }
@@ -66,6 +70,7 @@ impl TrackerRegistry {
     pub fn abort_block(&mut self) {
         self.factories.abort_block();
         self.factory_auths.abort_block();
+        self.vaults.abort_block();
         self.offers.abort_block();
         self.participants.abort_block();
     }
@@ -89,9 +94,15 @@ impl TrackerRegistry {
             .process_tx_spends(sql_tx, tx, block_height)
             .await?;
 
+        let vault_snapshots = self.offers.vault_snapshots_for_tx(tx, &self.vaults);
+
+        self.vaults
+            .process_tx_spends(sql_tx, tx, block_height)
+            .await?;
+
         let offer_spent = self
             .offers
-            .process_tx_spends(sql_tx, tx, block_height)
+            .process_tx_spends(sql_tx, tx, block_height, &mut self.vaults, &vault_snapshots)
             .await?;
         self.participants
             .process_tx_spends(sql_tx, tx, block_height)

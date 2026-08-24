@@ -29,6 +29,7 @@ pub async fn test_pool() -> anyhow::Result<PgPool> {
     sqlx::query(
         r#"
         TRUNCATE TABLE
+            offer_vaults,
             offer_participants,
             offer_utxos,
             offers,
@@ -331,6 +332,8 @@ pub fn padded_tx_with_inputs(known_inputs: Vec<OutPoint>, outputs: Vec<TxOut>) -
     }
     tx_with_inputs(inputs, outputs)
 }
+
+pub mod vault_tracking;
 
 pub fn explicit_asset_output(asset_byte: u8, script_pubkey: Script) -> TxOut {
     let mut output = TxOut {

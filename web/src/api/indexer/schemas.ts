@@ -20,11 +20,25 @@ export const offerUtxoTypeSchema = zod.enum([
   'active_offer',
   'borrower_principal',
   'cancellation',
-  'repayment',
   'liquidation',
-  'claim',
 ])
 export type OfferUtxoType = zod.infer<typeof offerUtxoTypeSchema>
+
+export const vaultTypeSchema = zod.enum(['lender', 'protocol_fee'])
+export type VaultType = zod.infer<typeof vaultTypeSchema>
+
+export const offerVaultSchema = zod.object({
+  offer_id: zod.string(),
+  vault_type: vaultTypeSchema,
+  txid: zod.string(),
+  vout: zod.coerce.number(),
+  amount: u64AsBigint,
+  already_supplied: u64AsBigint,
+  is_finalized: zod.boolean(),
+  created_at_height: blockHeightSchema,
+  updated_at_height: blockHeightSchema,
+})
+export type OfferVault = zod.infer<typeof offerVaultSchema>
 
 export const participantShortSchema = zod.object({
   participant_type: participantTypeSchema,
@@ -103,6 +117,7 @@ export type OfferRepayment = zod.infer<typeof offerRepaymentSchema>
 export const offerDetailsSchema = offerFullSchema.extend({
   participants: zod.array(participantDtoSchema).default([]),
   utxos: zod.array(offerUtxoSchema).default([]),
+  vaults: zod.array(offerVaultSchema).default([]),
   repayments: zod.array(offerRepaymentSchema).default([]),
 })
 export type OfferDetails = zod.infer<typeof offerDetailsSchema>

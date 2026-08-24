@@ -1,13 +1,17 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO offer_utxos (\n            offer_id, txid, vout, utxo_type, created_at_height, spent_txid, spent_at_height\n        ) VALUES ($1, $2, $3, $4, $5, $6, $7)\n        ",
+  "query": "\n        SELECT COUNT(*)::BIGINT\n        FROM offer_utxos\n        WHERE offer_id = $1\n          AND utxo_type = $2\n          AND spent_txid IS NULL\n        ",
   "describe": {
-    "columns": [],
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
     "parameters": {
       "Left": [
         "Int8",
-        "Bytea",
-        "Int4",
         {
           "Custom": {
             "name": "utxo_type",
@@ -21,13 +25,12 @@
               ]
             }
           }
-        },
-        "Int8",
-        "Bytea",
-        "Int8"
+        }
       ]
     },
-    "nullable": []
+    "nullable": [
+      null
+    ]
   },
-  "hash": "1baaa15bde4d110d88bc760b26b6f5a4576db6853f426af4a549f945ac914ce6"
+  "hash": "87bde28203e2a3fa6880655f544ad9861a275260cb62083f3affb71fb2e70a60"
 }

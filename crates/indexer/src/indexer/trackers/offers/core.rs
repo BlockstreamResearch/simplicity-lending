@@ -9,12 +9,13 @@ use simplex::{
 use crate::{
     db::DbTx,
     indexer::cache::WatchCache,
+    indexer::trackers::offer_vaults::{VaultSnapshotsByOffer, VaultWatchEntry, VaultsTracker},
     indexer::trackers::offers::{
         ActiveOfferSpendKind, classify_active_offer_spend, fetch_offer, insert_offer_repayment,
         insert_offer_utxo, load_offer_utxos_cache, partial_repayment_amounts_from_scan,
         spend_offer_utxo, update_offer_debt_and_collateral, update_offer_status,
     },
-    models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
+    models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType, VaultType},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -41,6 +42,8 @@ impl OffersTracker {
         sql_tx: &mut DbTx<'_>,
         tx: &Transaction,
         block_height: u64,
+        vaults: &mut VaultsTracker,
+        vault_snapshots: &VaultSnapshotsByOffer,
     ) -> anyhow::Result<bool> {
         let mut offer_spent = false;
 
@@ -53,6 +56,8 @@ impl OffersTracker {
                     entry.offer_id,
                     entry.utxo_type,
                     block_height,
+                    vaults,
+                    vault_snapshots,
                 )
                 .await?;
 
@@ -61,6 +66,26 @@ impl OffersTracker {
         }
 
         Ok(offer_spent)
+    }
+
+    pub fn vault_snapshots_for_tx(
+        &self,
+        tx: &Transaction,
+        vaults: &VaultsTracker,
+    ) -> VaultSnapshotsByOffer {
+        let mut snapshots = VaultSnapshotsByOffer::new();
+
+        for input in &tx.input {
+            if let Some(entry) = self.cache.get(&input.previous_output)
+                && entry.utxo_type == UtxoType::ActiveOffer
+            {
+                snapshots
+                    .entry(entry.offer_id)
+                    .or_insert_with(|| vaults.snapshot_vault_amounts(entry.offer_id));
+            }
+        }
+
+        snapshots
     }
 
     pub fn begin_block(&mut self) {
@@ -125,6 +150,7 @@ impl OffersTracker {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn on_spend(
         &mut self,
         sql_tx: &mut DbTx<'_>,
@@ -133,6 +159,8 @@ impl OffersTracker {
         offer_id: i64,
         utxo_type: UtxoType,
         block_height: u64,
+        vaults: &mut VaultsTracker,
+        vault_snapshots: &VaultSnapshotsByOffer,
     ) -> anyhow::Result<()> {
         let txid = tx.txid();
 
@@ -156,9 +184,14 @@ impl OffersTracker {
                 let offer_model = fetch_offer(sql_tx, offer_id).await?;
                 let offer = offer_model.to_active_lending_offer(self.network)?;
 
-                // TODO: pass vault prevout amounts once vault UTXOs are tracked.
-                // `None` only discovers NoRepayments-phase (first) partials.
-                match classify_active_offer_spend(&offer, tx, None)? {
+                // Pre-spend vault amounts are snapshotted before VaultsTracker processes
+                // inputs in this tx (see `vault_snapshots_for_tx`). On the first partial
+                // (NoRepayments phase) the snapshot is None and the classifier works via
+                // output-only matching.
+                let vault_amounts_before = vault_snapshots.get(&offer_id).copied().flatten();
+                let is_first_repayment = vault_amounts_before.is_none();
+
+                match classify_active_offer_spend(&offer, tx, vault_amounts_before)? {
                     ActiveOfferSpendKind::FullRepayment { scan } => {
                         self.handle_loan_repayment(
                             sql_tx,
@@ -168,6 +201,9 @@ impl OffersTracker {
                             &offer_model,
                             &scan,
                             block_height,
+                            vaults,
+                            tx,
+                            is_first_repayment,
                         )
                         .await
                     }
@@ -180,6 +216,9 @@ impl OffersTracker {
                             &offer_model,
                             &scan,
                             block_height,
+                            vaults,
+                            tx,
+                            is_first_repayment,
                         )
                         .await
                     }
@@ -194,10 +233,6 @@ impl OffersTracker {
                         .await
                     }
                 }
-            }
-            UtxoType::Repayment => {
-                self.handle_repayment_claim(sql_tx, old_outpoint, offer_id, txid, block_height)
-                    .await
             }
             UtxoType::BorrowerPrincipal => {
                 self.handle_borrower_principal_spend(
@@ -344,7 +379,7 @@ impl OffersTracker {
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(
         name = "Handling partial offer repayment",
-        skip(self, sql_tx, old_outpoint, offer_model, scan, block_height),
+        skip(self, sql_tx, old_outpoint, offer_model, scan, block_height, vaults),
         fields(%offer_id, %txid, %block_height),
     )]
     async fn handle_partial_repayment(
@@ -356,6 +391,9 @@ impl OffersTracker {
         offer_model: &OfferModel,
         scan: &LendingOfferRepaymentScan,
         block_height: u64,
+        vaults: &mut VaultsTracker,
+        tx: &Transaction,
+        is_first_repayment: bool,
     ) -> anyhow::Result<()> {
         let continuing_vout = scan.continuing_offer_vout.ok_or_else(|| {
             anyhow::anyhow!("partial repayment scan missing continuing_offer_vout")
@@ -394,6 +432,84 @@ impl OffersTracker {
         )
         .await?;
 
+        let offer_lending = offer_model.to_lending_offer_parameters(self.network)?;
+
+        if is_first_repayment {
+            // First repayment: vault UTXOs are being created for the first time.
+            let lender_vault_after = offer_lending.get_lender_vault(amounts.debt_after);
+            let protocol_vault_after = offer_lending.get_protocol_fee_vault(amounts.debt_after);
+
+            let lender_amount = explicit_output_amount(tx, scan.lender_vault_vout)
+                .ok_or_else(|| anyhow::anyhow!("lender vault output not found in tx"))?;
+            vaults
+                .create_vault(
+                    sql_tx,
+                    OutPoint {
+                        txid,
+                        vout: scan.lender_vault_vout,
+                    },
+                    VaultWatchEntry {
+                        offer_id,
+                        vault_type: VaultType::Lender,
+                        amount: lender_amount,
+                        already_supplied: lender_vault_after.get_already_supplied_amount(),
+                        is_finalized: false,
+                    },
+                    block_height,
+                )
+                .await?;
+
+            if let Some(protocol_vout) = scan.protocol_fee_vault_vout {
+                let protocol_amount = explicit_output_amount(tx, protocol_vout)
+                    .ok_or_else(|| anyhow::anyhow!("protocol fee vault output not found in tx"))?;
+                vaults
+                    .create_vault(
+                        sql_tx,
+                        OutPoint {
+                            txid,
+                            vout: protocol_vout,
+                        },
+                        VaultWatchEntry {
+                            offer_id,
+                            vault_type: VaultType::ProtocolFee,
+                            amount: protocol_amount,
+                            already_supplied: protocol_vault_after.get_already_supplied_amount(),
+                            is_finalized: false,
+                        },
+                        block_height,
+                    )
+                    .await?;
+            }
+        } else {
+            // 2nd+ repayment: existing vault UTXOs were spent and removed from cache by
+            // VaultsTracker::process_tx_spends. Insert the new continuing outputs.
+            vaults
+                .supply_vault(
+                    sql_tx,
+                    offer_id,
+                    VaultType::Lender,
+                    tx,
+                    amounts.debt_after,
+                    &offer_lending,
+                    block_height,
+                )
+                .await?;
+
+            if scan.protocol_fee_vault_vout.is_some() {
+                vaults
+                    .supply_vault(
+                        sql_tx,
+                        offer_id,
+                        VaultType::ProtocolFee,
+                        tx,
+                        amounts.debt_after,
+                        &offer_lending,
+                        block_height,
+                    )
+                    .await?;
+            }
+        }
+
         let continuing_outpoint = OutPoint {
             txid,
             vout: continuing_vout,
@@ -431,7 +547,7 @@ impl OffersTracker {
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(
         name = "Handling offer repayment",
-        skip(self, sql_tx, old_outpoint, offer_id, txid, offer_model, scan, block_height),
+        skip(self, sql_tx, old_outpoint, offer_id, txid, offer_model, scan, block_height, vaults),
         fields(%offer_id, %txid, %block_height),
     )]
     async fn handle_loan_repayment(
@@ -443,6 +559,9 @@ impl OffersTracker {
         offer_model: &OfferModel,
         scan: &LendingOfferRepaymentScan,
         block_height: u64,
+        vaults: &mut VaultsTracker,
+        tx: &Transaction,
+        is_first_repayment: bool,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
@@ -465,29 +584,92 @@ impl OffersTracker {
         )
         .await?;
 
+        // Full repayment finalizes both vaults.
+        // For finalized vaults already_supplied == supply_goal.
+        let offer_lending = offer_model.to_lending_offer_parameters(self.network)?;
+
+        if is_first_repayment {
+            // First (and only) repayment: vault UTXOs are being created for the first time.
+            let lender_params = offer_lending.get_lender_vault_parameters();
+            let protocol_params = offer_lending.get_protocol_fee_vault_parameters();
+
+            let lender_amount =
+                explicit_output_amount(tx, scan.lender_vault_vout).ok_or_else(|| {
+                    anyhow::anyhow!("lender vault output not found in full repayment tx")
+                })?;
+            vaults
+                .create_vault(
+                    sql_tx,
+                    OutPoint {
+                        txid,
+                        vout: scan.lender_vault_vout,
+                    },
+                    VaultWatchEntry {
+                        offer_id,
+                        vault_type: VaultType::Lender,
+                        amount: lender_amount,
+                        already_supplied: lender_params.supply_goal,
+                        is_finalized: true,
+                    },
+                    block_height,
+                )
+                .await?;
+
+            if let Some(protocol_vout) = scan.protocol_fee_vault_vout {
+                let protocol_amount =
+                    explicit_output_amount(tx, protocol_vout).ok_or_else(|| {
+                        anyhow::anyhow!("protocol fee vault output not found in full repayment tx")
+                    })?;
+                vaults
+                    .create_vault(
+                        sql_tx,
+                        OutPoint {
+                            txid,
+                            vout: protocol_vout,
+                        },
+                        VaultWatchEntry {
+                            offer_id,
+                            vault_type: VaultType::ProtocolFee,
+                            amount: protocol_amount,
+                            already_supplied: protocol_params.supply_goal,
+                            is_finalized: true,
+                        },
+                        block_height,
+                    )
+                    .await?;
+            }
+        } else {
+            // 2nd+ repayment: existing vault UTXOs were already spent by VaultsTracker.
+            // debt_after = 0 on full repayment → vaults are finalized.
+            vaults
+                .supply_vault(
+                    sql_tx,
+                    offer_id,
+                    VaultType::Lender,
+                    tx,
+                    scan.debt_after,
+                    &offer_lending,
+                    block_height,
+                )
+                .await?;
+
+            if scan.protocol_fee_vault_vout.is_some() {
+                vaults
+                    .supply_vault(
+                        sql_tx,
+                        offer_id,
+                        VaultType::ProtocolFee,
+                        tx,
+                        scan.debt_after,
+                        &offer_lending,
+                        block_height,
+                    )
+                    .await?;
+            }
+        }
+
         update_offer_debt_and_collateral(sql_tx, offer_id, 0, 0, block_height).await?;
         update_offer_status(sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
-
-        let repayment_outpoint = OutPoint { txid, vout: 1 };
-        let repayment_utxo = OfferUtxoModel {
-            offer_id,
-            txid: repayment_outpoint.txid.to_byte_array().to_vec(),
-            vout: repayment_outpoint.vout as i32,
-            utxo_type: UtxoType::Repayment,
-            created_at_height: block_height as i64,
-            spent_at_height: None,
-            spent_txid: None,
-        };
-
-        insert_offer_utxo(sql_tx, &repayment_utxo).await?;
-
-        self.cache.insert(
-            repayment_outpoint,
-            OffersWatchEntry {
-                offer_id,
-                utxo_type: UtxoType::Repayment,
-            },
-        );
 
         Ok(())
     }
@@ -511,12 +693,12 @@ impl OffersTracker {
         update_offer_debt_and_collateral(sql_tx, offer_id, 0, 0, block_height).await?;
         update_offer_status(sql_tx, offer_id, OfferStatus::Liquidated, block_height).await?;
 
-        let repayment_outpoint = OutPoint { txid, vout: 0 };
-        let repayment_utxo = OfferUtxoModel {
+        let liquidation_outpoint = OutPoint { txid, vout: 0 };
+        let liquidation_utxo = OfferUtxoModel {
             offer_id,
-            txid: repayment_outpoint.txid.to_byte_array().to_vec(),
-            vout: repayment_outpoint.vout as i32,
-            utxo_type: UtxoType::Repayment,
+            txid: liquidation_outpoint.txid.to_byte_array().to_vec(),
+            vout: liquidation_outpoint.vout as i32,
+            utxo_type: UtxoType::Liquidation,
             created_at_height: block_height as i64,
 
             // Marked as spent immediately to:
@@ -526,47 +708,7 @@ impl OffersTracker {
             spent_txid: Some(txid.to_byte_array().to_vec()),
         };
 
-        insert_offer_utxo(sql_tx, &repayment_utxo).await?;
-
-        tracing::info!(%offer_id, "Offer archived");
-        Ok(())
-    }
-
-    #[tracing::instrument(
-        name = "Handling repayment tokens claim",
-        skip(self, sql_tx, old_outpoint, offer_id, txid, block_height),
-        fields(%offer_id, %txid, %block_height),
-    )]
-    async fn handle_repayment_claim(
-        &mut self,
-        sql_tx: &mut DbTx<'_>,
-        old_outpoint: &OutPoint,
-        offer_id: i64,
-        txid: Txid,
-        block_height: u64,
-    ) -> anyhow::Result<()> {
-        spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
-        self.cache.remove(old_outpoint);
-
-        update_offer_status(sql_tx, offer_id, OfferStatus::Claimed, block_height).await?;
-
-        let claim_outpoint = OutPoint { txid, vout: 1 };
-
-        let claim_utxo = OfferUtxoModel {
-            offer_id,
-            txid: claim_outpoint.txid.to_byte_array().to_vec(),
-            vout: claim_outpoint.vout as i32,
-            utxo_type: UtxoType::Claim,
-            created_at_height: block_height as i64,
-
-            // Marked as spent immediately to:
-            // 1. Exclude from cache on restart (WHERE spent_txid IS NULL)
-            // 2. Preserve a permanent audit trail in database
-            spent_at_height: Some(block_height as i64),
-            spent_txid: Some(txid.to_byte_array().to_vec()),
-        };
-
-        insert_offer_utxo(sql_tx, &claim_utxo).await?;
+        insert_offer_utxo(sql_tx, &liquidation_utxo).await?;
 
         tracing::info!(%offer_id, "Offer archived");
         Ok(())
@@ -579,4 +721,11 @@ impl OffersTracker {
 
         tx.output[0].is_null_data() && tx.output[1].is_null_data() && !tx.output[2].is_null_data()
     }
+}
+
+/// Return the explicit value of output at `vout` in `tx`, or `None`.
+fn explicit_output_amount(tx: &Transaction, vout: u32) -> Option<u64> {
+    tx.output
+        .get(vout as usize)
+        .and_then(|out| out.value.explicit())
 }

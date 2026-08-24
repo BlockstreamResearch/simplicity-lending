@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { resolveLenderNftOutpoint, resolveRepaymentOutpoint } from '@/api/indexer/utils'
+import { resolveLenderNftOutpoint, resolveLenderVaultOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
@@ -45,7 +45,7 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
   const claimVault = () =>
     runStandardTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
-      const vaultOutpoint = resolveRepaymentOutpoint(fullOffer)
+      const vaultOutpoint = resolveLenderVaultOutpoint(fullOffer)
       if (!vaultOutpoint) throw new Error('Lender vault UTXO not found')
 
       const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
