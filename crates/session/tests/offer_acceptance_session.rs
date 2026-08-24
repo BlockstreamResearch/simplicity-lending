@@ -8,12 +8,14 @@ use lending_session::SessionError;
 use serial_test::serial;
 
 use utils::{
-    DEFAULT_LOAN_EXPIRATION_OFFSET, TEST_PRINCIPAL_AMOUNT, build_session,
-    build_session_with_signer, fund_asset_outputs, issue_asset, offer_params,
-    setup_it_context_pool, setup_pending_offer, start_indexer_api,
+    DEFAULT_LOAN_EXPIRATION_OFFSET, TEST_PRINCIPAL_AMOUNT, accept_pending_offer,
+    assert_offer_status, build_session, build_session_with_signer, cancel_pending_offer,
+    dummy_principal_asset_id, fund_asset_outputs, issue_asset, offer_params, setup_it_context_pool,
+    setup_pending_offer, start_indexer_api,
 };
 
 const PRINCIPAL_PARTS: [u64; 2] = [6_000, 5_000];
+const BORROWER_PRINCIPAL_ASSET_SUPPLY: u64 = 30_000;
 
 fn assert_acceptance_tx_shape(
     accept: &lending_session::AcceptOfferTx,
@@ -218,6 +220,109 @@ async fn accept_offer_returns_principal_utxo_not_found_without_funds() -> anyhow
     let result = lender.accept_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::PrincipalUtxoNotFound)));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn accept_offer_fails_on_already_active_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
+    let (offer_id, offer) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    fund_asset_outputs(
+        &borrower,
+        lender.signer(),
+        principal_asset_id,
+        &[TEST_PRINCIPAL_AMOUNT],
+    )?;
+    accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    let result = lender.accept_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::OfferNotPending)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn accept_offer_fails_on_cancelled_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
+
+    let (offer_id, offer) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    cancel_pending_offer(&borrower, &pool, offer_id, &offer).await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Cancelled).await?;
+
+    let result = lender.accept_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::OfferNotPending)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Cancelled).await?;
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn borrower_cannot_accept_own_pending_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+    let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
+
+    let (offer_id, _) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            principal_asset_id,
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    let result = borrower.accept_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(
+        result,
+        Err(SessionError::BorrowerCannotAcceptOwnOffer)
+    ));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
 
     server_handle.abort();
     Ok(())

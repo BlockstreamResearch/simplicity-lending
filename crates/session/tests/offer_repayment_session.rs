@@ -1,13 +1,15 @@
 mod utils;
 
 use lending_contracts::programs::program::SimplexProgram;
+use lending_indexer::models::OfferStatus;
 use lending_session::SessionError;
 use serial_test::serial;
 
 use utils::{
-    DEFAULT_LOAN_EXPIRATION_OFFSET, TEST_PRINCIPAL_AMOUNT, accept_pending_offer, build_session,
-    build_session_with_signer, dummy_principal_asset_id, fund_asset_outputs, issue_asset,
-    offer_params, setup_it_context_pool, setup_pending_offer, start_indexer_api,
+    DEFAULT_LOAN_EXPIRATION_OFFSET, TEST_PRINCIPAL_AMOUNT, accept_pending_offer,
+    assert_offer_status, build_session, build_session_with_signer, dummy_principal_asset_id,
+    fund_asset_outputs, issue_asset, offer_params, setup_it_context_pool, setup_pending_offer,
+    start_indexer_api,
 };
 
 const BORROWER_PRINCIPAL_ASSET_SUPPLY: u64 = 30_000;
@@ -235,6 +237,34 @@ async fn repay_offer_returns_principal_utxo_not_found_without_funds() -> anyhow:
     let result = borrower.repay_offer(&offer_id.to_string()).await;
 
     assert!(matches!(result, Err(SessionError::PrincipalUtxoNotFound)));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn repay_offer_fails_on_pending_offer() -> anyhow::Result<()> {
+    let (context, pool) = setup_it_context_pool().await?;
+    let (indexer_url, server_handle) = start_indexer_api(pool.clone()).await?;
+    let borrower = build_session(&context, &indexer_url);
+
+    let (offer_id, _) = setup_pending_offer(
+        &borrower,
+        &pool,
+        offer_params(
+            &borrower,
+            dummy_principal_asset_id(),
+            DEFAULT_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
+
+    let result = borrower.repay_offer(&offer_id.to_string()).await;
+
+    assert!(matches!(result, Err(SessionError::OfferNotActive)));
+    assert_offer_status(&borrower, offer_id, OfferStatus::Pending).await?;
 
     server_handle.abort();
     Ok(())
