@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use super::types::{OfferStatus, ParticipantType};
+use crate::models::{OfferStatus, ParticipantType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OfferSortBy {
