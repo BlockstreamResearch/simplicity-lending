@@ -1,5 +1,5 @@
 use std::lib::asserts::assert_eq_32;
-use std::lib::u32::safe_add_32;
+use std::lib::u32::math::safe_add_32;
 
 use crate::helper::check_asset_amounts_eq;
 

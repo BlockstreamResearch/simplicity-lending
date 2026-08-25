@@ -1,5 +1,5 @@
 use std::lib::op_return::assert_output_is_op_return;
-use std::lib::u64::{ge_64, safe_add_64};
+use std::lib::u64::math::{ge_64, safe_add_64};
 
 use crate::helper::{
     get_input_explicit_asset_and_amount,
