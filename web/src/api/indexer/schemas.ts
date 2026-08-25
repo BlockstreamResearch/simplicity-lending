@@ -101,6 +101,14 @@ export const offerUtxoSchema = zod.object({
 })
 export type OfferUtxo = zod.infer<typeof offerUtxoSchema>
 
+export const offerRepaymentPhaseSchema = zod.enum([
+  'no_repayments',
+  'repaying_offer_fee',
+  'repaying_principal',
+  'repaid',
+])
+export type OfferRepaymentPhase = zod.infer<typeof offerRepaymentPhaseSchema>
+
 export const offerRepaymentSchema = zod.object({
   txid: zod.string(),
   height: blockHeightSchema,
@@ -111,6 +119,7 @@ export const offerRepaymentSchema = zod.object({
   collateral_before: u64AsBigint,
   collateral_after: u64AsBigint,
   is_full: zod.boolean(),
+  phase: offerRepaymentPhaseSchema,
 })
 export type OfferRepayment = zod.infer<typeof offerRepaymentSchema>
 

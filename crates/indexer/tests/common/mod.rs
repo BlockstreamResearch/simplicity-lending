@@ -30,6 +30,7 @@ pub async fn test_pool() -> anyhow::Result<PgPool> {
         r#"
         TRUNCATE TABLE
             offer_vaults,
+            offer_repayments,
             offer_participants,
             offer_utxos,
             offers,

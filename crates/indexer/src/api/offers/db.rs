@@ -2,6 +2,8 @@ use sqlx::PgPool;
 
 use simplex::simplicityhl::elements::hex::ToHex;
 
+use lending_contracts::programs::lending::OfferParameters;
+
 use crate::api::OfferListQuery;
 use crate::api::db::{AssetSumRow, asset_amounts_from_rows};
 use crate::models::{
@@ -79,11 +81,11 @@ pub async fn fetch_list(
     fetch_all_offers_list(db, &query).await
 }
 
-async fn fetch_full_info_by_id(
+async fn fetch_offer_model_by_id(
     db: &PgPool,
     offer_id: i64,
-) -> Result<Option<OfferListItemFull>, sqlx::Error> {
-    let model = sqlx::query_as!(
+) -> Result<Option<OfferModel>, sqlx::Error> {
+    sqlx::query_as!(
         OfferModel,
         r#"
         SELECT
@@ -110,9 +112,7 @@ async fn fetch_full_info_by_id(
         offer_id,
     )
     .fetch_optional(db)
-    .await?;
-
-    Ok(model.map(OfferListItemFull::from))
+    .await
 }
 
 async fn fetch_latest_participants(
@@ -171,6 +171,7 @@ async fn fetch_unspent_utxos(db: &PgPool, offer_id: i64) -> Result<Vec<OfferUtxo
 async fn fetch_offer_repayments(
     db: &PgPool,
     offer_id: i64,
+    offer_parameters: &OfferParameters,
 ) -> Result<Vec<OfferRepaymentDto>, sqlx::Error> {
     let rows = sqlx::query_as!(
         OfferRepaymentModel,
@@ -196,7 +197,10 @@ async fn fetch_offer_repayments(
     .fetch_all(db)
     .await?;
 
-    Ok(rows.into_iter().map(OfferRepaymentDto::from).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| OfferRepaymentDto::from_model(row, offer_parameters))
+        .collect())
 }
 
 async fn fetch_active_vaults(
@@ -241,15 +245,18 @@ pub async fn fetch_details_by_id(
     db: &PgPool,
     offer_id: i64,
 ) -> Result<Option<OfferDetailsResponse>, sqlx::Error> {
-    let Some(info) = fetch_full_info_by_id(db, offer_id).await? else {
+    let Some(model) = fetch_offer_model_by_id(db, offer_id).await? else {
         return Ok(None);
     };
+
+    let offer_parameters = model.offer_parameters();
+    let info = OfferListItemFull::from(model);
 
     let (participants, utxos, vaults, repayments) = tokio::try_join!(
         fetch_latest_participants(db, offer_id),
         fetch_unspent_utxos(db, offer_id),
         fetch_active_vaults(db, offer_id),
-        fetch_offer_repayments(db, offer_id),
+        fetch_offer_repayments(db, offer_id, &offer_parameters),
     )?;
 
     let mut info = info;

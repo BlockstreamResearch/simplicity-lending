@@ -174,6 +174,16 @@ impl OfferModel {
         })
     }
 
+    /// Numeric offer terms used by contract math (repayment phase, fees).
+    pub fn offer_parameters(&self) -> OfferParameters {
+        OfferParameters {
+            collateral_amount: self.collateral_amount as u64,
+            principal_amount: self.principal_amount as u64,
+            loan_expiration_time: self.loan_expiration_time as u32,
+            principal_interest_rate: self.interest_rate as u16,
+        }
+    }
+
     pub fn to_active_lending_offer(
         &self,
         network: SimplicityNetwork,

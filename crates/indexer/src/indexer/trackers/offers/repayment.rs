@@ -281,4 +281,99 @@ mod tests {
         assert!(partial_repayment_amounts_from_scan(&scan, 500).is_err());
         assert!(partial_repayment_amounts_from_scan(&scan, 400).is_err());
     }
+
+    #[test]
+    fn classify_partial_fee_supply_uses_prevout_vault_amounts() {
+        let params = test_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let debt_before = total - 500;
+        let active = LendingOffer::new_active(params, debt_before);
+        let amount_to_repay = 200_u64;
+        let debt_after = debt_before - amount_to_repay;
+        let continuing = LendingOffer::new_active(params, debt_after);
+
+        let protocol_fee = params
+            .offer_parameters
+            .get_repaid_protocol_fee(debt_before, amount_to_repay);
+        let lender_delta = amount_to_repay - protocol_fee;
+        let lender_before = params
+            .get_lender_vault(debt_before)
+            .get_already_supplied_amount();
+        let protocol_before = params
+            .get_protocol_fee_vault(debt_before)
+            .get_already_supplied_amount();
+        let lender_after = params.get_lender_vault(debt_after);
+        let protocol_after = params.get_protocol_fee_vault(debt_after);
+
+        let tx = tx_with_outputs(vec![
+            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+            explicit_output(
+                params.collateral_asset_id,
+                3_000 - 136 - 54,
+                continuing.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                lender_before + lender_delta,
+                lender_after.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                protocol_before + protocol_fee,
+                protocol_after.get_script_pubkey(),
+            ),
+        ]);
+
+        let kind =
+            classify_active_offer_spend(&active, &tx, Some((lender_before, Some(protocol_before))))
+                .unwrap();
+        let ActiveOfferSpendKind::PartialRepayment { scan } = kind else {
+            panic!("expected partial repayment, got {kind:?}");
+        };
+        assert_eq!(scan.amount_to_repay, amount_to_repay);
+        assert_eq!(scan.debt_after, debt_after);
+        assert_eq!(scan.protocol_fee_vault_vout, Some(3));
+    }
+
+    #[test]
+    fn classify_partial_principal_supply_omits_protocol_vault() {
+        let params = test_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let total_fee = params.offer_parameters.get_total_fee();
+        let debt_before = total - total_fee;
+        let active = LendingOffer::new_active(params, debt_before);
+        let amount_to_repay = 1_000_u64;
+        let debt_after = debt_before - amount_to_repay;
+        let continuing = LendingOffer::new_active(params, debt_after);
+
+        let lender_before = params
+            .get_lender_vault(debt_before)
+            .get_already_supplied_amount();
+        let lender_after = params.get_lender_vault(debt_after);
+
+        let tx = tx_with_outputs(vec![
+            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+            explicit_output(
+                params.collateral_asset_id,
+                3_000
+                    - params
+                        .offer_parameters
+                        .get_collateral_for_principal(total_fee + amount_to_repay),
+                continuing.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                lender_before + amount_to_repay,
+                lender_after.get_script_pubkey(),
+            ),
+        ]);
+
+        let kind = classify_active_offer_spend(&active, &tx, Some((lender_before, None))).unwrap();
+        let ActiveOfferSpendKind::PartialRepayment { scan } = kind else {
+            panic!("expected partial repayment, got {kind:?}");
+        };
+        assert_eq!(scan.amount_to_repay, amount_to_repay);
+        assert_eq!(scan.debt_after, debt_after);
+        assert!(scan.protocol_fee_vault_vout.is_none());
+    }
 }
