@@ -1,6 +1,7 @@
 use std::lib::asserts::{assert_eq_32, assert_eq_64};
-use std::lib::u64::{safe_add_64, safe_div_64, safe_sub_64, u64_into_u256};
-use std::lib::u32::safe_add_32;
+use std::lib::u64::math::{safe_add_64, safe_div_64, safe_sub_64};
+use std::lib::u64::convert::u64_to_u256;
+use std::lib::u32::math::safe_add_32;
 
 use crate::helper::{get_input_explicit_asset_and_amount, check_asset_amounts_eq, check_assets_eq};
 

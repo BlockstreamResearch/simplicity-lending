@@ -1,9 +1,9 @@
-use std::lib::u64::u64_into_u256;
+use std::lib::u64::convert::u64_to_u256;
 
 // Storage helpers
 
 pub fn get_bool_slot_leaf(value: bool) -> u256 {
-    let value_num: u256 = u64_into_u256(jet::left_pad_low_1_64(<bool>::into(value)));
+    let value_num: u256 = u64_to_u256(jet::left_pad_low_1_64(<bool>::into(value)));
 
     let state_ctx1: Ctx8 = jet::tapdata_init();
     let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, value_num);
@@ -12,7 +12,7 @@ pub fn get_bool_slot_leaf(value: bool) -> u256 {
 }
 
 pub fn get_u64_slot_leaf(value: u64) -> u256 {
-    let value: u256 = u64_into_u256(value);
+    let value: u256 = u64_to_u256(value);
 
     let state_ctx1: Ctx8 = jet::tapdata_init();
     let state_ctx2: Ctx8 = jet::sha_256_ctx_8_add_32(state_ctx1, value);

@@ -1,6 +1,5 @@
-use std::lib::binary::not;
 use std::lib::op_return::is_output_op_return;
-use std::lib::u64::{safe_add_64, safe_sub_64};
+use std::lib::u64::math::{safe_add_64, safe_sub_64};
 
 use crate::helper::{
     get_explicit_asset_and_amount,

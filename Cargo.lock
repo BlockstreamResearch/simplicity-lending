@@ -3225,8 +3225,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-build"
-version = "0.0.9"
-source = "git+https://github.com/BlockstreamResearch/smplx.git?rev=c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b#c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5a566aed019a661983dc6f1e420c6431f1cd47c0e3b2d3fabdeb9de75f0c07"
 dependencies = [
  "glob",
  "globwalk",
@@ -3245,8 +3246,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-macros"
-version = "0.0.9"
-source = "git+https://github.com/BlockstreamResearch/smplx.git?rev=c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b#c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d68dfea03cfb3282d1c28c9cb80ccb683dc015d1f6ab2f1488806f7e9502fe2"
 dependencies = [
  "smplx-build",
  "smplx-test",
@@ -3255,8 +3257,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-regtest"
-version = "0.0.9"
-source = "git+https://github.com/BlockstreamResearch/smplx.git?rev=c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b#c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "963a0c9536049b55eebe96cbbd46c6b51026ae964f7c2e664cb4297af9b36178"
 dependencies = [
  "electrsd",
  "hex",
@@ -3270,8 +3273,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-sdk"
-version = "0.0.9"
-source = "git+https://github.com/BlockstreamResearch/smplx.git?rev=c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b#c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "700f68a14dbbe1e6b214965470197e12505693f7e0fd82360efb53d5430cb823"
 dependencies = [
  "bip39",
  "bitcoin_hashes",
@@ -3289,8 +3293,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-std"
-version = "0.0.9"
-source = "git+https://github.com/BlockstreamResearch/smplx.git?rev=c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b#c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b11221eb218a73f1d9e20c57364905e62351c43feb601dbc64d406137ebd63c"
 dependencies = [
  "either",
  "serde",
@@ -3302,8 +3307,9 @@ dependencies = [
 
 [[package]]
 name = "smplx-test"
-version = "0.0.9"
-source = "git+https://github.com/BlockstreamResearch/smplx.git?rev=c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b#c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b"
+version = "0.0.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4ae375c32c2f220320459710b54bbd7d7289bde0a45daa20cc0193a1999cd98"
 dependencies = [
  "electrsd",
  "proc-macro2",
