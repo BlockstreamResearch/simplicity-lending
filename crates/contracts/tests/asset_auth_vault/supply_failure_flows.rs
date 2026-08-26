@@ -84,8 +84,8 @@ fn fails_to_supply_when_auth_utxo_is_invalid(context: simplex::TestContext) -> a
     let provider = context.get_default_provider();
     let signer = context.get_default_signer();
 
-    let (mut asset_auth_vault, vault_parameters) =
-        default_vault_supplying_setup(&context, 1_000_000)?;
+    let (asset_auth_vault, vault_parameters) = default_vault_supplying_setup(&context, 1_000_000)?;
+    let already_supplied = asset_auth_vault.get_already_supplied_amount();
 
     let asset_auth_vault_utxo =
         provider.fetch_scripthash_utxos(&asset_auth_vault.get_script_pubkey())?[0].clone();
@@ -115,7 +115,8 @@ fn fails_to_supply_when_auth_utxo_is_invalid(context: simplex::TestContext) -> a
             RequiredSignature::NativeEcdsa,
         );
 
-        asset_auth_vault.attach_supplying(
+        let mut vault = AssetAuthVault::new_active(vault_parameters, already_supplied);
+        vault.attach_supplying(
             &mut ft,
             asset_auth_vault_utxo.clone(),
             auth_index_pair.0,

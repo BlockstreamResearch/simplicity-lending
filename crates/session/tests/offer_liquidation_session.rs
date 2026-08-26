@@ -301,7 +301,7 @@ async fn liquidate_offer_fails_on_repaid_offer() -> anyhow::Result<()> {
     let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
     assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
 
-    repay_active_offer(&borrower, &pool, offer_id, accept_txid).await?;
+    repay_active_offer(&borrower, &pool, offer_id, accept_txid, &offer.parameters).await?;
     assert_offer_status(&borrower, offer_id, OfferStatus::Repaid).await?;
 
     let result = lender.liquidate_offer(&offer_id.to_string()).await;
@@ -343,7 +343,8 @@ async fn liquidate_offer_fails_on_claimed_offer() -> anyhow::Result<()> {
     let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
     assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
 
-    let repay_txid = repay_active_offer(&borrower, &pool, offer_id, accept_txid).await?;
+    let repay_txid =
+        repay_active_offer(&borrower, &pool, offer_id, accept_txid, &offer.parameters).await?;
     assert_offer_status(&borrower, offer_id, OfferStatus::Repaid).await?;
 
     claim_lender_vault(&lender, &pool, offer_id, accept_txid, repay_txid).await?;

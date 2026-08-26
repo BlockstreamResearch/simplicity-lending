@@ -286,7 +286,7 @@ async fn claim_principal_fails_on_repaid_offer() -> anyhow::Result<()> {
     let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
     assert_offer_status(&borrower, offer_id, OfferStatus::Active).await?;
 
-    repay_active_offer(&borrower, &pool, offer_id, accept_txid).await?;
+    repay_active_offer(&borrower, &pool, offer_id, accept_txid, &offer.parameters).await?;
     assert_offer_status(&borrower, offer_id, OfferStatus::Repaid).await?;
 
     let result = borrower.claim_principal(&offer_id.to_string()).await;
