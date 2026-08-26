@@ -43,3 +43,12 @@ export const WALLET_CHAIN_ID: string | null = WALLET_CHAIN?.caipNetworkId ?? nul
 
 /** The CAIP-2 namespace Liquid shares with Bitcoin. Accounts and views are keyed by it. */
 export const WALLET_NAMESPACE = liquidTestnet.chainNamespace
+
+/**
+ * The chain a wallet that signs in this page is scoped to.
+ *
+ * The connection layer publishes ids for the chains the extension serves, and has none for a
+ * local Elements chain. A wallet holding a key of its own is on whatever chain the chain library
+ * was built for, including that one, so it is named here rather than left without an account.
+ */
+export const SIGNING_CHAIN_ID: string = WALLET_CHAIN_ID ?? `bip122:${env.VITE_NETWORK}`

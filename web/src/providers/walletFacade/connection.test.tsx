@@ -35,13 +35,40 @@ function Probe() {
       <span data-testid='status'>{wallet.connectionStatus}</span>
       <span data-testid='account'>{wallet.account ?? ''}</span>
       <span data-testid='script'>{wallet.scriptPubkey ?? ''}</span>
-      <span data-testid='error'>{wallet.isError ? wallet.error : ''}</span>
+      <span data-testid='signer'>{wallet.signerType ?? ''}</span>
+      <span data-testid='offered'>
+        {wallet.wallets.map(one => `${one.id}:${String(one.isAvailable)}`).join(' ')}
+      </span>
       <button
         type='button'
         onClick={() => {
           outcome = null
           wallet
-            .connect()
+            .connect('a wallet that is not here')
+            .then(() => {
+              outcome = 'connected'
+            })
+            .catch((error: Error) => {
+              outcome = `refused: ${error.message}`
+            })
+        }}
+      >
+        connect nothing
+      </button>
+      <span data-testid='error'>{wallet.isError ? wallet.error : ''}</span>
+      <button
+        type='button'
+        onClick={() => {
+          outcome = null
+
+          // The probe presses the first wallet the facade offers, which is what a person does:
+          // the picker's cards are that list.
+          const [first] = wallet.wallets
+
+          if (!first) return
+
+          wallet
+            .connect(first.id)
             .then(() => {
               outcome = 'connected'
             })
@@ -110,6 +137,34 @@ describe('connecting the dapp to the wallet', () => {
     await waitFor(() =>
       expect(screen.getByTestId('script').textContent).toBe(`script:${FAKE_DESCRIPTOR}`),
     )
+  })
+
+  it('offers each wallet it can act through, with that wallet\u2019s own availability', async () => {
+    renderProbe()
+
+    await waitFor(() => expect(screen.getByTestId('offered').textContent).toContain('humid:true'))
+  })
+
+  it('reports the wallet that is connected as the signer, rather than a fixed one', async () => {
+    renderProbe()
+
+    expect(screen.getByTestId('signer').textContent).toBe('')
+
+    await pressConnect()
+
+    await waitFor(() => expect(screen.getByTestId('signer').textContent).toBe('humid'))
+  })
+
+  it('refuses to connect a wallet it cannot act through, and names it', async () => {
+    renderProbe()
+
+    await act(async () => {
+      screen.getByText('connect nothing').click()
+    })
+
+    await waitFor(() => expect(outcome).not.toBeNull())
+    expect(outcome).toContain('a wallet that is not here')
+    expect(screen.getByTestId('status').textContent).toBe('disconnected')
   })
 
   it('reports a refusal instead of waiting on it, and stays disconnected', async () => {

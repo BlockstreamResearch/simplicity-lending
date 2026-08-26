@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 
-import type { WalletCapabilities, WalletUtxo } from '@/lib/wallet/types'
+import type { WalletAssetBalance, WalletCapabilities, WalletUtxo } from '@/lib/wallet/types'
 
 import { STALE_TIME_MS } from '../staleTime'
 import { fetchWalletBalances, fetchWalletUtxos } from './methods'
@@ -11,7 +11,7 @@ export function useWalletBalances(
   capabilities: WalletCapabilities,
   account: string | null,
   assetIds: readonly string[],
-): UseQueryResult<Record<string, string>> {
+): UseQueryResult<Record<string, WalletAssetBalance>> {
   return useQuery({
     queryKey: walletQueryKeys.balances(account, assetIds),
     queryFn: () => fetchWalletBalances(capabilities, assetIds),

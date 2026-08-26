@@ -1,4 +1,4 @@
-import type { WalletCapabilities, WalletUtxo } from '@/lib/wallet/types'
+import type { WalletAssetBalance, WalletCapabilities, WalletUtxo } from '@/lib/wallet/types'
 
 /**
  * What the wallet says the account holds of each named asset, in base units.
@@ -10,7 +10,7 @@ import type { WalletCapabilities, WalletUtxo } from '@/lib/wallet/types'
 export async function fetchWalletBalances(
   capabilities: WalletCapabilities,
   assetIds: readonly string[],
-): Promise<Record<string, string>> {
+): Promise<Record<string, WalletAssetBalance>> {
   const amounts = await Promise.all(assetIds.map(assetId => capabilities.getBalance(assetId)))
 
   return Object.fromEntries(assetIds.map((assetId, index) => [assetId, amounts[index]!]))
