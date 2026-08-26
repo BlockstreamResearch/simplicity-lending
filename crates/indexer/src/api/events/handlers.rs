@@ -17,7 +17,7 @@ use crate::api::AppState;
     responses(
         (
             status = 200,
-            description = "Server-Sent Events stream. Event types: `block_indexed`, `factory_created`, `offer_created`, `offer_status_updated`, `offer_repayment_indexed`. Each `data` field carries a tagged JSON `IndexerEvent`. Clients should refetch REST resources on receipt.",
+            description = "Server-Sent Events stream. Event types: `block_indexed`, `factory_created`, `offer_created`, `offer_status_updated`, `offer_repayment_indexed`, `offer_vault_withdrawal_indexed`. Each `data` field carries a tagged JSON `IndexerEvent`. Clients should refetch REST resources on receipt.",
             content_type = "text/event-stream"
         ),
     )

@@ -8,12 +8,13 @@ use crate::api::OfferListQuery;
 use crate::api::db::{AssetSumRow, asset_amounts_from_rows};
 use crate::models::{
     OfferModel, OfferParticipantModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel,
-    OfferVaultModel, ParticipantType, UtxoType, VaultType,
+    OfferVaultModel, OfferVaultWithdrawalModel, ParticipantType, UtxoType, VaultType,
 };
 
 use super::dto::{
     OfferDetailsResponse, OfferListItemFull, OfferListResponse, OfferRepaymentDto, OfferUtxoDto,
-    OfferVaultDto, OffersOverview, ParticipantDto, borrower_principal_outpoint_from_utxos,
+    OfferVaultDto, OfferVaultWithdrawalDto, OffersOverview, ParticipantDto,
+    borrower_principal_outpoint_from_utxos,
 };
 use super::list_query::fetch_all_offers_list;
 
@@ -236,6 +237,38 @@ async fn fetch_active_vaults(
     Ok(rows.into_iter().map(OfferVaultDto::from).collect())
 }
 
+async fn fetch_offer_vault_withdrawals(
+    db: &PgPool,
+    offer_id: i64,
+) -> Result<Vec<OfferVaultWithdrawalDto>, sqlx::Error> {
+    let rows = sqlx::query_as!(
+        OfferVaultWithdrawalModel,
+        r#"
+        SELECT
+            id,
+            offer_id,
+            vault_type AS "vault_type: VaultType",
+            txid,
+            height,
+            is_full,
+            amount_withdrawn,
+            vault_amount_before,
+            vault_amount_after
+        FROM offer_vault_withdrawals
+        WHERE offer_id = $1
+        ORDER BY height DESC, id DESC
+        "#,
+        offer_id,
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(OfferVaultWithdrawalDto::from)
+        .collect())
+}
+
 #[tracing::instrument(
     name = "Fetching offer details from DB",
     skip(db, offer_id),
@@ -252,11 +285,12 @@ pub async fn fetch_details_by_id(
     let offer_parameters = model.offer_parameters();
     let info = OfferListItemFull::from(model);
 
-    let (participants, utxos, vaults, repayments) = tokio::try_join!(
+    let (participants, utxos, vaults, repayments, withdrawals) = tokio::try_join!(
         fetch_latest_participants(db, offer_id),
         fetch_unspent_utxos(db, offer_id),
         fetch_active_vaults(db, offer_id),
         fetch_offer_repayments(db, offer_id, &offer_parameters),
+        fetch_offer_vault_withdrawals(db, offer_id),
     )?;
 
     let mut info = info;
@@ -268,6 +302,7 @@ pub async fn fetch_details_by_id(
         utxos,
         vaults,
         repayments,
+        withdrawals,
     }))
 }
 

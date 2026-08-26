@@ -9,10 +9,13 @@ use crate::{
     db::DbTx,
     indexer::{
         cache::WatchCache,
-        trackers::offer_vaults::{insert_offer_vault, load_offer_vaults_cache, spend_offer_vault},
+        trackers::offer_vaults::{
+            insert_offer_vault, insert_offer_vault_withdrawal, load_offer_vaults_cache,
+            spend_offer_vault,
+        },
         trackers::offers::{fetch_offer_parameters, update_offer_status},
     },
-    models::{OfferStatus, OfferVaultModel, VaultType},
+    models::{OfferStatus, OfferVaultModel, OfferVaultWithdrawalModel, VaultType},
 };
 use lending_contracts::programs::{
     asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters, AssetAuthVaultTxKind},
@@ -208,6 +211,22 @@ impl VaultsTracker {
                     "Vault fully withdrawn"
                 );
 
+                insert_offer_vault_withdrawal(
+                    sql_tx,
+                    &OfferVaultWithdrawalModel {
+                        id: 0,
+                        offer_id: entry.offer_id,
+                        vault_type: entry.vault_type,
+                        txid: txid.to_byte_array().to_vec(),
+                        height: block_height as i64,
+                        is_full: true,
+                        amount_withdrawn: entry.amount as i64,
+                        vault_amount_before: entry.amount as i64,
+                        vault_amount_after: 0,
+                    },
+                )
+                .await?;
+
                 if entry.vault_type == VaultType::Lender {
                     update_offer_status(sql_tx, entry.offer_id, OfferStatus::Claimed, block_height)
                         .await?;
@@ -218,6 +237,30 @@ impl VaultsTracker {
                 let scan = vault.scan_withdraw_part(tx).ok_or_else(|| {
                     anyhow::anyhow!("WithdrawPart classified but scan returned None")
                 })?;
+
+                if scan.vault_amount_after >= entry.amount {
+                    anyhow::bail!(
+                        "WithdrawPart vault_amount_after ({}) must be < prevout amount ({})",
+                        scan.vault_amount_after,
+                        entry.amount
+                    );
+                }
+
+                insert_offer_vault_withdrawal(
+                    sql_tx,
+                    &OfferVaultWithdrawalModel {
+                        id: 0,
+                        offer_id: entry.offer_id,
+                        vault_type: entry.vault_type,
+                        txid: txid.to_byte_array().to_vec(),
+                        height: block_height as i64,
+                        is_full: false,
+                        amount_withdrawn: (entry.amount - scan.vault_amount_after) as i64,
+                        vault_amount_before: entry.amount as i64,
+                        vault_amount_after: scan.vault_amount_after as i64,
+                    },
+                )
+                .await?;
 
                 self.index_vault(
                     sql_tx,

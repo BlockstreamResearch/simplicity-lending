@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::models::OfferStatus;
+use crate::models::{OfferStatus, VaultType};
 
 pub const INDEXER_EVENTS_CHANNEL: &str = "lending_indexer_events";
 
@@ -38,6 +38,14 @@ pub enum IndexerEvent {
         collateral_after: String,
         is_full: bool,
     },
+    OfferVaultWithdrawalIndexed {
+        id: String,
+        txid: String,
+        height: u64,
+        vault_type: VaultType,
+        is_full: bool,
+        amount_withdrawn: String,
+    },
 }
 
 impl IndexerEvent {
@@ -48,6 +56,7 @@ impl IndexerEvent {
             Self::OfferCreated { .. } => "offer_created",
             Self::OfferStatusUpdated { .. } => "offer_status_updated",
             Self::OfferRepaymentIndexed { .. } => "offer_repayment_indexed",
+            Self::OfferVaultWithdrawalIndexed { .. } => "offer_vault_withdrawal_indexed",
         }
     }
 }
@@ -55,7 +64,7 @@ impl IndexerEvent {
 #[cfg(test)]
 mod tests {
     use super::IndexerEvent;
-    use crate::models::OfferStatus;
+    use crate::models::{OfferStatus, VaultType};
     use uuid::Uuid;
 
     #[test]
@@ -132,6 +141,24 @@ mod tests {
     }
 
     #[test]
+    fn offer_vault_withdrawal_indexed_serializes_with_type_tag() {
+        let event = IndexerEvent::OfferVaultWithdrawalIndexed {
+            id: "7".to_string(),
+            txid: "aabb".to_string(),
+            height: 500,
+            vault_type: VaultType::Lender,
+            is_full: true,
+            amount_withdrawn: "10900".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize");
+
+        assert_eq!(json["type"], "offer_vault_withdrawal_indexed");
+        assert_eq!(json["vault_type"], "lender");
+        assert_eq!(json["amount_withdrawn"], "10900");
+        assert_eq!(json["is_full"], true);
+    }
+
+    #[test]
     fn events_roundtrip() {
         let events = [
             IndexerEvent::BlockIndexed { height: 42 },
@@ -160,6 +187,14 @@ mod tests {
                 debt_after: "900".to_string(),
                 collateral_after: "800".to_string(),
                 is_full: false,
+            },
+            IndexerEvent::OfferVaultWithdrawalIndexed {
+                id: "1".to_string(),
+                txid: "ee".to_string(),
+                height: 5,
+                vault_type: VaultType::ProtocolFee,
+                is_full: false,
+                amount_withdrawn: "50".to_string(),
             },
         ];
 

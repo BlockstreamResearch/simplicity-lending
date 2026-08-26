@@ -1,9 +1,11 @@
 use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
 
 use crate::{
+    api::utils::{format_hex, format_offer_id, format_satoshis},
     db::DbTx,
+    events::{IndexerEvent, notify_indexer_event},
     indexer::{VaultWatchEntry, WatchCache},
-    models::{OfferVaultModel, VaultType},
+    models::{OfferVaultModel, OfferVaultWithdrawalModel, VaultType},
 };
 
 #[tracing::instrument(
@@ -141,4 +143,58 @@ pub async fn load_offer_vaults_cache(
     tracing::info!(vaults = count, "Warm-up: Vaults WatchCache populated");
 
     Ok(cache)
+}
+
+#[tracing::instrument(
+    name = "Inserting offer vault withdrawal history row",
+    skip(sql_tx, withdrawal),
+    fields(
+        offer_id = %withdrawal.offer_id,
+        vault_type = ?withdrawal.vault_type,
+        height = %withdrawal.height,
+        is_full = %withdrawal.is_full,
+        amount_withdrawn = %withdrawal.amount_withdrawn
+    )
+)]
+pub async fn insert_offer_vault_withdrawal(
+    sql_tx: &mut DbTx<'_>,
+    withdrawal: &OfferVaultWithdrawalModel,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO offer_vault_withdrawals (
+            offer_id, vault_type, txid, height, is_full,
+            amount_withdrawn, vault_amount_before, vault_amount_after
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        "#,
+        withdrawal.offer_id,
+        withdrawal.vault_type as VaultType,
+        withdrawal.txid,
+        withdrawal.height,
+        withdrawal.is_full,
+        withdrawal.amount_withdrawn,
+        withdrawal.vault_amount_before,
+        withdrawal.vault_amount_after,
+    )
+    .execute(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to insert offer vault withdrawal: {e:?}");
+        e
+    })?;
+
+    notify_indexer_event(
+        sql_tx,
+        &IndexerEvent::OfferVaultWithdrawalIndexed {
+            id: format_offer_id(withdrawal.offer_id),
+            txid: format_hex(withdrawal.txid.clone()),
+            height: withdrawal.height as u64,
+            vault_type: withdrawal.vault_type,
+            is_full: withdrawal.is_full,
+            amount_withdrawn: format_satoshis(withdrawal.amount_withdrawn),
+        },
+    )
+    .await?;
+
+    Ok(())
 }

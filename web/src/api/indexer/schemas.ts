@@ -123,11 +123,23 @@ export const offerRepaymentSchema = zod.object({
 })
 export type OfferRepayment = zod.infer<typeof offerRepaymentSchema>
 
+export const offerVaultWithdrawalSchema = zod.object({
+  txid: zod.string(),
+  height: blockHeightSchema,
+  vault_type: vaultTypeSchema,
+  is_full: zod.boolean(),
+  amount_withdrawn: u64AsBigint,
+  vault_amount_before: u64AsBigint,
+  vault_amount_after: u64AsBigint,
+})
+export type OfferVaultWithdrawal = zod.infer<typeof offerVaultWithdrawalSchema>
+
 export const offerDetailsSchema = offerFullSchema.extend({
   participants: zod.array(participantDtoSchema).default([]),
   utxos: zod.array(offerUtxoSchema).default([]),
   vaults: zod.array(offerVaultSchema).default([]),
   repayments: zod.array(offerRepaymentSchema).default([]),
+  withdrawals: zod.array(offerVaultWithdrawalSchema).default([]),
 })
 export type OfferDetails = zod.infer<typeof offerDetailsSchema>
 

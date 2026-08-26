@@ -977,6 +977,7 @@ struct ExpectedOfferDetailsDto {
     vaults: Vec<ExpectedOfferVaultDto>,
     participants: Vec<ExpectedParticipantDto>,
     repayments: Vec<ExpectedOfferRepaymentDto>,
+    withdrawals: Vec<ExpectedOfferVaultWithdrawalDto>,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -989,6 +990,18 @@ struct ExpectedOfferVaultDto {
     amount: String,
     already_supplied: String,
     is_finalized: bool,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[allow(dead_code)]
+struct ExpectedOfferVaultWithdrawalDto {
+    txid: String,
+    height: u64,
+    vault_type: String,
+    is_full: bool,
+    amount_withdrawn: String,
+    vault_amount_before: String,
+    vault_amount_after: String,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -1270,6 +1283,69 @@ async fn active_offer_details_after_partial_includes_vaults_and_repayment() -> a
         dto.repayments[0].amount_repaid,
         vault_tracking::FIRST_PARTIAL_AMOUNT.to_string()
     );
+    assert!(dto.withdrawals.is_empty());
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn offer_details_after_lender_claim_includes_withdrawal() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = vault_tracking::seed_minimal_factory(&pool).await?;
+    let (offer_id, active_outpoint, offer) =
+        vault_tracking::seed_trackable_active_offer(&pool, factory_id, 12, 100).await?;
+
+    let repay_tx = vault_tracking::build_full_repayment_tx(active_outpoint, &offer)?;
+    let repay_txid = repay_tx.txid();
+    let mut registry = vault_tracking::load_registry(&pool).await?;
+    vault_tracking::process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &repay_tx,
+        vault_tracking::TRACKABLE_REPAYMENT_HEIGHT,
+    )
+    .await?;
+
+    let params = vault_tracking::offer_lending_params(&offer)?;
+    let total = params.offer_parameters.get_total_amount_to_repay();
+    let protocol_fee = params.offer_parameters.get_total_protocol_fee();
+    let lender_amount = total - protocol_fee;
+
+    let claim_tx = vault_tracking::build_lender_vault_withdraw_all_tx(
+        OutPoint {
+            txid: repay_txid,
+            vout: 1,
+        },
+        &offer,
+        lender_amount,
+    )?;
+    vault_tracking::process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &claim_tx,
+        vault_tracking::TRACKABLE_REPAYMENT_HEIGHT + 1,
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let raw = get_json(&http, format!("{base_url}/offers/{offer_id}")).await?;
+    let dto: ExpectedOfferDetailsDto =
+        serde_json::from_value(raw).expect("response must match full DTO shape");
+
+    assert_eq!(dto.status, "claimed");
+    assert_eq!(dto.withdrawals.len(), 1);
+    assert_eq!(dto.withdrawals[0].vault_type, "lender");
+    assert!(dto.withdrawals[0].is_full);
+    assert_eq!(
+        dto.withdrawals[0].amount_withdrawn,
+        lender_amount.to_string()
+    );
+    assert_eq!(dto.withdrawals[0].vault_amount_after, "0");
+    assert!(dto.vaults.iter().all(|vault| vault.vault_type != "lender"));
 
     server_handle.abort();
     Ok(())

@@ -23,7 +23,7 @@ pub use lenders::dto::LenderOverview;
 pub use offers::dto::{
     OfferDetailsResponse, OfferListItemFull, OfferListItemShort, OfferListResponse,
     OfferRepaymentDto, OfferRepaymentPhaseDto, OfferUtxoDto, OfferUtxoOutpointShort, OfferVaultDto,
-    OffersOverview, ParticipantDto, ParticipantShort,
+    OfferVaultWithdrawalDto, OffersOverview, ParticipantDto, ParticipantShort,
 };
 pub use openapi::ApiDoc;
 pub use params::*;

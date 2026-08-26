@@ -6,10 +6,11 @@ use common::vault_tracking::{
     apply_repayment_to_offer, build_first_partial_repayment_tx,
     build_full_repayment_after_partials_tx, build_full_repayment_tx,
     build_lender_vault_withdraw_all_tx, build_principal_phase_partial_repayment_tx,
-    build_second_partial_repayment_tx, count_offer_repayments, count_unspent_utxos_of_type,
-    fetch_active_vault_rows, fetch_offer_balances, fetch_offer_status, load_registry,
-    offer_lending_params, process_tx_through_registry, seed_minimal_factory,
-    seed_trackable_active_offer,
+    build_protocol_vault_withdraw_all_tx, build_second_partial_repayment_tx,
+    build_vault_withdraw_part_tx, count_offer_repayments, count_offer_vault_withdrawals,
+    count_unspent_utxos_of_type, fetch_active_vault_rows, fetch_offer_balances, fetch_offer_status,
+    fetch_offer_vault_withdrawals, load_registry, offer_lending_params,
+    process_tx_through_registry, seed_minimal_factory, seed_trackable_active_offer,
 };
 use lending_indexer::models::{OfferStatus, UtxoType, VaultType};
 use serial_test::serial;
@@ -156,6 +157,10 @@ async fn second_partial_repayment_supplies_vaults() -> anyhow::Result<()> {
     .await?
     .unwrap_or(0);
     assert_eq!(spent_first_vaults, 2);
+    assert_eq!(
+        count_offer_vault_withdrawals(&pool, offer_id, None).await?,
+        0
+    );
 
     Ok(())
 }
@@ -209,6 +214,14 @@ async fn lender_vault_withdraw_all_sets_claimed() -> anyhow::Result<()> {
     assert_eq!(active_vaults.len(), 1);
     assert_eq!(active_vaults[0].vault_type, VaultType::ProtocolFee);
 
+    let withdrawals = fetch_offer_vault_withdrawals(&pool, offer_id).await?;
+    assert_eq!(withdrawals.len(), 1);
+    assert_eq!(withdrawals[0].vault_type, VaultType::Lender);
+    assert!(withdrawals[0].is_full);
+    assert_eq!(withdrawals[0].amount_withdrawn, lender_amount as i64);
+    assert_eq!(withdrawals[0].vault_amount_before, lender_amount as i64);
+    assert_eq!(withdrawals[0].vault_amount_after, 0);
+
     Ok(())
 }
 
@@ -252,6 +265,10 @@ async fn first_partial_repayment_creates_unfinalized_vaults() -> anyhow::Result<
     assert_eq!(
         count_offer_repayments(&pool, offer_id, Some(false)).await?,
         1
+    );
+    assert_eq!(
+        count_offer_vault_withdrawals(&pool, offer_id, None).await?,
+        0
     );
 
     Ok(())
@@ -539,6 +556,134 @@ async fn first_partial_that_covers_full_fee_finalizes_protocol_vault() -> anyhow
     assert_eq!(vaults.len(), 2);
     assert!(!vault_of_type(&vaults, VaultType::Lender).is_finalized);
     assert!(vault_of_type(&vaults, VaultType::ProtocolFee).is_finalized);
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn lender_vault_withdraw_part_indexes_withdrawal_history() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
+    let (offer_id, active_outpoint, offer) =
+        seed_trackable_active_offer(&pool, factory_id, 9, 100).await?;
+
+    let (tx, _debt_after) =
+        build_first_partial_repayment_tx(active_outpoint, &offer, FIRST_PARTIAL_AMOUNT)?;
+    let first_txid = tx.txid();
+    let mut registry = load_registry(&pool).await?;
+    process_tx_through_registry(&pool, &mut registry, &tx, TRACKABLE_REPAYMENT_HEIGHT).await?;
+
+    let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    let lender = vault_of_type(&vaults, VaultType::Lender);
+    assert!(!lender.is_finalized);
+
+    let amount_before = lender.amount as u64;
+    let amount_to_withdraw = amount_before / 2;
+    assert!(amount_to_withdraw > 0);
+
+    let withdraw_tx = build_vault_withdraw_part_tx(
+        OutPoint {
+            txid: first_txid,
+            vout: lender.vout as u32,
+        },
+        &offer,
+        VaultType::Lender,
+        lender.already_supplied as u64,
+        amount_before,
+        amount_to_withdraw,
+    )?;
+
+    process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &withdraw_tx,
+        TRACKABLE_REPAYMENT_HEIGHT + 1,
+    )
+    .await?;
+
+    assert_eq!(
+        fetch_offer_status(&pool, offer_id).await?,
+        OfferStatus::Active
+    );
+
+    let vaults_after = fetch_active_vault_rows(&pool, offer_id).await?;
+    let lender_after = vault_of_type(&vaults_after, VaultType::Lender);
+    assert_eq!(
+        lender_after.amount as u64,
+        amount_before - amount_to_withdraw
+    );
+    assert_eq!(lender_after.already_supplied, lender.already_supplied);
+    assert!(!lender_after.is_finalized);
+
+    let withdrawals = fetch_offer_vault_withdrawals(&pool, offer_id).await?;
+    assert_eq!(withdrawals.len(), 1);
+    assert!(!withdrawals[0].is_full);
+    assert_eq!(withdrawals[0].vault_type, VaultType::Lender);
+    assert_eq!(withdrawals[0].amount_withdrawn, amount_to_withdraw as i64);
+    assert_eq!(withdrawals[0].vault_amount_before, amount_before as i64);
+    assert_eq!(
+        withdrawals[0].vault_amount_after,
+        (amount_before - amount_to_withdraw) as i64
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn protocol_vault_withdraw_all_does_not_claim_offer() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
+    let (offer_id, active_outpoint, offer) =
+        seed_trackable_active_offer(&pool, factory_id, 10, 100).await?;
+
+    let repay_tx = build_full_repayment_tx(active_outpoint, &offer)?;
+    let repay_txid = repay_tx.txid();
+    let mut registry = load_registry(&pool).await?;
+    process_tx_through_registry(&pool, &mut registry, &repay_tx, TRACKABLE_REPAYMENT_HEIGHT)
+        .await?;
+
+    assert_eq!(
+        fetch_offer_status(&pool, offer_id).await?,
+        OfferStatus::Repaid
+    );
+
+    let params = offer_lending_params(&offer)?;
+    let protocol_fee = params.offer_parameters.get_total_protocol_fee();
+
+    let claim_tx = build_protocol_vault_withdraw_all_tx(
+        OutPoint {
+            txid: repay_txid,
+            vout: 2,
+        },
+        &offer,
+        protocol_fee,
+    )?;
+
+    process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &claim_tx,
+        TRACKABLE_REPAYMENT_HEIGHT + 1,
+    )
+    .await?;
+
+    assert_eq!(
+        fetch_offer_status(&pool, offer_id).await?,
+        OfferStatus::Repaid
+    );
+
+    let active_vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    assert_eq!(active_vaults.len(), 1);
+    assert_eq!(active_vaults[0].vault_type, VaultType::Lender);
+
+    let withdrawals = fetch_offer_vault_withdrawals(&pool, offer_id).await?;
+    assert_eq!(withdrawals.len(), 1);
+    assert_eq!(withdrawals[0].vault_type, VaultType::ProtocolFee);
+    assert!(withdrawals[0].is_full);
+    assert_eq!(withdrawals[0].amount_withdrawn, protocol_fee as i64);
+    assert_eq!(withdrawals[0].vault_amount_after, 0);
 
     Ok(())
 }
