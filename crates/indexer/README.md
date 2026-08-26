@@ -205,6 +205,8 @@ Event types:
 | `factory_created` | New issuance factory indexed | Refetch `GET /factories/{id}` or `/factories/by-script` |
 | `offer_created` | New offer indexed (`pending`) | Refetch `GET /borrowers/offers` when `borrower_script_pubkey` matches; or `GET /offers/{id}` |
 | `offer_status_updated` | Offer status transition | Refetch offer details and role-specific lists |
+| `offer_repayment_indexed` | Full or partial repayment indexed | Refetch `GET /offers/{id}` (debt, collateral, vaults, repayments) |
+| `offer_vault_withdrawal_indexed` | Vault `WithdrawPart` / `WithdrawAll` indexed | Refetch `GET /offers/{id}` (vaults, withdrawals; lender full withdraw may also emit `offer_status_updated` → `claimed`) |
 
 Examples:
 
@@ -220,6 +222,12 @@ data: {"type":"offer_created","id":"42","issuance_factory_id":"…","height":250
 
 event: offer_status_updated
 data: {"type":"offer_status_updated","id":"42","status":"active","height":2500005}
+
+event: offer_repayment_indexed
+data: {"type":"offer_repayment_indexed","id":"42","txid":"aabb…","height":2500010,"amount_repaid":"500","debt_after":"10500","collateral_after":"2864","is_full":false}
+
+event: offer_vault_withdrawal_indexed
+data: {"type":"offer_vault_withdrawal_indexed","id":"42","txid":"ccdd…","height":2500015,"vault_type":"lender","is_full":true,"amount_withdrawn":"10900"}
 ```
 
 Clients should treat events as signals to refetch REST resources rather than as full state snapshots. Keep-alive comments are sent periodically so proxies do not close idle connections. If an nginx (or similar) reverse proxy sits in front of the API, disable response buffering for this path.
@@ -300,9 +308,11 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 
 - `borrower_principal_utxo`: unspent `borrower_principal` UTXO outpoint (`txid`, `vout`), or omitted when none
 - `participants`: latest participant UTXO per role (`borrower`, `lender`); each entry includes `offer_id` (decimal string)
-- `utxos`: current unspent offer UTXOs only (`spent_txid IS NULL`); each entry includes `offer_id` (decimal string). Active offers may include both `active_offer` (Lending covenant) and `borrower_principal` (borrower principal AssetAuth locked until repayment).
+- `utxos`: all offer UTXOs for this offer (spent and unspent), ordered by `created_at_height` ascending; each entry includes `offer_id` (decimal string) and optional `spent_txid` / `spent_at_height`. Lifecycle typically includes `pending_offer` → `active_offer` (and continuing `active_offer` rows after partial repayments) plus `borrower_principal` while the loan is active. Convenience field `borrower_principal_utxo` still exposes only the **unspent** principal outpoint when present.
 - `current_debt` / `collateral_remaining`: remaining debt and locked collateral after any partial repayments (creation terms remain in `principal_amount` / `collateral_amount`)
-- `repayments`: history rows from `offer_repayments` (newest first), including amounts and before/after debt/collateral
+- `vaults`: current unspent lender / protocol-fee vault UTXOs only (`spent_txid IS NULL`); each entry includes `offer_id`, balances (`amount`, `already_supplied`), and `is_finalized`
+- `repayments`: history rows from `offer_repayments` (newest first), including amounts, before/after debt/collateral, `is_full`, and `phase` (`no_repayments` / `repaying_offer_fee` / `repaying_principal` / `repaid`) computed from offer terms and `debt_before`
+- `withdrawals`: history rows from `offer_vault_withdrawals` (newest first) for vault `WithdrawPart` / `WithdrawAll` — `vault_type`, `is_full`, `amount_withdrawn`, and vault balances before/after
 
 **Offers overview** (`GET /offers/overview`):
 
@@ -370,4 +380,4 @@ Overview sums use remaining state (`collateral_remaining`, `current_debt`) acros
 | `GET` | `/offers/overview` | Protocol-wide active loan totals | — |
 | `GET` | `/offers` | Paginated short offer list | offer list filters (see above) |
 | `GET` | `/offers/by-script` | Offer IDs (decimal strings) where `script_pubkey` matches an unspent participant UTXO (borrower or lender); response body is `["1", "2", …]` | `script_pubkey` (query param, hex) |
-| `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and unspent offer UTXOs; `{id}` is the numeric offer ID in the path | — |
+| `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and full offer UTXO history (spent + unspent); `{id}` is the numeric offer ID in the path | — |

@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id,\n            offer_id,\n            vault_type AS \"vault_type: VaultType\",\n            txid,\n            height,\n            is_full,\n            amount_withdrawn,\n            vault_amount_before,\n            vault_amount_after\n        FROM offer_vault_withdrawals\n        WHERE offer_id = $1\n        ORDER BY height DESC, id DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "offer_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "vault_type: VaultType",
+        "type_info": {
+          "Custom": {
+            "name": "vault_type",
+            "kind": {
+              "Enum": [
+                "lender",
+                "protocol_fee"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_full",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "amount_withdrawn",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "vault_amount_before",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "vault_amount_after",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "25167a19d860650b9e47ac51280482401abe0c4328454408bee7b58967824440"
+}

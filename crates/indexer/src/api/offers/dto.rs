@@ -10,7 +10,8 @@ use crate::api::dto::AssetAmount;
 use crate::api::utils::{format_hex, format_offer_id, format_satoshis};
 use crate::models::{
     OfferModel, OfferModelShort, OfferParticipantModel, OfferRepaymentModel, OfferStatus,
-    OfferUtxoModel, OfferVaultModel, ParticipantType, UtxoType, VaultType,
+    OfferUtxoModel, OfferVaultModel, OfferVaultWithdrawalModel, ParticipantType, UtxoType,
+    VaultType,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -68,7 +69,7 @@ pub fn borrower_principal_outpoint_from_utxos(
 ) -> Option<OfferUtxoOutpointShort> {
     utxos
         .iter()
-        .find(|utxo| utxo.utxo_type == UtxoType::BorrowerPrincipal)
+        .find(|utxo| utxo.utxo_type == UtxoType::BorrowerPrincipal && utxo.spent_txid.is_none())
         .map(|utxo| OfferUtxoOutpointShort {
             txid: utxo.txid.clone(),
             vout: utxo.vout,
@@ -321,6 +322,37 @@ impl From<OfferVaultModel> for OfferVaultDto {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct OfferVaultWithdrawalDto {
+    pub txid: String,
+    pub height: u64,
+    pub vault_type: VaultType,
+    pub is_full: bool,
+    /// Amount withdrawn in this tx, in satoshis (decimal string).
+    #[schema(example = "500")]
+    pub amount_withdrawn: String,
+    /// Vault balance before this withdraw, in satoshis (decimal string).
+    #[schema(example = "1000")]
+    pub vault_amount_before: String,
+    /// Vault balance after this withdraw, in satoshis (decimal string). Zero for full withdraw.
+    #[schema(example = "500")]
+    pub vault_amount_after: String,
+}
+
+impl From<OfferVaultWithdrawalModel> for OfferVaultWithdrawalDto {
+    fn from(value: OfferVaultWithdrawalModel) -> Self {
+        Self {
+            txid: format_hex(value.txid),
+            height: value.height as u64,
+            vault_type: value.vault_type,
+            is_full: value.is_full,
+            amount_withdrawn: format_satoshis(value.amount_withdrawn),
+            vault_amount_before: format_satoshis(value.vault_amount_before),
+            vault_amount_after: format_satoshis(value.vault_amount_after),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfferDetailsResponse {
     #[serde(flatten)]
@@ -329,18 +361,23 @@ pub struct OfferDetailsResponse {
     pub utxos: Vec<OfferUtxoDto>,
     #[serde(default)]
     pub vaults: Vec<OfferVaultDto>,
+    #[serde(default)]
     pub repayments: Vec<OfferRepaymentDto>,
+    #[serde(default)]
+    pub withdrawals: Vec<OfferVaultWithdrawalDto>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         OfferListItemFull, OfferListItemShort, OfferRepaymentDto, OfferRepaymentPhaseDto,
-        OfferUtxoDto, OfferUtxoOutpointShort, OfferVaultDto, ParticipantDto, ParticipantShort,
+        OfferUtxoDto, OfferUtxoOutpointShort, OfferVaultDto, OfferVaultWithdrawalDto,
+        ParticipantDto, ParticipantShort,
     };
     use crate::models::{
         OfferModel, OfferModelShort, OfferParticipantModel, OfferRepaymentModel, OfferStatus,
-        OfferUtxoModel, OfferVaultModel, ParticipantType, UtxoType, VaultType,
+        OfferUtxoModel, OfferVaultModel, OfferVaultWithdrawalModel, ParticipantType, UtxoType,
+        VaultType,
     };
     use lending_contracts::programs::lending::OfferParameters;
     use uuid::Uuid;
@@ -583,6 +620,52 @@ mod tests {
     }
 
     #[test]
+    fn borrower_principal_outpoint_from_utxos_skips_spent_principal() {
+        let offer_id = "123".to_string();
+        let utxos = vec![
+            OfferUtxoDto {
+                offer_id: offer_id.clone(),
+                txid: "aa".to_string(),
+                vout: 0,
+                utxo_type: UtxoType::BorrowerPrincipal,
+                created_at_height: 1,
+                spent_txid: Some("dead".to_string()),
+                spent_at_height: Some(10),
+            },
+            OfferUtxoDto {
+                offer_id,
+                txid: "bb".to_string(),
+                vout: 1,
+                utxo_type: UtxoType::BorrowerPrincipal,
+                created_at_height: 2,
+                spent_txid: None,
+                spent_at_height: None,
+            },
+        ];
+
+        let outpoint = super::borrower_principal_outpoint_from_utxos(&utxos)
+            .expect("should find unspent borrower principal");
+
+        assert_eq!(outpoint.txid, "bb");
+        assert_eq!(outpoint.vout, 1);
+    }
+
+    #[test]
+    fn borrower_principal_outpoint_from_utxos_returns_none_when_only_spent() {
+        let utxos = vec![OfferUtxoDto {
+            offer_id: "123".to_string(),
+            txid: "aa".to_string(),
+            vout: 0,
+            utxo_type: UtxoType::BorrowerPrincipal,
+            created_at_height: 1,
+            spent_txid: Some("dead".to_string()),
+            spent_at_height: Some(10),
+        }];
+
+        assert!(super::borrower_principal_outpoint_from_utxos(&utxos).is_none());
+    }
+
+    #[test]
     fn borrower_principal_outpoint_from_utxos_returns_none_when_missing() {
         let offer_id = "123".to_string();
         let utxos = vec![OfferUtxoDto {
@@ -705,5 +788,30 @@ mod tests {
         assert!(dto.is_finalized);
         assert_eq!(dto.created_at_height, 300);
         assert_eq!(dto.updated_at_height, 301);
+    }
+
+    #[test]
+    fn offer_vault_withdrawal_dto_from_model_maps_and_formats_fields() {
+        let model = OfferVaultWithdrawalModel {
+            id: 1,
+            offer_id: 42,
+            vault_type: VaultType::Lender,
+            txid: vec![0xaa, 0xbb],
+            height: 900,
+            is_full: true,
+            amount_withdrawn: 10_900,
+            vault_amount_before: 10_900,
+            vault_amount_after: 0,
+        };
+
+        let dto = OfferVaultWithdrawalDto::from(model);
+
+        assert_eq!(dto.txid, "bbaa");
+        assert_eq!(dto.height, 900);
+        assert_eq!(dto.vault_type, VaultType::Lender);
+        assert!(dto.is_full);
+        assert_eq!(dto.amount_withdrawn, "10900");
+        assert_eq!(dto.vault_amount_before, "10900");
+        assert_eq!(dto.vault_amount_after, "0");
     }
 }

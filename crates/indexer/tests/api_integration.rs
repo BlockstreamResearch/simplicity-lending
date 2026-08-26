@@ -977,6 +977,7 @@ struct ExpectedOfferDetailsDto {
     vaults: Vec<ExpectedOfferVaultDto>,
     participants: Vec<ExpectedParticipantDto>,
     repayments: Vec<ExpectedOfferRepaymentDto>,
+    withdrawals: Vec<ExpectedOfferVaultWithdrawalDto>,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -989,6 +990,18 @@ struct ExpectedOfferVaultDto {
     amount: String,
     already_supplied: String,
     is_finalized: bool,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[allow(dead_code)]
+struct ExpectedOfferVaultWithdrawalDto {
+    txid: String,
+    height: u64,
+    vault_type: String,
+    is_full: bool,
+    amount_withdrawn: String,
+    vault_amount_before: String,
+    vault_amount_after: String,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -1082,9 +1095,10 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.borrower_nft_asset.len(), 64);
     assert_eq!(dto.lender_nft_asset.len(), 64);
     assert_eq!(dto.protocol_fee_keeper_asset.len(), 64);
-    assert_eq!(dto.utxos.len(), 1);
-    assert_eq!(dto.utxos[0].utxo_type, "active_offer");
-    assert!(dto.utxos[0].spent_txid.is_none());
+    assert_eq!(dto.utxos.len(), 2);
+    assert_eq!(dto.utxos[0].utxo_type, "pending_offer");
+    assert_eq!(dto.utxos[1].utxo_type, "active_offer");
+    assert!(dto.utxos[1].spent_txid.is_none());
     assert!(dto.borrower_principal_utxo.is_none());
     assert!(dto.vaults.is_empty());
     assert!(dto.repayments.is_empty());
@@ -1116,12 +1130,11 @@ async fn active_offer_details_includes_borrower_principal_utxo() -> anyhow::Resu
 
     assert_eq!(dto.id, active_offer.to_string());
     assert_eq!(dto.status, "active");
-    assert_eq!(dto.utxos.len(), 2);
+    assert_eq!(dto.utxos.len(), 3);
 
     let utxo_types: Vec<&str> = dto.utxos.iter().map(|u| u.utxo_type.as_str()).collect();
     assert!(utxo_types.contains(&"active_offer"));
     assert!(utxo_types.contains(&"borrower_principal"));
-    assert!(dto.utxos.iter().all(|u| u.spent_txid.is_none()));
     assert!(dto.vaults.is_empty());
 
     let principal = dto
@@ -1263,6 +1276,16 @@ async fn active_offer_details_after_partial_includes_vaults_and_repayment() -> a
     assert_eq!(dto.current_debt, debt_after.to_string());
     assert_eq!(dto.vaults.len(), 2);
     assert!(dto.vaults.iter().all(|vault| vault.vout != 9));
+    assert!(
+        dto.utxos
+            .iter()
+            .any(|utxo| utxo.utxo_type == "active_offer" && utxo.spent_txid.is_some())
+    );
+    assert!(
+        dto.utxos
+            .iter()
+            .any(|utxo| utxo.utxo_type == "active_offer" && utxo.spent_txid.is_none())
+    );
     assert_eq!(dto.repayments.len(), 1);
     assert!(!dto.repayments[0].is_full);
     assert_eq!(dto.repayments[0].phase, "no_repayments");
@@ -1270,6 +1293,80 @@ async fn active_offer_details_after_partial_includes_vaults_and_repayment() -> a
         dto.repayments[0].amount_repaid,
         vault_tracking::FIRST_PARTIAL_AMOUNT.to_string()
     );
+    assert!(dto.withdrawals.is_empty());
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn offer_details_after_lender_claim_includes_withdrawal() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = vault_tracking::seed_minimal_factory(&pool).await?;
+    let (offer_id, active_outpoint, offer) =
+        vault_tracking::seed_trackable_active_offer(&pool, factory_id, 12, 100).await?;
+
+    let repay_tx = vault_tracking::build_full_repayment_tx(active_outpoint, &offer)?;
+    let repay_txid = repay_tx.txid();
+    let mut registry = vault_tracking::load_registry(&pool).await?;
+    vault_tracking::process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &repay_tx,
+        vault_tracking::TRACKABLE_REPAYMENT_HEIGHT,
+    )
+    .await?;
+
+    let params = vault_tracking::offer_lending_params(&offer)?;
+    let total = params.offer_parameters.get_total_amount_to_repay();
+    let protocol_fee = params.offer_parameters.get_total_protocol_fee();
+    let lender_amount = total - protocol_fee;
+
+    let claim_tx = vault_tracking::build_lender_vault_withdraw_all_tx(
+        OutPoint {
+            txid: repay_txid,
+            vout: 1,
+        },
+        &offer,
+        lender_amount,
+    )?;
+    vault_tracking::process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &claim_tx,
+        vault_tracking::TRACKABLE_REPAYMENT_HEIGHT + 1,
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let raw = get_json(&http, format!("{base_url}/offers/{offer_id}")).await?;
+    let dto: ExpectedOfferDetailsDto =
+        serde_json::from_value(raw).expect("response must match full DTO shape");
+
+    assert_eq!(dto.status, "claimed");
+    assert!(
+        dto.utxos
+            .iter()
+            .any(|utxo| utxo.utxo_type == "active_offer" && utxo.spent_txid.is_some())
+    );
+    assert!(
+        dto.utxos
+            .iter()
+            .all(|utxo| utxo.utxo_type != "active_offer" || utxo.spent_txid.is_some())
+    );
+    assert!(dto.borrower_principal_utxo.is_none());
+    assert_eq!(dto.withdrawals.len(), 1);
+    assert_eq!(dto.withdrawals[0].vault_type, "lender");
+    assert!(dto.withdrawals[0].is_full);
+    assert_eq!(
+        dto.withdrawals[0].amount_withdrawn,
+        lender_amount.to_string()
+    );
+    assert_eq!(dto.withdrawals[0].vault_amount_after, "0");
+    assert!(dto.vaults.iter().all(|vault| vault.vault_type != "lender"));
 
     server_handle.abort();
     Ok(())

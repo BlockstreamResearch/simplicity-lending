@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO offer_vault_withdrawals (\n            offer_id, vault_type, txid, height, is_full,\n            amount_withdrawn, vault_amount_before, vault_amount_after\n        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        {
+          "Custom": {
+            "name": "vault_type",
+            "kind": {
+              "Enum": [
+                "lender",
+                "protocol_fee"
+              ]
+            }
+          }
+        },
+        "Bytea",
+        "Int8",
+        "Bool",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "63320b3d182f83ef2a68222e60ca7d7d107456699d3b6decd8a4a6fc9333a9d7"
+}

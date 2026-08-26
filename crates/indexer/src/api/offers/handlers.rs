@@ -60,7 +60,7 @@ pub async fn list_offers(
     tag = "offers",
     params(("id" = i64, Path, description = "Integer offer ID (auto-increment)")),
     responses(
-        (status = 200, description = "Full offer details with participants and unspent UTXOs", body = OfferDetailsResponseSchema),
+        (status = 200, description = "Full offer details with participants and offer UTXO history (spent and unspent)", body = OfferDetailsResponseSchema),
         (status = 404, description = "Offer not found", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     )

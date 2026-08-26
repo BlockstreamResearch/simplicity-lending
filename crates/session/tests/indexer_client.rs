@@ -166,7 +166,8 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
                 }}
             ],
             "repayments": [],
-            "vaults": []
+            "vaults": [],
+            "withdrawals": []
         }}"#
     );
 
@@ -196,6 +197,7 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
     assert_eq!(details.info.base.collateral_remaining, "99");
     assert!(details.repayments.is_empty());
     assert!(details.vaults.is_empty());
+    assert!(details.withdrawals.is_empty());
 }
 
 #[tokio::test]

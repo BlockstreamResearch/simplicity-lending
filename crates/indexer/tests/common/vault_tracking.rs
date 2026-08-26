@@ -486,6 +486,110 @@ pub fn build_lender_vault_withdraw_all_tx(
     ))
 }
 
+pub fn build_protocol_vault_withdraw_all_tx(
+    protocol_vault_input: OutPoint,
+    offer: &OfferModel,
+    vault_amount: u64,
+) -> anyhow::Result<Transaction> {
+    let params = offer_lending_params(offer)?;
+    Ok(tx_with_inputs(
+        vec![protocol_vault_input],
+        vec![explicit_output(
+            params.principal_asset_id,
+            vault_amount,
+            script(&[0x99]),
+        )],
+    ))
+}
+
+pub fn build_vault_withdraw_part_tx(
+    vault_input: OutPoint,
+    offer: &OfferModel,
+    vault_type: VaultType,
+    already_supplied: u64,
+    vault_amount_before: u64,
+    amount_to_withdraw: u64,
+) -> anyhow::Result<Transaction> {
+    if amount_to_withdraw == 0 || amount_to_withdraw >= vault_amount_before {
+        anyhow::bail!(
+            "amount_to_withdraw ({amount_to_withdraw}) must be in 1..{vault_amount_before}"
+        );
+    }
+
+    let params = offer_lending_params(offer)?;
+    let vault_params = match vault_type {
+        VaultType::Lender => params.get_lender_vault_parameters(),
+        VaultType::ProtocolFee => params.get_protocol_fee_vault_parameters(),
+    };
+    let vault = AssetAuthVault::new_active(vault_params, already_supplied);
+    let vault_amount_after = vault_amount_before - amount_to_withdraw;
+
+    Ok(tx_with_inputs(
+        vec![vault_input],
+        vec![
+            explicit_output(
+                params.principal_asset_id,
+                vault_amount_after,
+                vault.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                amount_to_withdraw,
+                script(&[0x99]),
+            ),
+        ],
+    ))
+}
+
+pub async fn count_offer_vault_withdrawals(
+    pool: &PgPool,
+    offer_id: i64,
+    is_full: Option<bool>,
+) -> anyhow::Result<i64> {
+    let count = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*)::BIGINT
+        FROM offer_vault_withdrawals
+        WHERE offer_id = $1
+          AND ($2::BOOLEAN IS NULL OR is_full = $2)
+        "#,
+        offer_id,
+        is_full
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+    Ok(count)
+}
+
+pub async fn fetch_offer_vault_withdrawals(
+    pool: &PgPool,
+    offer_id: i64,
+) -> anyhow::Result<Vec<lending_indexer::models::OfferVaultWithdrawalModel>> {
+    let rows = sqlx::query_as!(
+        lending_indexer::models::OfferVaultWithdrawalModel,
+        r#"
+        SELECT
+            id,
+            offer_id,
+            vault_type AS "vault_type: VaultType",
+            txid,
+            height,
+            is_full,
+            amount_withdrawn,
+            vault_amount_before,
+            vault_amount_after
+        FROM offer_vault_withdrawals
+        WHERE offer_id = $1
+        ORDER BY height ASC, id ASC
+        "#,
+        offer_id
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 pub fn outpoint_from_txid_byte(txid_byte: u8, vout: u32) -> OutPoint {
     OutPoint {
         txid: Txid::from_slice(&[txid_byte; 32]).expect("valid txid"),
