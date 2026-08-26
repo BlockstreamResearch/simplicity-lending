@@ -1,28 +1,49 @@
 import type { Pset, Transaction, WalletTxOut, Wollet } from '@lilbonekit/lwk-web'
 
-import type { WalletActionRequest, WalletActionResult } from '@/lib/wallet/types'
+import type {
+  CachePolicy,
+  PendingWalletRequest,
+  WalletActionRequest,
+  WalletActionResult,
+  WalletConnectOptions,
+  WalletSignerType,
+  WalletVariant,
+} from '@/lib/wallet/types'
+
+export type {
+  CachePolicy,
+  PendingWalletRequest,
+  WalletConnectOptions,
+  WalletSignerType,
+  WalletVariant,
+} from '@/lib/wallet/types'
 
 /**
  * How far the connection has got, in the vocabulary the screens already read.
  *
- * `locked` belongs to a device that asks for a PIN. No wallet behind the facade does that
- * today, so nothing produces it; it stays in the union because the screens that branch on it
- * are being rewired rather than rewritten, and a connector that locks is meant to return.
+ * `locked` belongs to a device that has been reached and is waiting for its PIN. A screen that
+ * treated it as disconnected would be telling a person their device had failed while they were
+ * still typing on it.
  */
 export type WalletConnectionStatus = 'disconnected' | 'locked' | 'ready'
 
-/** Which wallet is holding the key. Read only to word a signing step. */
-export type WalletSignerType = 'jade' | 'seed' | 'sideswap' | 'humid'
-
-/** A request the person has to finish somewhere else before the dapp can continue. */
-export interface PendingWalletRequest {
-  kind: 'login' | 'sign'
-  requestId: string
-  appLink: string | null
+/**
+ * One wallet the person may pick, and whether they may pick it here.
+ *
+ * Availability is per wallet because it is a fact about each one separately: an extension that is
+ * not installed says nothing about a build that carries no relay URL. Reported as one flag, the
+ * picker could only offer all of them or none.
+ */
+export interface WalletChoice {
+  readonly id: string
+  /** Name a person would recognise. */
+  readonly name: string
+  readonly isAvailable: boolean
+  /** Why this wallet cannot be reached from this page, when it cannot. Null while it can. */
+  readonly unavailableReason: string | null
+  /** Whether starting it needs a recovery phrase from the person. */
+  readonly requiresRecoveryPhrase: boolean
 }
-
-/** Whether a disconnect keeps or drops what was cached for the account. */
-export type CachePolicy = 'preserve' | 'clear'
 
 /**
  * The only way anything in this application reaches a wallet.
@@ -31,12 +52,15 @@ export type CachePolicy = 'preserve' | 'clear'
  * connected. Everything below is one adapter per wallet.
  */
 export interface WalletFacadeValue {
-  /** Whether a wallet can be reached from this page at all. */
-  hasWallet: boolean
-  /** Why no wallet can be reached, when none can. Null while one can. */
-  walletUnavailableReason: string | null
+  /** Every wallet this dapp can act through, and whether each is reachable from this page. */
+  wallets: readonly WalletChoice[]
   connectionStatus: WalletConnectionStatus
-  /** Which wallet is connected, or null. */
+  /**
+   * Which wallet the dapp is acting through, or null while it is acting through none.
+   *
+   * Set from the moment one is picked rather than from the moment it answers, because a wallet
+   * that is waiting for a PIN is the one a retry has to go back to.
+   */
   connectorId: string | null
   signerType: WalletSignerType | null
   /** The account this dapp is acting as. */
@@ -62,15 +86,33 @@ export interface WalletFacadeValue {
   /** The script the account's address pays to — how every read here identifies an account. */
   scriptPubkey: string | null
   pendingRequest: PendingWalletRequest | null
+  /** Whether the device the connected wallet lives on is plugged in. False for one that has none. */
+  usbDeviceDetected: boolean
+  /** Which kind of address the connected account hands out, where the wallet was told. */
+  walletVariant: WalletVariant | null
   /** The last failure, kept after it stops being shown. */
   error: string | null
   /** Whether that failure is still worth showing. */
   isError: boolean
 
-  connect(): Promise<void>
+  /**
+   * Connect the wallet the person picked, with whatever that wallet needs to start.
+   *
+   * The wallet is named by the caller because only the person choosing knows which one they
+   * pressed. Nothing here defaults to a wallet: a connect with no wallet named is a bug in the
+   * screen that called it, not a reason to pick one on their behalf.
+   */
+  connect(walletId: string, options?: WalletConnectOptions): Promise<void>
   disconnect(options?: { cachePolicy?: CachePolicy }): Promise<void>
   /** Show the wallet's own account view, where an account is inspected and given up. */
   openAccount(): void
+  /**
+   * Give up on a request the wallet is waiting for a person to answer elsewhere.
+   *
+   * Resolves without doing anything where nothing is waiting, so a screen offering it does not
+   * have to know which wallet is connected.
+   */
+  cancelPendingRequest(): Promise<void>
   /** Re-read everything the wallet serves about this account. */
   syncWallet(): Promise<void>
   getReceiveAddress(): Promise<string | null>

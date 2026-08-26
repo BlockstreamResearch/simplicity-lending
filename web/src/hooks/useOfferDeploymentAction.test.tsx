@@ -85,7 +85,11 @@ function Probe({ useAction }: { useAction: () => PerformOfferAction }) {
       <button
         type='button'
         onClick={() => {
-          void wallet.connect().catch(() => {})
+          // The probe presses the first wallet the facade offers, which is what a person does:
+          // the picker's cards are that list.
+          const [first] = wallet.wallets
+
+          if (first) void wallet.connect(first.id).catch(() => {})
         }}
       >
         connect

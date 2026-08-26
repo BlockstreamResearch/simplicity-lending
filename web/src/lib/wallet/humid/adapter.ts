@@ -98,7 +98,9 @@ function useCapabilities(provider: CaipRpcProvider | undefined): WalletCapabilit
 
         const { balance } = await client.getBalance({ assetId: walletAssetId(assetId) })
 
-        return balance
+        // One number, and nothing about its parts: the wallet does not publish what has confirmed,
+        // and inventing a split here would state as fact something it never said.
+        return { total: balance, confirmed: null, pending: null }
       },
       async getUtxos(assetId: string): Promise<WalletUtxo[]> {
         if (!client) throw new WalletNotConnectedError('reading spendable outputs')
@@ -183,6 +185,7 @@ export function useHumidWallet(): WalletAdapter {
 
     return {
       id: HUMID_CONNECTOR.id,
+      signerType: 'humid',
       name: HUMID_CONNECTOR.name,
       isAvailable: unavailableReason === null,
       unavailableReason,
