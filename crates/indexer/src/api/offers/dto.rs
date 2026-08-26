@@ -69,7 +69,7 @@ pub fn borrower_principal_outpoint_from_utxos(
 ) -> Option<OfferUtxoOutpointShort> {
     utxos
         .iter()
-        .find(|utxo| utxo.utxo_type == UtxoType::BorrowerPrincipal)
+        .find(|utxo| utxo.utxo_type == UtxoType::BorrowerPrincipal && utxo.spent_txid.is_none())
         .map(|utxo| OfferUtxoOutpointShort {
             txid: utxo.txid.clone(),
             vout: utxo.vout,
@@ -617,6 +617,52 @@ mod tests {
 
         assert_eq!(outpoint.txid, "bb");
         assert_eq!(outpoint.vout, 1);
+    }
+
+    #[test]
+    fn borrower_principal_outpoint_from_utxos_skips_spent_principal() {
+        let offer_id = "123".to_string();
+        let utxos = vec![
+            OfferUtxoDto {
+                offer_id: offer_id.clone(),
+                txid: "aa".to_string(),
+                vout: 0,
+                utxo_type: UtxoType::BorrowerPrincipal,
+                created_at_height: 1,
+                spent_txid: Some("dead".to_string()),
+                spent_at_height: Some(10),
+            },
+            OfferUtxoDto {
+                offer_id,
+                txid: "bb".to_string(),
+                vout: 1,
+                utxo_type: UtxoType::BorrowerPrincipal,
+                created_at_height: 2,
+                spent_txid: None,
+                spent_at_height: None,
+            },
+        ];
+
+        let outpoint = super::borrower_principal_outpoint_from_utxos(&utxos)
+            .expect("should find unspent borrower principal");
+
+        assert_eq!(outpoint.txid, "bb");
+        assert_eq!(outpoint.vout, 1);
+    }
+
+    #[test]
+    fn borrower_principal_outpoint_from_utxos_returns_none_when_only_spent() {
+        let utxos = vec![OfferUtxoDto {
+            offer_id: "123".to_string(),
+            txid: "aa".to_string(),
+            vout: 0,
+            utxo_type: UtxoType::BorrowerPrincipal,
+            created_at_height: 1,
+            spent_txid: Some("dead".to_string()),
+            spent_at_height: Some(10),
+        }];
+
+        assert!(super::borrower_principal_outpoint_from_utxos(&utxos).is_none());
     }
 
     #[test]

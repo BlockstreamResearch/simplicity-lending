@@ -144,7 +144,7 @@ async fn fetch_latest_participants(
     Ok(rows.into_iter().map(ParticipantDto::from).collect())
 }
 
-async fn fetch_unspent_utxos(db: &PgPool, offer_id: i64) -> Result<Vec<OfferUtxoDto>, sqlx::Error> {
+async fn fetch_offer_utxos(db: &PgPool, offer_id: i64) -> Result<Vec<OfferUtxoDto>, sqlx::Error> {
     let rows = sqlx::query_as!(
         OfferUtxoModel,
         r#"
@@ -158,7 +158,6 @@ async fn fetch_unspent_utxos(db: &PgPool, offer_id: i64) -> Result<Vec<OfferUtxo
             spent_at_height
         FROM offer_utxos
         WHERE offer_id = $1
-          AND spent_txid IS NULL
         ORDER BY created_at_height ASC
         "#,
         offer_id,
@@ -287,7 +286,7 @@ pub async fn fetch_details_by_id(
 
     let (participants, utxos, vaults, repayments, withdrawals) = tokio::try_join!(
         fetch_latest_participants(db, offer_id),
-        fetch_unspent_utxos(db, offer_id),
+        fetch_offer_utxos(db, offer_id),
         fetch_active_vaults(db, offer_id),
         fetch_offer_repayments(db, offer_id, &offer_parameters),
         fetch_offer_vault_withdrawals(db, offer_id),

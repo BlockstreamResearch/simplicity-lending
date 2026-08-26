@@ -1095,9 +1095,10 @@ async fn offer_details_full_dto_shape() -> anyhow::Result<()> {
     assert_eq!(dto.borrower_nft_asset.len(), 64);
     assert_eq!(dto.lender_nft_asset.len(), 64);
     assert_eq!(dto.protocol_fee_keeper_asset.len(), 64);
-    assert_eq!(dto.utxos.len(), 1);
-    assert_eq!(dto.utxos[0].utxo_type, "active_offer");
-    assert!(dto.utxos[0].spent_txid.is_none());
+    assert_eq!(dto.utxos.len(), 2);
+    assert_eq!(dto.utxos[0].utxo_type, "pending_offer");
+    assert_eq!(dto.utxos[1].utxo_type, "active_offer");
+    assert!(dto.utxos[1].spent_txid.is_none());
     assert!(dto.borrower_principal_utxo.is_none());
     assert!(dto.vaults.is_empty());
     assert!(dto.repayments.is_empty());
@@ -1129,12 +1130,11 @@ async fn active_offer_details_includes_borrower_principal_utxo() -> anyhow::Resu
 
     assert_eq!(dto.id, active_offer.to_string());
     assert_eq!(dto.status, "active");
-    assert_eq!(dto.utxos.len(), 2);
+    assert_eq!(dto.utxos.len(), 3);
 
     let utxo_types: Vec<&str> = dto.utxos.iter().map(|u| u.utxo_type.as_str()).collect();
     assert!(utxo_types.contains(&"active_offer"));
     assert!(utxo_types.contains(&"borrower_principal"));
-    assert!(dto.utxos.iter().all(|u| u.spent_txid.is_none()));
     assert!(dto.vaults.is_empty());
 
     let principal = dto
@@ -1276,6 +1276,16 @@ async fn active_offer_details_after_partial_includes_vaults_and_repayment() -> a
     assert_eq!(dto.current_debt, debt_after.to_string());
     assert_eq!(dto.vaults.len(), 2);
     assert!(dto.vaults.iter().all(|vault| vault.vout != 9));
+    assert!(
+        dto.utxos
+            .iter()
+            .any(|utxo| utxo.utxo_type == "active_offer" && utxo.spent_txid.is_some())
+    );
+    assert!(
+        dto.utxos
+            .iter()
+            .any(|utxo| utxo.utxo_type == "active_offer" && utxo.spent_txid.is_none())
+    );
     assert_eq!(dto.repayments.len(), 1);
     assert!(!dto.repayments[0].is_full);
     assert_eq!(dto.repayments[0].phase, "no_repayments");
@@ -1337,6 +1347,17 @@ async fn offer_details_after_lender_claim_includes_withdrawal() -> anyhow::Resul
         serde_json::from_value(raw).expect("response must match full DTO shape");
 
     assert_eq!(dto.status, "claimed");
+    assert!(
+        dto.utxos
+            .iter()
+            .any(|utxo| utxo.utxo_type == "active_offer" && utxo.spent_txid.is_some())
+    );
+    assert!(
+        dto.utxos
+            .iter()
+            .all(|utxo| utxo.utxo_type != "active_offer" || utxo.spent_txid.is_some())
+    );
+    assert!(dto.borrower_principal_utxo.is_none());
     assert_eq!(dto.withdrawals.len(), 1);
     assert_eq!(dto.withdrawals[0].vault_type, "lender");
     assert!(dto.withdrawals[0].is_full);

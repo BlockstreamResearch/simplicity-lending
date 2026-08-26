@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            offer_id,\n            txid,\n            vout,\n            utxo_type AS \"utxo_type: UtxoType\",\n            created_at_height,\n            spent_txid,\n            spent_at_height\n        FROM offer_utxos\n        WHERE offer_id = $1\n          AND spent_txid IS NULL\n        ORDER BY created_at_height ASC\n        ",
+  "query": "\n        SELECT\n            offer_id,\n            txid,\n            vout,\n            utxo_type AS \"utxo_type: UtxoType\",\n            created_at_height,\n            spent_txid,\n            spent_at_height\n        FROM offer_utxos\n        WHERE offer_id = $1\n        ORDER BY created_at_height ASC\n        ",
   "describe": {
     "columns": [
       {
@@ -67,5 +67,5 @@
       true
     ]
   },
-  "hash": "71f942711d77042e8e74c1aa28c44896a4dacbacfc49e78a6e457d52b2043c02"
+  "hash": "a19d7851631910cc8aa8bc7581196d62b9d77534dedac625df8fedee08ab3311"
 }
