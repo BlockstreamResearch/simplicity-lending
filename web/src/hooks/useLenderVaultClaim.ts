@@ -31,10 +31,10 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import {
   ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY,
+  buildAssetAuthVaultSpendInfo,
   buildAssetAuthVaultWitness,
   loadAssetAuthVaultProgram,
 } from '@/simplicity/asset-auth-vault/program'
-import { buildCovenantSpendInfo } from '@/simplicity/taproot'
 import { bytesToHex } from '@/utils/hex'
 import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
@@ -117,17 +117,20 @@ export function useLenderVaultClaim() {
     const lenderNftAsset = requireExplicitAsset(lenderNftTxOut, 'Lender NFT')
     const borrowerNftAsset = requireExplicitAsset(borrowerNftPreRepayTxOut, 'Borrower NFT')
     assertExplicitAmount(lenderNftTxOut, NFT_AMOUNT, 'Lender NFT')
+    const lenderVaultSupplyGoal = toUint64(principalAmount, 'lenderVaultSupplyGoal')
     const lenderVaultProgram = loadAssetAuthVaultProgram({
       vaultAssetId: toBytes32(principalAsset.toBytes(), 'principalAssetId'),
       keeperAuthAssetId: toBytes32(lenderNftAsset.toBytes(), 'lenderNftAssetId'),
-      keeperAuthAssetAmount: toUint64(NFT_AMOUNT, 'lenderNftAmount'),
-      withKeeperAssetBurn: true,
       supplierAuthAssetId: toBytes32(borrowerNftAsset.toBytes(), 'borrowerNftAssetId'),
+      supplyGoal: lenderVaultSupplyGoal,
+      withKeeperAssetBurn: true,
       withSupplierAssetBurn: true,
-      finalizedVaultCovHash: toBytes32(new Uint8Array(32)),
-      isActive: false,
     })
-    const lenderVaultSpendInfo = buildCovenantSpendInfo(lenderVaultProgram)
+    const lenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(
+      lenderVaultProgram,
+      false,
+      lenderVaultSupplyGoal,
+    )
 
     assertScriptMatches(
       lenderVaultTxOut.scriptPubkey(),

@@ -345,13 +345,9 @@ export function useCreateOffer() {
             },
             scripts: {
               lendingScriptHash: bytesToHex(lendingScriptHash),
-              lenderVaultCovHash: bytesToHex(derivedLendingParams.lenderVaultCovHash),
-              finalizedLenderVaultCovHash: bytesToHex(
-                derivedLendingParams.finalizedLenderVaultCovHash,
-              ),
-              protocolFeeVaultCovHash: bytesToHex(derivedLendingParams.protocolFeeVaultCovHash),
-              finalizedProtocolFeeVaultCovHash: bytesToHex(
-                derivedLendingParams.finalizedProtocolFeeVaultCovHash,
+              lenderVaultTapleafHash: bytesToHex(derivedLendingParams.lenderVaultTapleafHash),
+              protocolFeeVaultTapleafHash: bytesToHex(
+                derivedLendingParams.protocolFeeVaultTapleafHash,
               ),
               principalOutputScriptHash: bytesToHex(derivedLendingParams.principalOutputScriptHash),
             },

@@ -3,6 +3,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
+import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type LiquidateOfferSummary, useLiquidateOffer } from '@/hooks/useLiquidateOffer'
@@ -13,6 +14,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { formatCollateralUtxoOption } from './helpers'
+import { OfferIdAutofill } from './OfferIdAutofill'
 import { TxResult } from './TxResult'
 
 const outpointSchema = (label: string) =>
@@ -101,7 +103,7 @@ export default function LiquidateOfferDemo() {
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { liquidateOffer } = useLiquidateOffer()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit } = useForm<LiquidateOfferForm>({
+  const { control, handleSubmit, setValue } = useForm<LiquidateOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
     resolver: liquidateOfferFormResolver,
@@ -201,6 +203,19 @@ export default function LiquidateOfferDemo() {
         the unlocked collateral to the connected wallet. Transaction locktime is set automatically
         from the offer metadata.
       </p>
+
+      <OfferIdAutofill
+        onResolve={offer => {
+          const activeOfferOutpoint = resolveActiveOutpoint(offer)
+          if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
+          const lenderNftOutpoint = resolveLenderNftOutpoint(offer)
+          if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
+
+          setValue('activeOfferOutpoint', activeOfferOutpoint)
+          setValue('createOfferTxid', offer.created_at_txid)
+          setValue('lenderNftOutpoint', lenderNftOutpoint)
+        }}
+      />
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({

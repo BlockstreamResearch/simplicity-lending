@@ -5,6 +5,7 @@ import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
 import CreateOfferDemo from './CreateOfferDemo'
 import LenderVaultClaimDemo from './LenderVaultClaimDemo'
 import LiquidateOfferDemo from './LiquidateOfferDemo'
+import PartialRepayOfferDemo from './PartialRepayOfferDemo'
 import RepayOfferDemo from './RepayOfferDemo'
 import UtxoChopperDemo from './UtxoChopperDemo'
 import { WalletDemo } from './WalletDemo'
@@ -22,6 +23,7 @@ export default function DemoPage() {
       <CancelOfferDemo />
       <LiquidateOfferDemo />
       <RepayOfferDemo />
+      <PartialRepayOfferDemo />
       <LenderVaultClaimDemo />
     </div>
   )

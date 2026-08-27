@@ -12,7 +12,6 @@ import {
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { BPS_DIVISOR } from '@/constants/offers'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -32,31 +31,24 @@ import {
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { loadAssetAuthVaultProgram } from '@/simplicity/asset-auth-vault/program'
+import { buildAssetAuthVaultSpendInfo } from '@/simplicity/asset-auth-vault/program'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
 import {
   buildDerivedLendingOfferProgramParams,
+  buildLenderVaultProgram,
   buildLendingOfferSpendInfo,
   buildLendingWitness,
+  buildProtocolFeeVaultProgram,
   LENDING_MAX_WEIGHT_TO_SATISFY,
   loadLendingProgram,
 } from '@/simplicity/lending/program'
-import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
-import { buildCovenantSpendInfo } from '@/simplicity/taproot'
+import { getProtocolFee, getTotalAmountToRepay } from '@/simplicity/lending/utils'
 import { bytesToHex } from '@/utils/hex'
 import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
-
-// 10% of the total fee goes to the protocol, matching PROTOCOL_FEE_PERCENTAGE in Rust.
-// Check crates/contracts/src/programs/lending/offer.rs)
-const PROTOCOL_FEE_BPS = 1_000n
-
-function getTotalProtocolFee(totalFee: bigint): bigint {
-  return (totalFee * PROTOCOL_FEE_BPS) / BPS_DIVISOR
-}
 
 export interface RepayOfferParams {
   activeOfferOutpoint: string
@@ -175,33 +167,22 @@ export function useRepayOffer() {
       'Active offer output does not match the reconstructed active Lending covenant',
     )
 
-    const finalizedLenderVaultProgram = loadAssetAuthVaultProgram({
-      vaultAssetId: derivedLendingParams.principalAssetId,
-      keeperAuthAssetId: derivedLendingParams.lenderNftAssetId,
-      keeperAuthAssetAmount: toUint64(1n),
-      withKeeperAssetBurn: true,
-      supplierAuthAssetId: derivedLendingParams.borrowerNftAssetId,
-      withSupplierAssetBurn: true,
-      finalizedVaultCovHash: toBytes32(new Uint8Array(32)),
-      isActive: false,
-    })
-    const finalizedProtocolFeeVaultProgram = loadAssetAuthVaultProgram({
-      vaultAssetId: derivedLendingParams.principalAssetId,
-      keeperAuthAssetId: protocolFeeKeeperAssetId,
-      keeperAuthAssetAmount: toUint64(1n),
-      withKeeperAssetBurn: false,
-      supplierAuthAssetId: derivedLendingParams.borrowerNftAssetId,
-      withSupplierAssetBurn: true,
-      finalizedVaultCovHash: toBytes32(new Uint8Array(32)),
-      isActive: false,
-    })
-    const finalizedLenderVaultSpendInfo = buildCovenantSpendInfo(finalizedLenderVaultProgram)
-    const finalizedProtocolFeeVaultSpendInfo = buildCovenantSpendInfo(
-      finalizedProtocolFeeVaultProgram,
-    )
     const totalFee = totalAmountToRepay - metadata.principalAmount
-    const totalProtocolFee = getTotalProtocolFee(totalFee)
+    const totalProtocolFee = getProtocolFee(toUint64(totalFee, 'totalFee'))
     const lenderVaultAmount = totalAmountToRepay - totalProtocolFee
+
+    const finalizedLenderVaultProgram = buildLenderVaultProgram(derivedLendingParams)
+    const finalizedProtocolFeeVaultProgram = buildProtocolFeeVaultProgram(derivedLendingParams)
+    const finalizedLenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(
+      finalizedLenderVaultProgram,
+      false,
+      derivedLendingParams.lenderVaultSupplyGoal,
+    )
+    const finalizedProtocolFeeVaultSpendInfo = buildAssetAuthVaultSpendInfo(
+      finalizedProtocolFeeVaultProgram,
+      false,
+      derivedLendingParams.protocolFeeVaultSupplyGoal,
+    )
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
     const walletInputOutpointStrings = [...params.principalOutpoints, ...params.feeOutpoints]
     const inputOrderStrings = [

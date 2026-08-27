@@ -3,11 +3,16 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
-import { resolveActiveOutpoint, resolveBorrowerNftOutpoint } from '@/api/indexer/utils'
+import {
+  resolveActiveLenderVaultOutpoint,
+  resolveActiveOutpoint,
+  resolveActiveProtocolFeeVaultOutpoint,
+  resolveBorrowerNftOutpoint,
+} from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type RepayOfferSummary, useRepayOffer } from '@/hooks/useRepayOffer'
+import { type PartialRepayOfferSummary, usePartialRepayOffer } from '@/hooks/usePartialRepayOffer'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
@@ -32,25 +37,51 @@ const outpointListSchema = (label: string) =>
     .transform(value => value.split(/[\s,]+/).filter(Boolean))
     .pipe(zod.array(outpointSchema(label)).min(1, `${label}: at least one outpoint required`))
 
-const repayOfferFormSchema = zod.object({
+const createOfferTxidSchema = zod
+  .string()
+  .trim()
+  .regex(/^[0-9a-fA-F]{64}$/, 'Create-offer txid must be 64 hex chars')
+  .transform(value => value.toLowerCase())
+
+const optionalUint64Schema = zod.string().trim().regex(/^\d*$/, 'Must be a whole number')
+
+const partialRepayOfferFormSchema = zod.object({
   activeOfferOutpoint: outpointSchema('Active offer outpoint'),
+  createOfferTxid: createOfferTxidSchema,
   borrowerNftOutpoint: outpointSchema('Borrower NFT outpoint'),
+  amountToRepay: zod
+    .string()
+    .trim()
+    .regex(/^\d+$/, 'Amount to repay must be a whole number')
+    .refine(value => BigInt(value) > 0n, 'Amount to repay must be greater than zero'),
+  currentDebt: optionalUint64Schema.optional(),
+  lenderVaultOutpoint: zod
+    .string()
+    .trim()
+    .regex(/^([0-9a-fA-F]{64}:\d+)?$/, 'Lender vault outpoint must have txid:vout format')
+    .optional(),
+  protocolFeeVaultOutpoint: zod
+    .string()
+    .trim()
+    .regex(/^([0-9a-fA-F]{64}:\d+)?$/, 'Protocol fee vault outpoint must have txid:vout format')
+    .optional(),
   collateralRecipientAddress: zod.string().trim().optional(),
+  borrowerNftRecipientAddress: zod.string().trim().optional(),
   principalOutpoints: outpointListSchema('Principal outpoint'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
 })
 
-type RepayOfferForm = zod.input<typeof repayOfferFormSchema>
-type RepayOfferTextField = keyof RepayOfferForm
-type RepayOfferTextFieldProps = Omit<
+type PartialRepayOfferForm = zod.input<typeof partialRepayOfferFormSchema>
+type PartialRepayOfferTextField = keyof PartialRepayOfferForm
+type PartialRepayOfferTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
 > & {
-  name: RepayOfferTextField
+  name: PartialRepayOfferTextField
 }
 
-const repayOfferFormResolver: Resolver<RepayOfferForm> = async values => {
-  const result = repayOfferFormSchema.safeParse(values)
+const partialRepayOfferFormResolver: Resolver<PartialRepayOfferForm> = async values => {
+  const result = partialRepayOfferFormSchema.safeParse(values)
   if (result.success) return { values, errors: {} }
 
   return {
@@ -72,7 +103,7 @@ const repayOfferFormResolver: Resolver<RepayOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: { txid: string; summary: RepayOfferSummary } | null
+  result: { txid: string; summary: PartialRepayOfferSummary } | null
 }
 
 interface WalletUtxosState {
@@ -80,10 +111,16 @@ interface WalletUtxosState {
   error: string | null
 }
 
-const EMPTY_FORM: RepayOfferForm = {
+const EMPTY_FORM: PartialRepayOfferForm = {
   activeOfferOutpoint: '',
+  createOfferTxid: '',
   borrowerNftOutpoint: '',
+  amountToRepay: '',
+  currentDebt: '',
+  lenderVaultOutpoint: '',
+  protocolFeeVaultOutpoint: '',
   collateralRecipientAddress: '',
+  borrowerNftRecipientAddress: '',
   principalOutpoints: '',
   feeOutpoints: '',
 }
@@ -94,15 +131,15 @@ const INITIAL_STATE: BroadcastState = {
   result: null,
 }
 
-export default function RepayOfferDemo() {
+export default function PartialRepayOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
-  const { repayOffer } = useRepayOffer()
+  const { partialRepayOffer } = usePartialRepayOffer()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit, setValue } = useForm<RepayOfferForm>({
+  const { control, handleSubmit, setValue } = useForm<PartialRepayOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
-    resolver: repayOfferFormResolver,
+    resolver: partialRepayOfferFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
   const [walletUtxos, setWalletUtxos] = useState<WalletTxOut[]>([])
@@ -176,16 +213,18 @@ export default function RepayOfferDemo() {
     }
   }, [connectionStatus, getBlindedWalletUtxos])
 
-  const onSubmit = async (formValues: RepayOfferForm) => {
+  const onSubmit = async (formValues: PartialRepayOfferForm) => {
     setState({ busy: true, error: null, result: null })
 
     try {
-      const result = repayOfferFormSchema.safeParse(formValues)
+      const result = partialRepayOfferFormSchema.safeParse(formValues)
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
 
-      const { txid, summary } = await runStandardTransactionFlow(() => repayOffer(result.data))
+      const { txid, summary } = await runStandardTransactionFlow(() =>
+        partialRepayOffer(result.data),
+      )
 
       setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
@@ -197,7 +236,7 @@ export default function RepayOfferDemo() {
     }
   }
 
-  const renderTextField = ({ name, ...props }: RepayOfferTextFieldProps) => (
+  const renderTextField = ({ name, ...props }: PartialRepayOfferTextFieldProps) => (
     <Controller
       control={control}
       name={name}
@@ -215,12 +254,11 @@ export default function RepayOfferDemo() {
 
   return (
     <div className='rounded border border-gray-300 bg-white p-4'>
-      <div className='font-bold'>Repay Offer Demo</div>
+      <div className='font-bold'>Partial Repay Offer Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-        Full repayment: spends the active Lending covenant and the Borrower NFT, burns the NFT,
-        creates the finalized lender and protocol-fee vaults, and returns the unlocked collateral to
-        the specified address. Run ClaimPrincipalDemo first — repayment burns the Borrower NFT, so
-        the principal must be claimed beforehand.
+        Repays an offer, in full or in part, any number of times. All fields below can be filled
+        manually — useful for forcing edge-case amounts — or autofilled from the indexer by offer
+        id. Run ClaimPrincipalDemo first — the Borrower NFT it outputs is required here.
       </p>
 
       <OfferIdAutofill
@@ -231,7 +269,11 @@ export default function RepayOfferDemo() {
           if (!borrowerNftOutpoint) throw new Error('Borrower NFT UTXO not found')
 
           setValue('activeOfferOutpoint', activeOfferOutpoint)
+          setValue('createOfferTxid', offer.created_at_txid)
           setValue('borrowerNftOutpoint', borrowerNftOutpoint)
+          setValue('currentDebt', offer.current_debt.toString())
+          setValue('lenderVaultOutpoint', resolveActiveLenderVaultOutpoint(offer) ?? '')
+          setValue('protocolFeeVaultOutpoint', resolveActiveProtocolFeeVaultOutpoint(offer) ?? '')
         }}
       />
 
@@ -243,17 +285,58 @@ export default function RepayOfferDemo() {
           description: 'AcceptOfferDemo places the active Lending covenant at vout 0',
         })}
         {renderTextField({
+          name: 'createOfferTxid',
+          label: 'Create-offer txid',
+          placeholder: '64 hex chars',
+          description:
+            'Original create-offer txid — used to recover offer parameters and the borrower/lender NFT asset ids',
+        })}
+        {renderTextField({
           name: 'borrowerNftOutpoint',
           label: 'Borrower NFT outpoint',
           placeholder: 'claim-principal-txid:0',
+          description: 'ClaimPrincipalDemo outputs the Borrower NFT at vout 0 — use that here',
+        })}
+        {renderTextField({
+          name: 'amountToRepay',
+          label: 'Amount to repay',
+          placeholder: 'e.g. 100',
           description:
-            'ClaimPrincipalDemo outputs the Borrower NFT at vout 0 — use that outpoint here; repayment burns it',
+            'In principal asset units. Must be > 0 and <= current debt (principal + full interest).',
+        })}
+        {renderTextField({
+          name: 'currentDebt',
+          label: 'Current offer debt (optional)',
+          placeholder: 'Leave blank for a fresh offer (defaults to principal + full interest)',
+          description:
+            'Only needed for a repayment against an offer that already had a prior repayment — use the previous "New active offer Lending" step’s newDebt',
+        })}
+        {renderTextField({
+          name: 'lenderVaultOutpoint',
+          label: 'Lender vault outpoint (optional)',
+          placeholder: 'txid:vout',
+          description:
+            'Needed for any repayment after the first one — the active lender vault from the previous step',
+        })}
+        {renderTextField({
+          name: 'protocolFeeVaultOutpoint',
+          label: 'Protocol fee vault outpoint (optional)',
+          placeholder: 'txid:vout',
+          description:
+            'Only needed while the offer fee is still being paid off across multiple repayments — the active protocol-fee vault from the previous step',
         })}
         {renderTextField({
           name: 'collateralRecipientAddress',
           label: 'Collateral recipient address (optional)',
           placeholder: 'Leave blank to use wallet receive address',
-          description: 'Where the unlocked collateral is sent after full repayment',
+          description: 'Where the (partially or fully) unlocked collateral is sent',
+        })}
+        {renderTextField({
+          name: 'borrowerNftRecipientAddress',
+          label: 'Borrower NFT recipient address (optional)',
+          placeholder: 'Leave blank to use wallet receive address',
+          description:
+            'Only used when the repayment is partial (not final) — the NFT is returned here instead of burned',
         })}
         {renderTextField({
           name: 'principalOutpoints',
@@ -295,14 +378,14 @@ export default function RepayOfferDemo() {
           loadingText='Repaying offer...'
           onPress={() => void handleSubmit(onSubmit)()}
         >
-          Repay Offer
+          Partial Repay Offer
         </UiButton>
       </div>
 
       {state.error ? <p className='mt-3 text-xs text-red-500'>Repay: {state.error}</p> : null}
 
       <TxResult
-        title='Offer Repaid'
+        title='Offer Partially Repaid'
         txid={state.result?.txid ?? null}
         txStatus={txStatus}
         detail={state.result?.summary}

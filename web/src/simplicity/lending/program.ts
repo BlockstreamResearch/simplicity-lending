@@ -13,9 +13,10 @@ import { sources } from 'virtual:simplicity-sources'
 import { loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
 import {
   type AssetAuthVaultProgramParams,
+  getAssetAuthVaultTapleafHash,
   loadAssetAuthVaultProgram,
 } from '@/simplicity/asset-auth-vault/program'
-import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
+import { getProtocolFee, getTotalAmountToRepay, getTotalFee } from '@/simplicity/lending/utils'
 import { buildCovenantSpendInfo, UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { bytes32ToHex, hexToBytes } from '@/utils/hex'
 import {
@@ -36,10 +37,8 @@ const ARGUMENTS = {
   PRINCIPAL_AMOUNT: 'PRINCIPAL_AMOUNT',
   PRINCIPAL_INTEREST_RATE: 'PRINCIPAL_INTEREST_RATE',
   LOAN_EXPIRATION_TIME: 'LOAN_EXPIRATION_TIME',
-  LENDER_VAULT_COV_HASH: 'LENDER_VAULT_COV_HASH',
-  FINALIZED_LENDER_VAULT_COV_HASH: 'FINALIZED_LENDER_VAULT_COV_HASH',
-  PROTOCOL_FEE_VAULT_COV_HASH: 'PROTOCOL_FEE_VAULT_COV_HASH',
-  FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH: 'FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH',
+  LENDER_VAULT_TAPLEAF_HASH: 'LENDER_VAULT_TAPLEAF_HASH',
+  PROTOCOL_FEE_VAULT_TAPLEAF_HASH: 'PROTOCOL_FEE_VAULT_TAPLEAF_HASH',
   PRINCIPAL_OUTPUT_SCRIPT_HASH: 'PRINCIPAL_OUTPUT_SCRIPT_HASH',
 } as const
 
@@ -61,10 +60,10 @@ export interface LendingOfferProgramParams {
   lenderNftAssetId: Bytes32
   protocolFeeKeeperAssetId: Bytes32
   offerParameters: OfferParameters
-  lenderVaultCovHash: Bytes32
-  finalizedLenderVaultCovHash: Bytes32
-  protocolFeeVaultCovHash: Bytes32
-  finalizedProtocolFeeVaultCovHash: Bytes32
+  lenderVaultTapleafHash: Bytes32
+  protocolFeeVaultTapleafHash: Bytes32
+  lenderVaultSupplyGoal: Uint64
+  protocolFeeVaultSupplyGoal: Uint64
   principalOutputScriptHash: Bytes32
 }
 
@@ -130,20 +129,12 @@ export function buildLendingArguments(params: LendingOfferProgramParams): Simpli
       SimplicityTypedValue.fromU32(params.offerParameters.loanExpirationTime),
     )
     .addValue(
-      ARGUMENTS.LENDER_VAULT_COV_HASH,
-      SimplicityTypedValue.fromU256Hex(bytes32ToHex(params.lenderVaultCovHash)),
+      ARGUMENTS.LENDER_VAULT_TAPLEAF_HASH,
+      SimplicityTypedValue.fromU256Hex(bytes32ToHex(params.lenderVaultTapleafHash)),
     )
     .addValue(
-      ARGUMENTS.FINALIZED_LENDER_VAULT_COV_HASH,
-      SimplicityTypedValue.fromU256Hex(bytes32ToHex(params.finalizedLenderVaultCovHash)),
-    )
-    .addValue(
-      ARGUMENTS.PROTOCOL_FEE_VAULT_COV_HASH,
-      SimplicityTypedValue.fromU256Hex(bytes32ToHex(params.protocolFeeVaultCovHash)),
-    )
-    .addValue(
-      ARGUMENTS.FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH,
-      SimplicityTypedValue.fromU256Hex(bytes32ToHex(params.finalizedProtocolFeeVaultCovHash)),
+      ARGUMENTS.PROTOCOL_FEE_VAULT_TAPLEAF_HASH,
+      SimplicityTypedValue.fromU256Hex(bytes32ToHex(params.protocolFeeVaultTapleafHash)),
     )
     .addValue(
       ARGUMENTS.PRINCIPAL_OUTPUT_SCRIPT_HASH,
@@ -151,49 +142,47 @@ export function buildLendingArguments(params: LendingOfferProgramParams): Simpli
     )
 }
 
-function buildFinalizedLenderVaultParams(
+function buildLenderVaultParams(
   params: Pick<
     LendingOfferProgramParams,
     'principalAssetId' | 'lenderNftAssetId' | 'borrowerNftAssetId'
   >,
+  supplyGoal: Uint64,
 ): AssetAuthVaultProgramParams {
   return {
     vaultAssetId: params.principalAssetId,
     keeperAuthAssetId: params.lenderNftAssetId,
-    keeperAuthAssetAmount: toUint64(1n),
-    withKeeperAssetBurn: true,
     supplierAuthAssetId: params.borrowerNftAssetId,
+    supplyGoal,
+    withKeeperAssetBurn: true,
     withSupplierAssetBurn: true,
-    finalizedVaultCovHash: toBytes32(new Uint8Array(32)),
-    isActive: false,
   }
 }
 
-function buildFinalizedProtocolFeeVaultParams(
+function buildProtocolFeeVaultParams(
   params: Pick<
     LendingOfferProgramParams,
     'principalAssetId' | 'protocolFeeKeeperAssetId' | 'borrowerNftAssetId'
   >,
+  supplyGoal: Uint64,
 ): AssetAuthVaultProgramParams {
   return {
     vaultAssetId: params.principalAssetId,
     keeperAuthAssetId: params.protocolFeeKeeperAssetId,
-    keeperAuthAssetAmount: toUint64(1n),
-    withKeeperAssetBurn: false,
     supplierAuthAssetId: params.borrowerNftAssetId,
-    withSupplierAssetBurn: true,
-    finalizedVaultCovHash: toBytes32(new Uint8Array(32)),
-    isActive: false,
+    supplyGoal,
+    withKeeperAssetBurn: false,
+    withSupplierAssetBurn: false,
   }
 }
 
 export function buildDerivedLendingOfferProgramParams(
   params: Omit<
     LendingOfferProgramParams,
-    | 'lenderVaultCovHash'
-    | 'finalizedLenderVaultCovHash'
-    | 'protocolFeeVaultCovHash'
-    | 'finalizedProtocolFeeVaultCovHash'
+    | 'lenderVaultTapleafHash'
+    | 'protocolFeeVaultTapleafHash'
+    | 'lenderVaultSupplyGoal'
+    | 'protocolFeeVaultSupplyGoal'
     | 'principalOutputScriptHash'
   >,
 ): LendingOfferProgramParams {
@@ -202,31 +191,46 @@ export function buildDerivedLendingOfferProgramParams(
     assetAmount: toUint64(1n),
     withAssetBurn: false,
   })
-  const finalizedLenderVault = loadAssetAuthVaultProgram(buildFinalizedLenderVaultParams(params))
-  const finalizedProtocolFeeVault = loadAssetAuthVaultProgram(
-    buildFinalizedProtocolFeeVaultParams(params),
+
+  const totalAmountToRepay = getTotalAmountToRepay(params.offerParameters)
+  const totalProtocolFee = getProtocolFee(getTotalFee(params.offerParameters))
+  const lenderVaultSupplyGoal = toUint64(
+    totalAmountToRepay - totalProtocolFee,
+    'lenderVaultSupplyGoal',
   )
-  const finalizedLenderVaultCovHash = getProgramScriptHash(finalizedLenderVault)
-  const finalizedProtocolFeeVaultCovHash = getProgramScriptHash(finalizedProtocolFeeVault)
-  const activeLenderVault = loadAssetAuthVaultProgram({
-    ...buildFinalizedLenderVaultParams(params),
-    finalizedVaultCovHash: finalizedLenderVaultCovHash,
-    isActive: true,
-  })
-  const activeProtocolFeeVault = loadAssetAuthVaultProgram({
-    ...buildFinalizedProtocolFeeVaultParams(params),
-    finalizedVaultCovHash: finalizedProtocolFeeVaultCovHash,
-    isActive: true,
-  })
+  const protocolFeeVaultSupplyGoal = totalProtocolFee
+
+  const lenderVaultProgram = loadAssetAuthVaultProgram(
+    buildLenderVaultParams(params, lenderVaultSupplyGoal),
+  )
+  const protocolFeeVaultProgram = loadAssetAuthVaultProgram(
+    buildProtocolFeeVaultParams(params, protocolFeeVaultSupplyGoal),
+  )
 
   return {
     ...params,
-    lenderVaultCovHash: getProgramScriptHash(activeLenderVault),
-    finalizedLenderVaultCovHash,
-    protocolFeeVaultCovHash: getProgramScriptHash(activeProtocolFeeVault),
-    finalizedProtocolFeeVaultCovHash,
+    lenderVaultTapleafHash: getAssetAuthVaultTapleafHash(lenderVaultProgram),
+    protocolFeeVaultTapleafHash: getAssetAuthVaultTapleafHash(protocolFeeVaultProgram),
+    lenderVaultSupplyGoal,
+    protocolFeeVaultSupplyGoal,
     principalOutputScriptHash: getProgramScriptHash(principalOutputAssetAuth),
   }
+}
+
+export function buildLenderVaultProgram(
+  derivedParams: LendingOfferProgramParams,
+): SimplicityProgram {
+  return loadAssetAuthVaultProgram(
+    buildLenderVaultParams(derivedParams, derivedParams.lenderVaultSupplyGoal),
+  )
+}
+
+export function buildProtocolFeeVaultProgram(
+  derivedParams: LendingOfferProgramParams,
+): SimplicityProgram {
+  return loadAssetAuthVaultProgram(
+    buildProtocolFeeVaultParams(derivedParams, derivedParams.protocolFeeVaultSupplyGoal),
+  )
 }
 
 function getProgramScriptHash(program: SimplicityProgram): Bytes32 {
@@ -243,14 +247,15 @@ export function buildLendingOfferSpendInfo(
     principalInterestRate: Uint16
   },
   isActive = false,
+  currentDebt?: Uint64,
 ): StateTaprootSpendInfo {
-  const totalAmountToRepay = getTotalAmountToRepay(offerParameters)
+  const debt = currentDebt ?? getTotalAmountToRepay(offerParameters)
 
   const isActiveSlot = new Uint8Array(32)
   isActiveSlot[31] = isActive ? 1 : 0
 
   const debtSlot = new Uint8Array(32)
-  new DataView(debtSlot.buffer).setBigUint64(24, totalAmountToRepay, false)
+  new DataView(debtSlot.buffer).setBigUint64(24, debt, false)
 
   const numsKey = XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY)
 
