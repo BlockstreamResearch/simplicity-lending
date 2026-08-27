@@ -30,4 +30,5 @@ build_web:
       VITE_NETWORK=liquidtestnet
       VITE_WATERFALLS_URL=https://waterfalls-elements-testnet.esplora.staging.blockstream.io:17771
       VITE_WATERFALLS_RECIPIENT=age1ajng86w5g0qleku0k7eqjre5l7e6qaynjrnlyuc08w3ddu0etdcs379rr3
+      VITE_SIDESWAP_WS_URL=wss://api-testnet.sideswap.io/server-connect
     REQUIRED_BUILD_ARGS: VITE_API_URL VITE_ESPLORA_BASE_URL VITE_NETWORK VITE_WATERFALLS_URL
