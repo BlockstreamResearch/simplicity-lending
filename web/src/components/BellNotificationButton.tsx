@@ -6,7 +6,7 @@ import BellBoldIcon from '@/components/icons/BellBoldIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import type { PendingTxRecord } from '@/providers/pendingTransactions/types'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { truncateAddress } from '@/utils/format'
 import { getConfirmationProgressText, PENDING_TX_KIND_LABEL } from '@/utils/pendingTransactions'
 

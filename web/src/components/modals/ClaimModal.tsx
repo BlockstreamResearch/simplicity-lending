@@ -2,30 +2,15 @@ import { Chip } from '@heroui/react'
 import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { resolveLenderNftOutpoint, resolveRepaymentOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
-import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
-import {
-  estimateFeeBudgetSats,
-  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-  selectFeeUtxos,
-  utxoToOutpointString,
-} from '@/lwk/utxo'
-import { useLwk } from '@/providers/lwk/useLwk'
+import { useLenderVaultClaimAction } from '@/hooks/useLenderVaultClaimAction'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
-import { ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth-vault/program'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { formatAmount } from '@/utils/format'
 import { calcInterest } from '@/utils/offers'
-
-const CLAIM_WEIGHT_UNITS =
-  ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawAll + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
 
 interface ClaimModalProps {
   isOpen: boolean
@@ -36,46 +21,15 @@ interface ClaimModalProps {
 
 export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
-  const { lwkNetwork } = useLwk()
-  const { claimLenderVault } = useLenderVaultClaim()
-  const runStandardTransactionFlow = useStandardTransactionFlow()
+  const { scriptPubkey } = useWallet()
+  const claimLenderVault = useLenderVaultClaimAction()
   const { addPendingTx } = usePendingTransactions()
 
-  const claimVault = () =>
-    runStandardTransactionFlow(async () => {
-      const fullOffer = await fetchOffer(offer.id)
-      const vaultOutpoint = resolveRepaymentOutpoint(fullOffer)
-      if (!vaultOutpoint) throw new Error('Lender vault UTXO not found')
-
-      const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
-      if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
-
-      await syncWallet()
-      const [blindedWalletUtxos, feeRate] = await Promise.all([
-        getBlindedWalletUtxos(),
-        fetchFeeRateSatPerKvb(),
-      ])
-      const feeBudgetSats = estimateFeeBudgetSats(CLAIM_WEIGHT_UNITS, feeRate)
-      const feeUtxos = selectFeeUtxos(
-        blindedWalletUtxos,
-        lwkNetwork.policyAsset(),
-        feeBudgetSats,
-        feeRate,
-      )
-
-      return claimLenderVault({
-        lenderVaultOutpoint: vaultOutpoint,
-        lenderNftOutpoint,
-        feeOutpoints: feeUtxos.map(utxoToOutpointString),
-      })
-    })
-
   const { mutate, reset, data, status } = useMutation({
-    mutationFn: claimVault,
-    onSuccess: result => {
+    mutationFn: () => claimLenderVault(offer.id),
+    onSuccess: ({ txid }) => {
       void addPendingTx({
-        txid: result.txid,
+        txid,
         kind: 'claim_interest',
         walletScriptPubkey: scriptPubkey ?? '',
         offerId: offer.id,
@@ -87,6 +41,7 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
 
   const txSummary = useMemo(() => {
     const interestAmount = calcInterest(offer.principal_amount, offer.interest_rate)
+
     return [
       {
         label: 'Principal',

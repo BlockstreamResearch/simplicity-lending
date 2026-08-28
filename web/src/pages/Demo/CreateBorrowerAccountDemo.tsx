@@ -1,9 +1,8 @@
 import { useState } from 'react'
 
-import { type BorrowerAccountCreationSummary, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
-import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
+import { useProtocolAction } from '@/hooks/useProtocolAction'
 import { useTxStatus } from '@/hooks/useTxStatus'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 import { TxResult } from './TxResult'
 
@@ -15,13 +14,25 @@ interface BroadcastState<TResult> {
 
 const INITIAL_STATE = { busy: false, error: null, result: null }
 
+/** The action the deployed document declares for bringing a factory into existence. */
+const CREATE_FACTORY = 'CreateFactory'
+
+/*
+ * Removing one is still not wired: giving a factory up spends the covenant, which needs a
+ * signature over the whole transaction that neither this page nor the wallet's action path
+ * produces today. It refused here before this page stopped building transactions, and it
+ * refuses here now, for the same reason.
+ */
+const REMOVE_IS_UNWIRED =
+  'Removing a borrower account is not wired: spending the factory covenant needs a signature ' +
+  'over the whole transaction, which no path here produces yet.'
+
 export default function CreateBorrowerAccountDemo() {
   const { connectionStatus } = useWallet()
-  const { createBorrowerAccount, removeBorrowerAccount } = useBorrowerAccount()
-  const runStandardTransactionFlow = useStandardTransactionFlow()
+  const performProtocolAction = useProtocolAction()
 
   const [createState, setCreateState] =
-    useState<BroadcastState<{ txid: string; summary: BorrowerAccountCreationSummary }>>(
+    useState<BroadcastState<{ txid: string; deployment: Record<string, string> | null }>>(
       INITIAL_STATE,
     )
   const [removeState, setRemoveState] = useState<BroadcastState<null>>(INITIAL_STATE)
@@ -32,9 +43,9 @@ export default function CreateBorrowerAccountDemo() {
   const handleCreate = async () => {
     setCreateState({ busy: true, error: null, result: null })
     try {
-      const { txid, summary } = await runStandardTransactionFlow(createBorrowerAccount)
+      const { txid, deployment } = await performProtocolAction({ action: CREATE_FACTORY })
 
-      setCreateState({ busy: false, error: null, result: { txid, summary } })
+      setCreateState({ busy: false, error: null, result: { txid, deployment } })
     } catch (err) {
       setCreateState({
         busy: false,
@@ -47,8 +58,7 @@ export default function CreateBorrowerAccountDemo() {
   const handleRemove = async () => {
     setRemoveState({ busy: true, error: null, result: null })
     try {
-      await removeBorrowerAccount()
-      setRemoveState({ busy: false, error: null, result: null })
+      throw new Error(REMOVE_IS_UNWIRED)
     } catch (err) {
       setRemoveState({
         busy: false,
@@ -66,9 +76,10 @@ export default function CreateBorrowerAccountDemo() {
       <div className='rounded border border-gray-300 bg-white p-4'>
         <div className='font-bold'>Borrower Account IssuanceFactory Demo</div>
         <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-          Creates a borrower account by issuing two units of a new auth asset from one wallet L-BTC
-          input. One unit returns to the user as FactoryAuth, and one unit funds the IssuanceFactory
-          covenant. Reissuance token amount is zero.
+          Asks the wallet to perform the protocol&rsquo;s own factory creation from the deployed
+          document: it issues two units of a new asset from one wallet L-BTC input, returns one as
+          the owner&rsquo;s auth NFT, locks one in the IssuanceFactory covenant, and publishes the
+          creation record. Nothing here builds that transaction.
         </p>
 
         <div className='mt-4 flex flex-wrap gap-2'>
@@ -102,7 +113,7 @@ export default function CreateBorrowerAccountDemo() {
               title='Borrower Account Created'
               txid={createState.result.txid}
               txStatus={createTxStatus}
-              detail={createState.result.summary}
+              detail={createState.result.deployment ?? undefined}
             />
           )}
           {removeState.result !== undefined && removeState.error && (

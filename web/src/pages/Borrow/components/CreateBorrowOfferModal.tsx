@@ -18,17 +18,16 @@ import { UiTextField } from '@/components/ui/UiTextField'
 import { env } from '@/constants/env'
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
 import { BPS_DIVISOR } from '@/constants/offers'
-import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
-import { useCreateOffer } from '@/hooks/useCreateOffer'
+import { useBorrowerFactory } from '@/hooks/useBorrowerFactory'
+import { useContractFunding } from '@/hooks/useContractFunding'
+import { useCreateOfferAction } from '@/hooks/useCreateOfferAction'
 import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
-import { type PolicyAssetUtxo, usePolicyAssetUtxos } from '@/hooks/usePolicyAssetUtxos'
-import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { estimateFeeBudgetSats, EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/issuance-factory/program'
 import { toBigintAmount } from '@/utils/bigint'
 import { formatAmount, formatFeeReserve, formatUsd } from '@/utils/format'
@@ -39,7 +38,6 @@ import {
   getPolicyAssetUnit,
   parsePolicyAssetInput,
 } from '@/utils/policyAssetDenomination'
-import { selectByLargestFirst } from '@/utils/utxo'
 
 import { MAX_LTV } from '../helpers'
 import LoanMetricsSummary from './LoanMetricsSummary'
@@ -84,7 +82,10 @@ interface BorrowOfferContext {
   collateralUnit: string
   principalDecimals: number
   principalSymbol: string
-  utxos: PolicyAssetUtxo[]
+  /** What a contract action can actually be funded from, in base units. */
+  fundingAvailable: bigint
+  /** Whether the wallet answered for it. False while it is unknown, and nothing is checked. */
+  fundingKnown: boolean
   feeBudgetSats: bigint
   collateralUsd: number | null
 }
@@ -154,7 +155,8 @@ function createBorrowOfferSchema({
   collateralUnit,
   principalDecimals,
   principalSymbol,
-  utxos,
+  fundingAvailable,
+  fundingKnown,
   feeBudgetSats,
   collateralUsd,
 }: BorrowOfferContext) {
@@ -194,10 +196,9 @@ function createBorrowOfferSchema({
         `Fee is below the minimum ${principalSymbol} unit`,
       )
 
-      if (collateralBase !== null && utxos.length > 0) {
-        const collateralBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
+      if (collateralBase !== null && fundingKnown) {
         const maxCollateral =
-          collateralBalance > feeBudgetSats ? collateralBalance - feeBudgetSats : 0n
+          fundingAvailable > feeBudgetSats ? fundingAvailable - feeBudgetSats : 0n
         if (collateralBase > maxCollateral) {
           const maxDisplay = formatPolicyAssetDisplay(
             maxCollateral,
@@ -280,15 +281,18 @@ export default function CreateBorrowOfferModal({
   const { denomination } = useAssetDenomination()
   const collateralUnit = getPolicyAssetUnit(denomination, collateralAsset)
   const collateralUsd = useAssetPriceUsd(collateralAsset.id)
-  const { utxos, isLoading: isLoadingUtxos } = usePolicyAssetUtxos(isOpen)
-  const { factoryState, refetchFactory } = useBorrowerAccount()
-  const { createOffer } = useCreateOffer()
-  const runStandardTransactionFlow = useStandardTransactionFlow()
+  const {
+    available: fundingAvailable,
+    isLoading: isLoadingFunding,
+    unavailableReason: fundingUnavailableReason,
+  } = useContractFunding(isOpen)
+  const { refetchFactory } = useBorrowerFactory()
+  const createOffer = useCreateOfferAction()
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const feeRate = useFeeRateSatPerKvb(isOpen)
   const feeBudgetSats = useMemo(
-    () => estimateFeeBudgetSats(CREATE_OFFER_WEIGHT_UNITS, feeRate, Math.max(utxos.length, 1)),
-    [feeRate, utxos.length],
+    () => estimateFeeBudgetSats(CREATE_OFFER_WEIGHT_UNITS, feeRate, 1),
+    [feeRate],
   )
 
   const formContext = useMemo<BorrowOfferContext>(
@@ -298,7 +302,8 @@ export default function CreateBorrowOfferModal({
       collateralUnit,
       principalDecimals: principalAsset.decimals,
       principalSymbol: principalAsset.symbol,
-      utxos: isLoadingUtxos ? [] : utxos,
+      fundingAvailable,
+      fundingKnown: !isLoadingFunding && fundingUnavailableReason === null,
       feeBudgetSats,
       collateralUsd,
     }),
@@ -308,8 +313,9 @@ export default function CreateBorrowOfferModal({
       collateralUnit,
       principalAsset.decimals,
       principalAsset.symbol,
-      utxos,
-      isLoadingUtxos,
+      fundingAvailable,
+      isLoadingFunding,
+      fundingUnavailableReason,
       feeBudgetSats,
       collateralUsd,
     ],
@@ -336,7 +342,7 @@ export default function CreateBorrowOfferModal({
   const protocolFee = `${formatAmount(computeProtocolFee(feeBase), principalAsset.decimals)} ${principalAsset.symbol}`
   const loanDurationBlocks = values.termDays ? daysToBlocks(values.termDays) : 0
 
-  const confirmedBalance = utxos.reduce((sum, utxo) => sum + utxo.value, 0n)
+  const confirmedBalance = fundingAvailable
   const collateralFiat = formatUsd(collateralBase, collateralAsset.decimals, collateralUsd)
   const applyMaxCollateral = useCallback(
     (onChange: (value: string) => void) => {
@@ -347,39 +353,28 @@ export default function CreateBorrowOfferModal({
   )
 
   const createBorrowOffer = useCallback(async () => {
-    const { txid } = await runStandardTransactionFlow(async () => {
-      if (!factoryState) {
-        throw new Error('No active factory found. Create a borrower account first.')
-      }
-      const collateralUtxos = selectByLargestFirst(utxos, collateralBase + feeBudgetSats)
-      if (!collateralUtxos) {
-        throw new Error(
-          `Insufficient confirmed L-BTC balance for the collateral and a fee reserve of ${formatFeeReserve(feeBudgetSats)}.`,
-        )
-      }
+    // Which outputs pay for this is the wallet's to choose; what this checks is that the
+    // account holds enough for the collateral and still has something left for the fee,
+    // because the answer a person needs is "top up", not "the wallet found nothing".
+    if (confirmedBalance < collateralBase + feeBudgetSats) {
+      throw new Error(
+        `Insufficient confirmed L-BTC balance for the collateral and a fee reserve of ${formatFeeReserve(feeBudgetSats)}.`,
+      )
+    }
 
-      return createOffer({
-        factoryAuthOutpoint: factoryState.factoryAuthOutpoint,
-        issuanceFactoryOutpoint: factoryState.issuanceFactoryOutpoint,
-        factoryAssetId: factoryState.factoryAssetId,
-        collateralOutpoints: collateralUtxos.map(utxo => utxo.outpoint),
-        collateralAmount: collateralBase,
-        principalAssetId: NETWORK_CONFIG.principalAsset.id,
-        principalAmount: principalBase,
-        principalInterestRate: bps,
-        loanDurationBlocks,
-        protocolFeeKeeperAssetId: NETWORK_CONFIG.principalAsset.id,
-      })
+    const { txid } = await createOffer({
+      collateralAmount: collateralBase,
+      loanDurationBlocks,
+      principalAmount: principalBase,
+      principalInterestRateBps: bps,
     })
 
     refetchFactory()
     return txid
   }, [
-    factoryState,
-    utxos,
+    confirmedBalance,
     collateralBase,
     feeBudgetSats,
-    runStandardTransactionFlow,
     createOffer,
     principalBase,
     bps,
@@ -498,7 +493,7 @@ export default function CreateBorrowOfferModal({
               onBlur={field.onBlur}
               endContent={collateralUnit}
               onMax={() => applyMaxCollateral(field.onChange)}
-              isMaxDisabled={isLoadingUtxos || confirmedBalance <= feeBudgetSats}
+              isMaxDisabled={isLoadingFunding || confirmedBalance <= feeBudgetSats}
               description={collateralFiat ? `Collateral Value = ${collateralFiat} USD` : undefined}
               errorMessage={fieldState.error?.message}
             />

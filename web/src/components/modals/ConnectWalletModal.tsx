@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 
 import CopyButton from '@/components/CopyButton'
 import ChevronLeftIcon from '@/components/icons/ChevronLeftIcon'
+import HumidIcon from '@/components/icons/HumidIcon'
 import JadeIcon from '@/components/icons/JadeIcon'
 import SeedIcon from '@/components/icons/SeedIcon'
 import SideSwapIcon from '@/components/icons/SideSwapIcon'
@@ -13,6 +14,7 @@ import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { env } from '@/constants/env'
 import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
+import { useHumid } from '@/providers/humid/useHumid'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 const MNEMONIC_WORD_COUNT = 12
@@ -65,6 +67,7 @@ function ConnectOptionCard({
 export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalProps) {
   const { connect, cancelPendingRequest, connectionStatus, pendingRequest, isError, error } =
     useWallet()
+  const humid = useHumid()
   const [mode, setMode] = useState<'choose' | 'seed' | 'sideswap'>('choose')
   const [mnemonic, setMnemonic] = useState('')
   const [connecting, setConnecting] = useState(false)
@@ -88,6 +91,20 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
       onOpenChange(false)
     }
   }, [isOpen, connectionStatus, onOpenChange])
+
+  // The extension asks for approval in its own window, which draws over this one. Step out
+  // of the way first, then wait: the wallet reports a refusal where the person is looking,
+  // so a rejection here has already been read by the time it arrives.
+  const handleHumidConnect = async () => {
+    if (humid.connecting) return
+
+    onOpenChange(false)
+    try {
+      await humid.connect()
+    } catch {
+      // Refused or abandoned. The wallet said so in its own window.
+    }
+  }
 
   const handleJadeConnect = async () => {
     if (jadeConnecting) return
@@ -168,6 +185,18 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
     >
       {mode === 'choose' ? (
         <div className='flex flex-col gap-3'>
+          <ConnectOptionCard
+            icon={<HumidIcon className='size-5 text-white' />}
+            iconBadgeClassName='bg-accent'
+            title='HUMID (testnet)'
+            subtitle={
+              humid.hasExtension
+                ? 'Approve in the HUMID browser extension'
+                : 'Browser extension — not detected on this page'
+            }
+            disabled={humid.connecting}
+            onPress={() => void handleHumidConnect()}
+          />
           <ConnectOptionCard
             icon={<JadeIcon className='size-6' />}
             iconBadgeClassName='bg-accent'

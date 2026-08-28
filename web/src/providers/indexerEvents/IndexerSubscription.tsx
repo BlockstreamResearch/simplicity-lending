@@ -5,7 +5,7 @@ import { INDEXER_EVENT_NAMES, parseIndexerEvent } from '@/api/indexer/events'
 import { invalidateEventQueries } from '@/api/indexer/invalidateEventQueries'
 import { env } from '@/constants/env'
 import { useLatestRef } from '@/hooks/useLatestRef'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 export function IndexerSubscription(): null {
   const queryClient = useQueryClient()

@@ -1,33 +1,16 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
-import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { esploraQueryKeys } from '@/api/esplora/queryKeys'
-import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { useAcceptOffer } from '@/hooks/useAcceptOffer'
+import { useAcceptOfferAction } from '@/hooks/useAcceptOfferAction'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
-import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
-import {
-  estimateFeeBudgetSats,
-  selectAssetUtxos,
-  selectFeeUtxos,
-  utxoToOutpointString,
-} from '@/lwk/utxo'
-import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
-import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
-import { SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/script-auth/program'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { calcInterest, computeApr } from '@/utils/offers'
-
-const ACCEPT_WEIGHT_UNITS =
-  LENDING_MAX_WEIGHT_TO_SATISFY.OfferAcceptance + SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY
 
 interface AcceptOfferModalProps {
   isOpen: boolean
@@ -43,57 +26,16 @@ export default function AcceptOfferModal({
   onSuccess,
 }: AcceptOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, confirmedBalances } = useWallet()
-  const { lwkNetwork } = useLwk()
-  const { acceptOffer } = useAcceptOffer()
-  const runStandardTransactionFlow = useStandardTransactionFlow()
+  const { scriptPubkey, confirmedBalances } = useWallet()
+  const acceptOffer = useAcceptOfferAction()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
 
-  const acceptBorrowOffer = () =>
-    runStandardTransactionFlow(async () => {
-      const fullOffer = await fetchOffer(offer.id)
-      const pendingOfferOutpoint = resolvePendingOutpoint(fullOffer)
-      if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
-
-      await syncWallet()
-      const [blindedWalletUtxos, feeRate] = await Promise.all([
-        getBlindedWalletUtxos(),
-        fetchFeeRateSatPerKvb(),
-      ])
-
-      const principalUtxos = selectAssetUtxos(
-        blindedWalletUtxos,
-        principalAsset.id,
-        offer.principal_amount,
-        principalAsset.symbol,
-      )
-
-      const feeBudgetSats = estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
-      const feeUtxos = selectFeeUtxos(
-        blindedWalletUtxos,
-        lwkNetwork.policyAsset(),
-        feeBudgetSats,
-        feeRate,
-      )
-      const nftOutpoints = resolveNftOutpoints(fullOffer)
-      if (!nftOutpoints) throw new Error('Offer NFT participants not found')
-      const { lenderNft, borrowerNft } = nftOutpoints
-
-      return acceptOffer({
-        pendingOfferOutpoint,
-        lenderNftOutpoint: lenderNft,
-        borrowerNftReferenceOutpoint: borrowerNft,
-        principalOutpoints: principalUtxos.map(utxoToOutpointString),
-        feeOutpoints: feeUtxos.map(utxoToOutpointString),
-      })
-    })
-
   const { mutate, reset, data, status } = useMutation({
-    mutationFn: acceptBorrowOffer,
-    onSuccess: result => {
+    mutationFn: () => acceptOffer(offer.id),
+    onSuccess: ({ txid }) => {
       void addPendingTx({
-        txid: result.txid,
+        txid,
         kind: 'accept_offer',
         walletScriptPubkey: scriptPubkey ?? '',
         offerId: offer.id,
@@ -103,16 +45,11 @@ export default function AcceptOfferModal({
     },
   })
 
-  const { data: feeRate = FALLBACK_FEE_RATE_SAT_PER_KVB } = useQuery({
-    queryKey: esploraQueryKeys.feeRate,
-    queryFn: () => fetchFeeRateSatPerKvb(),
-  })
-  const feeBuffer =
-    principalAsset.id === lwkNetwork.policyAsset().toString()
-      ? estimateFeeBudgetSats(ACCEPT_WEIGHT_UNITS, feeRate)
-      : 0n
+  // What the wallet will actually fund the principal from is its own to choose, and it holds
+  // the fee too. What a person needs answered here is whether this account has the principal
+  // at all, because the answer to that is "top up" rather than "the wallet found nothing".
   const insufficientBalance =
-    BigInt(confirmedBalances[principalAsset.id] ?? 0) < offer.principal_amount + feeBuffer
+    BigInt(confirmedBalances[principalAsset.id] ?? 0) < offer.principal_amount
 
   const txSummary = useMemo(
     () => [
