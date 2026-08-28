@@ -11,6 +11,7 @@ import PartialRepayOfferDemo from './PartialRepayOfferDemo'
 import ProtocolFeeVaultClaimDemo from './ProtocolFeeVaultClaimDemo'
 import ProtocolFeeVaultWithdrawPartDemo from './ProtocolFeeVaultWithdrawPartDemo'
 import RepayOfferDemo from './RepayOfferDemo'
+import ScriptToAddressDemo from './ScriptToAddressDemo'
 import UtxoChopperDemo from './UtxoChopperDemo'
 import { WalletDemo } from './WalletDemo'
 
@@ -20,6 +21,7 @@ export default function DemoPage() {
       <h1 className='text-3xl font-semibold'>Demo</h1>
       <WalletDemo />
       <OfferInspectorDemo />
+      <ScriptToAddressDemo />
       <UtxoChopperDemo />
       <CreateBorrowerAccountDemo />
       <CreateOfferDemo />
