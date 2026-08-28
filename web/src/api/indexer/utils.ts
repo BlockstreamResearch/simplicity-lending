@@ -53,3 +53,8 @@ export function resolveBorrowerNftOutpoint(offer: OfferDetails): string | null {
 export function resolveBorrowerPrincipalOutpoint(offer: OfferDetails): string | null {
   return offer.borrower_principal_utxo ? toOutpoint(offer.borrower_principal_utxo) : null
 }
+
+export function resolveProtocolFeeVaultOutpoint(offer: OfferDetails): string | null {
+  const vault = offer.vaults.find(v => v.vault_type === 'protocol_fee' && v.is_finalized)
+  return vault ? toOutpoint(vault) : null
+}

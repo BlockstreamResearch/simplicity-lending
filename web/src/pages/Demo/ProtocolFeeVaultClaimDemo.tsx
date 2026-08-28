@@ -3,13 +3,17 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
-import { resolveLenderNftOutpoint, resolveLenderVaultOutpoint } from '@/api/indexer/utils'
+import { resolveProtocolFeeVaultOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { type LenderVaultClaimSummary, useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
+import { NETWORK_CONFIG } from '@/constants/network-config'
+import {
+  type ProtocolFeeVaultClaimSummary,
+  useProtocolFeeVaultClaim,
+} from '@/hooks/useProtocolFeeVaultClaim'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
-import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
+import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -31,32 +35,25 @@ const outpointListSchema = (label: string) =>
     .transform(value => value.split(/[\s,]+/).filter(Boolean))
     .pipe(zod.array(outpointSchema(label)).min(1, `${label}: at least one outpoint required`))
 
-const txidSchema = (label: string) =>
-  zod
-    .string()
-    .trim()
-    .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
-    .transform(value => value.toLowerCase())
-
-const lenderVaultClaimFormSchema = zod.object({
-  lenderVaultOutpoint: outpointSchema('Lender vault outpoint'),
-  lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
-  createOfferTxid: txidSchema('Create-offer txid'),
+const protocolFeeVaultClaimFormSchema = zod.object({
+  protocolFeeVaultOutpoint: outpointSchema('Protocol fee vault outpoint'),
+  keeperOutpoint: outpointSchema('Protocol fee keeper outpoint'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
+  keeperRecipientAddress: zod.string().trim().optional(),
   principalRecipientAddress: zod.string().trim().optional(),
 })
 
-type LenderVaultClaimForm = zod.input<typeof lenderVaultClaimFormSchema>
-type LenderVaultClaimTextField = keyof LenderVaultClaimForm
-type LenderVaultClaimTextFieldProps = Omit<
+type ProtocolFeeVaultClaimForm = zod.input<typeof protocolFeeVaultClaimFormSchema>
+type ProtocolFeeVaultClaimTextField = keyof ProtocolFeeVaultClaimForm
+type ProtocolFeeVaultClaimTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
 > & {
-  name: LenderVaultClaimTextField
+  name: ProtocolFeeVaultClaimTextField
 }
 
-const lenderVaultClaimFormResolver: Resolver<LenderVaultClaimForm> = async values => {
-  const result = lenderVaultClaimFormSchema.safeParse(values)
+const protocolFeeVaultClaimFormResolver: Resolver<ProtocolFeeVaultClaimForm> = async values => {
+  const result = protocolFeeVaultClaimFormSchema.safeParse(values)
   if (result.success) return { values, errors: {} }
 
   return {
@@ -78,7 +75,7 @@ const lenderVaultClaimFormResolver: Resolver<LenderVaultClaimForm> = async value
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: { txid: string; summary: LenderVaultClaimSummary } | null
+  result: { txid: string; summary: ProtocolFeeVaultClaimSummary } | null
 }
 
 interface WalletUtxosState {
@@ -86,11 +83,11 @@ interface WalletUtxosState {
   error: string | null
 }
 
-const EMPTY_FORM: LenderVaultClaimForm = {
-  lenderVaultOutpoint: '',
-  lenderNftOutpoint: '',
-  createOfferTxid: '',
+const EMPTY_FORM: ProtocolFeeVaultClaimForm = {
+  protocolFeeVaultOutpoint: '',
+  keeperOutpoint: '',
   feeOutpoints: '',
+  keeperRecipientAddress: '',
   principalRecipientAddress: '',
 }
 
@@ -100,40 +97,62 @@ const INITIAL_STATE: BroadcastState = {
   result: null,
 }
 
-export default function LenderVaultClaimDemo() {
+export default function ProtocolFeeVaultClaimDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
-  const { claimLenderVault } = useLenderVaultClaim()
+  const { claimProtocolFeeVault } = useProtocolFeeVaultClaim()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit, setValue } = useForm<LenderVaultClaimForm>({
+  const { control, handleSubmit, setValue } = useForm<ProtocolFeeVaultClaimForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
-    resolver: lenderVaultClaimFormResolver,
+    resolver: protocolFeeVaultClaimFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
-  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
-  const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
+  const [foundVault, setFoundVault] = useState<string | null>(null)
+  const [walletUtxos, setWalletUtxos] = useState<WalletTxOut[]>([])
+  const [walletUtxosState, setWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,
   })
   const { status: txStatus } = useTxStatus(state.result?.txid ?? null)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
+  const keeperAsset = NETWORK_CONFIG.protocolFeeAsset
+
+  // The protocol-fee "keeper" isn't a per-offer NFT — it's just NETWORK_CONFIG.protocolFeeAsset,
+  // a network-wide credential (any wallet UTXO of it, passed through unburned). Not resolvable
+  // from an offer id — pick it from the connected wallet like a normal fee/principal outpoint.
+  const keeperUtxoOptions = useMemo(() => {
+    if (connectionStatus !== 'ready') return []
+    return walletUtxos
+      .filter(
+        utxo =>
+          isConfirmedWalletUtxo(utxo) && utxo.unblinded().asset().toString() === keeperAsset.id,
+      )
+      .map(utxo => {
+        const outpoint = utxoToOutpointString(utxo)
+        const unblinded = utxo.unblinded()
+        return {
+          id: outpoint,
+          label: `${outpoint} | ${unblinded.value().toString()} units`,
+        }
+      })
+  }, [connectionStatus, keeperAsset.id, walletUtxos])
   const feeUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
-    return blindedWalletUtxos
+    return walletUtxos
       .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAssetId))
       .map(formatCollateralUtxoOption)
-  }, [connectionStatus, policyAssetId, blindedWalletUtxos])
+  }, [connectionStatus, policyAssetId, walletUtxos])
 
   const refreshWalletUtxos = useCallback(async () => {
-    setBlindedWalletUtxosState({ busy: true, error: null })
+    setWalletUtxosState({ busy: true, error: null })
     try {
       await syncWallet()
-      setBlindedWalletUtxos(await getBlindedWalletUtxos())
-      setBlindedWalletUtxosState({ busy: false, error: null })
+      setWalletUtxos(await getBlindedWalletUtxos())
+      setWalletUtxosState({ busy: false, error: null })
     } catch (err) {
-      setBlindedWalletUtxosState({
+      setWalletUtxosState({
         busy: false,
         error: err instanceof Error ? err.message : String(err),
       })
@@ -146,11 +165,11 @@ export default function LenderVaultClaimDemo() {
     let cancelled = false
     getBlindedWalletUtxos()
       .then(utxos => {
-        if (!cancelled) setBlindedWalletUtxos(utxos)
+        if (!cancelled) setWalletUtxos(utxos)
       })
       .catch(err => {
         if (!cancelled) {
-          setBlindedWalletUtxosState({
+          setWalletUtxosState({
             busy: false,
             error: err instanceof Error ? err.message : String(err),
           })
@@ -162,15 +181,15 @@ export default function LenderVaultClaimDemo() {
     }
   }, [connectionStatus, getBlindedWalletUtxos])
 
-  const onSubmit = async (formValues: LenderVaultClaimForm) => {
+  const onSubmit = async (formValues: ProtocolFeeVaultClaimForm) => {
     setState({ busy: true, error: null, result: null })
     try {
-      const result = lenderVaultClaimFormSchema.safeParse(formValues)
+      const result = protocolFeeVaultClaimFormSchema.safeParse(formValues)
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
       const { txid, summary } = await runStandardTransactionFlow(() =>
-        claimLenderVault(result.data),
+        claimProtocolFeeVault(result.data),
       )
 
       setState({ busy: false, error: null, result: { txid, summary } })
@@ -183,7 +202,7 @@ export default function LenderVaultClaimDemo() {
     }
   }
 
-  const renderTextField = ({ name, ...props }: LenderVaultClaimTextFieldProps) => (
+  const renderTextField = ({ name, ...props }: ProtocolFeeVaultClaimTextFieldProps) => (
     <Controller
       control={control}
       name={name}
@@ -201,53 +220,53 @@ export default function LenderVaultClaimDemo() {
 
   return (
     <div className='rounded border border-gray-300 bg-white p-4'>
-      <div className='font-bold'>Lender Vault Final Claim Demo</div>
+      <div className='font-bold'>Protocol Fee Vault Final Claim Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-        Spends the finalized lender vault UTXO locked in an AssetAuthVault covenant after the offer
-        has been fully repaid. Requires the wallet-owned Lender NFT as proof of ownership — the NFT
-        is burned via OP_RETURN and the full principal (plus interest) is released to the specified
-        address. Only the Lender NFT holder can execute this transaction.
+        Spends the finalized protocol-fee vault UTXO. Unlike the lender vault, the keeper credential
+        is not burned — it&apos;s NETWORK_CONFIG.protocolFeeAsset, a network-wide credential passed
+        through unchanged, not a per-offer NFT.
       </p>
 
       <OfferIdAutofill
         onResolve={offer => {
-          const lenderVaultOutpoint = resolveLenderVaultOutpoint(offer)
-          if (!lenderVaultOutpoint) throw new Error('Finalized lender vault UTXO not found')
-          const lenderNftOutpoint = resolveLenderNftOutpoint(offer)
-          if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
+          const protocolFeeVaultOutpoint = resolveProtocolFeeVaultOutpoint(offer)
+          if (!protocolFeeVaultOutpoint) throw new Error('Finalized protocol-fee vault not found')
+          const vault = offer.vaults.find(v => v.vault_type === 'protocol_fee' && v.is_finalized)
 
-          setValue('lenderVaultOutpoint', lenderVaultOutpoint)
-          setValue('lenderNftOutpoint', lenderNftOutpoint)
-          setValue('createOfferTxid', offer.created_at_txid)
+          setValue('protocolFeeVaultOutpoint', protocolFeeVaultOutpoint)
+          setFoundVault(vault ? `balance ${vault.amount.toString()}` : null)
         }}
       />
+      {foundVault ? <p className='mt-2 text-xs text-gray-600'>Found: {foundVault}</p> : null}
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({
-          name: 'lenderVaultOutpoint',
-          label: 'Finalized lender vault AssetAuthVault outpoint',
-          placeholder: 'repay-offer-txid:1',
-          description:
-            'RepayOfferDemo places the finalized lender vault AssetAuthVault covenant at vout 1',
+          name: 'protocolFeeVaultOutpoint',
+          label: 'Finalized protocol-fee vault AssetAuthVault outpoint',
+          placeholder: 'txid:vout',
+          description: 'The finalized protocol-fee vault UTXO',
         })}
         {renderTextField({
-          name: 'lenderNftOutpoint',
-          label: 'Lender NFT outpoint',
-          placeholder: 'accept-offer-txid:2 or current location',
+          name: 'keeperOutpoint',
+          label: 'Protocol fee keeper outpoint (wallet)',
+          placeholder: 'txid:vout',
           description:
-            'Wallet-owned Lender NFT UTXO — authorises the vault withdrawal and is burned on success',
+            `Filtered by ${keeperAsset.symbol} asset: ${keeperAsset.id}. ` +
+            (keeperUtxoOptions.length
+              ? `Available: ${keeperUtxoOptions.map(o => o.label).join(' | ')}`
+              : 'No matching wallet UTXOs loaded'),
         })}
         {renderTextField({
-          name: 'createOfferTxid',
-          label: 'Create-offer txid',
-          placeholder: '64 hex chars',
-          description: 'Used to recover offer parameters and the vault supply goal',
+          name: 'keeperRecipientAddress',
+          label: 'Keeper recipient address (optional)',
+          placeholder: 'Leave blank to use wallet receive address',
+          description: 'Where the passed-through keeper credential is sent back',
         })}
         {renderTextField({
           name: 'principalRecipientAddress',
           label: 'Principal recipient address (optional)',
           placeholder: 'Leave blank to use wallet receive address',
-          description: 'Where the unlocked principal + interest amount is sent',
+          description: 'Where the unlocked protocol fee is sent',
         })}
         {renderTextField({
           name: 'feeOutpoints',
@@ -259,34 +278,34 @@ export default function LenderVaultClaimDemo() {
         })}
       </div>
 
-      {blindedWalletUtxosState.error ? (
-        <p className='mt-2 text-xs text-red-500'>Wallet UTXOs: {blindedWalletUtxosState.error}</p>
+      {walletUtxosState.error ? (
+        <p className='mt-2 text-xs text-red-500'>Wallet UTXOs: {walletUtxosState.error}</p>
       ) : null}
 
       <div className='mt-4 flex flex-wrap gap-2'>
         <UiButton
           variant='outline'
-          isDisabled={connectionStatus !== 'ready' || syncing || blindedWalletUtxosState.busy}
-          isPending={syncing || blindedWalletUtxosState.busy}
+          isDisabled={connectionStatus !== 'ready' || syncing || walletUtxosState.busy}
+          isPending={syncing || walletUtxosState.busy}
           loadingText='Refreshing...'
           onPress={refreshWalletUtxos}
         >
-          Refresh L-BTC UTXOs
+          Refresh Wallet UTXOs
         </UiButton>
         <UiButton
           isDisabled={connectionStatus !== 'ready'}
           isPending={state.busy}
-          loadingText='Claiming vault...'
+          loadingText='Claiming...'
           onPress={() => void handleSubmit(onSubmit)()}
         >
-          Claim Lender Vault
+          Claim Protocol Fee Vault
         </UiButton>
       </div>
 
       {state.error ? <p className='mt-3 text-xs text-red-500'>Claim: {state.error}</p> : null}
 
       <TxResult
-        title='Lender Vault Claimed'
+        title='Protocol Fee Vault Claimed'
         txid={state.result?.txid ?? null}
         txStatus={txStatus}
         detail={state.result?.summary}

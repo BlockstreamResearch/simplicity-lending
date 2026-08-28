@@ -4,8 +4,11 @@ import ClaimPrincipalDemo from './ClaimPrincipalDemo'
 import CreateBorrowerAccountDemo from './CreateBorrowerAccountDemo'
 import CreateOfferDemo from './CreateOfferDemo'
 import LenderVaultClaimDemo from './LenderVaultClaimDemo'
+import LenderVaultWithdrawPartDemo from './LenderVaultWithdrawPartDemo'
 import LiquidateOfferDemo from './LiquidateOfferDemo'
 import PartialRepayOfferDemo from './PartialRepayOfferDemo'
+import ProtocolFeeVaultClaimDemo from './ProtocolFeeVaultClaimDemo'
+import ProtocolFeeVaultWithdrawPartDemo from './ProtocolFeeVaultWithdrawPartDemo'
 import RepayOfferDemo from './RepayOfferDemo'
 import UtxoChopperDemo from './UtxoChopperDemo'
 import { WalletDemo } from './WalletDemo'
@@ -25,6 +28,9 @@ export default function DemoPage() {
       <RepayOfferDemo />
       <PartialRepayOfferDemo />
       <LenderVaultClaimDemo />
+      <LenderVaultWithdrawPartDemo />
+      <ProtocolFeeVaultClaimDemo />
+      <ProtocolFeeVaultWithdrawPartDemo />
     </div>
   )
 }

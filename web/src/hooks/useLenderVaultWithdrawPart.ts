@@ -3,7 +3,6 @@ import {
   ExternalUtxo,
   OutPoint,
   type Pset,
-  Script,
   SimplicityLogLevel,
   TxBuilder,
   TxOutSecrets,
@@ -42,46 +41,51 @@ import { getProcessingTxids } from '@/utils/pendingTransactions'
 import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
-const BURN_PAYLOAD = new TextEncoder().encode('burn')
+const LENDER_NFT_INPUT_INDEX = toUint32(1, 'lenderNftInputIndex')
+const LENDER_NFT_OUTPUT_INDEX = toUint32(1, 'lenderNftOutputIndex')
+const VAULT_OUTPUT_INDEX = toUint32(0, 'vaultOutputIndex')
 
-const LENDER_NFT_INPUT_INDEX = 1
-const LENDER_NFT_BURN_OUTPUT_INDEX = 0
-
-export interface LenderVaultClaimParams {
+export interface LenderVaultWithdrawPartParams {
   lenderVaultOutpoint: string
   lenderNftOutpoint: string
   createOfferTxid: string
+  alreadySupplied: string
+  amountToWithdraw: string
   feeOutpoints: string[]
   principalRecipientAddress?: string
+  lenderNftRecipientAddress?: string
 }
 
-export interface LenderVaultClaimSummary {
+export interface LenderVaultWithdrawPartSummary {
   inputs: Record<string, string>
   outputs: Record<string, string>
   assetIds: Record<string, string>
   amounts: Record<string, string>
-  scripts: Record<string, string>
 }
 
-export function useLenderVaultClaim() {
+export function useLenderVaultWithdrawPart() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
-  const claimLenderVault = async (
-    params: LenderVaultClaimParams,
-  ): Promise<UpdatedPset<LenderVaultClaimSummary>> => {
+  const withdrawLenderVaultPart = async (
+    params: LenderVaultWithdrawPartParams,
+  ): Promise<UpdatedPset<LenderVaultWithdrawPartSummary>> => {
     const lenderVaultOutpoint = new OutPoint(params.lenderVaultOutpoint)
     const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
     const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
     assertDistinctOutpoints(
       [lenderVaultOutpoint, lenderNftOutpoint, ...feeOutpoints],
-      'Lender vault claim inputs must use distinct outpoints',
+      'Lender vault withdraw-part inputs must use distinct outpoints',
     )
     const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
     const principalRecipient = Address.parse(
       params.principalRecipientAddress?.trim() || receiveAddressString,
+      lwkNetwork,
+    )
+    const lenderNftRecipient = Address.parse(
+      params.lenderNftRecipientAddress?.trim() || receiveAddressString,
       lwkNetwork,
     )
     await syncWallet()
@@ -92,6 +96,11 @@ export function useLenderVaultClaim() {
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
       throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
     }
+
+    const alreadySupplied = toUint64(BigInt(params.alreadySupplied.trim()), 'alreadySupplied')
+    const amountToWithdraw = toUint64(BigInt(params.amountToWithdraw.trim()), 'amountToWithdraw')
+    if (amountToWithdraw <= 0n) throw new Error('Amount to withdraw must be greater than zero')
+
     const [lenderVaultTx, lenderNftTx, createOfferTx, feeTxs, feeRate] = await Promise.all([
       fetchTransaction(lenderVaultOutpoint),
       fetchTransaction(lenderNftOutpoint),
@@ -100,27 +109,37 @@ export function useLenderVaultClaim() {
       fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
 
-    // The lender vault was created by the repay tx. Input 0 of that tx was the Borrower NFT
-    // (burned there via OP_RETURN). We fetch its predecessor to recover the borrower NFT asset
-    // ID needed to reconstruct the finalized AssetAuthVault program parameters.
-    const borrowerNftPreRepayOutpoint = lenderVaultTx.inputs[0].outpoint()
-    const borrowerNftPreRepayTx = await fetchTransaction(borrowerNftPreRepayOutpoint)
     const lenderVaultTxOut = requireTxOut(lenderVaultTx, lenderVaultOutpoint.vout(), 'Lender vault')
     const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
       requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
     )
-    const borrowerNftPreRepayTxOut = requireTxOut(
-      borrowerNftPreRepayTx,
-      borrowerNftPreRepayOutpoint.vout(),
-      'Borrower NFT (pre-repay)',
+
+    // The transaction that produced this vault UTXO (creation, or a prior supply/withdraw) always
+    // has the Borrower NFT at input 0 — same trick useLenderVaultClaim uses to avoid needing a
+    // live borrower NFT outpoint just to recover its asset id.
+    const borrowerNftPreTouchOutpoint = lenderVaultTx.inputs[0].outpoint()
+    const borrowerNftPreTouchTx = await fetchTransaction(borrowerNftPreTouchOutpoint)
+    const borrowerNftPreTouchTxOut = requireTxOut(
+      borrowerNftPreTouchTx,
+      borrowerNftPreTouchOutpoint.vout(),
+      'Borrower NFT (pre-touch)',
+    )
+    const borrowerNftAsset = requireExplicitAsset(
+      borrowerNftPreTouchTxOut,
+      'Borrower NFT (pre-touch)',
     )
 
     const principalAsset = requireExplicitAsset(lenderVaultTxOut, 'Lender vault')
-    const principalAmount = requireExplicitAmount(lenderVaultTxOut, 'Lender vault')
+    const lenderVaultAmount = requireExplicitAmount(lenderVaultTxOut, 'Lender vault')
     const lenderNftAsset = requireExplicitAsset(lenderNftTxOut, 'Lender NFT')
-    const borrowerNftAsset = requireExplicitAsset(borrowerNftPreRepayTxOut, 'Borrower NFT')
     assertExplicitAmount(lenderNftTxOut, NFT_AMOUNT, 'Lender NFT')
+
+    if (amountToWithdraw >= lenderVaultAmount) {
+      throw new Error(
+        `Amount to withdraw must be less than the vault balance (${lenderVaultAmount.toString()})`,
+      )
+    }
 
     const metadata = await findPendingOfferMetadata(createOfferTx)
     const offerParameters = {
@@ -131,6 +150,7 @@ export function useLenderVaultClaim() {
       getTotalAmountToRepay(offerParameters) - getProtocolFee(getTotalFee(offerParameters)),
       'lenderVaultSupplyGoal',
     )
+
     const lenderVaultProgram = loadAssetAuthVaultProgram({
       vaultAssetId: toBytes32(principalAsset.toBytes(), 'principalAssetId'),
       keeperAuthAssetId: toBytes32(lenderNftAsset.toBytes(), 'lenderNftAssetId'),
@@ -139,24 +159,29 @@ export function useLenderVaultClaim() {
       withKeeperAssetBurn: true,
       withSupplierAssetBurn: true,
     })
-    const lenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(
+    const lenderVaultInputSpendInfo = buildAssetAuthVaultSpendInfo(
       lenderVaultProgram,
-      false,
-      lenderVaultSupplyGoal,
+      true,
+      alreadySupplied,
     )
-
     assertScriptMatches(
       lenderVaultTxOut.scriptPubkey(),
-      lenderVaultSpendInfo.scriptPubkey,
-      'Lender vault UTXO does not match the reconstructed finalized AssetAuthVault covenant',
+      lenderVaultInputSpendInfo.scriptPubkey,
+      'Lender vault output does not match the reconstructed active AssetAuthVault covenant',
     )
-    const burnScript = Script.newOpReturn(BURN_PAYLOAD)
+
+    const vaultChangeAmount = toUint64(lenderVaultAmount - amountToWithdraw, 'vaultChangeAmount')
+    const lenderVaultOutputSpendInfo = buildAssetAuthVaultSpendInfo(
+      lenderVaultProgram,
+      true,
+      alreadySupplied,
+    )
+
     const inputOrderStrings = [
       params.lenderVaultOutpoint,
       params.lenderNftOutpoint,
       ...params.feeOutpoints,
     ]
-
     const firstFeeOutpoint = params.feeOutpoints[0]
     if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
 
@@ -168,8 +193,8 @@ export function useLenderVaultClaim() {
         new ExternalUtxo(
           lenderVaultOutpoint.vout(),
           lenderVaultTx,
-          TxOutSecrets.fromExplicit(principalAsset, principalAmount),
-          ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawAll,
+          TxOutSecrets.fromExplicit(principalAsset, lenderVaultAmount),
+          ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawPart,
           true,
         ),
         new ExternalUtxo(
@@ -180,8 +205,13 @@ export function useLenderVaultClaim() {
           true,
         ),
       ])
-      .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
-      .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
+      .addPostIssuanceScriptOutput(
+        lenderVaultOutputSpendInfo.scriptPubkey,
+        vaultChangeAmount,
+        principalAsset,
+      )
+      .addPostIssuanceScriptOutput(lenderNftRecipient.scriptPubkey(), NFT_AMOUNT, lenderNftAsset)
+      .addPostIssuanceRecipient(principalRecipient, amountToWithdraw, principalAsset)
       .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .finish(wollet)
 
@@ -193,13 +223,16 @@ export function useLenderVaultClaim() {
         const prevouts = [lenderVaultTxOut, lenderNftTxOut, ...feeTxOuts]
         const finalizedTx = lenderVaultProgram.finalizeTransactionWithSpendInfo(
           txWithWalletWitnesses,
-          lenderVaultSpendInfo,
+          lenderVaultInputSpendInfo,
           prevouts,
           0,
           buildAssetAuthVaultWitness({
-            branch: 'WithdrawAll',
-            inputKeeperIndex: toUint32(LENDER_NFT_INPUT_INDEX, 'lenderNftInputIndex'),
-            outputKeeperIndex: toUint32(LENDER_NFT_BURN_OUTPUT_INDEX, 'lenderNftBurnOutputIndex'),
+            branch: 'WithdrawPart',
+            inputKeeperIndex: LENDER_NFT_INPUT_INDEX,
+            outputKeeperIndex: LENDER_NFT_OUTPUT_INDEX,
+            vaultOutputIndex: VAULT_OUTPUT_INDEX,
+            alreadySupplied,
+            amountToWithdraw,
           }),
           lwkNetwork,
           SimplicityLogLevel.Trace,
@@ -207,17 +240,18 @@ export function useLenderVaultClaim() {
 
         return {
           finalizedTx,
-          // TODO: Remove debug summary before release
           summary: {
             inputs: {
-              '0 Finalized lender vault AssetAuthVault': params.lenderVaultOutpoint,
+              '0 Active lender vault AssetAuthVault': params.lenderVaultOutpoint,
               '1 Lender NFT (wallet)': params.lenderNftOutpoint,
               '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
             },
             outputs: {
-              '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
-              '1 Unlocked principal to recipient': principalRecipient.toString(),
-              'L-BTC change': 'Managed by LWK',
+              '0 Lender vault (active, reduced balance)': bytesToHex(
+                lenderVaultOutputSpendInfo.scriptPubkey.bytes(),
+              ),
+              '1 Lender NFT (returned)': lenderNftRecipient.toString(),
+              '2 Withdrawn principal': principalRecipient.toString(),
             },
             assetIds: {
               principalAssetId: principalAsset.toString(),
@@ -225,13 +259,10 @@ export function useLenderVaultClaim() {
               borrowerNftAssetId: borrowerNftAsset.toString(),
             },
             amounts: {
-              principalAmount: principalAmount.toString(),
-              lenderNftAmount: NFT_AMOUNT.toString(),
-            },
-            scripts: {
-              lenderVaultScript: bytesToHex(lenderVaultSpendInfo.scriptPubkey.bytes()),
-              burnScript: bytesToHex(burnScript.bytes()),
-              principalRecipientScript: bytesToHex(principalRecipient.scriptPubkey().bytes()),
+              lenderVaultAmount: lenderVaultAmount.toString(),
+              alreadySupplied: alreadySupplied.toString(),
+              amountToWithdraw: amountToWithdraw.toString(),
+              vaultChangeAmount: vaultChangeAmount.toString(),
             },
           },
         }
@@ -239,5 +270,5 @@ export function useLenderVaultClaim() {
     }
   }
 
-  return { claimLenderVault }
+  return { withdrawLenderVaultPart }
 }

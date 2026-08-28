@@ -3,10 +3,13 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
-import { resolveLenderNftOutpoint, resolveLenderVaultOutpoint } from '@/api/indexer/utils'
+import { resolveActiveLenderVaultOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { type LenderVaultClaimSummary, useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
+import {
+  type LenderVaultWithdrawPartSummary,
+  useLenderVaultWithdrawPart,
+} from '@/hooks/useLenderVaultWithdrawPart'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
@@ -38,25 +41,32 @@ const txidSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
     .transform(value => value.toLowerCase())
 
-const lenderVaultClaimFormSchema = zod.object({
+const lenderVaultWithdrawPartFormSchema = zod.object({
   lenderVaultOutpoint: outpointSchema('Lender vault outpoint'),
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
   createOfferTxid: txidSchema('Create-offer txid'),
+  alreadySupplied: zod.string().trim().regex(/^\d+$/, 'Must be a whole number'),
+  amountToWithdraw: zod
+    .string()
+    .trim()
+    .regex(/^\d+$/, 'Amount to withdraw must be a whole number')
+    .refine(value => BigInt(value) > 0n, 'Amount to withdraw must be greater than zero'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
   principalRecipientAddress: zod.string().trim().optional(),
+  lenderNftRecipientAddress: zod.string().trim().optional(),
 })
 
-type LenderVaultClaimForm = zod.input<typeof lenderVaultClaimFormSchema>
-type LenderVaultClaimTextField = keyof LenderVaultClaimForm
-type LenderVaultClaimTextFieldProps = Omit<
+type LenderVaultWithdrawPartForm = zod.input<typeof lenderVaultWithdrawPartFormSchema>
+type LenderVaultWithdrawPartTextField = keyof LenderVaultWithdrawPartForm
+type LenderVaultWithdrawPartTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
 > & {
-  name: LenderVaultClaimTextField
+  name: LenderVaultWithdrawPartTextField
 }
 
-const lenderVaultClaimFormResolver: Resolver<LenderVaultClaimForm> = async values => {
-  const result = lenderVaultClaimFormSchema.safeParse(values)
+const lenderVaultWithdrawPartFormResolver: Resolver<LenderVaultWithdrawPartForm> = async values => {
+  const result = lenderVaultWithdrawPartFormSchema.safeParse(values)
   if (result.success) return { values, errors: {} }
 
   return {
@@ -78,7 +88,7 @@ const lenderVaultClaimFormResolver: Resolver<LenderVaultClaimForm> = async value
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: { txid: string; summary: LenderVaultClaimSummary } | null
+  result: { txid: string; summary: LenderVaultWithdrawPartSummary } | null
 }
 
 interface WalletUtxosState {
@@ -86,12 +96,15 @@ interface WalletUtxosState {
   error: string | null
 }
 
-const EMPTY_FORM: LenderVaultClaimForm = {
+const EMPTY_FORM: LenderVaultWithdrawPartForm = {
   lenderVaultOutpoint: '',
   lenderNftOutpoint: '',
   createOfferTxid: '',
+  alreadySupplied: '',
+  amountToWithdraw: '',
   feeOutpoints: '',
   principalRecipientAddress: '',
+  lenderNftRecipientAddress: '',
 }
 
 const INITIAL_STATE: BroadcastState = {
@@ -100,17 +113,18 @@ const INITIAL_STATE: BroadcastState = {
   result: null,
 }
 
-export default function LenderVaultClaimDemo() {
+export default function LenderVaultWithdrawPartDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
-  const { claimLenderVault } = useLenderVaultClaim()
+  const { withdrawLenderVaultPart } = useLenderVaultWithdrawPart()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit, setValue } = useForm<LenderVaultClaimForm>({
+  const { control, handleSubmit, setValue } = useForm<LenderVaultWithdrawPartForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
-    resolver: lenderVaultClaimFormResolver,
+    resolver: lenderVaultWithdrawPartFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
+  const [foundVault, setFoundVault] = useState<string | null>(null)
   const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
   const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
@@ -162,15 +176,15 @@ export default function LenderVaultClaimDemo() {
     }
   }, [connectionStatus, getBlindedWalletUtxos])
 
-  const onSubmit = async (formValues: LenderVaultClaimForm) => {
+  const onSubmit = async (formValues: LenderVaultWithdrawPartForm) => {
     setState({ busy: true, error: null, result: null })
     try {
-      const result = lenderVaultClaimFormSchema.safeParse(formValues)
+      const result = lenderVaultWithdrawPartFormSchema.safeParse(formValues)
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
       const { txid, summary } = await runStandardTransactionFlow(() =>
-        claimLenderVault(result.data),
+        withdrawLenderVaultPart(result.data),
       )
 
       setState({ busy: false, error: null, result: { txid, summary } })
@@ -183,7 +197,7 @@ export default function LenderVaultClaimDemo() {
     }
   }
 
-  const renderTextField = ({ name, ...props }: LenderVaultClaimTextFieldProps) => (
+  const renderTextField = ({ name, ...props }: LenderVaultWithdrawPartTextFieldProps) => (
     <Controller
       control={control}
       name={name}
@@ -201,41 +215,45 @@ export default function LenderVaultClaimDemo() {
 
   return (
     <div className='rounded border border-gray-300 bg-white p-4'>
-      <div className='font-bold'>Lender Vault Final Claim Demo</div>
+      <div className='font-bold'>Lender Vault Partial Withdraw Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-        Spends the finalized lender vault UTXO locked in an AssetAuthVault covenant after the offer
-        has been fully repaid. Requires the wallet-owned Lender NFT as proof of ownership — the NFT
-        is burned via OP_RETURN and the full principal (plus interest) is released to the specified
-        address. Only the Lender NFT holder can execute this transaction.
+        Spends an active (not yet finalized) lender vault UTXO, withdrawing part of the
+        already-supplied principal without waiting for the offer to fully repay. The Lender NFT is
+        passed through (not burned) and the vault continues with the reduced balance.
       </p>
 
       <OfferIdAutofill
         onResolve={offer => {
-          const lenderVaultOutpoint = resolveLenderVaultOutpoint(offer)
-          if (!lenderVaultOutpoint) throw new Error('Finalized lender vault UTXO not found')
+          const lenderVaultOutpoint = resolveActiveLenderVaultOutpoint(offer)
+          if (!lenderVaultOutpoint) throw new Error('Active lender vault UTXO not found')
           const lenderNftOutpoint = resolveLenderNftOutpoint(offer)
           if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
+          const vault = offer.vaults.find(v => v.vault_type === 'lender' && !v.is_finalized)
+          if (!vault) throw new Error('Active lender vault not found')
 
           setValue('lenderVaultOutpoint', lenderVaultOutpoint)
           setValue('lenderNftOutpoint', lenderNftOutpoint)
           setValue('createOfferTxid', offer.created_at_txid)
+          setValue('alreadySupplied', vault.already_supplied.toString())
+          setFoundVault(
+            `balance ${vault.amount.toString()}, already supplied ${vault.already_supplied.toString()}`,
+          )
         }}
       />
+      {foundVault ? <p className='mt-2 text-xs text-gray-600'>Found: {foundVault}</p> : null}
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({
           name: 'lenderVaultOutpoint',
-          label: 'Finalized lender vault AssetAuthVault outpoint',
-          placeholder: 'repay-offer-txid:1',
-          description:
-            'RepayOfferDemo places the finalized lender vault AssetAuthVault covenant at vout 1',
+          label: 'Active lender vault AssetAuthVault outpoint',
+          placeholder: 'txid:vout',
+          description: 'The active (not finalized) lender vault UTXO',
         })}
         {renderTextField({
           name: 'lenderNftOutpoint',
           label: 'Lender NFT outpoint',
-          placeholder: 'accept-offer-txid:2 or current location',
-          description:
-            'Wallet-owned Lender NFT UTXO — authorises the vault withdrawal and is burned on success',
+          placeholder: 'txid:vout',
+          description: 'Wallet-owned Lender NFT UTXO — passed through, not burned',
         })}
         {renderTextField({
           name: 'createOfferTxid',
@@ -244,10 +262,28 @@ export default function LenderVaultClaimDemo() {
           description: 'Used to recover offer parameters and the vault supply goal',
         })}
         {renderTextField({
+          name: 'alreadySupplied',
+          label: 'Already supplied (vault state)',
+          placeholder: 'e.g. 900',
+          description: "The vault's current already_supplied accounting value from the indexer",
+        })}
+        {renderTextField({
+          name: 'amountToWithdraw',
+          label: 'Amount to withdraw',
+          placeholder: 'e.g. 100',
+          description: 'Must be less than the vault balance',
+        })}
+        {renderTextField({
           name: 'principalRecipientAddress',
           label: 'Principal recipient address (optional)',
           placeholder: 'Leave blank to use wallet receive address',
-          description: 'Where the unlocked principal + interest amount is sent',
+          description: 'Where the withdrawn principal is sent',
+        })}
+        {renderTextField({
+          name: 'lenderNftRecipientAddress',
+          label: 'Lender NFT recipient address (optional)',
+          placeholder: 'Leave blank to use wallet receive address',
+          description: 'Where the (unburned) Lender NFT is returned',
         })}
         {renderTextField({
           name: 'feeOutpoints',
@@ -276,17 +312,17 @@ export default function LenderVaultClaimDemo() {
         <UiButton
           isDisabled={connectionStatus !== 'ready'}
           isPending={state.busy}
-          loadingText='Claiming vault...'
+          loadingText='Withdrawing...'
           onPress={() => void handleSubmit(onSubmit)()}
         >
-          Claim Lender Vault
+          Withdraw Part
         </UiButton>
       </div>
 
-      {state.error ? <p className='mt-3 text-xs text-red-500'>Claim: {state.error}</p> : null}
+      {state.error ? <p className='mt-3 text-xs text-red-500'>Withdraw: {state.error}</p> : null}
 
       <TxResult
-        title='Lender Vault Claimed'
+        title='Lender Vault Partially Withdrawn'
         txid={state.result?.txid ?? null}
         txStatus={txStatus}
         detail={state.result?.summary}
