@@ -50,7 +50,8 @@ export function useUtxoChopper() {
     ])
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
     const recipientAddressString = params.recipientAddress?.trim() || receiveAddressString
-    const recipient = Address.parse(recipientAddressString, lwkNetwork)
+    const parsedRecipient = Address.parse(recipientAddressString, lwkNetwork)
+    const recipient = params.explicitOutput ? parsedRecipient.toUnconfidential() : parsedRecipient
     const lbtcChangeRecipient = Address.parse(recipientAddressString, lwkNetwork)
     const recipientSummary = recipient.toString()
     await syncWallet()

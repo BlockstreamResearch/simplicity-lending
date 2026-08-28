@@ -148,9 +148,10 @@ export default function ProtocolFeeVaultWithdrawPartDemo() {
       .map(utxo => {
         const outpoint = utxoToOutpointString(utxo)
         const unblinded = utxo.unblinded()
+        const blindedTag = unblinded.isExplicit() ? 'explicit' : 'blinded'
         return {
           id: outpoint,
-          label: `${outpoint} | ${unblinded.value().toString()} units`,
+          label: `${outpoint} | ${unblinded.value().toString()} units | ${blindedTag}`,
         }
       })
   }, [connectionStatus, keeperAsset.id, walletUtxos])
