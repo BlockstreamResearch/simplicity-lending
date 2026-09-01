@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use lending_session::indexer::{
-    FactoryStatus, IndexerClient, IndexerClientConfig, IndexerClientError, OfferListParams,
-    OfferSortBy, OfferStatus, ParticipantType, SortDir, UtxoType,
+use lending_indexer::client::{
+    IndexerClient, IndexerClientConfig, IndexerClientError, OfferListParams, OfferSortBy, SortDir,
 };
+use lending_indexer::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
 use uuid::Uuid;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
