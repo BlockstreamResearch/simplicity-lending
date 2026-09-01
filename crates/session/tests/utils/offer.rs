@@ -6,7 +6,7 @@ use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::programs::script_auth::ScriptAuth;
 use lending_indexer::indexer::{
     insert_offer, insert_offer_utxo, insert_offer_vault, insert_participant_utxo, spend_offer_utxo,
-    spend_participant_utxo, update_offer_status,
+    spend_offer_vault, spend_participant_utxo, update_offer_status,
 };
 use lending_indexer::models::{
     OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, OfferVaultModel,
@@ -19,8 +19,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::factory::{
-    FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, create_and_broadcast_factory,
-    seed_active_factory,
+    IndexedFactoryState, create_active_factory, sync_factory_after_offer_creation,
 };
 
 pub const TEST_PRINCIPAL_AMOUNT: u64 = 10_000;
@@ -50,7 +49,6 @@ pub fn offer_params(
     })
 }
 
-/// On-chain offer creation result used to seed the indexer (params + outpoints/scripts).
 pub struct OfferCreation {
     pub parameters: LendingOfferParameters,
     pub creation_txid: Txid,
@@ -65,27 +63,30 @@ pub async fn setup_pending_offer(
     session: &Session,
     pool: &PgPool,
     params: CreateOfferParams,
-) -> anyhow::Result<OfferCreation> {
-    let (factory_asset_id, factory_creation_txid, auth_vout, program_vout, program_script) =
-        create_and_broadcast_factory(session).await?;
-    let signer_script = session.signer().get_address().script_pubkey().to_bytes();
-    let factory_id = seed_active_factory(
-        pool,
-        signer_script,
-        factory_asset_id,
-        program_script,
-        FACTORY_ISSUING_UTXOS_COUNT as i16,
-        FACTORY_REISSUANCE_FLAGS as i64,
-        factory_creation_txid,
-        (factory_creation_txid, auth_vout),
-        (factory_creation_txid, program_vout),
+) -> anyhow::Result<(i64, OfferCreation)> {
+    let factory = create_active_factory(session, pool).await?;
+    let offer_creation = create_and_broadcast_offer(session, params).await?;
+    let offer_id = seed_pending_offer(pool, factory.id, &offer_creation).await?;
+
+    Ok((offer_id, offer_creation))
+}
+
+pub async fn setup_pending_offer_with_existing_factory(
+    borrower: &Session,
+    pool: &PgPool,
+    factory: &mut IndexedFactoryState,
+    principal_asset_id: AssetId,
+    loan_expiration_offset: u32,
+) -> anyhow::Result<(i64, OfferCreation)> {
+    let offer_creation = create_and_broadcast_offer(
+        borrower,
+        offer_params(borrower, principal_asset_id, loan_expiration_offset)?,
     )
     .await?;
-
-    let offer_creation = create_and_broadcast_offer(session, params).await?;
-    seed_pending_offer(pool, factory_id, &offer_creation).await?;
-
-    Ok(offer_creation)
+    sync_factory_after_offer_creation(borrower, pool, factory, offer_creation.creation_txid)
+        .await?;
+    let offer_id = seed_pending_offer(pool, factory.id, &offer_creation).await?;
+    Ok((offer_id, offer_creation))
 }
 
 pub async fn create_and_broadcast_offer(
@@ -367,4 +368,190 @@ pub async fn repay_active_offer(
     sql_tx.commit().await?;
 
     Ok(repay_txid)
+}
+
+pub async fn assert_offer_status(
+    session: &Session,
+    offer_id: i64,
+    expected: OfferStatus,
+) -> anyhow::Result<()> {
+    let status = session
+        .indexer()
+        .get_offer(&offer_id.to_string())
+        .await?
+        .info
+        .base
+        .status;
+    assert_eq!(status, expected);
+    Ok(())
+}
+
+pub async fn claim_borrower_principal(
+    borrower: &Session,
+    pool: &PgPool,
+    offer_id: i64,
+    offer: &OfferCreation,
+    accept_txid: Txid,
+) -> anyhow::Result<Txid> {
+    let claim = borrower.claim_principal(&offer_id.to_string()).await?;
+
+    let receipt = borrower.signer().broadcast(&claim)?;
+    let claim_txid = receipt.txid();
+    receipt.wait()?;
+
+    let block_height = 250_u64;
+    let borrower_principal_outpoint = OutPoint::new(accept_txid, 1);
+    let old_borrower_nft_outpoint =
+        OutPoint::new(offer.creation_txid, offer.borrower_nft_vout as u32);
+
+    let mut sql_tx = pool.begin().await?;
+
+    spend_offer_utxo(
+        &mut sql_tx,
+        &borrower_principal_outpoint,
+        block_height,
+        claim_txid,
+    )
+    .await?;
+    spend_participant_utxo(
+        &mut sql_tx,
+        &old_borrower_nft_outpoint,
+        block_height,
+        claim_txid,
+    )
+    .await?;
+
+    insert_participant_utxo(
+        &mut sql_tx,
+        &OfferParticipantModel {
+            offer_id,
+            participant_type: ParticipantType::Borrower,
+            script_pubkey: borrower.signer().get_address().script_pubkey().to_bytes(),
+            txid: claim_txid.as_byte_array().to_vec(),
+            vout: 0,
+            created_at_height: block_height as i64,
+            spent_txid: None,
+            spent_at_height: None,
+        },
+    )
+    .await?;
+
+    sql_tx.commit().await?;
+
+    Ok(claim_txid)
+}
+
+pub async fn claim_lender_vault(
+    lender: &Session,
+    pool: &PgPool,
+    offer_id: i64,
+    accept_txid: Txid,
+    repay_txid: Txid,
+) -> anyhow::Result<Txid> {
+    let claim = lender.claim_lender_vault(&offer_id.to_string()).await?;
+
+    let receipt = lender.signer().broadcast(&claim)?;
+    let claim_txid = receipt.txid();
+    receipt.wait()?;
+
+    let block_height = 400_u64;
+    let lender_vault_outpoint = OutPoint::new(repay_txid, 1);
+    let lender_nft_outpoint = OutPoint::new(accept_txid, 2);
+
+    let mut sql_tx = pool.begin().await?;
+
+    spend_offer_vault(
+        &mut sql_tx,
+        &lender_vault_outpoint,
+        block_height,
+        claim_txid,
+    )
+    .await?;
+    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Claimed, block_height).await?;
+    spend_participant_utxo(&mut sql_tx, &lender_nft_outpoint, block_height, claim_txid).await?;
+
+    sql_tx.commit().await?;
+
+    Ok(claim_txid)
+}
+
+pub async fn cancel_pending_offer(
+    borrower: &Session,
+    pool: &PgPool,
+    offer_id: i64,
+    offer: &OfferCreation,
+) -> anyhow::Result<Txid> {
+    let cancel = borrower.cancel_offer(&offer_id.to_string()).await?;
+
+    let receipt = borrower.signer().broadcast(&cancel)?;
+    let cancel_txid = receipt.txid();
+    receipt.wait()?;
+
+    let block_height = 150_u64;
+    let pending_offer_outpoint =
+        OutPoint::new(offer.creation_txid, offer.pending_offer_vout as u32);
+    let borrower_nft_outpoint = OutPoint::new(offer.creation_txid, offer.borrower_nft_vout as u32);
+    let lender_nft_outpoint = OutPoint::new(offer.creation_txid, offer.lender_nft_vout as u32);
+
+    let mut sql_tx = pool.begin().await?;
+
+    spend_offer_utxo(
+        &mut sql_tx,
+        &pending_offer_outpoint,
+        block_height,
+        cancel_txid,
+    )
+    .await?;
+    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Cancelled, block_height).await?;
+    spend_participant_utxo(
+        &mut sql_tx,
+        &borrower_nft_outpoint,
+        block_height,
+        cancel_txid,
+    )
+    .await?;
+    spend_participant_utxo(&mut sql_tx, &lender_nft_outpoint, block_height, cancel_txid).await?;
+
+    sql_tx.commit().await?;
+
+    Ok(cancel_txid)
+}
+
+pub async fn liquidate_active_offer(
+    lender: &Session,
+    pool: &PgPool,
+    offer_id: i64,
+    accept_txid: Txid,
+) -> anyhow::Result<Txid> {
+    let liquidation = lender.liquidate_offer(&offer_id.to_string()).await?;
+
+    let receipt = lender.signer().broadcast(&liquidation)?;
+    let liquidation_txid = receipt.txid();
+    receipt.wait()?;
+
+    let block_height = 350_u64;
+    let active_offer_outpoint = OutPoint::new(accept_txid, 0);
+    let lender_nft_outpoint = OutPoint::new(accept_txid, 2);
+
+    let mut sql_tx = pool.begin().await?;
+
+    spend_offer_utxo(
+        &mut sql_tx,
+        &active_offer_outpoint,
+        block_height,
+        liquidation_txid,
+    )
+    .await?;
+    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Liquidated, block_height).await?;
+    spend_participant_utxo(
+        &mut sql_tx,
+        &lender_nft_outpoint,
+        block_height,
+        liquidation_txid,
+    )
+    .await?;
+
+    sql_tx.commit().await?;
+
+    Ok(liquidation_txid)
 }
