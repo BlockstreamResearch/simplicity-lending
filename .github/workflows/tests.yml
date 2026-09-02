@@ -76,7 +76,9 @@ jobs:
           echo "$SQLX_CLI_ROOT/bin" >> $GITHUB_PATH
 
       - name: Install simplex-cli
-        uses: ./.github/actions/setup-smplx
+        uses: BlockstreamResearch/simplicityhl-toolchain@v0.0.2
+        with:
+          components: simplex
 
       - name: Generate contract artifacts
         shell: bash
