@@ -93,21 +93,16 @@ export function useLiquidateOffer() {
       throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
     }
     // TODO: Handle with indexer
-    // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction)
-    const borrowerNftReferenceOutpoint = new OutPoint(`${params.createOfferTxid}:2`)
-    const [activeOfferTx, createOfferTx, borrowerNftTx, lenderNftTx, feeTxs] = await Promise.all([
+    const [activeOfferTx, createOfferTx, lenderNftTx, feeTxs] = await Promise.all([
       fetchTransaction(activeOfferOutpoint),
       fetchTransaction(new OutPoint(`${params.createOfferTxid}:0`)),
-      fetchTransaction(borrowerNftReferenceOutpoint),
       fetchTransaction(lenderNftOutpoint),
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
     ])
     const activeOfferTxOut = requireTxOut(activeOfferTx, activeOfferOutpoint.vout(), 'Active offer')
-    const borrowerNftTxOut = requireTxOut(
-      borrowerNftTx,
-      borrowerNftReferenceOutpoint.vout(),
-      'Borrower NFT reference',
-    )
+    // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction) —
+    // fetched once above via createOfferTx, reused here instead of a second round trip.
+    const borrowerNftTxOut = requireTxOut(createOfferTx, 2, 'Borrower NFT reference')
     const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
       requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),

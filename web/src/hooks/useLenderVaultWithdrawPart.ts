@@ -159,23 +159,19 @@ export function useLenderVaultWithdrawPart() {
       withKeeperAssetBurn: true,
       withSupplierAssetBurn: true,
     })
-    const lenderVaultInputSpendInfo = buildAssetAuthVaultSpendInfo(
-      lenderVaultProgram,
-      true,
+    // WithdrawPart only changes the coin's output value — is_active and already_supplied stay
+    // the same, so the input and output covenant spend info are byte-identical here.
+    const lenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(lenderVaultProgram, {
+      isActive: true,
       alreadySupplied,
-    )
+    })
     assertScriptMatches(
       lenderVaultTxOut.scriptPubkey(),
-      lenderVaultInputSpendInfo.scriptPubkey,
+      lenderVaultSpendInfo.scriptPubkey,
       'Lender vault output does not match the reconstructed active AssetAuthVault covenant',
     )
 
     const vaultChangeAmount = toUint64(lenderVaultAmount - amountToWithdraw, 'vaultChangeAmount')
-    const lenderVaultOutputSpendInfo = buildAssetAuthVaultSpendInfo(
-      lenderVaultProgram,
-      true,
-      alreadySupplied,
-    )
 
     const inputOrderStrings = [
       params.lenderVaultOutpoint,
@@ -206,7 +202,7 @@ export function useLenderVaultWithdrawPart() {
         ),
       ])
       .addPostIssuanceScriptOutput(
-        lenderVaultOutputSpendInfo.scriptPubkey,
+        lenderVaultSpendInfo.scriptPubkey,
         vaultChangeAmount,
         principalAsset,
       )
@@ -223,7 +219,7 @@ export function useLenderVaultWithdrawPart() {
         const prevouts = [lenderVaultTxOut, lenderNftTxOut, ...feeTxOuts]
         const finalizedTx = lenderVaultProgram.finalizeTransactionWithSpendInfo(
           txWithWalletWitnesses,
-          lenderVaultInputSpendInfo,
+          lenderVaultSpendInfo,
           prevouts,
           0,
           buildAssetAuthVaultWitness({
@@ -248,7 +244,7 @@ export function useLenderVaultWithdrawPart() {
             },
             outputs: {
               '0 Lender vault (active, reduced balance)': bytesToHex(
-                lenderVaultOutputSpendInfo.scriptPubkey.bytes(),
+                lenderVaultSpendInfo.scriptPubkey.bytes(),
               ),
               '1 Lender NFT (returned)': lenderNftRecipient.toString(),
               '2 Withdrawn principal': principalRecipient.toString(),

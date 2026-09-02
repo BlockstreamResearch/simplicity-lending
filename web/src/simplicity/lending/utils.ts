@@ -21,6 +21,8 @@ export function getTotalFee(params: TotalAmountToRepayParams): Uint64 {
   )
 }
 
+// 10% of the total fee goes to the protocol, matching PROTOCOL_FEE_PERCENTAGE in Rust.
+// Check crates/contracts/src/programs/lending/offer.rs
 const PROTOCOL_FEE_BPS = 1_000n
 
 export function getProtocolFee(feeAmount: Uint64): Uint64 {

@@ -139,11 +139,10 @@ export function useLenderVaultClaim() {
       withKeeperAssetBurn: true,
       withSupplierAssetBurn: true,
     })
-    const lenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(
-      lenderVaultProgram,
-      false,
-      lenderVaultSupplyGoal,
-    )
+    const lenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(lenderVaultProgram, {
+      isActive: false,
+      alreadySupplied: lenderVaultSupplyGoal,
+    })
 
     assertScriptMatches(
       lenderVaultTxOut.scriptPubkey(),

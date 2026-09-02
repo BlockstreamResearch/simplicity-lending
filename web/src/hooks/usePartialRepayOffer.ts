@@ -57,16 +57,12 @@ import {
 } from '@/simplicity/lending/utils'
 import { bytesToHex } from '@/utils/hex'
 import { getProcessingTxids } from '@/utils/pendingTransactions'
-import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
+import { minUint64, toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
 const BORROWER_NFT_INPUT_INDEX = toUint32(0, 'borrowerNftInputIndex')
 const BORROWER_NFT_OUTPUT_INDEX = toUint32(0, 'borrowerNftOutputIndex')
-
-function minUint64(a: bigint, b: bigint): bigint {
-  return a < b ? a : b
-}
 
 export interface PartialRepayOfferParams {
   activeOfferOutpoint: string
@@ -141,31 +137,21 @@ export function usePartialRepayOffer() {
       requireWalletUtxo(blindedWalletUtxos, o, 'Principal'),
     )
 
-    const lenderNftReferenceOutpoint = new OutPoint(`${params.createOfferTxid}:3`)
-    const pendingOfferOutpoint = new OutPoint(`${params.createOfferTxid}:5`)
-    const [
-      activeOfferTx,
-      borrowerNftTx,
-      createOfferTx,
-      lenderNftRefTx,
-      pendingOfferTx,
-      principalTxs,
-      feeTxs,
-      feeRate,
-    ] = await Promise.all([
-      fetchTransaction(activeOfferOutpoint),
-      fetchTransaction(borrowerNftOutpoint),
-      fetchTransaction(new OutPoint(`${params.createOfferTxid}:0`)),
-      fetchTransaction(lenderNftReferenceOutpoint),
-      fetchTransaction(pendingOfferOutpoint),
-      Promise.all(principalOutpoints.map(o => fetchTransaction(o))),
-      Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
-      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
-    ])
+    const [activeOfferTx, borrowerNftTx, createOfferTx, principalTxs, feeTxs, feeRate] =
+      await Promise.all([
+        fetchTransaction(activeOfferOutpoint),
+        fetchTransaction(borrowerNftOutpoint),
+        fetchTransaction(new OutPoint(`${params.createOfferTxid}:0`)),
+        Promise.all(principalOutpoints.map(o => fetchTransaction(o))),
+        Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
+        fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
+      ])
     const activeOfferTxOut = requireTxOut(activeOfferTx, activeOfferOutpoint.vout(), 'Active offer')
     const borrowerNftTxOut = requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT')
-    const lenderNftRefTxOut = requireTxOut(lenderNftRefTx, 3, 'Lender NFT reference')
-    const pendingOfferTxOut = requireTxOut(pendingOfferTx, 5, 'Pending offer Lending')
+    // The create-offer tx carries the Lender NFT reference at vout 3 and the pending Lending
+    // covenant at vout 5 — fetched once above, reused here instead of two more round trips.
+    const lenderNftRefTxOut = requireTxOut(createOfferTx, 3, 'Lender NFT reference')
+    const pendingOfferTxOut = requireTxOut(createOfferTx, 5, 'Pending offer Lending')
 
     const collateralAsset = requireExplicitAsset(activeOfferTxOut, 'Active offer')
     const currentCollateralAmount = requireExplicitAmount(activeOfferTxOut, 'Active offer')
@@ -303,7 +289,10 @@ export function usePartialRepayOffer() {
 
     const lenderVaultProgram = buildLenderVaultProgram(derivedLendingParams)
     const lenderVaultInputSpendInfo = needsLenderVaultInput
-      ? buildAssetAuthVaultSpendInfo(lenderVaultProgram, true, lenderVaultAlreadySupplied)
+      ? buildAssetAuthVaultSpendInfo(lenderVaultProgram, {
+          isActive: true,
+          alreadySupplied: lenderVaultAlreadySupplied,
+        })
       : null
 
     if (needsLenderVaultInput && lenderVaultTxOut && lenderVaultInputSpendInfo) {
@@ -327,15 +316,17 @@ export function usePartialRepayOffer() {
           lenderVaultAlreadySupplied + additionalLenderVaultAmount,
           'lenderVaultNewAlreadySupplied',
         )
-    const lenderVaultOutputSpendInfo = buildAssetAuthVaultSpendInfo(
-      lenderVaultProgram,
-      !isFinalRepayment,
-      lenderVaultNewAlreadySupplied,
-    )
+    const lenderVaultOutputSpendInfo = buildAssetAuthVaultSpendInfo(lenderVaultProgram, {
+      isActive: !isFinalRepayment,
+      alreadySupplied: lenderVaultNewAlreadySupplied,
+    })
 
     const protocolFeeVaultProgram = buildProtocolFeeVaultProgram(derivedLendingParams)
     const protocolFeeVaultInputSpendInfo = needsProtocolFeeVaultInput
-      ? buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, true, alreadyRepaidProtocolFee)
+      ? buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, {
+          isActive: true,
+          alreadySupplied: alreadyRepaidProtocolFee,
+        })
       : null
 
     if (needsProtocolFeeVaultInput && protocolFeeVaultTxOut && protocolFeeVaultInputSpendInfo) {
@@ -360,11 +351,10 @@ export function usePartialRepayOffer() {
       )
     }
     const protocolFeeVaultOutputSpendInfo = isProtocolFeeVaultTouchedNow
-      ? buildAssetAuthVaultSpendInfo(
-          protocolFeeVaultProgram,
-          !isProtocolFeeVaultFinalized,
-          totalRepaidProtocolFee,
-        )
+      ? buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, {
+          isActive: !isProtocolFeeVaultFinalized,
+          alreadySupplied: totalRepaidProtocolFee,
+        })
       : null
 
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)

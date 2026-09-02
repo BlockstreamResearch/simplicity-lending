@@ -54,3 +54,7 @@ export function toUint64(value: bigint, label = 'Value'): Uint64 {
 
   return value as Uint64
 }
+
+export function minUint64(a: bigint, b: bigint): bigint {
+  return a < b ? a : b
+}

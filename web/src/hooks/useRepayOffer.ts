@@ -175,13 +175,17 @@ export function useRepayOffer() {
     const finalizedProtocolFeeVaultProgram = buildProtocolFeeVaultProgram(derivedLendingParams)
     const finalizedLenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(
       finalizedLenderVaultProgram,
-      false,
-      derivedLendingParams.lenderVaultSupplyGoal,
+      {
+        isActive: false,
+        alreadySupplied: derivedLendingParams.lenderVaultSupplyGoal,
+      },
     )
     const finalizedProtocolFeeVaultSpendInfo = buildAssetAuthVaultSpendInfo(
       finalizedProtocolFeeVaultProgram,
-      false,
-      derivedLendingParams.protocolFeeVaultSupplyGoal,
+      {
+        isActive: false,
+        alreadySupplied: derivedLendingParams.protocolFeeVaultSupplyGoal,
+      },
     )
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
     const walletInputOutpointStrings = [...params.principalOutpoints, ...params.feeOutpoints]

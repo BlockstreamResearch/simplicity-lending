@@ -158,11 +158,10 @@ export function useProtocolFeeVaultWithdrawPart() {
       withKeeperAssetBurn: false,
       withSupplierAssetBurn: false,
     })
-    const protocolFeeVaultInputSpendInfo = buildAssetAuthVaultSpendInfo(
-      protocolFeeVaultProgram,
-      true,
+    const protocolFeeVaultInputSpendInfo = buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, {
+      isActive: true,
       alreadySupplied,
-    )
+    })
     assertScriptMatches(
       protocolFeeVaultTxOut.scriptPubkey(),
       protocolFeeVaultInputSpendInfo.scriptPubkey,
@@ -173,11 +172,10 @@ export function useProtocolFeeVaultWithdrawPart() {
       protocolFeeVaultAmount - amountToWithdraw,
       'vaultChangeAmount',
     )
-    const protocolFeeVaultOutputSpendInfo = buildAssetAuthVaultSpendInfo(
-      protocolFeeVaultProgram,
-      true,
+    const protocolFeeVaultOutputSpendInfo = buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, {
+      isActive: true,
       alreadySupplied,
-    )
+    })
 
     const inputOrderStrings = [
       params.protocolFeeVaultOutpoint,

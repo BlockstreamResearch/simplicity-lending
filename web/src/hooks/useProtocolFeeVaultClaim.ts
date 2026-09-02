@@ -134,11 +134,10 @@ export function useProtocolFeeVaultClaim() {
       withKeeperAssetBurn: false,
       withSupplierAssetBurn: false,
     })
-    const protocolFeeVaultSpendInfo = buildAssetAuthVaultSpendInfo(
-      protocolFeeVaultProgram,
-      false,
-      protocolFeeVaultSupplyGoal,
-    )
+    const protocolFeeVaultSpendInfo = buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, {
+      isActive: false,
+      alreadySupplied: protocolFeeVaultSupplyGoal,
+    })
     assertScriptMatches(
       protocolFeeVaultTxOut.scriptPubkey(),
       protocolFeeVaultSpendInfo.scriptPubkey,

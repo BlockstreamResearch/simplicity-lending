@@ -10,7 +10,7 @@ import {
 } from '@lilbonekit/lwk-web'
 import { sources } from 'virtual:simplicity-sources'
 
-import { UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
+import { buildCovenantSpendInfo, UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { bytes32ToHex } from '@/utils/hex'
 import { type Bytes32, toBytes32, type Uint32, type Uint64 } from '@/utils/uint'
 
@@ -121,11 +121,17 @@ export function buildAssetAuthVaultArguments(
     )
 }
 
+export interface AssetAuthVaultSpendInfoParams {
+  isActive: boolean
+  alreadySupplied: Uint64
+}
+
 export function buildAssetAuthVaultSpendInfo(
   program: SimplicityProgram,
-  isActive: boolean,
-  alreadySupplied: Uint64,
+  params: AssetAuthVaultSpendInfoParams,
 ): StateTaprootSpendInfo {
+  const { isActive, alreadySupplied } = params
+
   const isActiveSlot = new Uint8Array(32)
   isActiveSlot[31] = isActive ? 1 : 0
 
@@ -142,9 +148,7 @@ export function buildAssetAuthVaultSpendInfo(
 }
 
 export function getAssetAuthVaultTapleafHash(program: SimplicityProgram): Bytes32 {
-  const numsKey = XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY)
-  const spendInfo = new StateTaprootBuilder().addSimplicityLeaf(0, program.cmr).finalize(numsKey)
-  const merkleRoot = spendInfo.merkleRoot
+  const merkleRoot = buildCovenantSpendInfo(program).merkleRoot
   if (!merkleRoot) throw new Error('Missing merkle root for single-leaf AssetAuthVault program')
 
   return toBytes32(merkleRoot, 'assetAuthVaultTapleafHash')
