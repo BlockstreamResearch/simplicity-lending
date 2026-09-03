@@ -3,11 +3,16 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
-import { resolveActiveOutpoint, resolveBorrowerNftOutpoint } from '@/api/indexer/utils'
+import {
+  resolveActiveLenderVaultOutpoint,
+  resolveActiveOutpoint,
+  resolveActiveProtocolFeeVaultOutpoint,
+  resolveBorrowerNftOutpoint,
+} from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type RepayOfferSummary, useRepayOffer } from '@/hooks/useRepayOffer'
+import { type PartialRepayOfferSummary, usePartialRepayOffer } from '@/hooks/usePartialRepayOffer'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
@@ -32,9 +37,32 @@ const outpointListSchema = (label: string) =>
     .transform(value => value.split(/[\s,]+/).filter(Boolean))
     .pipe(zod.array(outpointSchema(label)).min(1, `${label}: at least one outpoint required`))
 
+const txidSchema = (label: string) =>
+  zod
+    .string()
+    .trim()
+    .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
+    .transform(value => value.toLowerCase())
+
 const repayOfferFormSchema = zod.object({
   activeOfferOutpoint: outpointSchema('Active offer outpoint'),
+  createOfferTxid: txidSchema('Create-offer txid'),
   borrowerNftOutpoint: outpointSchema('Borrower NFT outpoint'),
+  currentDebt: zod
+    .string()
+    .trim()
+    .regex(/^\d+$/, 'Current debt must be a whole number')
+    .refine(value => BigInt(value) > 0n, 'Current debt must be greater than zero'),
+  lenderVaultOutpoint: zod
+    .string()
+    .trim()
+    .regex(/^([0-9a-fA-F]{64}:\d+)?$/, 'Lender vault outpoint must have txid:vout format')
+    .optional(),
+  protocolFeeVaultOutpoint: zod
+    .string()
+    .trim()
+    .regex(/^([0-9a-fA-F]{64}:\d+)?$/, 'Protocol fee vault outpoint must have txid:vout format')
+    .optional(),
   collateralRecipientAddress: zod.string().trim().optional(),
   principalOutpoints: outpointListSchema('Principal outpoint'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
@@ -72,7 +100,7 @@ const repayOfferFormResolver: Resolver<RepayOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: { txid: string; summary: RepayOfferSummary } | null
+  result: { txid: string; summary: PartialRepayOfferSummary } | null
 }
 
 interface WalletUtxosState {
@@ -82,7 +110,11 @@ interface WalletUtxosState {
 
 const EMPTY_FORM: RepayOfferForm = {
   activeOfferOutpoint: '',
+  createOfferTxid: '',
   borrowerNftOutpoint: '',
+  currentDebt: '',
+  lenderVaultOutpoint: '',
+  protocolFeeVaultOutpoint: '',
   collateralRecipientAddress: '',
   principalOutpoints: '',
   feeOutpoints: '',
@@ -97,7 +129,7 @@ const INITIAL_STATE: BroadcastState = {
 export default function RepayOfferDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
-  const { repayOffer } = useRepayOffer()
+  const { partialRepayOffer } = usePartialRepayOffer()
   const runStandardTransactionFlow = useStandardTransactionFlow()
   const { control, handleSubmit, setValue } = useForm<RepayOfferForm>({
     defaultValues: EMPTY_FORM,
@@ -185,7 +217,9 @@ export default function RepayOfferDemo() {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
 
-      const { txid, summary } = await runStandardTransactionFlow(() => repayOffer(result.data))
+      const { txid, summary } = await runStandardTransactionFlow(() =>
+        partialRepayOffer({ ...result.data, amountToRepay: result.data.currentDebt }),
+      )
 
       setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
@@ -231,7 +265,11 @@ export default function RepayOfferDemo() {
           if (!borrowerNftOutpoint) throw new Error('Borrower NFT UTXO not found')
 
           setValue('activeOfferOutpoint', activeOfferOutpoint)
+          setValue('createOfferTxid', offer.created_at_txid)
           setValue('borrowerNftOutpoint', borrowerNftOutpoint)
+          setValue('currentDebt', offer.current_debt.toString())
+          setValue('lenderVaultOutpoint', resolveActiveLenderVaultOutpoint(offer) ?? '')
+          setValue('protocolFeeVaultOutpoint', resolveActiveProtocolFeeVaultOutpoint(offer) ?? '')
         }}
       />
 
@@ -243,11 +281,38 @@ export default function RepayOfferDemo() {
           description: 'AcceptOfferDemo places the active Lending covenant at vout 0',
         })}
         {renderTextField({
+          name: 'createOfferTxid',
+          label: 'Create-offer txid',
+          placeholder: '64 hex chars',
+          description: 'Used to recover offer parameters and (if touched) the active vaults',
+        })}
+        {renderTextField({
           name: 'borrowerNftOutpoint',
           label: 'Borrower NFT outpoint',
           placeholder: 'claim-principal-txid:0',
           description:
             'ClaimPrincipalDemo outputs the Borrower NFT at vout 0 — use that outpoint here; repayment burns it',
+        })}
+        {renderTextField({
+          name: 'currentDebt',
+          label: 'Current offer debt',
+          placeholder: 'e.g. 11000',
+          description:
+            'Principal + full interest for a fresh offer, or the remaining debt after a prior partial repayment. Repaid in full.',
+        })}
+        {renderTextField({
+          name: 'lenderVaultOutpoint',
+          label: 'Lender vault outpoint (optional)',
+          placeholder: 'txid:vout',
+          description:
+            'Needed only if a prior partial repayment already created an active lender vault',
+        })}
+        {renderTextField({
+          name: 'protocolFeeVaultOutpoint',
+          label: 'Protocol fee vault outpoint (optional)',
+          placeholder: 'txid:vout',
+          description:
+            'Needed only if a prior partial repayment already created an active protocol-fee vault',
         })}
         {renderTextField({
           name: 'collateralRecipientAddress',

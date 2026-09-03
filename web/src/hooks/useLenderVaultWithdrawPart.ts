@@ -115,19 +115,14 @@ export function useLenderVaultWithdrawPart() {
       requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
     )
 
-    // The transaction that produced this vault UTXO (creation, or a prior supply/withdraw) always
-    // has the Borrower NFT at input 0 — same trick useLenderVaultClaim uses to avoid needing a
-    // live borrower NFT outpoint just to recover its asset id.
-    const borrowerNftPreTouchOutpoint = lenderVaultTx.inputs[0].outpoint()
-    const borrowerNftPreTouchTx = await fetchTransaction(borrowerNftPreTouchOutpoint)
-    const borrowerNftPreTouchTxOut = requireTxOut(
-      borrowerNftPreTouchTx,
-      borrowerNftPreTouchOutpoint.vout(),
-      'Borrower NFT (pre-touch)',
-    )
+    // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction). Reading
+    // it from the creation tx (already fetched above) works regardless of how many prior
+    // supply/withdraw transactions produced the current vault UTXO — unlike reading input 0 of
+    // the vault's immediate producer, which is only the Borrower NFT on the vault's first touch.
+    const borrowerNftReferenceTxOut = requireTxOut(createOfferTx, 2, 'Borrower NFT reference')
     const borrowerNftAsset = requireExplicitAsset(
-      borrowerNftPreTouchTxOut,
-      'Borrower NFT (pre-touch)',
+      borrowerNftReferenceTxOut,
+      'Borrower NFT reference',
     )
 
     const principalAsset = requireExplicitAsset(lenderVaultTxOut, 'Lender vault')

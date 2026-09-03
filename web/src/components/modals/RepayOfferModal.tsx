@@ -6,12 +6,17 @@ import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/espl
 import { esploraQueryKeys } from '@/api/esplora/queryKeys'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { resolveActiveOutpoint, resolveBorrowerNftOutpoint } from '@/api/indexer/utils'
+import {
+  resolveActiveLenderVaultOutpoint,
+  resolveActiveOutpoint,
+  resolveActiveProtocolFeeVaultOutpoint,
+  resolveBorrowerNftOutpoint,
+} from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
-import { useRepayOffer } from '@/hooks/useRepayOffer'
+import { usePartialRepayOffer } from '@/hooks/usePartialRepayOffer'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
   estimateFeeBudgetSats,
@@ -45,7 +50,7 @@ export default function RepayOfferModal({
   const { principalAsset } = NETWORK_CONFIG
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey, confirmedBalances } = useWallet()
   const { lwkNetwork } = useLwk()
-  const { repayOffer } = useRepayOffer()
+  const { partialRepayOffer } = usePartialRepayOffer()
   const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
   const { formatCollateralDisplay, formatPrincipalAmount } = useFormatAmount()
@@ -59,8 +64,9 @@ export default function RepayOfferModal({
       const borrowerNftOutpoint = resolveBorrowerNftOutpoint(fullOffer)
       if (!borrowerNftOutpoint) throw new Error('Borrower NFT UTXO not found')
 
-      const totalToRepay =
-        offer.principal_amount + calcInterest(offer.principal_amount, offer.interest_rate)
+      // current_debt already accounts for any prior partial repayment — repaying it in full here
+      // closes the loan the same way a single-shot repay on a fresh offer would.
+      const totalToRepay = fullOffer.current_debt
 
       await syncWallet()
       const [blindedWalletUtxos, feeRate] = await Promise.all([
@@ -83,9 +89,14 @@ export default function RepayOfferModal({
         feeRate,
       )
 
-      return repayOffer({
+      return partialRepayOffer({
         activeOfferOutpoint,
+        createOfferTxid: fullOffer.created_at_txid,
         borrowerNftOutpoint,
+        amountToRepay: totalToRepay.toString(),
+        currentDebt: totalToRepay.toString(),
+        lenderVaultOutpoint: resolveActiveLenderVaultOutpoint(fullOffer) ?? undefined,
+        protocolFeeVaultOutpoint: resolveActiveProtocolFeeVaultOutpoint(fullOffer) ?? undefined,
         principalOutpoints: principalUtxos.map(utxoToOutpointString),
         feeOutpoints: feeUtxos.map(utxoToOutpointString),
       })
@@ -105,8 +116,7 @@ export default function RepayOfferModal({
     },
   })
 
-  const totalToRepay =
-    offer.principal_amount + calcInterest(offer.principal_amount, offer.interest_rate)
+  const totalToRepay = offer.current_debt
   const { data: feeRate = FALLBACK_FEE_RATE_SAT_PER_KVB } = useQuery({
     queryKey: esploraQueryKeys.feeRate,
     queryFn: () => fetchFeeRateSatPerKvb(),

@@ -35,9 +35,17 @@ const outpointListSchema = (label: string) =>
     .transform(value => value.split(/[\s,]+/).filter(Boolean))
     .pipe(zod.array(outpointSchema(label)).min(1, `${label}: at least one outpoint required`))
 
+const txidSchema = (label: string) =>
+  zod
+    .string()
+    .trim()
+    .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
+    .transform(value => value.toLowerCase())
+
 const protocolFeeVaultClaimFormSchema = zod.object({
   protocolFeeVaultOutpoint: outpointSchema('Protocol fee vault outpoint'),
   keeperOutpoint: outpointSchema('Protocol fee keeper outpoint'),
+  createOfferTxid: txidSchema('Create-offer txid'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
   keeperRecipientAddress: zod.string().trim().optional(),
   principalRecipientAddress: zod.string().trim().optional(),
@@ -86,6 +94,7 @@ interface WalletUtxosState {
 const EMPTY_FORM: ProtocolFeeVaultClaimForm = {
   protocolFeeVaultOutpoint: '',
   keeperOutpoint: '',
+  createOfferTxid: '',
   feeOutpoints: '',
   keeperRecipientAddress: '',
   principalRecipientAddress: '',
@@ -235,6 +244,7 @@ export default function ProtocolFeeVaultClaimDemo() {
           const vault = offer.vaults.find(v => v.vault_type === 'protocol_fee' && v.is_finalized)
 
           setValue('protocolFeeVaultOutpoint', protocolFeeVaultOutpoint)
+          setValue('createOfferTxid', offer.created_at_txid)
           setFoundVault(vault ? `balance ${vault.amount.toString()}` : null)
         }}
       />
@@ -246,6 +256,12 @@ export default function ProtocolFeeVaultClaimDemo() {
           label: 'Finalized protocol-fee vault AssetAuthVault outpoint',
           placeholder: 'txid:vout',
           description: 'The finalized protocol-fee vault UTXO',
+        })}
+        {renderTextField({
+          name: 'createOfferTxid',
+          label: 'Create-offer txid',
+          placeholder: '64 hex chars',
+          description: 'Used to recover offer parameters and the vault supply goal',
         })}
         {renderTextField({
           name: 'keeperOutpoint',

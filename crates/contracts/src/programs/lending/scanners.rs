@@ -641,9 +641,14 @@ fn repayment_vault_deltas(
     debt_before: u64,
     amount_to_repay: u64,
 ) -> Option<(u64, u64)> {
-    let protocol_fee_repaid = params
+    let debt_after = debt_before.checked_sub(amount_to_repay)?;
+    let protocol_fee_before = params
         .offer_parameters
-        .get_repaid_protocol_fee(debt_before, amount_to_repay);
+        .get_already_repaid_protocol_fee(debt_before);
+    let protocol_fee_after = params
+        .offer_parameters
+        .get_already_repaid_protocol_fee(debt_after);
+    let protocol_fee_repaid = protocol_fee_after.checked_sub(protocol_fee_before)?;
     let lender_delta = amount_to_repay.checked_sub(protocol_fee_repaid)?;
 
     Some((lender_delta, protocol_fee_repaid))
@@ -1024,6 +1029,60 @@ mod tests {
         let scan = active
             .discover_partial_repayment(&tx, 0, 0, Some((lender_before, Some(protocol_before))))
             .expect("partial fee phase");
+        assert_eq!(scan.amount_to_repay, amount_to_repay);
+        assert_eq!(scan.debt_after, debt_after);
+    }
+
+    // Protocol fee must accrue cumulatively (floor(20*0.1) - floor(15*0.1) = 1), not per
+    // installment (floor(5*0.1) = 0), or a second fee-phase repayment goes unrecognized.
+    #[test]
+    fn discover_partial_repayment_second_fee_installment() {
+        let params = test_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        // First repayment of 15 already applied: fee repaid so far = 15, protocol fee = 1.
+        let debt_before = total - 15;
+        let active = LendingOffer::new_active(params, debt_before);
+        let amount_to_repay = 5_u64;
+        let debt_after = debt_before - amount_to_repay;
+        let continuing = LendingOffer::new_active(params, debt_after);
+
+        let lender_before = 14_u64;
+        let protocol_before = 1_u64;
+        // Correct, cumulative expectation: protocol fee goes 1 -> 2, lender absorbs the rest.
+        let protocol_after_supplied = 2_u64;
+        let lender_after_supplied = lender_before + (amount_to_repay - 1);
+
+        let lender_after = AssetAuthVault::new_active(
+            params.get_lender_vault_parameters(),
+            lender_after_supplied,
+        );
+        let protocol_after = AssetAuthVault::new_active(
+            params.get_protocol_fee_vault_parameters(),
+            protocol_after_supplied,
+        );
+
+        let tx = tx_with_outputs(vec![
+            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+            explicit_output(
+                params.collateral_asset_id,
+                3_000 - params.offer_parameters.get_collateral_for_principal(15 + 5),
+                continuing.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                lender_after_supplied,
+                lender_after.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                protocol_after_supplied,
+                protocol_after.get_script_pubkey(),
+            ),
+        ]);
+
+        let scan = active
+            .discover_partial_repayment(&tx, 0, 0, Some((lender_before, Some(protocol_before))))
+            .expect("second fee-phase repayment");
         assert_eq!(scan.amount_to_repay, amount_to_repay);
         assert_eq!(scan.debt_after, debt_after);
     }

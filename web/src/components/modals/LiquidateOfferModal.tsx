@@ -71,6 +71,7 @@ export default function LiquidateOfferModal({
         activeOfferOutpoint,
         createOfferTxid: offer.created_at_txid,
         lenderNftOutpoint,
+        currentDebt: fullOffer.current_debt.toString(),
         feeOutpoints: feeUtxos.map(utxoToOutpointString),
       })
     })

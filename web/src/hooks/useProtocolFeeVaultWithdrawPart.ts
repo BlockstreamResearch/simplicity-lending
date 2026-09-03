@@ -107,9 +107,6 @@ export function useProtocolFeeVaultWithdrawPart() {
       fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
 
-    const borrowerNftPreTouchOutpoint = protocolFeeVaultTx.inputs[0].outpoint()
-    const borrowerNftPreTouchTx = await fetchTransaction(borrowerNftPreTouchOutpoint)
-
     const protocolFeeVaultTxOut = requireTxOut(
       protocolFeeVaultTx,
       protocolFeeVaultOutpoint.vout(),
@@ -119,11 +116,11 @@ export function useProtocolFeeVaultWithdrawPart() {
     const feeTxOuts = feeTxs.map((tx, index) =>
       requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
     )
-    const borrowerNftPreTouchTxOut = requireTxOut(
-      borrowerNftPreTouchTx,
-      borrowerNftPreTouchOutpoint.vout(),
-      'Borrower NFT (pre-touch)',
-    )
+    // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction). Reading
+    // it from the creation tx (already fetched above) works regardless of how many prior
+    // supply/withdraw transactions produced the current vault UTXO — unlike reading input 0 of
+    // the vault's immediate producer, which is only the Borrower NFT on the vault's first touch.
+    const borrowerNftReferenceTxOut = requireTxOut(createOfferTx, 2, 'Borrower NFT reference')
 
     const principalAsset = requireExplicitAsset(protocolFeeVaultTxOut, 'Protocol fee vault')
     const protocolFeeVaultAmount = requireExplicitAmount(
@@ -133,8 +130,8 @@ export function useProtocolFeeVaultWithdrawPart() {
     const keeperAsset = requireExplicitAsset(keeperTxOut, 'Protocol fee keeper')
     const keeperAmount = requireExplicitAmount(keeperTxOut, 'Protocol fee keeper')
     const borrowerNftAsset = requireExplicitAsset(
-      borrowerNftPreTouchTxOut,
-      'Borrower NFT (pre-touch)',
+      borrowerNftReferenceTxOut,
+      'Borrower NFT reference',
     )
 
     if (amountToWithdraw >= protocolFeeVaultAmount) {

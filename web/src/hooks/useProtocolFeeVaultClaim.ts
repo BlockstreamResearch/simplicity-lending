@@ -33,8 +33,10 @@ import {
   buildAssetAuthVaultWitness,
   loadAssetAuthVaultProgram,
 } from '@/simplicity/asset-auth-vault/program'
+import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
+import { getProtocolFee, getTotalFee } from '@/simplicity/lending/utils'
 import { getProcessingTxids } from '@/utils/pendingTransactions'
-import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
+import { toBytes32, toUint32 } from '@/utils/uint'
 
 const KEEPER_INPUT_INDEX = toUint32(1, 'keeperInputIndex')
 const KEEPER_OUTPUT_INDEX = toUint32(0, 'keeperOutputIndex')
@@ -42,6 +44,7 @@ const KEEPER_OUTPUT_INDEX = toUint32(0, 'keeperOutputIndex')
 export interface ProtocolFeeVaultClaimParams {
   protocolFeeVaultOutpoint: string
   keeperOutpoint: string
+  createOfferTxid: string
   feeOutpoints: string[]
   keeperRecipientAddress?: string
   principalRecipientAddress?: string
@@ -88,18 +91,13 @@ export function useProtocolFeeVaultClaim() {
       throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
     }
 
-    const [protocolFeeVaultTx, keeperTx, feeTxs, feeRate] = await Promise.all([
+    const [protocolFeeVaultTx, keeperTx, createOfferTx, feeTxs, feeRate] = await Promise.all([
       fetchTransaction(protocolFeeVaultOutpoint),
       fetchTransaction(keeperOutpoint),
+      fetchTransaction(new OutPoint(`${params.createOfferTxid}:0`)),
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
       fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
-
-    // Same trick useLenderVaultClaim uses to recover the borrower NFT asset id without a live
-    // outpoint: the transaction that produced this (finalized) vault UTXO always has the
-    // Borrower NFT at input 0.
-    const borrowerNftPreTouchOutpoint = protocolFeeVaultTx.inputs[0].outpoint()
-    const borrowerNftPreTouchTx = await fetchTransaction(borrowerNftPreTouchOutpoint)
 
     const protocolFeeVaultTxOut = requireTxOut(
       protocolFeeVaultTx,
@@ -110,21 +108,30 @@ export function useProtocolFeeVaultClaim() {
     const feeTxOuts = feeTxs.map((tx, index) =>
       requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
     )
-    const borrowerNftPreTouchTxOut = requireTxOut(
-      borrowerNftPreTouchTx,
-      borrowerNftPreTouchOutpoint.vout(),
-      'Borrower NFT (pre-touch)',
-    )
+    // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction). Reading
+    // it from the creation tx works regardless of how many prior supply/withdraw transactions
+    // produced the current (finalized) vault UTXO — unlike reading input 0 of the vault's
+    // immediate producer, which is only the Borrower NFT on the vault's first touch.
+    const borrowerNftReferenceTxOut = requireTxOut(createOfferTx, 2, 'Borrower NFT reference')
 
     const principalAsset = requireExplicitAsset(protocolFeeVaultTxOut, 'Protocol fee vault')
     const principalAmount = requireExplicitAmount(protocolFeeVaultTxOut, 'Protocol fee vault')
     const keeperAsset = requireExplicitAsset(keeperTxOut, 'Protocol fee keeper')
     const keeperAmount = requireExplicitAmount(keeperTxOut, 'Protocol fee keeper')
     const borrowerNftAsset = requireExplicitAsset(
-      borrowerNftPreTouchTxOut,
-      'Borrower NFT (pre-touch)',
+      borrowerNftReferenceTxOut,
+      'Borrower NFT reference',
     )
-    const protocolFeeVaultSupplyGoal = toUint64(principalAmount, 'protocolFeeVaultSupplyGoal')
+
+    // The vault's current balance is not its (compile-time, CMR-affecting) supply goal once a
+    // withdrawal has happened in between supplies — derive the goal from the original offer
+    // metadata instead, same as useLenderVaultClaim does.
+    const metadata = await findPendingOfferMetadata(createOfferTx)
+    const offerParameters = {
+      principalAmount: metadata.principalAmount,
+      principalInterestRate: metadata.principalInterestRate,
+    }
+    const protocolFeeVaultSupplyGoal = getProtocolFee(getTotalFee(offerParameters))
 
     const protocolFeeVaultProgram = loadAssetAuthVaultProgram({
       vaultAssetId: toBytes32(principalAsset.toBytes(), 'principalAssetId'),

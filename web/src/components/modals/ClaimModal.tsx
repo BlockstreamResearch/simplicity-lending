@@ -67,6 +67,7 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
       return claimLenderVault({
         lenderVaultOutpoint: vaultOutpoint,
         lenderNftOutpoint,
+        createOfferTxid: offer.created_at_txid,
         feeOutpoints: feeUtxos.map(utxoToOutpointString),
       })
     })

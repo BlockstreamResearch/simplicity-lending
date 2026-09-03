@@ -38,10 +38,13 @@ const txidSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
     .transform(value => value.toLowerCase())
 
+const optionalUint64Schema = zod.string().trim().regex(/^\d*$/, 'Must be a whole number')
+
 const liquidateOfferFormSchema = zod.object({
   activeOfferOutpoint: outpointSchema('Active offer outpoint'),
   createOfferTxid: txidSchema('Create-offer txid'),
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
+  currentDebt: optionalUint64Schema.optional(),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
 })
 
@@ -89,6 +92,7 @@ const EMPTY_FORM: LiquidateOfferForm = {
   activeOfferOutpoint: '',
   createOfferTxid: '',
   lenderNftOutpoint: '',
+  currentDebt: '',
   feeOutpoints: '',
 }
 
@@ -214,6 +218,7 @@ export default function LiquidateOfferDemo() {
           setValue('activeOfferOutpoint', activeOfferOutpoint)
           setValue('createOfferTxid', offer.created_at_txid)
           setValue('lenderNftOutpoint', lenderNftOutpoint)
+          setValue('currentDebt', offer.current_debt.toString())
         }}
       />
 
@@ -236,6 +241,13 @@ export default function LiquidateOfferDemo() {
           label: 'Lender NFT outpoint',
           placeholder: 'accept-offer-txid:2 or current location',
           description: 'Wallet-owned Lender NFT UTXO received during offer acceptance',
+        })}
+        {renderTextField({
+          name: 'currentDebt',
+          label: 'Current offer debt (optional)',
+          placeholder: 'Leave blank for a fresh offer (defaults to principal + full interest)',
+          description:
+            'Only needed after a prior partial repayment — the debt remaining at expiration',
         })}
         {renderTextField({
           name: 'feeOutpoints',
