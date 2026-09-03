@@ -15,6 +15,7 @@ export interface ChopUtxoParams {
   pieceAmount: bigint
   pieceCount: number
   recipientAddress?: string
+  explicitOutput?: boolean
 }
 
 export interface ChopUtxoResult {
@@ -49,7 +50,8 @@ export function useUtxoChopper() {
     ])
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
     const recipientAddressString = params.recipientAddress?.trim() || receiveAddressString
-    const recipient = Address.parse(recipientAddressString, lwkNetwork)
+    const parsedRecipient = Address.parse(recipientAddressString, lwkNetwork)
+    const recipient = params.explicitOutput ? parsedRecipient.toUnconfidential() : parsedRecipient
     const lbtcChangeRecipient = Address.parse(recipientAddressString, lwkNetwork)
     const recipientSummary = recipient.toString()
     await syncWallet()
@@ -89,9 +91,13 @@ export function useUtxoChopper() {
       .setInputOrder(walletInputOutpointStrings.map(o => new OutPoint(o)))
 
     for (let index = 0; index < params.pieceCount; index += 1) {
-      txBuilder = fundingIsLbtc
-        ? txBuilder.addLbtcRecipient(recipient, params.pieceAmount)
-        : txBuilder.addRecipient(recipient, params.pieceAmount, fundingAsset)
+      if (params.explicitOutput) {
+        txBuilder = txBuilder.addExplicitRecipient(recipient, params.pieceAmount, fundingAsset)
+      } else if (fundingIsLbtc) {
+        txBuilder = txBuilder.addLbtcRecipient(recipient, params.pieceAmount)
+      } else {
+        txBuilder = txBuilder.addRecipient(recipient, params.pieceAmount, fundingAsset)
+      }
     }
 
     txBuilder = txBuilder.drainLbtcTo(lbtcChangeRecipient)

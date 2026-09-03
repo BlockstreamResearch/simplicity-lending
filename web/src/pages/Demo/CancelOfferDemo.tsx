@@ -3,6 +3,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
+import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type CancelOfferSummary, useCancelOffer } from '@/hooks/useCancelOffer'
@@ -13,6 +14,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { formatCollateralUtxoOption } from './helpers'
+import { OfferIdAutofill } from './OfferIdAutofill'
 import { TxResult } from './TxResult'
 
 const outpointSchema = (label: string) =>
@@ -102,7 +104,7 @@ export default function CancelOfferDemo() {
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { cancelOffer } = useCancelOffer()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit } = useForm<CancelOfferForm>({
+  const { control, handleSubmit, setValue } = useForm<CancelOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
     resolver: cancelOfferFormResolver,
@@ -206,6 +208,19 @@ export default function CancelOfferDemo() {
         ScriptAuth covenants, burns both offer NFTs, and returns the unlocked collateral to the
         supplied address.
       </p>
+
+      <OfferIdAutofill
+        onResolve={offer => {
+          const pendingOfferOutpoint = resolvePendingOutpoint(offer)
+          if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
+          const nftOutpoints = resolveNftOutpoints(offer)
+          if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+
+          setValue('pendingOfferOutpoint', pendingOfferOutpoint)
+          setValue('lenderNftOutpoint', nftOutpoints.lenderNft)
+          setValue('borrowerNftOutpoint', nftOutpoints.borrowerNft)
+        }}
+      />
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({

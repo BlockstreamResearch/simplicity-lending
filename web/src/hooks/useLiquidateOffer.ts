@@ -52,6 +52,7 @@ export interface LiquidateOfferParams {
   activeOfferOutpoint: string
   createOfferTxid: string
   lenderNftOutpoint: string
+  currentDebt?: string
   feeOutpoints: string[]
 }
 
@@ -93,34 +94,38 @@ export function useLiquidateOffer() {
       throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
     }
     // TODO: Handle with indexer
-    // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction)
-    const borrowerNftReferenceOutpoint = new OutPoint(`${params.createOfferTxid}:2`)
-    const [activeOfferTx, createOfferTx, borrowerNftTx, lenderNftTx, feeTxs] = await Promise.all([
+    const [activeOfferTx, createOfferTx, lenderNftTx, feeTxs] = await Promise.all([
       fetchTransaction(activeOfferOutpoint),
       fetchTransaction(new OutPoint(`${params.createOfferTxid}:0`)),
-      fetchTransaction(borrowerNftReferenceOutpoint),
       fetchTransaction(lenderNftOutpoint),
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
     ])
     const activeOfferTxOut = requireTxOut(activeOfferTx, activeOfferOutpoint.vout(), 'Active offer')
-    const borrowerNftTxOut = requireTxOut(
-      borrowerNftTx,
-      borrowerNftReferenceOutpoint.vout(),
-      'Borrower NFT reference',
-    )
+    // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction) —
+    // fetched once above via createOfferTx, reused here instead of a second round trip.
+    const borrowerNftTxOut = requireTxOut(createOfferTx, 2, 'Borrower NFT reference')
+    // create-offer tx vout 5 = pending offer Lending covenant, which still carries the original
+    // (compile-time) collateral amount. activeOfferTxOut's amount already shrinks after a prior
+    // partial repayment, so it can't be reused as the covenant-reconstruction argument once this
+    // isn't the offer's first touch — same distinction usePartialRepayOffer draws.
+    const pendingOfferTxOut = requireTxOut(createOfferTx, 5, 'Pending offer Lending')
     const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
       requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
     )
 
     const collateralAsset = requireExplicitAsset(activeOfferTxOut, 'Active offer')
-    const collateralAmount = requireExplicitAmount(activeOfferTxOut, 'Active offer')
+    const currentCollateralAmount = requireExplicitAmount(activeOfferTxOut, 'Active offer')
+    const originalCollateralAmount = requireExplicitAmount(
+      pendingOfferTxOut,
+      'Pending offer Lending',
+    )
     const borrowerNftAsset = requireExplicitAsset(borrowerNftTxOut, 'Borrower NFT reference')
     const lenderNftAsset = requireExplicitAsset(lenderNftTxOut, 'Lender NFT')
     assertExplicitAmount(lenderNftTxOut, NFT_AMOUNT, 'Lender NFT')
     const metadata = await findPendingOfferMetadata(createOfferTx)
     const offerParameters = {
-      collateralAmount: toUint64(collateralAmount, 'collateralAmount'),
+      collateralAmount: toUint64(originalCollateralAmount, 'collateralAmount'),
       principalAmount: metadata.principalAmount,
       principalInterestRate: metadata.principalInterestRate,
       loanExpirationTime: metadata.loanExpirationTime,
@@ -137,7 +142,15 @@ export function useLiquidateOffer() {
       offerParameters,
     })
     const lendingProgram = loadLendingProgram(derivedLendingParams)
-    const activeLendingSpendInfo = buildLendingOfferSpendInfo(lendingProgram, offerParameters, true)
+    const currentDebt = params.currentDebt?.trim()
+      ? toUint64(BigInt(params.currentDebt.trim()), 'currentDebt')
+      : getTotalAmountToRepay(offerParameters)
+    const activeLendingSpendInfo = buildLendingOfferSpendInfo(
+      lendingProgram,
+      offerParameters,
+      true,
+      currentDebt,
+    )
 
     assertScriptMatches(
       activeOfferTxOut.scriptPubkey(),
@@ -145,7 +158,6 @@ export function useLiquidateOffer() {
       'Active offer output does not match the reconstructed active Lending covenant',
     )
 
-    const currentDebt = getTotalAmountToRepay(offerParameters)
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
     const firstFeeOutpoint = params.feeOutpoints[0]
     if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
@@ -162,7 +174,7 @@ export function useLiquidateOffer() {
         new ExternalUtxo(
           activeOfferOutpoint.vout(),
           activeOfferTx,
-          TxOutSecrets.fromExplicit(collateralAsset, collateralAmount),
+          TxOutSecrets.fromExplicit(collateralAsset, currentCollateralAmount),
           LENDING_MAX_WEIGHT_TO_SATISFY.Liquidation,
           true,
         ),
@@ -175,7 +187,7 @@ export function useLiquidateOffer() {
         ),
       ])
       .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
-      .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
+      .addPostIssuanceRecipient(collateralRecipient, currentCollateralAmount, collateralAsset)
       .setFallbackLocktimeHeight(metadata.loanExpirationTime)
       .setInputSequence(new OutPoint(params.activeOfferOutpoint), MAX_SEQUENCE_NON_RBF)
       // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1) —
@@ -221,7 +233,8 @@ export function useLiquidateOffer() {
               lenderNftAssetId: lenderNftAsset.toString(),
             },
             offerParameters: {
-              collateralAmount: collateralAmount.toString(),
+              collateralAmount: originalCollateralAmount.toString(),
+              currentCollateralAmount: currentCollateralAmount.toString(),
               principalAmount: metadata.principalAmount.toString(),
               principalInterestRate: metadata.principalInterestRate.toString(),
               loanExpirationTime: metadata.loanExpirationTime.toString(),

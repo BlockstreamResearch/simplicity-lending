@@ -3,10 +3,13 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
-import { resolveActiveOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
+import { resolveActiveLenderVaultOutpoint, resolveLenderNftOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
-import { type LiquidateOfferSummary, useLiquidateOffer } from '@/hooks/useLiquidateOffer'
+import {
+  type LenderVaultWithdrawPartSummary,
+  useLenderVaultWithdrawPart,
+} from '@/hooks/useLenderVaultWithdrawPart'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
@@ -38,27 +41,32 @@ const txidSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
     .transform(value => value.toLowerCase())
 
-const optionalUint64Schema = zod.string().trim().regex(/^\d*$/, 'Must be a whole number')
-
-const liquidateOfferFormSchema = zod.object({
-  activeOfferOutpoint: outpointSchema('Active offer outpoint'),
-  createOfferTxid: txidSchema('Create-offer txid'),
+const lenderVaultWithdrawPartFormSchema = zod.object({
+  lenderVaultOutpoint: outpointSchema('Lender vault outpoint'),
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
-  currentDebt: optionalUint64Schema.optional(),
+  createOfferTxid: txidSchema('Create-offer txid'),
+  alreadySupplied: zod.string().trim().regex(/^\d+$/, 'Must be a whole number'),
+  amountToWithdraw: zod
+    .string()
+    .trim()
+    .regex(/^\d+$/, 'Amount to withdraw must be a whole number')
+    .refine(value => BigInt(value) > 0n, 'Amount to withdraw must be greater than zero'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
+  principalRecipientAddress: zod.string().trim().optional(),
+  lenderNftRecipientAddress: zod.string().trim().optional(),
 })
 
-type LiquidateOfferForm = zod.input<typeof liquidateOfferFormSchema>
-type LiquidateOfferTextField = keyof LiquidateOfferForm
-type LiquidateOfferTextFieldProps = Omit<
+type LenderVaultWithdrawPartForm = zod.input<typeof lenderVaultWithdrawPartFormSchema>
+type LenderVaultWithdrawPartTextField = keyof LenderVaultWithdrawPartForm
+type LenderVaultWithdrawPartTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
 > & {
-  name: LiquidateOfferTextField
+  name: LenderVaultWithdrawPartTextField
 }
 
-const liquidateOfferFormResolver: Resolver<LiquidateOfferForm> = async values => {
-  const result = liquidateOfferFormSchema.safeParse(values)
+const lenderVaultWithdrawPartFormResolver: Resolver<LenderVaultWithdrawPartForm> = async values => {
+  const result = lenderVaultWithdrawPartFormSchema.safeParse(values)
   if (result.success) return { values, errors: {} }
 
   return {
@@ -80,7 +88,7 @@ const liquidateOfferFormResolver: Resolver<LiquidateOfferForm> = async values =>
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: { txid: string; summary: LiquidateOfferSummary } | null
+  result: { txid: string; summary: LenderVaultWithdrawPartSummary } | null
 }
 
 interface WalletUtxosState {
@@ -88,12 +96,15 @@ interface WalletUtxosState {
   error: string | null
 }
 
-const EMPTY_FORM: LiquidateOfferForm = {
-  activeOfferOutpoint: '',
-  createOfferTxid: '',
+const EMPTY_FORM: LenderVaultWithdrawPartForm = {
+  lenderVaultOutpoint: '',
   lenderNftOutpoint: '',
-  currentDebt: '',
+  createOfferTxid: '',
+  alreadySupplied: '',
+  amountToWithdraw: '',
   feeOutpoints: '',
+  principalRecipientAddress: '',
+  lenderNftRecipientAddress: '',
 }
 
 const INITIAL_STATE: BroadcastState = {
@@ -102,17 +113,18 @@ const INITIAL_STATE: BroadcastState = {
   result: null,
 }
 
-export default function LiquidateOfferDemo() {
+export default function LenderVaultWithdrawPartDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
-  const { liquidateOffer } = useLiquidateOffer()
+  const { withdrawLenderVaultPart } = useLenderVaultWithdrawPart()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit, setValue } = useForm<LiquidateOfferForm>({
+  const { control, handleSubmit, setValue } = useForm<LenderVaultWithdrawPartForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
-    resolver: liquidateOfferFormResolver,
+    resolver: lenderVaultWithdrawPartFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
+  const [foundVault, setFoundVault] = useState<string | null>(null)
   const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
   const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
@@ -164,14 +176,16 @@ export default function LiquidateOfferDemo() {
     }
   }, [connectionStatus, getBlindedWalletUtxos])
 
-  const onSubmit = async (formValues: LiquidateOfferForm) => {
+  const onSubmit = async (formValues: LenderVaultWithdrawPartForm) => {
     setState({ busy: true, error: null, result: null })
     try {
-      const result = liquidateOfferFormSchema.safeParse(formValues)
+      const result = lenderVaultWithdrawPartFormSchema.safeParse(formValues)
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-      const { txid, summary } = await runStandardTransactionFlow(() => liquidateOffer(result.data))
+      const { txid, summary } = await runStandardTransactionFlow(() =>
+        withdrawLenderVaultPart(result.data),
+      )
 
       setState({ busy: false, error: null, result: { txid, summary } })
     } catch (err) {
@@ -183,7 +197,7 @@ export default function LiquidateOfferDemo() {
     }
   }
 
-  const renderTextField = ({ name, ...props }: LiquidateOfferTextFieldProps) => (
+  const renderTextField = ({ name, ...props }: LenderVaultWithdrawPartTextFieldProps) => (
     <Controller
       control={control}
       name={name}
@@ -201,53 +215,75 @@ export default function LiquidateOfferDemo() {
 
   return (
     <div className='rounded border border-gray-300 bg-white p-4'>
-      <div className='font-bold'>Liquidate Offer Demo</div>
+      <div className='font-bold'>Lender Vault Partial Withdraw Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-        Spends the active Lending covenant after loan expiration. Burns the Lender NFT and returns
-        the unlocked collateral to the connected wallet. Transaction locktime is set automatically
-        from the offer metadata.
+        Spends an active (not yet finalized) lender vault UTXO, withdrawing part of the
+        already-supplied principal without waiting for the offer to fully repay. The Lender NFT is
+        passed through (not burned) and the vault continues with the reduced balance.
       </p>
 
       <OfferIdAutofill
         onResolve={offer => {
-          const activeOfferOutpoint = resolveActiveOutpoint(offer)
-          if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
+          const lenderVaultOutpoint = resolveActiveLenderVaultOutpoint(offer)
+          if (!lenderVaultOutpoint) throw new Error('Active lender vault UTXO not found')
           const lenderNftOutpoint = resolveLenderNftOutpoint(offer)
           if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
+          const vault = offer.vaults.find(v => v.vault_type === 'lender' && !v.is_finalized)
+          if (!vault) throw new Error('Active lender vault not found')
 
-          setValue('activeOfferOutpoint', activeOfferOutpoint)
-          setValue('createOfferTxid', offer.created_at_txid)
+          setValue('lenderVaultOutpoint', lenderVaultOutpoint)
           setValue('lenderNftOutpoint', lenderNftOutpoint)
-          setValue('currentDebt', offer.current_debt.toString())
+          setValue('createOfferTxid', offer.created_at_txid)
+          setValue('alreadySupplied', vault.already_supplied.toString())
+          setFoundVault(
+            `balance ${vault.amount.toString()}, already supplied ${vault.already_supplied.toString()}`,
+          )
         }}
       />
+      {foundVault ? <p className='mt-2 text-xs text-gray-600'>Found: {foundVault}</p> : null}
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({
-          name: 'activeOfferOutpoint',
-          label: 'Active offer Lending outpoint',
-          placeholder: 'accept-offer-txid:0',
-          description: 'AcceptOfferDemo places the active Lending covenant at vout 0',
+          name: 'lenderVaultOutpoint',
+          label: 'Active lender vault AssetAuthVault outpoint',
+          placeholder: 'txid:vout',
+          description: 'The active (not finalized) lender vault UTXO',
+        })}
+        {renderTextField({
+          name: 'lenderNftOutpoint',
+          label: 'Lender NFT outpoint',
+          placeholder: 'txid:vout',
+          description: 'Wallet-owned Lender NFT UTXO — passed through, not burned',
         })}
         {renderTextField({
           name: 'createOfferTxid',
           label: 'Create-offer txid',
           placeholder: '64 hex chars',
-          description:
-            'Original create-offer txid — used to recover offer parameters from the OP_RETURN metadata and borrower NFT asset id (vout 2)',
+          description: 'Used to recover offer parameters and the vault supply goal',
         })}
         {renderTextField({
-          name: 'lenderNftOutpoint',
-          label: 'Lender NFT outpoint',
-          placeholder: 'accept-offer-txid:2 or current location',
-          description: 'Wallet-owned Lender NFT UTXO received during offer acceptance',
+          name: 'alreadySupplied',
+          label: 'Already supplied (vault state)',
+          placeholder: 'e.g. 900',
+          description: "The vault's current already_supplied accounting value from the indexer",
         })}
         {renderTextField({
-          name: 'currentDebt',
-          label: 'Current offer debt (optional)',
-          placeholder: 'Leave blank for a fresh offer (defaults to principal + full interest)',
-          description:
-            'Only needed after a prior partial repayment — the debt remaining at expiration',
+          name: 'amountToWithdraw',
+          label: 'Amount to withdraw',
+          placeholder: 'e.g. 100',
+          description: 'Must be less than the vault balance',
+        })}
+        {renderTextField({
+          name: 'principalRecipientAddress',
+          label: 'Principal recipient address (optional)',
+          placeholder: 'Leave blank to use wallet receive address',
+          description: 'Where the withdrawn principal is sent',
+        })}
+        {renderTextField({
+          name: 'lenderNftRecipientAddress',
+          label: 'Lender NFT recipient address (optional)',
+          placeholder: 'Leave blank to use wallet receive address',
+          description: 'Where the (unburned) Lender NFT is returned',
         })}
         {renderTextField({
           name: 'feeOutpoints',
@@ -276,17 +312,17 @@ export default function LiquidateOfferDemo() {
         <UiButton
           isDisabled={connectionStatus !== 'ready'}
           isPending={state.busy}
-          loadingText='Liquidating...'
+          loadingText='Withdrawing...'
           onPress={() => void handleSubmit(onSubmit)()}
         >
-          Liquidate Offer
+          Withdraw Part
         </UiButton>
       </div>
 
-      {state.error ? <p className='mt-3 text-xs text-red-500'>Liquidate: {state.error}</p> : null}
+      {state.error ? <p className='mt-3 text-xs text-red-500'>Withdraw: {state.error}</p> : null}
 
       <TxResult
-        title='Offer Liquidated'
+        title='Lender Vault Partially Withdrawn'
         txid={state.result?.txid ?? null}
         txStatus={txStatus}
         detail={state.result?.summary}

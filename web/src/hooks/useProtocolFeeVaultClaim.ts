@@ -3,7 +3,6 @@ import {
   ExternalUtxo,
   OutPoint,
   type Pset,
-  Script,
   SimplicityLogLevel,
   TxBuilder,
   TxOutSecrets,
@@ -12,7 +11,6 @@ import {
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import {
   assertDistinctOutpoints,
-  assertExplicitAmount,
   assertScriptMatches,
   fetchTransaction,
   requireExplicitAmount,
@@ -36,50 +34,50 @@ import {
   loadAssetAuthVaultProgram,
 } from '@/simplicity/asset-auth-vault/program'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
-import { getProtocolFee, getTotalAmountToRepay, getTotalFee } from '@/simplicity/lending/utils'
-import { bytesToHex } from '@/utils/hex'
+import { getProtocolFee, getTotalFee } from '@/simplicity/lending/utils'
 import { getProcessingTxids } from '@/utils/pendingTransactions'
-import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
+import { toBytes32, toUint32 } from '@/utils/uint'
 
-const NFT_AMOUNT = 1n
-const BURN_PAYLOAD = new TextEncoder().encode('burn')
+const KEEPER_INPUT_INDEX = toUint32(1, 'keeperInputIndex')
+const KEEPER_OUTPUT_INDEX = toUint32(0, 'keeperOutputIndex')
 
-const LENDER_NFT_INPUT_INDEX = 1
-const LENDER_NFT_BURN_OUTPUT_INDEX = 0
-
-export interface LenderVaultClaimParams {
-  lenderVaultOutpoint: string
-  lenderNftOutpoint: string
+export interface ProtocolFeeVaultClaimParams {
+  protocolFeeVaultOutpoint: string
+  keeperOutpoint: string
   createOfferTxid: string
   feeOutpoints: string[]
+  keeperRecipientAddress?: string
   principalRecipientAddress?: string
 }
 
-export interface LenderVaultClaimSummary {
+export interface ProtocolFeeVaultClaimSummary {
   inputs: Record<string, string>
   outputs: Record<string, string>
   assetIds: Record<string, string>
   amounts: Record<string, string>
-  scripts: Record<string, string>
 }
 
-export function useLenderVaultClaim() {
+export function useProtocolFeeVaultClaim() {
   const { lwkNetwork } = useLwk()
   const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
-  const claimLenderVault = async (
-    params: LenderVaultClaimParams,
-  ): Promise<UpdatedPset<LenderVaultClaimSummary>> => {
-    const lenderVaultOutpoint = new OutPoint(params.lenderVaultOutpoint)
-    const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
+  const claimProtocolFeeVault = async (
+    params: ProtocolFeeVaultClaimParams,
+  ): Promise<UpdatedPset<ProtocolFeeVaultClaimSummary>> => {
+    const protocolFeeVaultOutpoint = new OutPoint(params.protocolFeeVaultOutpoint)
+    const keeperOutpoint = new OutPoint(params.keeperOutpoint)
     const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
     assertDistinctOutpoints(
-      [lenderVaultOutpoint, lenderNftOutpoint, ...feeOutpoints],
-      'Lender vault claim inputs must use distinct outpoints',
+      [protocolFeeVaultOutpoint, keeperOutpoint, ...feeOutpoints],
+      'Protocol fee vault claim inputs must use distinct outpoints',
     )
     const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
+    const keeperRecipient = Address.parse(
+      params.keeperRecipientAddress?.trim() || receiveAddressString,
+      lwkNetwork,
+    )
     const principalRecipient = Address.parse(
       params.principalRecipientAddress?.trim() || receiveAddressString,
       lwkNetwork,
@@ -92,70 +90,72 @@ export function useLenderVaultClaim() {
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
       throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
     }
-    const [lenderVaultTx, lenderNftTx, createOfferTx, feeTxs, feeRate] = await Promise.all([
-      fetchTransaction(lenderVaultOutpoint),
-      fetchTransaction(lenderNftOutpoint),
+
+    const [protocolFeeVaultTx, keeperTx, createOfferTx, feeTxs, feeRate] = await Promise.all([
+      fetchTransaction(protocolFeeVaultOutpoint),
+      fetchTransaction(keeperOutpoint),
       fetchTransaction(new OutPoint(`${params.createOfferTxid}:0`)),
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
       fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
 
-    // The lender vault was created by the repay tx. Input 0 of that tx was the Borrower NFT
-    // (burned there via OP_RETURN). We fetch its predecessor to recover the borrower NFT asset
-    // ID needed to reconstruct the finalized AssetAuthVault program parameters.
-    const borrowerNftPreRepayOutpoint = lenderVaultTx.inputs[0].outpoint()
-    const borrowerNftPreRepayTx = await fetchTransaction(borrowerNftPreRepayOutpoint)
-    const lenderVaultTxOut = requireTxOut(lenderVaultTx, lenderVaultOutpoint.vout(), 'Lender vault')
-    const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
+    const protocolFeeVaultTxOut = requireTxOut(
+      protocolFeeVaultTx,
+      protocolFeeVaultOutpoint.vout(),
+      'Protocol fee vault',
+    )
+    const keeperTxOut = requireTxOut(keeperTx, keeperOutpoint.vout(), 'Protocol fee keeper')
     const feeTxOuts = feeTxs.map((tx, index) =>
       requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
     )
-    const borrowerNftPreRepayTxOut = requireTxOut(
-      borrowerNftPreRepayTx,
-      borrowerNftPreRepayOutpoint.vout(),
-      'Borrower NFT (pre-repay)',
+    // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction). Reading
+    // it from the creation tx works regardless of how many prior supply/withdraw transactions
+    // produced the current (finalized) vault UTXO — unlike reading input 0 of the vault's
+    // immediate producer, which is only the Borrower NFT on the vault's first touch.
+    const borrowerNftReferenceTxOut = requireTxOut(createOfferTx, 2, 'Borrower NFT reference')
+
+    const principalAsset = requireExplicitAsset(protocolFeeVaultTxOut, 'Protocol fee vault')
+    const principalAmount = requireExplicitAmount(protocolFeeVaultTxOut, 'Protocol fee vault')
+    const keeperAsset = requireExplicitAsset(keeperTxOut, 'Protocol fee keeper')
+    const keeperAmount = requireExplicitAmount(keeperTxOut, 'Protocol fee keeper')
+    const borrowerNftAsset = requireExplicitAsset(
+      borrowerNftReferenceTxOut,
+      'Borrower NFT reference',
     )
 
-    const principalAsset = requireExplicitAsset(lenderVaultTxOut, 'Lender vault')
-    const principalAmount = requireExplicitAmount(lenderVaultTxOut, 'Lender vault')
-    const lenderNftAsset = requireExplicitAsset(lenderNftTxOut, 'Lender NFT')
-    const borrowerNftAsset = requireExplicitAsset(borrowerNftPreRepayTxOut, 'Borrower NFT')
-    assertExplicitAmount(lenderNftTxOut, NFT_AMOUNT, 'Lender NFT')
-
+    // The vault's current balance is not its (compile-time, CMR-affecting) supply goal once a
+    // withdrawal has happened in between supplies — derive the goal from the original offer
+    // metadata instead, same as useLenderVaultClaim does.
     const metadata = await findPendingOfferMetadata(createOfferTx)
     const offerParameters = {
       principalAmount: metadata.principalAmount,
       principalInterestRate: metadata.principalInterestRate,
     }
-    const lenderVaultSupplyGoal = toUint64(
-      getTotalAmountToRepay(offerParameters) - getProtocolFee(getTotalFee(offerParameters)),
-      'lenderVaultSupplyGoal',
-    )
-    const lenderVaultProgram = loadAssetAuthVaultProgram({
-      vaultAssetId: toBytes32(principalAsset.toBytes(), 'principalAssetId'),
-      keeperAuthAssetId: toBytes32(lenderNftAsset.toBytes(), 'lenderNftAssetId'),
-      supplierAuthAssetId: toBytes32(borrowerNftAsset.toBytes(), 'borrowerNftAssetId'),
-      supplyGoal: lenderVaultSupplyGoal,
-      withKeeperAssetBurn: true,
-      withSupplierAssetBurn: true,
-    })
-    const lenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(lenderVaultProgram, {
-      isActive: false,
-      alreadySupplied: lenderVaultSupplyGoal,
-    })
+    const protocolFeeVaultSupplyGoal = getProtocolFee(getTotalFee(offerParameters))
 
+    const protocolFeeVaultProgram = loadAssetAuthVaultProgram({
+      vaultAssetId: toBytes32(principalAsset.toBytes(), 'principalAssetId'),
+      keeperAuthAssetId: toBytes32(keeperAsset.toBytes(), 'keeperAssetId'),
+      supplierAuthAssetId: toBytes32(borrowerNftAsset.toBytes(), 'borrowerNftAssetId'),
+      supplyGoal: protocolFeeVaultSupplyGoal,
+      withKeeperAssetBurn: false,
+      withSupplierAssetBurn: false,
+    })
+    const protocolFeeVaultSpendInfo = buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, {
+      isActive: false,
+      alreadySupplied: protocolFeeVaultSupplyGoal,
+    })
     assertScriptMatches(
-      lenderVaultTxOut.scriptPubkey(),
-      lenderVaultSpendInfo.scriptPubkey,
-      'Lender vault UTXO does not match the reconstructed finalized AssetAuthVault covenant',
+      protocolFeeVaultTxOut.scriptPubkey(),
+      protocolFeeVaultSpendInfo.scriptPubkey,
+      'Protocol fee vault UTXO does not match the reconstructed finalized AssetAuthVault covenant',
     )
-    const burnScript = Script.newOpReturn(BURN_PAYLOAD)
+
     const inputOrderStrings = [
-      params.lenderVaultOutpoint,
-      params.lenderNftOutpoint,
+      params.protocolFeeVaultOutpoint,
+      params.keeperOutpoint,
       ...params.feeOutpoints,
     ]
-
     const firstFeeOutpoint = params.feeOutpoints[0]
     if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
 
@@ -165,21 +165,21 @@ export function useLenderVaultClaim() {
       .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
       .addExternalUtxos([
         new ExternalUtxo(
-          lenderVaultOutpoint.vout(),
-          lenderVaultTx,
+          protocolFeeVaultOutpoint.vout(),
+          protocolFeeVaultTx,
           TxOutSecrets.fromExplicit(principalAsset, principalAmount),
           ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawAll,
           true,
         ),
         new ExternalUtxo(
-          lenderNftOutpoint.vout(),
-          lenderNftTx,
-          TxOutSecrets.fromExplicit(lenderNftAsset, NFT_AMOUNT),
+          keeperOutpoint.vout(),
+          keeperTx,
+          TxOutSecrets.fromExplicit(keeperAsset, keeperAmount),
           EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
           true,
         ),
       ])
-      .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
+      .addPostIssuanceScriptOutput(keeperRecipient.scriptPubkey(), keeperAmount, keeperAsset)
       .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
       .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
       .finish(wollet)
@@ -189,16 +189,16 @@ export function useLenderVaultClaim() {
       finalize: (signedPset: Pset) => {
         const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
 
-        const prevouts = [lenderVaultTxOut, lenderNftTxOut, ...feeTxOuts]
-        const finalizedTx = lenderVaultProgram.finalizeTransactionWithSpendInfo(
+        const prevouts = [protocolFeeVaultTxOut, keeperTxOut, ...feeTxOuts]
+        const finalizedTx = protocolFeeVaultProgram.finalizeTransactionWithSpendInfo(
           txWithWalletWitnesses,
-          lenderVaultSpendInfo,
+          protocolFeeVaultSpendInfo,
           prevouts,
           0,
           buildAssetAuthVaultWitness({
             branch: 'WithdrawAll',
-            inputKeeperIndex: toUint32(LENDER_NFT_INPUT_INDEX, 'lenderNftInputIndex'),
-            outputKeeperIndex: toUint32(LENDER_NFT_BURN_OUTPUT_INDEX, 'lenderNftBurnOutputIndex'),
+            inputKeeperIndex: KEEPER_INPUT_INDEX,
+            outputKeeperIndex: KEEPER_OUTPUT_INDEX,
           }),
           lwkNetwork,
           SimplicityLogLevel.Trace,
@@ -206,31 +206,24 @@ export function useLenderVaultClaim() {
 
         return {
           finalizedTx,
-          // TODO: Remove debug summary before release
           summary: {
             inputs: {
-              '0 Finalized lender vault AssetAuthVault': params.lenderVaultOutpoint,
-              '1 Lender NFT (wallet)': params.lenderNftOutpoint,
+              '0 Finalized protocol-fee vault AssetAuthVault': params.protocolFeeVaultOutpoint,
+              '1 Protocol fee keeper (wallet)': params.keeperOutpoint,
               '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
             },
             outputs: {
-              '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
-              '1 Unlocked principal to recipient': principalRecipient.toString(),
-              'L-BTC change': 'Managed by LWK',
+              '0 Protocol fee keeper (passed through)': keeperRecipient.toString(),
+              '1 Unlocked principal fee': principalRecipient.toString(),
             },
             assetIds: {
               principalAssetId: principalAsset.toString(),
-              lenderNftAssetId: lenderNftAsset.toString(),
+              keeperAssetId: keeperAsset.toString(),
               borrowerNftAssetId: borrowerNftAsset.toString(),
             },
             amounts: {
               principalAmount: principalAmount.toString(),
-              lenderNftAmount: NFT_AMOUNT.toString(),
-            },
-            scripts: {
-              lenderVaultScript: bytesToHex(lenderVaultSpendInfo.scriptPubkey.bytes()),
-              burnScript: bytesToHex(burnScript.bytes()),
-              principalRecipientScript: bytesToHex(principalRecipient.scriptPubkey().bytes()),
+              keeperAmount: keeperAmount.toString(),
             },
           },
         }
@@ -238,5 +231,5 @@ export function useLenderVaultClaim() {
     }
   }
 
-  return { claimLenderVault }
+  return { claimProtocolFeeVault }
 }

@@ -3,16 +3,14 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
-import {
-  resolveActiveLenderVaultOutpoint,
-  resolveActiveOutpoint,
-  resolveActiveProtocolFeeVaultOutpoint,
-  resolveBorrowerNftOutpoint,
-} from '@/api/indexer/utils'
+import { resolveActiveProtocolFeeVaultOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { type PartialRepayOfferSummary, usePartialRepayOffer } from '@/hooks/usePartialRepayOffer'
+import {
+  type ProtocolFeeVaultWithdrawPartSummary,
+  useProtocolFeeVaultWithdrawPart,
+} from '@/hooks/useProtocolFeeVaultWithdrawPart'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
@@ -44,41 +42,34 @@ const txidSchema = (label: string) =>
     .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
     .transform(value => value.toLowerCase())
 
-const repayOfferFormSchema = zod.object({
-  activeOfferOutpoint: outpointSchema('Active offer outpoint'),
+const protocolFeeVaultWithdrawPartFormSchema = zod.object({
+  protocolFeeVaultOutpoint: outpointSchema('Protocol fee vault outpoint'),
+  keeperOutpoint: outpointSchema('Protocol fee keeper outpoint'),
   createOfferTxid: txidSchema('Create-offer txid'),
-  borrowerNftOutpoint: outpointSchema('Borrower NFT outpoint'),
-  currentDebt: zod
+  alreadySupplied: zod.string().trim().regex(/^\d+$/, 'Must be a whole number'),
+  amountToWithdraw: zod
     .string()
     .trim()
-    .regex(/^\d+$/, 'Current debt must be a whole number')
-    .refine(value => BigInt(value) > 0n, 'Current debt must be greater than zero'),
-  lenderVaultOutpoint: zod
-    .string()
-    .trim()
-    .regex(/^([0-9a-fA-F]{64}:\d+)?$/, 'Lender vault outpoint must have txid:vout format')
-    .optional(),
-  protocolFeeVaultOutpoint: zod
-    .string()
-    .trim()
-    .regex(/^([0-9a-fA-F]{64}:\d+)?$/, 'Protocol fee vault outpoint must have txid:vout format')
-    .optional(),
-  collateralRecipientAddress: zod.string().trim().optional(),
-  principalOutpoints: outpointListSchema('Principal outpoint'),
+    .regex(/^\d+$/, 'Amount to withdraw must be a whole number')
+    .refine(value => BigInt(value) > 0n, 'Amount to withdraw must be greater than zero'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
+  keeperRecipientAddress: zod.string().trim().optional(),
+  principalRecipientAddress: zod.string().trim().optional(),
 })
 
-type RepayOfferForm = zod.input<typeof repayOfferFormSchema>
-type RepayOfferTextField = keyof RepayOfferForm
-type RepayOfferTextFieldProps = Omit<
+type ProtocolFeeVaultWithdrawPartForm = zod.input<typeof protocolFeeVaultWithdrawPartFormSchema>
+type ProtocolFeeVaultWithdrawPartTextField = keyof ProtocolFeeVaultWithdrawPartForm
+type ProtocolFeeVaultWithdrawPartTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
 > & {
-  name: RepayOfferTextField
+  name: ProtocolFeeVaultWithdrawPartTextField
 }
 
-const repayOfferFormResolver: Resolver<RepayOfferForm> = async values => {
-  const result = repayOfferFormSchema.safeParse(values)
+const protocolFeeVaultWithdrawPartFormResolver: Resolver<
+  ProtocolFeeVaultWithdrawPartForm
+> = async values => {
+  const result = protocolFeeVaultWithdrawPartFormSchema.safeParse(values)
   if (result.success) return { values, errors: {} }
 
   return {
@@ -100,7 +91,7 @@ const repayOfferFormResolver: Resolver<RepayOfferForm> = async values => {
 interface BroadcastState {
   busy: boolean
   error: string | null
-  result: { txid: string; summary: PartialRepayOfferSummary } | null
+  result: { txid: string; summary: ProtocolFeeVaultWithdrawPartSummary } | null
 }
 
 interface WalletUtxosState {
@@ -108,16 +99,15 @@ interface WalletUtxosState {
   error: string | null
 }
 
-const EMPTY_FORM: RepayOfferForm = {
-  activeOfferOutpoint: '',
-  createOfferTxid: '',
-  borrowerNftOutpoint: '',
-  currentDebt: '',
-  lenderVaultOutpoint: '',
+const EMPTY_FORM: ProtocolFeeVaultWithdrawPartForm = {
   protocolFeeVaultOutpoint: '',
-  collateralRecipientAddress: '',
-  principalOutpoints: '',
+  keeperOutpoint: '',
+  createOfferTxid: '',
+  alreadySupplied: '',
+  amountToWithdraw: '',
   feeOutpoints: '',
+  keeperRecipientAddress: '',
+  principalRecipientAddress: '',
 }
 
 const INITIAL_STATE: BroadcastState = {
@@ -126,17 +116,18 @@ const INITIAL_STATE: BroadcastState = {
   result: null,
 }
 
-export default function RepayOfferDemo() {
+export default function ProtocolFeeVaultWithdrawPartDemo() {
   const { lwkNetwork } = useLwk()
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
-  const { partialRepayOffer } = usePartialRepayOffer()
+  const { withdrawProtocolFeeVaultPart } = useProtocolFeeVaultWithdrawPart()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit, setValue } = useForm<RepayOfferForm>({
+  const { control, handleSubmit, setValue } = useForm<ProtocolFeeVaultWithdrawPartForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
-    resolver: repayOfferFormResolver,
+    resolver: protocolFeeVaultWithdrawPartFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
+  const [foundVault, setFoundVault] = useState<string | null>(null)
   const [walletUtxos, setWalletUtxos] = useState<WalletTxOut[]>([])
   const [walletUtxosState, setWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
@@ -145,25 +136,25 @@ export default function RepayOfferDemo() {
   const { status: txStatus } = useTxStatus(state.result?.txid ?? null)
 
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
-  const principalAsset = NETWORK_CONFIG.principalAsset
-  const principalUtxoOptions = useMemo(() => {
+  const keeperAsset = NETWORK_CONFIG.protocolFeeAsset
+
+  const keeperUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
     return walletUtxos
       .filter(
         utxo =>
-          isConfirmedWalletUtxo(utxo) && utxo.unblinded().asset().toString() === principalAsset.id,
+          isConfirmedWalletUtxo(utxo) && utxo.unblinded().asset().toString() === keeperAsset.id,
       )
       .map(utxo => {
         const outpoint = utxoToOutpointString(utxo)
         const unblinded = utxo.unblinded()
-        const height = utxo.height()
-        const status = height === undefined ? 'mempool' : `height ${height}`
+        const blindedTag = unblinded.isExplicit() ? 'explicit' : 'blinded'
         return {
           id: outpoint,
-          label: `${outpoint} | ${unblinded.value().toString()} units | asset ${unblinded.asset().toString()} | ${status}`,
+          label: `${outpoint} | ${unblinded.value().toString()} units | ${blindedTag}`,
         }
       })
-  }, [connectionStatus, principalAsset.id, walletUtxos])
+  }, [connectionStatus, keeperAsset.id, walletUtxos])
   const feeUtxoOptions = useMemo(() => {
     if (connectionStatus !== 'ready') return []
     return walletUtxos
@@ -173,7 +164,6 @@ export default function RepayOfferDemo() {
 
   const refreshWalletUtxos = useCallback(async () => {
     setWalletUtxosState({ busy: true, error: null })
-
     try {
       await syncWallet()
       setWalletUtxos(await getBlindedWalletUtxos())
@@ -208,17 +198,15 @@ export default function RepayOfferDemo() {
     }
   }, [connectionStatus, getBlindedWalletUtxos])
 
-  const onSubmit = async (formValues: RepayOfferForm) => {
+  const onSubmit = async (formValues: ProtocolFeeVaultWithdrawPartForm) => {
     setState({ busy: true, error: null, result: null })
-
     try {
-      const result = repayOfferFormSchema.safeParse(formValues)
+      const result = protocolFeeVaultWithdrawPartFormSchema.safeParse(formValues)
       if (!result.success) {
         throw new Error(result.error.issues.map(issue => issue.message).join('; '))
       }
-
       const { txid, summary } = await runStandardTransactionFlow(() =>
-        partialRepayOffer({ ...result.data, amountToRepay: result.data.currentDebt }),
+        withdrawProtocolFeeVaultPart(result.data),
       )
 
       setState({ busy: false, error: null, result: { txid, summary } })
@@ -231,7 +219,7 @@ export default function RepayOfferDemo() {
     }
   }
 
-  const renderTextField = ({ name, ...props }: RepayOfferTextFieldProps) => (
+  const renderTextField = ({ name, ...props }: ProtocolFeeVaultWithdrawPartTextFieldProps) => (
     <Controller
       control={control}
       name={name}
@@ -249,86 +237,76 @@ export default function RepayOfferDemo() {
 
   return (
     <div className='rounded border border-gray-300 bg-white p-4'>
-      <div className='font-bold'>Repay Offer Demo</div>
+      <div className='font-bold'>Protocol Fee Vault Partial Withdraw Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-        Full repayment: spends the active Lending covenant and the Borrower NFT, burns the NFT,
-        creates the finalized lender and protocol-fee vaults, and returns the unlocked collateral to
-        the specified address. Run ClaimPrincipalDemo first — repayment burns the Borrower NFT, so
-        the principal must be claimed beforehand.
+        Spends an active (not yet finalized) protocol-fee vault UTXO, withdrawing part of the
+        already-supplied fee. Same network-wide keeper credential as the final claim demo — not a
+        per-offer NFT, picked from the connected wallet.
       </p>
 
       <OfferIdAutofill
         onResolve={offer => {
-          const activeOfferOutpoint = resolveActiveOutpoint(offer)
-          if (!activeOfferOutpoint) throw new Error('Active offer UTXO not found')
-          const borrowerNftOutpoint = resolveBorrowerNftOutpoint(offer)
-          if (!borrowerNftOutpoint) throw new Error('Borrower NFT UTXO not found')
+          const protocolFeeVaultOutpoint = resolveActiveProtocolFeeVaultOutpoint(offer)
+          if (!protocolFeeVaultOutpoint) throw new Error('Active protocol-fee vault UTXO not found')
+          const vault = offer.vaults.find(v => v.vault_type === 'protocol_fee' && !v.is_finalized)
+          if (!vault) throw new Error('Active protocol-fee vault not found')
 
-          setValue('activeOfferOutpoint', activeOfferOutpoint)
+          setValue('protocolFeeVaultOutpoint', protocolFeeVaultOutpoint)
           setValue('createOfferTxid', offer.created_at_txid)
-          setValue('borrowerNftOutpoint', borrowerNftOutpoint)
-          setValue('currentDebt', offer.current_debt.toString())
-          setValue('lenderVaultOutpoint', resolveActiveLenderVaultOutpoint(offer) ?? '')
-          setValue('protocolFeeVaultOutpoint', resolveActiveProtocolFeeVaultOutpoint(offer) ?? '')
+          setValue('alreadySupplied', vault.already_supplied.toString())
+          setFoundVault(
+            `balance ${vault.amount.toString()}, already supplied ${vault.already_supplied.toString()}`,
+          )
         }}
       />
+      {foundVault ? <p className='mt-2 text-xs text-gray-600'>Found: {foundVault}</p> : null}
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({
-          name: 'activeOfferOutpoint',
-          label: 'Active offer Lending outpoint',
-          placeholder: 'accept-offer-txid:0',
-          description: 'AcceptOfferDemo places the active Lending covenant at vout 0',
+          name: 'protocolFeeVaultOutpoint',
+          label: 'Active protocol-fee vault AssetAuthVault outpoint',
+          placeholder: 'txid:vout',
+          description: 'The active (not finalized) protocol-fee vault UTXO',
+        })}
+        {renderTextField({
+          name: 'keeperOutpoint',
+          label: 'Protocol fee keeper outpoint (wallet)',
+          placeholder: 'txid:vout',
+          description:
+            `Filtered by ${keeperAsset.symbol} asset: ${keeperAsset.id}. ` +
+            (keeperUtxoOptions.length
+              ? `Available: ${keeperUtxoOptions.map(o => o.label).join(' | ')}`
+              : 'No matching wallet UTXOs loaded'),
         })}
         {renderTextField({
           name: 'createOfferTxid',
           label: 'Create-offer txid',
           placeholder: '64 hex chars',
-          description: 'Used to recover offer parameters and (if touched) the active vaults',
+          description: 'Used to recover offer parameters and the vault supply goal',
         })}
         {renderTextField({
-          name: 'borrowerNftOutpoint',
-          label: 'Borrower NFT outpoint',
-          placeholder: 'claim-principal-txid:0',
-          description:
-            'ClaimPrincipalDemo outputs the Borrower NFT at vout 0 — use that outpoint here; repayment burns it',
+          name: 'alreadySupplied',
+          label: 'Already supplied (vault state)',
+          placeholder: 'e.g. 60',
+          description: "The vault's current already_supplied accounting value from the indexer",
         })}
         {renderTextField({
-          name: 'currentDebt',
-          label: 'Current offer debt',
-          placeholder: 'e.g. 11000',
-          description:
-            'Principal + full interest for a fresh offer, or the remaining debt after a prior partial repayment. Repaid in full.',
+          name: 'amountToWithdraw',
+          label: 'Amount to withdraw',
+          placeholder: 'e.g. 20',
+          description: 'Must be less than the vault balance',
         })}
         {renderTextField({
-          name: 'lenderVaultOutpoint',
-          label: 'Lender vault outpoint (optional)',
-          placeholder: 'txid:vout',
-          description:
-            'Needed only if a prior partial repayment already created an active lender vault',
-        })}
-        {renderTextField({
-          name: 'protocolFeeVaultOutpoint',
-          label: 'Protocol fee vault outpoint (optional)',
-          placeholder: 'txid:vout',
-          description:
-            'Needed only if a prior partial repayment already created an active protocol-fee vault',
-        })}
-        {renderTextField({
-          name: 'collateralRecipientAddress',
-          label: 'Collateral recipient address (optional)',
+          name: 'keeperRecipientAddress',
+          label: 'Keeper recipient address (optional)',
           placeholder: 'Leave blank to use wallet receive address',
-          description: 'Where the unlocked collateral is sent after full repayment',
+          description: 'Where the passed-through keeper credential is sent back',
         })}
         {renderTextField({
-          name: 'principalOutpoints',
-          label: 'Principal asset outpoint(s)',
-          placeholder: 'txid:vout, txid:vout, ...',
-          description:
-            `Filtered by ${principalAsset.symbol} asset: ${principalAsset.id}. ` +
-            (principalUtxoOptions.length
-              ? `Available: ${principalUtxoOptions.map(o => o.label).join(' | ')}`
-              : 'No matching wallet UTXOs loaded'),
+          name: 'principalRecipientAddress',
+          label: 'Principal recipient address (optional)',
+          placeholder: 'Leave blank to use wallet receive address',
+          description: 'Where the withdrawn fee amount is sent',
         })}
         {renderTextField({
           name: 'feeOutpoints',
@@ -357,17 +335,17 @@ export default function RepayOfferDemo() {
         <UiButton
           isDisabled={connectionStatus !== 'ready'}
           isPending={state.busy}
-          loadingText='Repaying offer...'
+          loadingText='Withdrawing...'
           onPress={() => void handleSubmit(onSubmit)()}
         >
-          Repay Offer
+          Withdraw Part
         </UiButton>
       </div>
 
-      {state.error ? <p className='mt-3 text-xs text-red-500'>Repay: {state.error}</p> : null}
+      {state.error ? <p className='mt-3 text-xs text-red-500'>Withdraw: {state.error}</p> : null}
 
       <TxResult
-        title='Offer Repaid'
+        title='Protocol Fee Vault Partially Withdrawn'
         txid={state.result?.txid ?? null}
         txStatus={txStatus}
         detail={state.result?.summary}

@@ -3,6 +3,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
+import { resolveBorrowerPrincipalOutpoint, resolveNftOutpoints } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type ClaimPrincipalSummary, useClaimPrincipal } from '@/hooks/useClaimPrincipal'
@@ -13,6 +14,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { formatCollateralUtxoOption } from './helpers'
+import { OfferIdAutofill } from './OfferIdAutofill'
 import { TxResult } from './TxResult'
 
 const outpointSchema = (label: string) =>
@@ -96,7 +98,7 @@ export default function ClaimPrincipalDemo() {
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { claimPrincipal } = useClaimPrincipal()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit } = useForm<ClaimPrincipalForm>({
+  const { control, handleSubmit, setValue } = useForm<ClaimPrincipalForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
     resolver: claimPrincipalFormResolver,
@@ -197,6 +199,18 @@ export default function ClaimPrincipalDemo() {
         and the unlocked principal is sent to the specified address. Must be executed before full
         repayment, which burns the Borrower NFT.
       </p>
+
+      <OfferIdAutofill
+        onResolve={offer => {
+          const principalOutpoint = resolveBorrowerPrincipalOutpoint(offer)
+          if (!principalOutpoint) throw new Error('Borrower principal UTXO not found')
+          const nftOutpoints = resolveNftOutpoints(offer)
+          if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+
+          setValue('principalOutpoint', principalOutpoint)
+          setValue('borrowerNftOutpoint', nftOutpoints.borrowerNft)
+        }}
+      />
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({

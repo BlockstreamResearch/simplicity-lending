@@ -3,6 +3,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
+import { resolveLenderNftOutpoint, resolveLenderVaultOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { type LenderVaultClaimSummary, useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
@@ -13,6 +14,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { formatCollateralUtxoOption } from './helpers'
+import { OfferIdAutofill } from './OfferIdAutofill'
 import { TxResult } from './TxResult'
 
 const outpointSchema = (label: string) =>
@@ -29,9 +31,17 @@ const outpointListSchema = (label: string) =>
     .transform(value => value.split(/[\s,]+/).filter(Boolean))
     .pipe(zod.array(outpointSchema(label)).min(1, `${label}: at least one outpoint required`))
 
+const txidSchema = (label: string) =>
+  zod
+    .string()
+    .trim()
+    .regex(/^[0-9a-fA-F]{64}$/, `${label} must be a 64-char hex txid`)
+    .transform(value => value.toLowerCase())
+
 const lenderVaultClaimFormSchema = zod.object({
   lenderVaultOutpoint: outpointSchema('Lender vault outpoint'),
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
+  createOfferTxid: txidSchema('Create-offer txid'),
   feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
   principalRecipientAddress: zod.string().trim().optional(),
 })
@@ -79,6 +89,7 @@ interface WalletUtxosState {
 const EMPTY_FORM: LenderVaultClaimForm = {
   lenderVaultOutpoint: '',
   lenderNftOutpoint: '',
+  createOfferTxid: '',
   feeOutpoints: '',
   principalRecipientAddress: '',
 }
@@ -94,7 +105,7 @@ export default function LenderVaultClaimDemo() {
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { claimLenderVault } = useLenderVaultClaim()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit } = useForm<LenderVaultClaimForm>({
+  const { control, handleSubmit, setValue } = useForm<LenderVaultClaimForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
     resolver: lenderVaultClaimFormResolver,
@@ -198,6 +209,19 @@ export default function LenderVaultClaimDemo() {
         address. Only the Lender NFT holder can execute this transaction.
       </p>
 
+      <OfferIdAutofill
+        onResolve={offer => {
+          const lenderVaultOutpoint = resolveLenderVaultOutpoint(offer)
+          if (!lenderVaultOutpoint) throw new Error('Finalized lender vault UTXO not found')
+          const lenderNftOutpoint = resolveLenderNftOutpoint(offer)
+          if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
+
+          setValue('lenderVaultOutpoint', lenderVaultOutpoint)
+          setValue('lenderNftOutpoint', lenderNftOutpoint)
+          setValue('createOfferTxid', offer.created_at_txid)
+        }}
+      />
+
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({
           name: 'lenderVaultOutpoint',
@@ -212,6 +236,12 @@ export default function LenderVaultClaimDemo() {
           placeholder: 'accept-offer-txid:2 or current location',
           description:
             'Wallet-owned Lender NFT UTXO — authorises the vault withdrawal and is burned on success',
+        })}
+        {renderTextField({
+          name: 'createOfferTxid',
+          label: 'Create-offer txid',
+          placeholder: '64 hex chars',
+          description: 'Used to recover offer parameters and the vault supply goal',
         })}
         {renderTextField({
           name: 'principalRecipientAddress',

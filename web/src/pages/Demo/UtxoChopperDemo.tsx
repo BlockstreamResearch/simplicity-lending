@@ -52,10 +52,11 @@ const utxoChopperFormSchema = zod.object({
   pieceAmount: positiveBigIntStringSchema('Piece amount'),
   pieceCount: positiveIntegerStringSchema('Piece count'),
   recipientAddress: zod.string().trim().optional(),
+  explicitOutput: zod.boolean(),
 })
 
 type UtxoChopperForm = zod.input<typeof utxoChopperFormSchema>
-type UtxoChopperTextField = Exclude<keyof UtxoChopperForm, 'fundingOutpoint'>
+type UtxoChopperTextField = Exclude<keyof UtxoChopperForm, 'fundingOutpoint' | 'explicitOutput'>
 type UtxoChopperTextFieldProps = Omit<
   ComponentProps<typeof UiTextField>,
   'errorMessage' | 'isInvalid' | 'onChange' | 'value'
@@ -100,6 +101,7 @@ const EMPTY_FORM: UtxoChopperForm = {
   pieceAmount: '250',
   pieceCount: '4',
   recipientAddress: '',
+  explicitOutput: false,
 }
 
 const INITIAL_STATE: BroadcastState = {
@@ -133,14 +135,14 @@ export default function UtxoChopperDemo() {
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const assetOptions = useMemo(() => {
     const seen = new Set<string>()
-    const options = [{ id: 'all', label: 'All assets' }]
+    const options = [{ id: 'all', textValue: 'All assets' }]
     for (const utxo of blindedWalletUtxos.filter(isConfirmedWalletUtxo)) {
       const assetId = utxo.unblinded().asset().toString()
       if (seen.has(assetId)) continue
       seen.add(assetId)
       options.push({
         id: assetId,
-        label: assetId === policyAssetId ? 'L-BTC' : assetId,
+        textValue: assetId === policyAssetId ? 'L-BTC' : assetId,
       })
     }
     return options
@@ -166,7 +168,7 @@ export default function UtxoChopperDemo() {
         const assetLabel = assetId === policyAssetId ? 'L-BTC' : `${assetId.slice(0, 10)}...`
         return {
           id: outpoint,
-          label: `${outpoint} | ${utxo.unblinded().value().toString()} units | ${assetLabel} | ${status}`,
+          textValue: `${outpoint} | ${utxo.unblinded().value().toString()} units | ${assetLabel} | ${status}`,
         }
       })
   }, [connectionStatus, policyAssetId, assetFilter, blindedWalletUtxos])
@@ -370,6 +372,25 @@ export default function UtxoChopperDemo() {
           placeholder: 'Leave blank to use wallet receive address',
           description: 'Use the connected wallet address if you want the pieces available here',
         })}
+        <Controller
+          control={control}
+          name='explicitOutput'
+          render={({ field }) => (
+            <label className='flex items-center gap-2 text-sm'>
+              <input
+                type='checkbox'
+                checked={field.value}
+                onChange={e => field.onChange(e.target.checked)}
+              />
+              <span>Explicit (unblinded) output</span>
+            </label>
+          )}
+        />
+        <p className='-mt-2 text-xs text-gray-500'>
+          Produces plain, non-confidential pieces instead of the normal blinded ones. Needed to fund
+          a covenant input that reads the asset/amount directly (e.g. an AssetAuthVault keeper
+          credential) — a regular wallet holding is blinded and won&apos;t work there.
+        </p>
       </div>
 
       <div

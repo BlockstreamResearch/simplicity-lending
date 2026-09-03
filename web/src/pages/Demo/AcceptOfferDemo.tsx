@@ -3,6 +3,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from '
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
 
+import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
@@ -14,6 +15,7 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
 
 import { formatCollateralUtxoOption } from './helpers'
+import { OfferIdAutofill } from './OfferIdAutofill'
 import { TxResult } from './TxResult'
 
 const outpointSchema = (label: string) =>
@@ -98,7 +100,7 @@ export default function AcceptOfferDemo() {
   const { connectionStatus, getBlindedWalletUtxos, syncing, syncWallet } = useWallet()
   const { acceptOffer } = useAcceptOffer()
   const runStandardTransactionFlow = useStandardTransactionFlow()
-  const { control, handleSubmit } = useForm<AcceptOfferForm>({
+  const { control, handleSubmit, setValue } = useForm<AcceptOfferForm>({
     defaultValues: EMPTY_FORM,
     mode: 'onSubmit',
     resolver: acceptOfferFormResolver,
@@ -221,6 +223,19 @@ export default function AcceptOfferDemo() {
         enough principal asset from the connected wallet, and creates the active offer, borrower
         AssetAuth principal output, and lender-owned Lending NFT.
       </p>
+
+      <OfferIdAutofill
+        onResolve={offer => {
+          const pendingOfferOutpoint = resolvePendingOutpoint(offer)
+          if (!pendingOfferOutpoint) throw new Error('Pending offer UTXO not found')
+          const nftOutpoints = resolveNftOutpoints(offer)
+          if (!nftOutpoints) throw new Error('Offer NFT participants not found')
+
+          setValue('pendingOfferOutpoint', pendingOfferOutpoint)
+          setValue('lenderNftOutpoint', nftOutpoints.lenderNft)
+          setValue('borrowerNftReferenceOutpoint', nftOutpoints.borrowerNft)
+        }}
+      />
 
       <div className='mt-4 flex flex-col gap-3'>
         {renderTextField({
