@@ -14,6 +14,7 @@ mod query;
 pub mod server;
 mod state;
 pub mod utils;
+mod vaults;
 
 pub use borrowers::dto::BorrowerOverview;
 pub use dto::AssetAmount;
@@ -28,3 +29,4 @@ pub use offers::dto::{
 pub use openapi::ApiDoc;
 pub use params::*;
 pub use state::AppState;
+pub use vaults::dto::{ProtocolFeeVaultsQuery, ProtocolFeeVaultsResponse};

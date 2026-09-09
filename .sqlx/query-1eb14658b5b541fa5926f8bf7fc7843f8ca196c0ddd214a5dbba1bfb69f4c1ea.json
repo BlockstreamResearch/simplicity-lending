@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            v.offer_id,\n            v.txid,\n            v.vout,\n            v.amount,\n            v.created_at_height,\n            v.updated_at_height,\n            o.borrower_nft_asset_id,\n            o.protocol_fee_keeper_asset_id\n        FROM offer_vaults v\n        JOIN offers o ON o.id = v.offer_id\n        WHERE v.vault_type = 'protocol_fee'\n          AND v.is_finalized = true\n          AND v.spent_txid IS NULL\n          AND o.principal_asset_id = $1\n        ORDER BY v.amount DESC, v.id DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "offer_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "vout",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "borrower_nft_asset_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 7,
+        "name": "protocol_fee_keeper_asset_id",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1eb14658b5b541fa5926f8bf7fc7843f8ca196c0ddd214a5dbba1bfb69f4c1ea"
+}

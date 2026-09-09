@@ -1052,10 +1052,8 @@ mod tests {
         let protocol_after_supplied = 2_u64;
         let lender_after_supplied = lender_before + (amount_to_repay - 1);
 
-        let lender_after = AssetAuthVault::new_active(
-            params.get_lender_vault_parameters(),
-            lender_after_supplied,
-        );
+        let lender_after =
+            AssetAuthVault::new_active(params.get_lender_vault_parameters(), lender_after_supplied);
         let protocol_after = AssetAuthVault::new_active(
             params.get_protocol_fee_vault_parameters(),
             protocol_after_supplied,

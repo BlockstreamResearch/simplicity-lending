@@ -1635,3 +1635,165 @@ async fn lender_offers_returns_paginated_list_for_script() -> anyhow::Result<()>
     server_handle.abort();
     Ok(())
 }
+
+fn seed_protocol_fee_vault(
+    offer_id: i64,
+    txid_byte: u8,
+    amount: i64,
+    is_finalized: bool,
+    spent: bool,
+) -> lending_indexer::models::OfferVaultModel {
+    lending_indexer::models::OfferVaultModel {
+        id: 0,
+        offer_id,
+        vault_type: lending_indexer::models::VaultType::ProtocolFee,
+        txid: vec![txid_byte; 32],
+        vout: 0,
+        amount,
+        already_supplied: 0,
+        is_finalized,
+        created_at_height: 500,
+        updated_at_height: 500,
+        spent_txid: if spent { Some(vec![0xff; 32]) } else { None },
+        spent_at_height: if spent { Some(501) } else { None },
+    }
+}
+
+#[tokio::test]
+#[serial]
+async fn protocol_fee_vaults_returns_unspent_finalized_vaults_sorted_by_amount_desc()
+-> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = vault_tracking::seed_minimal_factory(&pool).await?;
+    let principal_asset = vec![0xaa_u8; 32];
+
+    let mut offer_small = vault_tracking::trackable_offer_model(1, factory_id, 100);
+    offer_small.principal_asset_id = principal_asset.clone();
+    let offer_small_id = seed_offer_row(&pool, &mut offer_small).await?;
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &seed_protocol_fee_vault(offer_small_id, 0x11, 300, true, false),
+    )
+    .await?;
+
+    let mut offer_big = vault_tracking::trackable_offer_model(2, factory_id, 110);
+    offer_big.principal_asset_id = principal_asset.clone();
+    let offer_big_id = seed_offer_row(&pool, &mut offer_big).await?;
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &seed_protocol_fee_vault(offer_big_id, 0x22, 900, true, false),
+    )
+    .await?;
+
+    let mut offer_unfinalized = vault_tracking::trackable_offer_model(3, factory_id, 120);
+    offer_unfinalized.principal_asset_id = principal_asset.clone();
+    let offer_unfinalized_id = seed_offer_row(&pool, &mut offer_unfinalized).await?;
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &seed_protocol_fee_vault(offer_unfinalized_id, 0x33, 5_000, false, false),
+    )
+    .await?;
+
+    let mut offer_spent = vault_tracking::trackable_offer_model(4, factory_id, 130);
+    offer_spent.principal_asset_id = principal_asset.clone();
+    let offer_spent_id = seed_offer_row(&pool, &mut offer_spent).await?;
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &seed_protocol_fee_vault(offer_spent_id, 0x44, 5_000, true, true),
+    )
+    .await?;
+
+    let mut offer_other_asset = vault_tracking::trackable_offer_model(5, factory_id, 140);
+    offer_other_asset.principal_asset_id = vec![0xbb_u8; 32];
+    let offer_other_asset_id = seed_offer_row(&pool, &mut offer_other_asset).await?;
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &seed_protocol_fee_vault(offer_other_asset_id, 0x55, 5_000, true, false),
+    )
+    .await?;
+
+    let mut offer_lender_vault = vault_tracking::trackable_offer_model(6, factory_id, 150);
+    offer_lender_vault.principal_asset_id = principal_asset.clone();
+    let offer_lender_vault_id = seed_offer_row(&pool, &mut offer_lender_vault).await?;
+    vault_tracking::seed_offer_vault_row(
+        &pool,
+        &lending_indexer::models::OfferVaultModel {
+            vault_type: lending_indexer::models::VaultType::Lender,
+            ..seed_protocol_fee_vault(offer_lender_vault_id, 0x66, 5_000, true, false)
+        },
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let principal_asset_hex = "aa".repeat(32);
+    let response = get_json(
+        &http,
+        format!("{base_url}/vaults/protocol-fee?principal_asset={principal_asset_hex}"),
+    )
+    .await?;
+
+    assert_eq!(response["count"], 2);
+    assert_eq!(response["total_amount"], "1200");
+    let items = response["items"].as_array().expect("items array");
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["amount"], "900");
+    assert_eq!(items[0]["offer_id"], offer_big_id.to_string());
+    assert_eq!(items[1]["amount"], "300");
+    assert_eq!(items[1]["offer_id"], offer_small_id.to_string());
+    assert_eq!(items[0]["borrower_nft_asset"], "07".repeat(32));
+    assert_eq!(items[0]["protocol_fee_keeper_asset"], "05".repeat(32));
+    assert_eq!(items[0]["txid"], "22".repeat(32));
+    assert_eq!(items[0]["vout"], 0);
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn protocol_fee_vaults_returns_empty_result_when_no_matches() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let principal_asset_hex = "cc".repeat(32);
+    let response = get_json(
+        &http,
+        format!("{base_url}/vaults/protocol-fee?principal_asset={principal_asset_hex}"),
+    )
+    .await?;
+
+    assert_eq!(response["count"], 0);
+    assert_eq!(response["total_amount"], "0");
+    assert_eq!(response["items"].as_array().map_or(1, Vec::len), 0);
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn protocol_fee_vaults_rejects_missing_or_invalid_principal_asset() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let missing_param = http
+        .get(format!("{base_url}/vaults/protocol-fee"))
+        .send()
+        .await?;
+    assert_eq!(missing_param.status(), StatusCode::BAD_REQUEST);
+
+    let invalid_hex = http
+        .get(format!("{base_url}/vaults/protocol-fee?principal_asset=zz"))
+        .send()
+        .await?;
+    assert_eq!(invalid_hex.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response_json(invalid_hex).await?;
+    assert_eq!(body["error"]["code"], "bad_request");
+
+    server_handle.abort();
+    Ok(())
+}

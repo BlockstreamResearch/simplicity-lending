@@ -381,3 +381,9 @@ Overview sums use remaining state (`collateral_remaining`, `current_debt`) acros
 | `GET` | `/offers` | Paginated short offer list | offer list filters (see above) |
 | `GET` | `/offers/by-script` | Offer IDs (decimal strings) where `script_pubkey` matches an unspent participant UTXO (borrower or lender); response body is `["1", "2", …]` | `script_pubkey` (query param, hex) |
 | `GET` | `/offers/{id}` | Full offer details with latest participant UTXOs and full offer UTXO history (spent + unspent); `{id}` is the numeric offer ID in the path | — |
+
+### Vaults Endpoints
+
+| Method | Endpoint | Description | Params / Body |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/vaults/protocol-fee` | Unspent, finalized `protocol_fee` vaults for a given `principal_asset`, sorted by `amount` descending | `principal_asset` (query param, hex) |
