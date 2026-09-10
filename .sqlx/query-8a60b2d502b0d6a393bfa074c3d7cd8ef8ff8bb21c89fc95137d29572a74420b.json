@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            v.offer_id,\n            v.txid,\n            v.vout,\n            v.amount,\n            v.created_at_height,\n            v.updated_at_height,\n            o.borrower_nft_asset_id,\n            o.protocol_fee_keeper_asset_id\n        FROM offer_vaults v\n        JOIN offers o ON o.id = v.offer_id\n        WHERE v.vault_type = 'protocol_fee'\n          AND v.is_finalized = true\n          AND v.spent_txid IS NULL\n          AND o.principal_asset_id = $1\n        ORDER BY v.amount DESC, v.id DESC\n        ",
+  "query": "\n        SELECT\n            offer_vaults.offer_id,\n            offer_vaults.txid,\n            offer_vaults.vout,\n            offer_vaults.amount,\n            offer_vaults.created_at_height,\n            offer_vaults.updated_at_height,\n            offers.borrower_nft_asset_id,\n            offers.protocol_fee_keeper_asset_id\n        FROM offer_vaults\n        JOIN offers ON offers.id = offer_vaults.offer_id\n        WHERE offer_vaults.vault_type = 'protocol_fee'\n          AND offer_vaults.is_finalized = true\n          AND offer_vaults.spent_txid IS NULL\n          AND offers.principal_asset_id = $1\n        ORDER BY offer_vaults.amount DESC, offer_vaults.id DESC\n        ",
   "describe": {
     "columns": [
       {
@@ -60,5 +60,5 @@
       false
     ]
   },
-  "hash": "1eb14658b5b541fa5926f8bf7fc7843f8ca196c0ddd214a5dbba1bfb69f4c1ea"
+  "hash": "8a60b2d502b0d6a393bfa074c3d7cd8ef8ff8bb21c89fc95137d29572a74420b"
 }

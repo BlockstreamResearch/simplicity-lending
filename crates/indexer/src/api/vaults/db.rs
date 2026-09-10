@@ -39,21 +39,21 @@ pub async fn fetch_unspent_protocol_fee_vaults(
         HarvestableProtocolFeeVaultRow,
         r#"
         SELECT
-            v.offer_id,
-            v.txid,
-            v.vout,
-            v.amount,
-            v.created_at_height,
-            v.updated_at_height,
-            o.borrower_nft_asset_id,
-            o.protocol_fee_keeper_asset_id
-        FROM offer_vaults v
-        JOIN offers o ON o.id = v.offer_id
-        WHERE v.vault_type = 'protocol_fee'
-          AND v.is_finalized = true
-          AND v.spent_txid IS NULL
-          AND o.principal_asset_id = $1
-        ORDER BY v.amount DESC, v.id DESC
+            offer_vaults.offer_id,
+            offer_vaults.txid,
+            offer_vaults.vout,
+            offer_vaults.amount,
+            offer_vaults.created_at_height,
+            offer_vaults.updated_at_height,
+            offers.borrower_nft_asset_id,
+            offers.protocol_fee_keeper_asset_id
+        FROM offer_vaults
+        JOIN offers ON offers.id = offer_vaults.offer_id
+        WHERE offer_vaults.vault_type = 'protocol_fee'
+          AND offer_vaults.is_finalized = true
+          AND offer_vaults.spent_txid IS NULL
+          AND offers.principal_asset_id = $1
+        ORDER BY offer_vaults.amount DESC, offer_vaults.id DESC
         "#,
         principal_asset_id,
     )
