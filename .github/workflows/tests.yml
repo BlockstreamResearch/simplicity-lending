@@ -108,6 +108,11 @@ jobs:
           DATABASE_URL: postgres://${{ env.APP_USER }}:${{ env.APP_USER_PWD }}@localhost:5432/${{ env.APP_DB_NAME }}
         run: cargo test -p lending-indexer
 
+      - name: Run session tests
+        env:
+          DATABASE_URL: postgres://${{ env.APP_USER }}:${{ env.APP_USER_PWD }}@localhost:5432/${{ env.APP_DB_NAME }}
+        run: cargo test -p lending-session
+
       - name: Run simplex tests
         shell: bash
         run: |
