@@ -1820,6 +1820,7 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
+ "wiremock",
 ]
 
 [[package]]
@@ -1830,16 +1831,13 @@ dependencies = [
  "dotenvy",
  "lending-contracts",
  "lending-indexer",
- "reqwest",
  "serde",
- "serde_json",
  "serial_test",
  "smplx-std",
  "sqlx",
  "thiserror",
  "tokio",
  "uuid",
- "wiremock",
 ]
 
 [[package]]

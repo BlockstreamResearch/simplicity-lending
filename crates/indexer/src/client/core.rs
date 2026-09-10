@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use super::error::{IndexerClientError, map_api_error};
 use super::query::OfferListParams;
-use super::types::{
+use crate::api::{
     BorrowerOverview, FactoryDetailsResponse, LenderOverview, OfferDetailsResponse,
     OfferListResponse, OffersOverview,
 };
