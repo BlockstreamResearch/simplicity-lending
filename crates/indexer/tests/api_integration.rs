@@ -1734,7 +1734,9 @@ async fn protocol_fee_vaults_returns_unspent_finalized_vaults_sorted_by_amount_d
     )
     .await?;
 
-    assert_eq!(response["count"], 2);
+    assert_eq!(response["total"], 2);
+    assert_eq!(response["limit"], 50);
+    assert_eq!(response["offset"], 0);
     assert_eq!(response["total_amount"], "1200");
     let items = response["items"].as_array().expect("items array");
     assert_eq!(items.len(), 2);
@@ -1746,6 +1748,58 @@ async fn protocol_fee_vaults_returns_unspent_finalized_vaults_sorted_by_amount_d
     assert_eq!(items[0]["protocol_fee_keeper_asset"], "05".repeat(32));
     assert_eq!(items[0]["txid"], "22".repeat(32));
     assert_eq!(items[0]["vout"], 0);
+
+    let first_page = get_json(
+        &http,
+        format!(
+            "{base_url}/vaults/protocol-fee?principal_asset={principal_asset_hex}&limit=1&offset=0"
+        ),
+    )
+    .await?;
+
+    assert_eq!(first_page["total"], 2);
+    assert_eq!(first_page["limit"], 1);
+    assert_eq!(first_page["offset"], 0);
+    assert_eq!(first_page["total_amount"], "1200");
+    let first_page_items = first_page["items"].as_array().expect("items array");
+    assert_eq!(first_page_items.len(), 1);
+    assert_eq!(first_page_items[0]["offer_id"], offer_big_id.to_string());
+
+    let second_page = get_json(
+        &http,
+        format!(
+            "{base_url}/vaults/protocol-fee?principal_asset={principal_asset_hex}&limit=1&offset=1"
+        ),
+    )
+    .await?;
+
+    assert_eq!(second_page["total"], 2);
+    assert_eq!(second_page["limit"], 1);
+    assert_eq!(second_page["offset"], 1);
+    assert_eq!(second_page["total_amount"], "1200");
+    let second_page_items = second_page["items"].as_array().expect("items array");
+    assert_eq!(second_page_items.len(), 1);
+    assert_eq!(second_page_items[0]["offer_id"], offer_small_id.to_string());
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn protocol_fee_vaults_caps_limit_at_maximum() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let principal_asset_hex = "aa".repeat(32);
+    let response = get_json(
+        &http,
+        format!("{base_url}/vaults/protocol-fee?principal_asset={principal_asset_hex}&limit=500"),
+    )
+    .await?;
+
+    assert_eq!(response["limit"], 100);
 
     server_handle.abort();
     Ok(())
@@ -1765,7 +1819,9 @@ async fn protocol_fee_vaults_returns_empty_result_when_no_matches() -> anyhow::R
     )
     .await?;
 
-    assert_eq!(response["count"], 0);
+    assert_eq!(response["total"], 0);
+    assert_eq!(response["limit"], 50);
+    assert_eq!(response["offset"], 0);
     assert_eq!(response["total_amount"], "0");
     assert_eq!(response["items"].as_array().map_or(1, Vec::len), 0);
 

@@ -17,7 +17,7 @@ use super::dto::{ProtocolFeeVaultsQuery, ProtocolFeeVaultsResponse};
     tag = "vaults",
     params(ProtocolFeeVaultsQuery),
     responses(
-        (status = 200, description = "Unspent, finalized protocol-fee vaults for the asset, sorted by amount desc", body = ProtocolFeeVaultsResponse),
+        (status = 200, description = "Paginated, unspent, finalized protocol-fee vaults for the asset, sorted by amount desc", body = ProtocolFeeVaultsResponse),
         (status = 400, description = "Invalid principal_asset hex", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     )
@@ -30,7 +30,8 @@ pub async fn list_protocol_fee_vaults(
     let asset_bytes = parse_filter_hex(&query.principal_asset)
         .ok_or_else(|| ApiError::BadRequest("Invalid principal_asset hex".to_string()))?;
 
-    let response = super::db::fetch_unspent_protocol_fee_vaults(&state.db, asset_bytes).await?;
+    let response =
+        super::db::fetch_unspent_protocol_fee_vaults(&state.db, asset_bytes, &query).await?;
 
     Ok(Json(response))
 }

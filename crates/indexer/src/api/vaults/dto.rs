@@ -1,11 +1,30 @@
 use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
 
+const DEFAULT_PROTOCOL_FEE_VAULTS_LIMIT: u64 = 50;
+const MAX_PROTOCOL_FEE_VAULTS_LIMIT: u64 = 100;
+
 #[derive(Deserialize, IntoParams, ToSchema)]
 #[into_params(parameter_in = Query)]
 pub struct ProtocolFeeVaultsQuery {
     #[param(example = "020202…")]
     pub principal_asset: String,
+    #[param(minimum = 0, maximum = 100, example = 50)]
+    pub limit: Option<u64>,
+    #[param(minimum = 0, example = 0)]
+    pub offset: Option<u64>,
+}
+
+impl ProtocolFeeVaultsQuery {
+    pub fn effective_limit(&self) -> u64 {
+        self.limit
+            .unwrap_or(DEFAULT_PROTOCOL_FEE_VAULTS_LIMIT)
+            .min(MAX_PROTOCOL_FEE_VAULTS_LIMIT)
+    }
+
+    pub fn effective_offset(&self) -> u64 {
+        self.offset.unwrap_or(0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ToSchema)]
@@ -25,7 +44,9 @@ pub struct ProtocolFeeVaultDto {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ToSchema)]
 pub struct ProtocolFeeVaultsResponse {
     pub items: Vec<ProtocolFeeVaultDto>,
-    pub count: u64,
+    pub total: u64,
+    pub limit: u64,
+    pub offset: u64,
     #[schema(example = "1500")]
     pub total_amount: String,
 }
@@ -47,12 +68,16 @@ mod tests {
                 created_at_height: 10,
                 updated_at_height: 10,
             }],
-            count: 1,
+            total: 1,
+            limit: 50,
+            offset: 0,
             total_amount: "1000".to_string(),
         };
 
         let json = serde_json::to_value(&response).expect("serialize");
-        assert_eq!(json["count"], 1);
+        assert_eq!(json["total"], 1);
+        assert_eq!(json["limit"], 50);
+        assert_eq!(json["offset"], 0);
         assert_eq!(json["total_amount"], "1000");
         assert_eq!(json["items"][0]["borrower_nft_asset"], "0102");
         assert_eq!(json["items"][0]["protocol_fee_keeper_asset"], "0304");
