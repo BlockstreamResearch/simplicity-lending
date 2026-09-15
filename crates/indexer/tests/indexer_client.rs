@@ -324,6 +324,7 @@ async fn list_protocol_fee_vaults_forwards_query_params_and_parses_response() {
                         "txid": "aabb",
                         "vout": 0,
                         "amount": "1000",
+                        "supply_goal": "1000",
                         "borrower_nft_asset": "0102",
                         "protocol_fee_keeper_asset": "0304",
                         "created_at_height": 10,
@@ -356,6 +357,7 @@ async fn list_protocol_fee_vaults_forwards_query_params_and_parses_response() {
     assert_eq!(response.items.len(), 1);
     assert_eq!(response.items[0].offer_id, "1");
     assert_eq!(response.items[0].borrower_nft_asset, "0102");
+    assert_eq!(response.items[0].supply_goal, "1000");
 }
 
 #[tokio::test]

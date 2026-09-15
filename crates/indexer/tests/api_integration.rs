@@ -1650,7 +1650,7 @@ fn seed_protocol_fee_vault(
         txid: vec![txid_byte; 32],
         vout: 0,
         amount,
-        already_supplied: 0,
+        already_supplied: amount,
         is_finalized,
         created_at_height: 500,
         updated_at_height: 500,
@@ -1741,8 +1741,10 @@ async fn protocol_fee_vaults_returns_unspent_finalized_vaults_sorted_by_amount_d
     let items = response["items"].as_array().expect("items array");
     assert_eq!(items.len(), 2);
     assert_eq!(items[0]["amount"], "900");
+    assert_eq!(items[0]["supply_goal"], "900");
     assert_eq!(items[0]["offer_id"], offer_big_id.to_string());
     assert_eq!(items[1]["amount"], "300");
+    assert_eq!(items[1]["supply_goal"], "300");
     assert_eq!(items[1]["offer_id"], offer_small_id.to_string());
     assert_eq!(items[0]["borrower_nft_asset"], "07".repeat(32));
     assert_eq!(items[0]["protocol_fee_keeper_asset"], "05".repeat(32));

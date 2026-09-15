@@ -35,6 +35,8 @@ pub struct ProtocolFeeVaultDto {
     pub vout: u32,
     #[schema(example = "1000")]
     pub amount: String,
+    #[schema(example = "1000")]
+    pub supply_goal: String,
     pub borrower_nft_asset: String,
     pub protocol_fee_keeper_asset: String,
     pub created_at_height: u64,
@@ -63,6 +65,7 @@ mod tests {
                 txid: "aabb".to_string(),
                 vout: 0,
                 amount: "1000".to_string(),
+                supply_goal: "1000".to_string(),
                 borrower_nft_asset: "0102".to_string(),
                 protocol_fee_keeper_asset: "0304".to_string(),
                 created_at_height: 10,
@@ -81,5 +84,6 @@ mod tests {
         assert_eq!(json["total_amount"], "1000");
         assert_eq!(json["items"][0]["borrower_nft_asset"], "0102");
         assert_eq!(json["items"][0]["protocol_fee_keeper_asset"], "0304");
+        assert_eq!(json["items"][0]["supply_goal"], "1000");
     }
 }
