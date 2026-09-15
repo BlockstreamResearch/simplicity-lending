@@ -175,6 +175,47 @@ fn participant_role_query(role: ParticipantType) -> String {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProtocolFeeVaultsParams {
+    pub principal_asset: String,
+    pub limit: Option<u64>,
+    pub offset: Option<u64>,
+}
+
+impl ProtocolFeeVaultsParams {
+    pub fn new(principal_asset: impl Into<String>) -> Self {
+        Self {
+            principal_asset: principal_asset.into(),
+            limit: None,
+            offset: None,
+        }
+    }
+
+    pub fn with_limit(mut self, limit: u64) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    pub fn with_offset(mut self, offset: u64) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    pub(crate) fn to_query_pairs(&self) -> Vec<(&'static str, String)> {
+        let mut pairs = vec![("principal_asset", self.principal_asset.clone())];
+
+        if let Some(limit) = self.limit {
+            pairs.push(("limit", limit.to_string()));
+        }
+
+        if let Some(offset) = self.offset {
+            pairs.push(("offset", offset.to_string()));
+        }
+
+        pairs
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,5 +261,26 @@ mod tests {
         assert!(pairs.contains(&("not_expired", "true".to_string())));
         assert!(pairs.contains(&("sort_by", "updated_at_height".to_string())));
         assert!(pairs.contains(&("sort_dir", "desc".to_string())));
+    }
+
+    #[test]
+    fn protocol_fee_vaults_params_always_include_principal_asset() {
+        let params = ProtocolFeeVaultsParams::new("020202");
+        assert_eq!(
+            params.to_query_pairs(),
+            vec![("principal_asset", "020202".to_string())]
+        );
+    }
+
+    #[test]
+    fn protocol_fee_vaults_params_serialize_pagination() {
+        let params = ProtocolFeeVaultsParams::new("020202")
+            .with_limit(10)
+            .with_offset(5);
+        let pairs = params.to_query_pairs();
+
+        assert!(pairs.contains(&("principal_asset", "020202".to_string())));
+        assert!(pairs.contains(&("limit", "10".to_string())));
+        assert!(pairs.contains(&("offset", "5".to_string())));
     }
 }

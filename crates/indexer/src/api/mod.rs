@@ -29,4 +29,4 @@ pub use offers::dto::{
 pub use openapi::ApiDoc;
 pub use params::*;
 pub use state::AppState;
-pub use vaults::dto::{ProtocolFeeVaultsQuery, ProtocolFeeVaultsResponse};
+pub use vaults::dto::{ProtocolFeeVaultDto, ProtocolFeeVaultsQuery, ProtocolFeeVaultsResponse};

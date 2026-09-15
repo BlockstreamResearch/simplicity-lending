@@ -5,10 +5,10 @@ use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
 use super::error::{IndexerClientError, map_api_error};
-use super::query::OfferListParams;
+use super::query::{OfferListParams, ProtocolFeeVaultsParams};
 use crate::api::{
     BorrowerOverview, FactoryDetailsResponse, LenderOverview, OfferDetailsResponse,
-    OfferListResponse, OffersOverview,
+    OfferListResponse, OffersOverview, ProtocolFeeVaultsResponse,
 };
 
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
@@ -146,6 +146,14 @@ impl IndexerClient {
         factory_id: Uuid,
     ) -> Result<FactoryDetailsResponse, IndexerClientError> {
         self.get(&format!("/factories/{factory_id}"), &[]).await
+    }
+
+    pub async fn list_protocol_fee_vaults(
+        &self,
+        params: &ProtocolFeeVaultsParams,
+    ) -> Result<ProtocolFeeVaultsResponse, IndexerClientError> {
+        self.get("/vaults/protocol-fee", &params.to_query_pairs())
+            .await
     }
 
     async fn get<T: DeserializeOwned>(

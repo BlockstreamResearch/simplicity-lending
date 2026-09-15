@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 const DEFAULT_PROTOCOL_FEE_VAULTS_LIMIT: u64 = 50;
@@ -27,7 +27,7 @@ impl ProtocolFeeVaultsQuery {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ProtocolFeeVaultDto {
     #[schema(example = "1")]
     pub offer_id: String,
@@ -41,7 +41,7 @@ pub struct ProtocolFeeVaultDto {
     pub updated_at_height: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ProtocolFeeVaultsResponse {
     pub items: Vec<ProtocolFeeVaultDto>,
     pub total: u64,
