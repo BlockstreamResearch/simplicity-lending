@@ -2,12 +2,11 @@ use simplex::{
     program::Program,
     provider::SimplicityNetwork,
     simplicityhl::elements::AssetId,
-    transaction::{FinalTransaction, UTXO},
+    transaction::{FinalTransaction, RequiredSignature, UTXO},
 };
 
 use crate::artifacts::fee_collector::FeeCollectorProgram;
-
-use crate::programs::fee_collector::{FeeCollectorParameters, FeeCollectorWitnessParams};
+use crate::programs::fee_collector::{FeeCollectorParameters, FeeCollectorWitnessBranch};
 use crate::programs::program::SimplexProgram;
 
 pub struct FeeCollector {
@@ -27,17 +26,41 @@ impl FeeCollector {
         &self.parameters
     }
 
-    pub fn attach_deposit(&self, ft: &mut FinalTransaction, asset_id: AssetId, amount: u64) {
+    pub fn attach_creation(&self, ft: &mut FinalTransaction, asset_id: AssetId, amount: u64) {
         self.add_program_output(ft, asset_id, amount);
     }
 
-    pub fn attach_withdrawal(
+    pub fn attach_deposit(
         &self,
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
-        witness_params: FeeCollectorWitnessParams,
+        additional_amount: u64,
     ) {
-        self.add_program_input(ft, program_utxo, witness_params.build_witness());
+        assert!(additional_amount > 0, "Invalid amount to deposit");
+
+        let output_index = ft.n_outputs() as u32;
+        let asset_id = program_utxo.explicit_asset();
+        let new_amount = program_utxo
+            .explicit_amount()
+            .checked_add(additional_amount)
+            .expect("Deposit amount overflow");
+
+        let deposit_witness_branch = FeeCollectorWitnessBranch::Deposit {
+            output_index,
+            additional_amount,
+        };
+
+        self.add_program_input(ft, program_utxo, deposit_witness_branch.build_witness());
+        self.add_program_output(ft, asset_id, new_amount);
+    }
+
+    pub fn attach_withdrawal(&self, ft: &mut FinalTransaction, program_utxo: UTXO) {
+        self.add_program_input_with_signature(
+            ft,
+            program_utxo,
+            FeeCollectorWitnessBranch::Withdrawal.build_witness(),
+            RequiredSignature::witness_with_path("PATH", ["Left"]),
+        );
     }
 }
 

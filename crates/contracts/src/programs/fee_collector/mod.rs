@@ -4,4 +4,4 @@ mod witness;
 
 pub use core::FeeCollector;
 pub use params::FeeCollectorParameters;
-pub use witness::FeeCollectorWitnessParams;
+pub use witness::FeeCollectorWitnessBranch;

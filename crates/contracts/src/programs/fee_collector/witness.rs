@@ -1,18 +1,27 @@
+use simplex::constants::DUMMY_SIGNATURE;
+use simplex::either::Either::{Left, Right};
+
 use crate::artifacts::fee_collector::derived_fee_collector::FeeCollectorWitness;
 
 #[derive(Debug, Clone, Copy)]
-pub struct FeeCollectorWitnessParams {
-    pub signature: [u8; 64],
+pub enum FeeCollectorWitnessBranch {
+    Withdrawal,
+    Deposit {
+        output_index: u32,
+        additional_amount: u64,
+    },
 }
 
-impl FeeCollectorWitnessParams {
-    pub fn new(signature: [u8; 64]) -> Self {
-        Self { signature }
-    }
-
+impl FeeCollectorWitnessBranch {
     pub fn build_witness(&self) -> Box<FeeCollectorWitness> {
-        Box::new(FeeCollectorWitness {
-            signature: self.signature,
-        })
+        let path = match self {
+            FeeCollectorWitnessBranch::Withdrawal => Left(DUMMY_SIGNATURE),
+            FeeCollectorWitnessBranch::Deposit {
+                output_index,
+                additional_amount,
+            } => Right((*output_index, *additional_amount)),
+        };
+
+        Box::new(FeeCollectorWitness { path })
     }
 }
