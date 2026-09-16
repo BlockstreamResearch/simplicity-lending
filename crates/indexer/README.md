@@ -386,4 +386,4 @@ Overview sums use remaining state (`collateral_remaining`, `current_debt`) acros
 
 | Method | Endpoint | Description | Params / Body |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/vaults/protocol-fee` | Unspent, finalized `protocol_fee` vaults for a given `principal_asset`, sorted by `amount` descending | `principal_asset` (query param, hex) |
+| `GET` | `/vaults/protocol-fee` | Paginated unspent, finalized `protocol_fee` vaults for the asset, sorted by `amount` descending | `principal_asset` (query param, hex) |

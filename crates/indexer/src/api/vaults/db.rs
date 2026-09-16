@@ -33,7 +33,7 @@ impl From<HarvestableProtocolFeeVaultRow> for ProtocolFeeVaultDto {
 }
 
 struct HarvestableProtocolFeeVaultsTotals {
-    total: i64,
+    total_count: i64,
     total_amount: i64,
 }
 
@@ -49,7 +49,7 @@ async fn fetch_unspent_protocol_fee_vaults_totals(
         HarvestableProtocolFeeVaultsTotals,
         r#"
         SELECT
-            COUNT(*)::BIGINT AS "total!",
+            COUNT(*)::BIGINT AS "total_count!",
             COALESCE(SUM(offer_vaults.amount), 0)::BIGINT AS "total_amount!"
         FROM offer_vaults
         JOIN offers ON offers.id = offer_vaults.offer_id
@@ -132,7 +132,7 @@ pub async fn fetch_unspent_protocol_fee_vaults(
 
     Ok(ProtocolFeeVaultsResponse {
         items,
-        total: totals.total as u64,
+        total_count: totals.total_count as u64,
         limit,
         offset,
         total_amount: format_satoshis(totals.total_amount),

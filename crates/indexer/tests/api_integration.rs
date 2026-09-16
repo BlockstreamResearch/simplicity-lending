@@ -1734,7 +1734,7 @@ async fn protocol_fee_vaults_returns_unspent_finalized_vaults_sorted_by_amount_d
     )
     .await?;
 
-    assert_eq!(response["total"], 2);
+    assert_eq!(response["total_count"], 2);
     assert_eq!(response["limit"], 50);
     assert_eq!(response["offset"], 0);
     assert_eq!(response["total_amount"], "1200");
@@ -1759,7 +1759,7 @@ async fn protocol_fee_vaults_returns_unspent_finalized_vaults_sorted_by_amount_d
     )
     .await?;
 
-    assert_eq!(first_page["total"], 2);
+    assert_eq!(first_page["total_count"], 2);
     assert_eq!(first_page["limit"], 1);
     assert_eq!(first_page["offset"], 0);
     assert_eq!(first_page["total_amount"], "1200");
@@ -1775,7 +1775,7 @@ async fn protocol_fee_vaults_returns_unspent_finalized_vaults_sorted_by_amount_d
     )
     .await?;
 
-    assert_eq!(second_page["total"], 2);
+    assert_eq!(second_page["total_count"], 2);
     assert_eq!(second_page["limit"], 1);
     assert_eq!(second_page["offset"], 1);
     assert_eq!(second_page["total_amount"], "1200");
@@ -1821,7 +1821,7 @@ async fn protocol_fee_vaults_returns_empty_result_when_no_matches() -> anyhow::R
     )
     .await?;
 
-    assert_eq!(response["total"], 0);
+    assert_eq!(response["total_count"], 0);
     assert_eq!(response["limit"], 50);
     assert_eq!(response["offset"], 0);
     assert_eq!(response["total_amount"], "0");

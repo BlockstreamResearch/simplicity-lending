@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
-const DEFAULT_PROTOCOL_FEE_VAULTS_LIMIT: u64 = 50;
-const MAX_PROTOCOL_FEE_VAULTS_LIMIT: u64 = 100;
+use crate::api::params::{DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT};
 
 #[derive(Deserialize, IntoParams, ToSchema)]
 #[into_params(parameter_in = Query)]
@@ -17,9 +16,7 @@ pub struct ProtocolFeeVaultsQuery {
 
 impl ProtocolFeeVaultsQuery {
     pub fn effective_limit(&self) -> u64 {
-        self.limit
-            .unwrap_or(DEFAULT_PROTOCOL_FEE_VAULTS_LIMIT)
-            .min(MAX_PROTOCOL_FEE_VAULTS_LIMIT)
+        self.limit.unwrap_or(DEFAULT_LIST_LIMIT).min(MAX_LIST_LIMIT)
     }
 
     pub fn effective_offset(&self) -> u64 {
@@ -46,7 +43,7 @@ pub struct ProtocolFeeVaultDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ProtocolFeeVaultsResponse {
     pub items: Vec<ProtocolFeeVaultDto>,
-    pub total: u64,
+    pub total_count: u64,
     pub limit: u64,
     pub offset: u64,
     #[schema(example = "1500")]
@@ -71,14 +68,14 @@ mod tests {
                 created_at_height: 10,
                 updated_at_height: 10,
             }],
-            total: 1,
+            total_count: 1,
             limit: 50,
             offset: 0,
             total_amount: "1000".to_string(),
         };
 
         let json = serde_json::to_value(&response).expect("serialize");
-        assert_eq!(json["total"], 1);
+        assert_eq!(json["total_count"], 1);
         assert_eq!(json["limit"], 50);
         assert_eq!(json["offset"], 0);
         assert_eq!(json["total_amount"], "1000");

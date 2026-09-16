@@ -331,7 +331,7 @@ async fn list_protocol_fee_vaults_forwards_query_params_and_parses_response() {
                         "updated_at_height": 10
                     }
                 ],
-                "total": 1,
+                "total_count": 1,
                 "limit": 10,
                 "offset": 5,
                 "total_amount": "1000"
@@ -350,7 +350,7 @@ async fn list_protocol_fee_vaults_forwards_query_params_and_parses_response() {
         .await
         .expect("protocol fee vaults");
 
-    assert_eq!(response.total, 1);
+    assert_eq!(response.total_count, 1);
     assert_eq!(response.limit, 10);
     assert_eq!(response.offset, 5);
     assert_eq!(response.total_amount, "1000");
