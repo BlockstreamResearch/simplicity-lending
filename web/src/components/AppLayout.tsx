@@ -30,7 +30,7 @@ export default function AppLayout() {
     <main className='bg-surface text-foreground min-h-screen'>
       <div className='mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pt-6 pb-12 sm:px-8 lg:gap-10 lg:px-20 lg:pt-10 lg:pb-20'>
         <header className='flex flex-wrap items-center justify-between gap-4'>
-          <Link to={RoutePath.Dashboard} className='flex flex-col gap-1.5'>
+          <Link to={RoutePath.Landing} className='flex flex-col gap-1.5'>
             <h1 className='text-3xl leading-none font-black tracking-tight uppercase sm:text-4xl lg:text-[43px] lg:leading-10'>
               Lending
             </h1>
