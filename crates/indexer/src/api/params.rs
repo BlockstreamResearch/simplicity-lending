@@ -49,8 +49,8 @@ impl OfferSortBy {
     }
 }
 
-const DEFAULT_OFFER_LIST_LIMIT: u64 = 50;
-const MAX_OFFER_LIST_LIMIT: u64 = 100;
+pub(crate) const DEFAULT_LIST_LIMIT: u64 = 50;
+pub(crate) const MAX_LIST_LIMIT: u64 = 100;
 
 /// Shared offer-list filter query parameters.
 #[derive(Deserialize, Debug, Default)]
@@ -88,9 +88,7 @@ pub type OfferListQuery = OfferFilters;
 
 impl OfferFilters {
     pub fn effective_limit(&self) -> u64 {
-        self.limit
-            .unwrap_or(DEFAULT_OFFER_LIST_LIMIT)
-            .min(MAX_OFFER_LIST_LIMIT)
+        self.limit.unwrap_or(DEFAULT_LIST_LIMIT).min(MAX_LIST_LIMIT)
     }
 
     pub fn effective_offset(&self) -> u64 {

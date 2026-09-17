@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            offer_vaults.offer_id,\n            offer_vaults.txid,\n            offer_vaults.vout,\n            offer_vaults.amount,\n            offer_vaults.already_supplied,\n            offer_vaults.created_at_height,\n            offer_vaults.updated_at_height,\n            offers.borrower_nft_asset_id,\n            offers.protocol_fee_keeper_asset_id\n        FROM offer_vaults\n        JOIN offers ON offers.id = offer_vaults.offer_id\n        WHERE offer_vaults.vault_type = 'protocol_fee'\n          AND offer_vaults.is_finalized = true\n          AND offer_vaults.spent_txid IS NULL\n          AND offers.principal_asset_id = $1\n        ORDER BY offer_vaults.amount DESC, offer_vaults.id DESC\n        LIMIT $2\n        OFFSET $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "offer_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "txid",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "vout",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "already_supplied",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at_height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "borrower_nft_asset_id",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 8,
+        "name": "protocol_fee_keeper_asset_id",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9e6ddf9f217c3a42d6ac2de593d47813ba3689adf1ed8988f86840f7a9908055"
+}

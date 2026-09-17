@@ -22,6 +22,8 @@ use crate::api::offers::dto::{
 };
 use crate::api::offers::handlers as offer_handlers;
 use crate::api::params::{OfferSortBy, SortDir};
+use crate::api::vaults::dto::ProtocolFeeVaultsResponse;
+use crate::api::vaults::handlers as vault_handlers;
 use crate::events::IndexerEvent;
 use crate::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType, VaultType};
 
@@ -50,6 +52,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         factory_handlers::get_by_id,
         event_handlers::subscribe_events,
         asset_handlers::get_domain_proof,
+        vault_handlers::list_protocol_fee_vaults,
         health::health,
         health::ready,
     ),
@@ -80,6 +83,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         ParticipantDto,
         ParticipantShort,
         ParticipantType,
+        ProtocolFeeVaultsResponse,
         SortDir,
         UtxoType,
         VaultType,
@@ -91,6 +95,7 @@ use super::schemas::{ErrorBody, ErrorResponse, OfferDetailsResponseSchema};
         (name = "factories", description = "Issuance factory queries"),
         (name = "events", description = "Server-Sent Events for indexer updates"),
         (name = "assets", description = "ELIP-0100 asset domain proofs"),
+        (name = "vaults", description = "Protocol vault queries"),
         (name = "health", description = "Liveness and readiness checks"),
     )
 )]
@@ -124,6 +129,7 @@ mod tests {
         assert!(paths.contains_key("/factories/by-script"));
         assert!(paths.contains_key("/factories/{id}"));
         assert!(paths.contains_key("/.well-known/{proof_file}"));
+        assert!(paths.contains_key("/vaults/protocol-fee"));
         assert!(paths.contains_key("/health"));
         assert!(paths.contains_key("/ready"));
         assert!(paths.contains_key("/events"));

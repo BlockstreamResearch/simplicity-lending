@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use lending_indexer::client::{
-    IndexerClient, IndexerClientConfig, IndexerClientError, OfferListParams, OfferSortBy, SortDir,
+    IndexerClient, IndexerClientConfig, IndexerClientError, OfferListParams, OfferSortBy,
+    ProtocolFeeVaultsParams, SortDir,
 };
 use lending_indexer::models::{FactoryStatus, OfferStatus, ParticipantType, UtxoType};
 use uuid::Uuid;
@@ -305,6 +306,58 @@ async fn get_offers_overview_parses_asset_amounts() {
     assert_eq!(overview.collateral_locked.len(), 1);
     assert_eq!(overview.collateral_locked[0].amount, "100");
     assert!(overview.active_loan_principal.is_empty());
+}
+
+#[tokio::test]
+async fn list_protocol_fee_vaults_forwards_query_params_and_parses_response() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/vaults/protocol-fee"))
+        .and(query_param("principal_asset", "020202"))
+        .and(query_param("limit", "10"))
+        .and(query_param("offset", "5"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            r#"{
+                "items": [
+                    {
+                        "offer_id": "1",
+                        "txid": "aabb",
+                        "vout": 0,
+                        "amount": "1000",
+                        "supply_goal": "1000",
+                        "borrower_nft_asset": "0102",
+                        "protocol_fee_keeper_asset": "0304",
+                        "created_at_height": 10,
+                        "updated_at_height": 10
+                    }
+                ],
+                "total_count": 1,
+                "limit": 10,
+                "offset": 5,
+                "total_amount": "1000"
+            }"#,
+        ))
+        .mount(&server)
+        .await;
+
+    let params = ProtocolFeeVaultsParams::new("020202")
+        .with_limit(10)
+        .with_offset(5);
+
+    let client = client_for(&server).await;
+    let response = client
+        .list_protocol_fee_vaults(&params)
+        .await
+        .expect("protocol fee vaults");
+
+    assert_eq!(response.total_count, 1);
+    assert_eq!(response.limit, 10);
+    assert_eq!(response.offset, 5);
+    assert_eq!(response.total_amount, "1000");
+    assert_eq!(response.items.len(), 1);
+    assert_eq!(response.items[0].offer_id, "1");
+    assert_eq!(response.items[0].borrower_nft_asset, "0102");
+    assert_eq!(response.items[0].supply_goal, "1000");
 }
 
 #[tokio::test]
