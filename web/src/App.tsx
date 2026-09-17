@@ -10,9 +10,15 @@ import BorrowPage from './pages/Borrow'
 import DashboardPage from './pages/Dashboard'
 import DemoPage from './pages/Demo'
 import DesignSystemPage from './pages/DesignSystem'
+import LandingPage from './pages/Landing'
 import SupplyPage from './pages/Supply'
 
 const router = createBrowserRouter([
+  {
+    path: RoutePath.Landing,
+    element: <LandingPage />,
+    errorElement: <ErrorBoundary />,
+  },
   {
     path: RoutePath.Dashboard,
     element: <AppLayout />,

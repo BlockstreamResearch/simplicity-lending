@@ -44,9 +44,12 @@ export default defineConfig(({ command, mode }) => {
             '/api': {
               target: apiProxyTarget,
               changeOrigin: true,
+              allowedHosts: true,
             },
           },
         }
-      : undefined,
+      : {
+          allowedHosts: true,
+        },
   }
 })
