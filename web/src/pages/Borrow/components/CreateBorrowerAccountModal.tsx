@@ -4,10 +4,13 @@ import UserIcon from '@/components/icons/UserIcon'
 import TransactionModal from '@/components/TransactionModal'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
-import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useBorrowerFactory } from '@/hooks/useBorrowerFactory'
 import { useFreezeViewWhileOpen } from '@/hooks/useFreezeViewWhileOpen'
-import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
+import { useProtocolAction } from '@/hooks/useProtocolAction'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
+
+/** The action the deployed document declares for bringing a factory into existence. */
+const CREATE_FACTORY = 'CreateFactory'
 
 interface CreateBorrowerAccountModalProps {
   isOpen: boolean
@@ -20,11 +23,13 @@ export default function CreateBorrowerAccountModal({
   onOpenChange,
   onClose,
 }: CreateBorrowerAccountModalProps) {
-  const { createBorrowerAccount, refetchFactory, scriptPubkey } = useBorrowerAccount()
-  const runStandardTransactionFlow = useStandardTransactionFlow()
+  const { refetchFactory, scriptPubkey } = useBorrowerFactory()
+  const performProtocolAction = useProtocolAction()
   const { addPendingTx, addSurfaceToast } = usePendingTransactions()
   const { mutate, reset, data, status } = useMutation({
-    mutationFn: () => runStandardTransactionFlow(createBorrowerAccount),
+    // The protocol's own factory creation, which is what this dapp calls a borrower account.
+    // Its three parameters are stated by the deployment and left to it.
+    mutationFn: () => performProtocolAction({ action: CREATE_FACTORY }),
     onSuccess: result => {
       void addPendingTx({
         txid: result.txid,

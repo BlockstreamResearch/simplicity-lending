@@ -7,7 +7,7 @@ import ArrowSquareUpIcon from '@/components/icons/ArrowSquareUpIcon'
 import { OffersLoadError } from '@/components/OffersLoadError'
 import OffersTable from '@/components/OffersTable'
 import { useOfferListControls } from '@/hooks/useOfferListControls'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 const SUPPLY_PAGE_SIZE = 10
 

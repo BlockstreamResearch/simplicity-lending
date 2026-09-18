@@ -1,0 +1,12 @@
+# esbuild and unrs-resolver compile or fetch a native binary in a postinstall
+# script. pnpm refuses to run those unless they are named here, and refuses the
+# whole install while any is unanswered, which fails every `pnpm run` gate.
+#
+# @reown/appkit is the opposite case: its postinstall builds nothing, it only
+# compares the installed @reown/appkit-* versions and prints a warning when they
+# disagree. This project pins all three to the same range in package.json, so the
+# check has nothing to find and is declined rather than left unanswered.
+allowBuilds:
+  '@reown/appkit': false
+  esbuild: true
+  unrs-resolver: true

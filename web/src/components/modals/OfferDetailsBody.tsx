@@ -8,7 +8,7 @@ import DetailsPanel, { type DetailRow } from '@/components/DetailsPanel'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { APR_TOOLTIP, PROTOCOL_FEE_LABEL, PROTOCOL_FEE_TOOLTIP } from '@/constants/offers'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { truncateAddress } from '@/utils/format'
 import {
   calcInterest,

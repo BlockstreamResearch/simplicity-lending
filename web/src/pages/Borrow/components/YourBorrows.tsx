@@ -9,11 +9,11 @@ import PlusIcon from '@/components/icons/PlusIcon'
 import { OffersLoadError } from '@/components/OffersLoadError'
 import OffersTable from '@/components/OffersTable'
 import { UiButton } from '@/components/ui/UiButton'
-import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
+import { useBorrowerFactory } from '@/hooks/useBorrowerFactory'
 import { useNow } from '@/hooks/useNow'
 import { useOfferListControls } from '@/hooks/useOfferListControls'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import {
   getBorrowerAccountPendingTx,
   getMempoolBlockingTx,
@@ -32,7 +32,7 @@ export default function YourBorrows() {
   const now = useNow(STUCK_CHECK_INTERVAL_MS)
 
   const { scriptPubkey } = useWallet()
-  const { hasAccount } = useBorrowerAccount()
+  const { hasAccount } = useBorrowerFactory()
   const { pendingTxs } = usePendingTransactions()
 
   const isCreatingBorrowerAccount =

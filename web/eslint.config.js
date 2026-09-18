@@ -13,7 +13,15 @@ import eslintConfigPrettier from 'eslint-config-prettier/flat'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'eslint.config.js', 'lwk_wasm/**']),
+  globalIgnores([
+    'dist',
+    'eslint.config.js',
+    'lwk_wasm/**',
+    // Vendored byte for byte from the humid repository — see its VENDOR.md. It answers to
+    // that project's lint rules, and holding it to these would turn every re-sync into a
+    // merge. `tsc -b` still typechecks it, so the copy stays proven against this project.
+    'src/lib/humid/appkit-injected-adapter/**',
+  ]),
 
   // Base config for all JS/JSX/TS/TSX files
   {
