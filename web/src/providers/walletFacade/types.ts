@@ -7,6 +7,7 @@ import type {
   WalletActionResult,
   WalletConnectOptions,
   WalletSignerType,
+  WalletUtxo,
   WalletVariant,
 } from '@/lib/wallet/types'
 
@@ -116,6 +117,13 @@ export interface WalletFacadeValue {
   /** Re-read everything the wallet serves about this account. */
   syncWallet(): Promise<void>
   getReceiveAddress(): Promise<string | null>
+  /**
+   * The outputs the wallet will spend for one asset, as the wallet itself reports them.
+   *
+   * Blinded outputs are in it, carrying what they hold: a wallet unblinds its own money for the
+   * account it belongs to. The secrets that unblind them are not, and are never served to a page.
+   */
+  getUtxos(assetId: string): Promise<WalletUtxo[]>
   /** Perform one protocol action as the connected account. */
   performAction(request: WalletActionRequest): Promise<WalletActionResult>
 

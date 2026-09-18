@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchScriptHashUtxo } from '@/api/esplora/methods'
 import type { ScriptHashUtxoEntry } from '@/api/esplora/schemas'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import type { WalletUtxo } from '@/lib/wallet/types'
 import { useWallet } from '@/providers/walletFacade/useWallet'
 import { bytesToHex, hexToBytes } from '@/utils/hex'
 import { sha256 } from '@/utils/sha256'
@@ -28,6 +29,11 @@ export async function scriptHashOf(scriptPubkeyHex: string): Promise<string> {
   return bytesToHex(new Uint8Array(await sha256(hexToBytes(scriptPubkeyHex))))
 }
 
+/** Where an output sits, so the two reads below can be added without counting one twice. */
+function outpointOf(utxo: { txid: string; vout: number }): string {
+  return `${utxo.txid}:${utxo.vout}`
+}
+
 /**
  * The outputs of one chain read that a contract action could actually spend.
  *
@@ -46,28 +52,53 @@ export function contractSpendableTotal(utxos: readonly ScriptHashUtxoEntry[]): b
 }
 
 /**
- * The money a contract action can be funded from, which is not the account's balance.
+ * The same total over what the wallet says it holds, confirmed only.
  *
- * A contract action spends only outputs that hide nothing: unblinding one needs secrets the
- * signing module is never given. On a network that hides by default almost everything an account
- * receives is confidential, so a screen offering the balance as collateral offers an amount the
- * wallet then refuses on, after the person has decided.
+ * `spendable` is the wallet's own word for confirmed: an action is funded from outputs that
+ * already exist on the chain, because what is signed has to be valid the moment it is sent.
+ */
+export function walletSpendableTotal(utxos: readonly WalletUtxo[]): bigint {
+  return utxos
+    .filter(utxo => utxo.spendable)
+    .reduce((total, utxo) => total + BigInt(utxo.amount), 0n)
+}
+
+/**
+ * The money a contract action can be funded from, which is two reads rather than one.
  *
- * Read from the chain rather than from the wallet, because the wallet does not serve it: its
- * `getUTXOs` describes the account as the chain library reports it, and that library treats an
- * unblinded output at the wallet's own script as external and omits it. The same outputs are
- * visible to anyone reading the chain, which is what this does — at the one address a contract
- * action can spend from, which is the script this dapp already identifies the account by.
+ * The wallet funds an action from every output it holds in the asset, the blinded ones included:
+ * it knows what its own money unblinds to and hands the signing module the secrets, which is the
+ * thing a wallet has and a page does not. So what the wallet reports is the larger part of this,
+ * and asking it is the only way to count a blinded output at all, because the amount is not in the
+ * open on the chain.
+ *
+ * The chain read stays for the one output the wallet's own list leaves out: an unblinded output at
+ * the account's first address. The chain library treats an explicit output at a confidential
+ * wallet script as external and omits it, while the wallet's action funding reads those separately
+ * and spends them. They are counted here from the chain, at that one address, and added by
+ * outpoint so an output both reads return is counted once.
  */
 export function useContractFunding(enabled: boolean): ContractFunding {
-  const { scriptPubkey } = useWallet()
+  const { account, getUtxos, scriptPubkey } = useWallet()
+  const collateralAssetId = NETWORK_CONFIG.collateralAsset.id
 
   const { data, error, isError, isLoading } = useQuery({
-    queryKey: ['contract-funding', scriptPubkey, NETWORK_CONFIG.collateralAsset.id],
+    queryKey: ['contract-funding', account, scriptPubkey, collateralAssetId],
     enabled: enabled && scriptPubkey !== null,
     staleTime: 0,
-    queryFn: async () => fetchScriptHashUtxo(await scriptHashOf(scriptPubkey ?? '')),
-    select: contractSpendableTotal,
+    queryFn: async (): Promise<bigint> => {
+      const [held, onChain] = await Promise.all([
+        getUtxos(collateralAssetId),
+        fetchScriptHashUtxo(await scriptHashOf(scriptPubkey ?? '')),
+      ])
+
+      const counted = new Set(held.filter(utxo => utxo.spendable).map(outpointOf))
+
+      return (
+        walletSpendableTotal(held) +
+        contractSpendableTotal(onChain.filter(utxo => !counted.has(outpointOf(utxo))))
+      )
+    },
   })
 
   return {

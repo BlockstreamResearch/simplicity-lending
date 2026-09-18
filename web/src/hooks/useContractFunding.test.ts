@@ -1,14 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import type { WalletUtxo } from '@/lib/wallet/types'
 
 /**
- * What a contract action can be funded from, counted from the chain.
+ * What a contract action can be funded from, counted from two reads that do not overlap.
  *
- * The wallet cannot answer this: its `getUTXOs` describes the account as the chain library
- * reports it, and that library treats an unblinded output at the wallet's own script as external
- * and omits it. So the count is taken from the chain at the one address a contract action spends
- * from — and what it must not count is everything this network hides by default.
+ * The wallet answers for the money it holds, the blinded outputs included, because it unblinds
+ * its own and hands the signing module the secrets. A page never sees those amounts on the chain,
+ * so that part can only come from the wallet.
+ *
+ * The chain read is left with one job: an unblinded output at the account's first address. The
+ * chain library treats an explicit output at a confidential wallet script as external and leaves
+ * it out of what the wallet reports, while the wallet's own action funding reads and spends it.
  */
 
 const COLLATERAL = NETWORK_CONFIG.collateralAsset.id
@@ -20,11 +24,15 @@ vi.mock('@/api/esplora/methods', () => ({
 }))
 
 vi.mock('@/providers/walletFacade/useWallet', () => ({
-  useWallet: () => ({ scriptPubkey: '0014' + '11'.repeat(20) }),
+  useWallet: () => ({
+    account: 'bip122:0:0',
+    getUtxos: async () => [],
+    scriptPubkey: '0014' + '11'.repeat(20),
+  }),
 }))
 
 const { fetchScriptHashUtxo } = await import('@/api/esplora/methods')
-const { contractSpendableTotal } = await import('./useContractFunding')
+const { contractSpendableTotal, walletSpendableTotal } = await import('./useContractFunding')
 
 type Utxo = Parameters<typeof contractSpendableTotal>[0][number]
 
@@ -40,7 +48,7 @@ describe('what an account can put behind a contract action', () => {
     )
   })
 
-  it('does not count one whose amount is hidden, which is most of what an account holds', () => {
+  it('leaves a hidden amount to the wallet, because the chain does not say what it is', () => {
     expect(
       contractSpendableTotal([
         utxo({ asset: COLLATERAL, value: 27_288, vout: 3 }),
@@ -64,8 +72,42 @@ describe('what an account can put behind a contract action', () => {
     ).toBe(0n)
   })
 
-  it('reads the chain rather than the wallet, which does not serve this', () => {
+  it('still reads the chain, for the output the wallet leaves out of its own list', () => {
     expect(fetchScriptHashUtxo).toBeDefined()
+  })
+})
+
+describe('what the wallet says it can spend', () => {
+  /** In the shape the wallet reports an output, already narrowed to one asset. */
+  function held(fields: Partial<WalletUtxo>): WalletUtxo {
+    return {
+      address: 'lq1',
+      amount: '0',
+      assetId: COLLATERAL,
+      confidential: true,
+      scriptPubkey: '0014' + '11'.repeat(20),
+      spendable: true,
+      txid: 'b'.repeat(64),
+      vout: 0,
+      ...fields,
+    }
+  }
+
+  it('counts a blinded output, which is what the chain read cannot see', () => {
+    expect(walletSpendableTotal([held({ amount: '150000', vout: 1 })])).toBe(150_000n)
+  })
+
+  it('counts an unblinded one the same way', () => {
+    expect(walletSpendableTotal([held({ amount: '900', confidential: false })])).toBe(900n)
+  })
+
+  it('does not count one the chain has not confirmed', () => {
+    expect(
+      walletSpendableTotal([
+        held({ amount: '150000', vout: 1 }),
+        held({ amount: '70000', spendable: false, vout: 2 }),
+      ]),
+    ).toBe(150_000n)
   })
 })
 

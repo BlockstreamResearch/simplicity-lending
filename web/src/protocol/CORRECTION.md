@@ -38,3 +38,12 @@ what they are.
 **Where the fix belongs.** Upstream, in apogee. This copy carries it so the protocol can
 be performed now; when apogee corrects its own document, this file is replaced from it
 again and this note goes.
+
+**Still needed, re-checked on 2026-09-18** against humid `7ef0dab`, the review response
+to PRs #20 to #29. The wallet reads an `instance.` reference from the deployment's own
+fields and nowhere else — `packages/tx-manifest/src/document/references.ts`, the
+`instance` case of `lookUp` — so a reference naming an action parameter still resolves
+against nothing. What did change is the other direction: a value supplied in the request
+now satisfies a bare reference to a declared field of the same name, in
+`instanceReferences`, which is what lets the six deployment actions send `params {}` and
+leave the rest to the wallet. Neither of those makes this correction unnecessary.

@@ -10,11 +10,19 @@ place — a local fix is a fork nobody can see.
 | --- | --- |
 | Repository | `git@github.com:BlockstreamResearch/humid.git` |
 | Path | `packages/appkit-injected-adapter/src/` |
-| Branch | `feature/conf-tx` |
-| Commit | `6af558b36d3ab499a3f40eff27afe281b3f0fe0a` |
+| Branch | `chore/smplx-upstream-pin` |
+| Commit | `7ef0dab` |
 
 Every file's Git blob hash matches that commit exactly, so drift is a `git hash-object`
 away from being visible rather than something to read for.
+
+Taken up on 2026-09-18, from `6af558b` on `feature/conf-tx`. Nine of the ten files
+changed and only one of those changes is behaviour: `liquid-rpc.ts` now states what the
+wallet answers a `processConfidentialTransaction` with — `{ broadcast, deployment?,
+feeSats, transactionHex, txid }` — where it used to say no dapp-facing shape existed.
+The rest is the review's comment removal. The branch is the review response to humid
+PRs #20 to #29 with the smplx submodule repinned on upstream, and it is what this dapp
+is being driven against; the commit here moves to whatever that work merges as.
 
 ## Why a copy instead of a dependency
 

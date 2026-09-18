@@ -10,6 +10,7 @@ import type {
 	LiquidGetWalletDescriptorParams,
 	LiquidGetWalletDescriptorResult,
 	LiquidProcessConfidentialTransactionParams,
+	LiquidProcessConfidentialTransactionResult,
 	LiquidSendTransferParams,
 	LiquidSendTransferResult,
 	LiquidSignIdentityParams,
@@ -22,11 +23,6 @@ import type {
 import { invokeMethod } from "./rpc";
 import type { CaipRpcProvider } from "./types";
 
-/**
- * A typed facade over the ten Liquid Wallet RPC methods. Each call is a CAIP-27 `wallet_invokeMethod`
- * with the params/result shapes from `./liquid-rpc`, so a dapp works against real types instead of
- * hand-rolled envelopes.
- */
 export type WalletClient = {
 	getBalance(params?: LiquidGetBalanceParams): Promise<LiquidGetBalanceResult>;
 	getUTXOs(params?: LiquidGetUTXOsParams): Promise<LiquidGetUTXOsResult>;
@@ -45,14 +41,9 @@ export type WalletClient = {
 	signIdentity(params: LiquidSignIdentityParams): Promise<LiquidSignIdentityResult>;
 	processConfidentialTransaction(
 		params: LiquidProcessConfidentialTransactionParams,
-	): Promise<unknown>;
+	): Promise<LiquidProcessConfidentialTransactionResult>;
 };
 
-/**
- * Build a {@link WalletClient} bound to a provider and a fixed CAIP-2 `scope` (the active chain).
- * Every method routes through `invokeMethod`, so the method-name strings stay in lock-step with the
- * wallet's `liquidWalletRpcMethods` surface.
- */
 export function createWalletClient(provider: CaipRpcProvider, scope: string): WalletClient {
 	return {
 		getBalance: (params) =>
@@ -82,6 +73,11 @@ export function createWalletClient(provider: CaipRpcProvider, scope: string): Wa
 		signIdentity: (params) =>
 			invokeMethod<LiquidSignIdentityResult>(provider, scope, "signIdentity", params),
 		processConfidentialTransaction: (params) =>
-			invokeMethod<unknown>(provider, scope, "processConfidentialTransaction", params),
+			invokeMethod<LiquidProcessConfidentialTransactionResult>(
+				provider,
+				scope,
+				"processConfidentialTransaction",
+				params,
+			),
 	};
 }

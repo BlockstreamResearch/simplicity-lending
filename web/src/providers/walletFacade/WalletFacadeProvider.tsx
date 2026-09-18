@@ -261,6 +261,11 @@ export function WalletFacadeProvider({ children }: PropsWithChildren) {
     [capabilities],
   )
 
+  const getUtxos = useCallback(
+    (assetId: string) => capabilities.getUtxos(assetId),
+    [capabilities],
+  )
+
   const performAction = useCallback(
     (request: WalletActionRequest) => capabilities.performAction(request),
     [capabilities],
@@ -365,6 +370,7 @@ export function WalletFacadeProvider({ children }: PropsWithChildren) {
       openAccount,
       syncWallet,
       getReceiveAddress,
+      getUtxos,
       performAction,
 
       getWollet: serveOrRefuse<Wollet>(
@@ -409,6 +415,7 @@ export function WalletFacadeProvider({ children }: PropsWithChildren) {
     disconnect,
     failure,
     getReceiveAddress,
+    getUtxos,
     openAccount,
     performAction,
     queryClient,

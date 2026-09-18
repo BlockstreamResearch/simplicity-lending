@@ -3,9 +3,7 @@ import type { InjectedProvider, InjectedRequestArguments, RawInjectedProvider } 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 3000;
 
 type CreateInjectedProviderOptions = {
-	/** Value returned from the bridged provider's `connect()` (AppKit's injected connector id). */
 	connectorId: string;
-	/** Max wait (ms) for the injected provider to appear before a request rejects. */
 	timeoutMs?: number;
 };
 
@@ -65,12 +63,6 @@ export function createInjectedProvider(
 	return provider;
 }
 
-/**
- * Resolve the raw injected provider, waiting briefly if it isn't on the page yet. A content script
- * usually injects it asynchronously, so on a fresh load the adapter (especially AppKit's
- * restore-on-load, which calls syncConnection early) can run before it exists — wait instead of
- * failing immediately, so an existing session actually restores rather than being dropped.
- */
 export function waitForProvider(
 	getProvider: () => RawInjectedProvider | undefined,
 	timeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS,

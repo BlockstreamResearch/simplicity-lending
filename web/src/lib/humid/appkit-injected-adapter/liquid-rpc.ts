@@ -1,15 +1,7 @@
-// Dapp-facing wire shapes for the ten Liquid Wallet RPC methods: the `*Params` a dapp builds and the
-// `*Result` the wallet returns, plus the small const enums a dapp needs to construct those params.
-// Internal branded ids (asset / chain) are surfaced here as plain `string`.
-
-/* ---------- getBalance ---------- */
-
-/** Balance query for the policy asset by default, or a specific ELIP-0144 asset id. */
 export type LiquidGetBalanceParams = {
 	assetId?: string;
 };
 
-/** Wallet-computed balance (base-unit string) for one asset, with the account and chain it came from. */
 export type LiquidGetBalanceResult = {
 	accountIdentifier: string;
 	assetId: string;
@@ -18,14 +10,10 @@ export type LiquidGetBalanceResult = {
 	policyAssetId: string;
 };
 
-/* ---------- getUTXOs ---------- */
-
-/** UTXO query for the policy asset by default, or a specific ELIP-0144 asset id. */
 export type LiquidGetUTXOsParams = {
 	assetId?: string;
 };
 
-/** A single wallet UTXO with the safe subset of its output data. */
 export type LiquidUTXO = {
 	address: string;
 	amount: string;
@@ -38,7 +26,6 @@ export type LiquidUTXO = {
 	vout: number;
 };
 
-/** The wallet's UTXO set for one asset. */
 export type LiquidGetUTXOsResult = {
 	accountIdentifier: string;
 	assetId: string;
@@ -46,8 +33,6 @@ export type LiquidGetUTXOsResult = {
 	policyAssetId: string;
 	utxos: LiquidUTXO[];
 };
-
-/* ---------- getWalletDescriptor ---------- */
 
 export const LIQUID_DESCRIPTOR_TYPES = {
 	PUBLIC_CONFIDENTIAL_DESCRIPTOR: "publicConfidentialDescriptor",
@@ -74,21 +59,18 @@ export type LiquidGetWalletDescriptorParams = {
 	descriptorType: LiquidDescriptorType;
 };
 
-/** One branch of a split-layout descriptor, with its address-index wildcard. */
 export type LiquidDescriptorBranch = {
 	addressIndex: "*";
 	branch: "external" | "internal";
 	change: 0 | 1;
 };
 
-/** One branch of a split-layout descriptor, rendered as a concrete descriptor string. */
 export type LiquidDescriptorBranchDescriptor = {
 	branch: "external" | "internal";
 	change: 0 | 1;
 	descriptor: string;
 };
 
-/** A single descriptor entry: either a multipath descriptor or per-branch split descriptors. */
 export type LiquidWalletDescriptorEntry = {
 	branchDescriptors?: LiquidDescriptorBranchDescriptor[];
 	branches?: LiquidDescriptorBranch[];
@@ -102,7 +84,6 @@ export type LiquidWalletDescriptorEntry = {
 	standardsUsed: string[];
 };
 
-/** The approved public wallet descriptor(s) for the connected account. */
 export type LiquidGetWalletDescriptorResult = {
 	accountIdentifier: string;
 	chainId: string;
@@ -110,9 +91,6 @@ export type LiquidGetWalletDescriptorResult = {
 	policyAssetId: string;
 };
 
-/* ---------- sendTransfer ---------- */
-
-/** A wallet-built transfer: amount + recipient for the policy asset or a supplied asset id. */
 export type LiquidSendTransferParams = {
 	account?: string;
 	amount: string;
@@ -121,12 +99,9 @@ export type LiquidSendTransferParams = {
 	recipientAddress: string;
 };
 
-/** The broadcast transaction id of a completed transfer. */
 export type LiquidSendTransferResult = {
 	txid: string;
 };
-
-/* ---------- signMessage ---------- */
 
 export const LIQUID_SIGN_MESSAGE_PROTOCOLS = {
 	BIP322: "bip322",
@@ -144,14 +119,12 @@ export type LiquidSignMessageProtocol =
 export type LiquidSignMessageSignatureEncoding =
 	(typeof LIQUID_SIGN_MESSAGE_SIGNATURE_ENCODINGS)[keyof typeof LIQUID_SIGN_MESSAGE_SIGNATURE_ENCODINGS];
 
-/** Sign an arbitrary message with the spend key of a wallet-owned address. */
 export type LiquidSignMessageParams = {
 	address: string;
 	message: string;
 	protocol?: LiquidSignMessageProtocol;
 };
 
-/** The signature plus the protocol and encoding the wallet used to produce it. */
 export type LiquidSignMessageResult = {
 	address: string;
 	messageHash?: string;
@@ -160,29 +133,22 @@ export type LiquidSignMessageResult = {
 	signatureEncoding: LiquidSignMessageSignatureEncoding;
 };
 
-/* ---------- signPset ---------- */
-
-/** One PSET input the wallet is asked to sign, identified by its address and index. */
 export type LiquidSignPsetInput = {
 	address: string;
 	index: number;
 	sighashTypes?: number[];
 };
 
-/** Sign the listed inputs of a PSET, optionally broadcasting the finalized transaction. */
 export type LiquidSignPsetParams = {
 	broadcast?: boolean;
 	pset: string;
 	signInputs: LiquidSignPsetInput[];
 };
 
-/** The signed PSET, plus a txid when it was broadcast. */
 export type LiquidSignPsetResult = {
 	pset: string;
 	txid?: string;
 };
-
-/* ---------- identity ---------- */
 
 export const LIQUID_IDENTITY_CURVE = "nist256p1";
 
@@ -196,7 +162,6 @@ export type LiquidIdentityPublicKeyType = typeof LIQUID_IDENTITY_PUBLIC_KEY_TYPE
 export type LiquidIdentitySharedKeyKdf = typeof LIQUID_IDENTITY_SHARED_KEY_KDF;
 export type LiquidIdentitySharedKeyType = typeof LIQUID_IDENTITY_SHARED_KEY_TYPE;
 
-/** Derive the SLIP-0013 identity public key for an identity URI. */
 export type LiquidGetIdentityPublicKeyParams = {
 	curve: LiquidIdentityCurve;
 	identity: string;
@@ -211,7 +176,6 @@ export type LiquidGetIdentityPublicKeyResult = {
 	type: LiquidIdentityPublicKeyType;
 };
 
-/** Derive a SLIP-0017 shared key (ECDH → HKDF) against a peer's public key. */
 export type LiquidGetIdentitySharedKeyParams = {
 	curve: LiquidIdentityCurve;
 	identity: string;
@@ -232,7 +196,6 @@ export type LiquidGetIdentitySharedKeyResult = {
 	type: LiquidIdentitySharedKeyType;
 };
 
-/** Sign a hex challenge with the SLIP-0013 identity key. */
 export type LiquidSignIdentityParams = {
 	challenge: string;
 	curve: LiquidIdentityCurve;
@@ -249,7 +212,12 @@ export type LiquidSignIdentityResult = {
 	type: LiquidIdentityPublicKeyType;
 };
 
-/* ---------- processConfidentialTransaction ---------- */
-
-/** Wallet ABI request. No dapp-facing shape exists yet; the wallet answers with a not-implemented error. */
 export type LiquidProcessConfidentialTransactionParams = Record<string, unknown>;
+
+export type LiquidProcessConfidentialTransactionResult = {
+	broadcast: boolean;
+	deployment?: Record<string, string>;
+	feeSats: string;
+	transactionHex: string;
+	txid: string;
+};
