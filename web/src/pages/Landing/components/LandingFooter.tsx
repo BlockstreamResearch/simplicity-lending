@@ -5,17 +5,16 @@ import { RoutePath } from '@/constants/routes'
 
 import { LandingContainer } from './LandingContainer'
 
-const ABOUT_SIMPLICITY_URL = 'https://simplicity-lang.org/'
-
 const NAV = [
-  { label: 'About', href: ABOUT_SIMPLICITY_URL },
-  { label: 'Docs', href: ABOUT_SIMPLICITY_URL },
+  { label: 'About', href: 'https://simplicity-lang.org/' },
+  { label: 'Docs', href: 'https://docs.simplicity-lang.org/' },
+  { label: 'GitHub', href: 'https://github.com/BlockstreamResearch/simplicity' },
 ]
 
 export function LandingFooter() {
   return (
     <LandingContainer
-      className='flex flex-wrap items-center justify-between gap-6 py-10'
+      className='flex flex-col items-start gap-6 py-10 sm:flex-row sm:items-center sm:justify-between'
       as='footer'
     >
       <Link to={RoutePath.Landing} className='flex flex-col gap-1.5'>
@@ -27,7 +26,7 @@ export function LandingFooter() {
         </span>
       </Link>
 
-      <nav className='flex flex-wrap items-center justify-center gap-1'>
+      <nav className='flex flex-wrap items-center gap-1'>
         {NAV.map(({ label, href }) => (
           <a
             key={label}

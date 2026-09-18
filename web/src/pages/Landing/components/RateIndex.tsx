@@ -8,7 +8,7 @@ import { Reveal } from './Reveal'
 
 export function RateIndex() {
   return (
-    <section className='bg-surface-secondary'>
+    <section>
       <LandingContainer className='flex flex-col items-center gap-10 py-12 text-center lg:py-20'>
         <Reveal className='flex max-w-200 flex-col items-center gap-4'>
           <div className='flex flex-col gap-4'>

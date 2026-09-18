@@ -14,13 +14,13 @@ export default function LandingPage() {
     <main className='bg-surface text-foreground min-h-screen'>
       <LandingHeader />
       <Hero />
-      <GetStarted />
       <WhySimplicity />
       <HowItWorks />
       <ForBorrowers />
       <ForLenders />
       <RateIndex />
       <ComparisonTable />
+      <GetStarted />
       <LandingFooter />
     </main>
   )

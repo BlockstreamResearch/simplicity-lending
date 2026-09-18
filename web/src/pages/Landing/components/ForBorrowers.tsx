@@ -27,11 +27,11 @@ const POINTS = [
 export function ForBorrowers() {
   return (
     <LandingContainer
-      className='flex flex-col items-center gap-10 py-12 lg:flex-row lg:items-center lg:justify-between lg:py-20'
+      className='relative flex min-h-146.25 flex-col items-center justify-center gap-10 py-12 lg:items-start lg:py-20'
       as='section'
     >
-      <Reveal className='flex w-full flex-col gap-10 lg:max-w-100'>
-        <div className='flex flex-col gap-4'>
+      <Reveal className='flex w-full flex-col gap-10 lg:max-w-[calc(100%-421px)]'>
+        <div className='flex flex-col mx-auto gap-4'>
           <p className='text-accent text-xs font-bold'>FOR BORROWERS</p>
           <p className='text-h2'>Your Loan, Your Terms</p>
           <p className='text-foreground text-sm'>
@@ -55,8 +55,15 @@ export function ForBorrowers() {
           ))}
         </ul>
       </Reveal>
-      <Reveal x={24} y={0} delay={0.15} className='hidden lg:block'>
-        <LiveCreateOfferPreview />
+      <Reveal
+        x={24}
+        y={0}
+        delay={0.15}
+        className='hidden lg:absolute lg:top-15 lg:right-20 lg:block'
+      >
+        <div className='lg:origin-top-right lg:scale-[0.6927]'>
+          <LiveCreateOfferPreview />
+        </div>
       </Reveal>
     </LandingContainer>
   )
