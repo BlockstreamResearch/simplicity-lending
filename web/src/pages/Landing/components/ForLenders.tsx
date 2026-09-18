@@ -26,11 +26,8 @@ const CARDS = [
 
 export function ForLenders() {
   return (
-    <LandingContainer className='flex flex-col items-center gap-10 py-12 lg:py-20' as='section'>
-      <Reveal className='hidden lg:block'>
-        <LiveOffersPreview />
-      </Reveal>
-      <div className='flex flex-col items-center gap-10'>
+    <section className='relative bg-surface-secondary'>
+      <LandingContainer className='flex flex-col items-center gap-10 py-12 lg:py-20'>
         <Reveal className='flex max-w-200 flex-col items-center gap-4 text-center'>
           <div className='flex flex-col gap-4'>
             <p className='text-accent text-xs font-bold'>FOR LENDERS</p>
@@ -43,12 +40,15 @@ export function ForLenders() {
             possession of the collateral.
           </p>
         </Reveal>
+        <Reveal delay={0.1} className='hidden lg:block'>
+          <LiveOffersPreview />
+        </Reveal>
         <div className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3'>
           {CARDS.map(({ icon: Icon, title, description }, index) => (
             <Reveal
               key={title}
-              delay={index * 0.08}
-              className='bg-surface-secondary flex flex-col gap-3 rounded-3xl p-6'
+              delay={0.15 + index * 0.08}
+              className='bg-surface flex flex-col gap-3 rounded-3xl p-6'
             >
               <Icon className='text-foreground size-6' />
               <div className='flex flex-col gap-1.5'>
@@ -58,7 +58,7 @@ export function ForLenders() {
             </Reveal>
           ))}
         </div>
-      </div>
-    </LandingContainer>
+      </LandingContainer>
+    </section>
   )
 }
