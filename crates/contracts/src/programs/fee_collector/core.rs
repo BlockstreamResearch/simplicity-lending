@@ -36,8 +36,6 @@ impl FeeCollector {
         program_utxo: UTXO,
         additional_amount: u64,
     ) {
-        assert!(additional_amount > 0, "Invalid amount to deposit");
-
         let output_index = ft.n_outputs() as u32;
         let asset_id = program_utxo.explicit_asset();
         let new_amount = program_utxo

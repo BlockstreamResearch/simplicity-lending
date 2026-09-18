@@ -3,6 +3,7 @@ use crate::checks::{
     ensure_io_script_hashes_eq,
     ensure_asset_transition_with_additional_amount
 };
+use crate::helper::get_input_explicit_asset_and_amount;
 
 fn checksig(pubkey: Pubkey, sig: Signature) {
     let sighash: u256 = jet::sig_all_hash();
@@ -14,7 +15,7 @@ fn deposit(output_index: u32, additional_amount: u64) {
     ensure_non_zero_amount(additional_amount);
 
     let current_index: u32 = jet::current_index();
-    let asset_bits: u256 = unwrap_right::<(u1, u256)>(jet::current_asset());
+    let (asset_bits, _): (u256, u64) = get_input_explicit_asset_and_amount(current_index);
 
     ensure_io_script_hashes_eq(current_index, output_index);
     ensure_asset_transition_with_additional_amount(
