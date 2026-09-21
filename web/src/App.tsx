@@ -16,6 +16,7 @@ import SupplyPage from './pages/Supply'
 
 function ProvidersLayout() {
   const { pathname } = useLocation()
+  // Once true, stays true: keeps providers mounted so the wallet session is not lost
   const [hasEnteredApp, setHasEnteredApp] = useState(() => isAppPath(pathname))
 
   if (!hasEnteredApp && isAppPath(pathname)) setHasEnteredApp(true)
