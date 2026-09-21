@@ -197,10 +197,10 @@ export function HeroDemoVideo() {
               {}
               <video
                 ref={previewVideoRef}
-                src={VIDEO_SRC}
+                src={`${VIDEO_SRC}#t=0.001`}
                 muted
                 playsInline
-                preload='auto'
+                preload='metadata'
                 onLoadedData={() => setIsPreviewLoaded(true)}
                 className={`h-full w-full object-contain transition-opacity duration-500 lg:object-cover ${isPreviewLoaded ? 'opacity-100' : 'opacity-0'}`}
               />
