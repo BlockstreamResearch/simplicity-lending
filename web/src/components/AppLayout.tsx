@@ -55,8 +55,8 @@ export default function AppLayout() {
         </header>
 
         <OfferActionModal offer={lastOffer} isOpen={isOpen} onClose={close} onSuccess={close} />
-        <Outlet />
         <JadeUnlockModal />
+        <Outlet />
 
         <footer className='text-muted flex flex-col gap-3 text-xs'>
           <nav className='flex flex-wrap items-center gap-4 font-medium'>

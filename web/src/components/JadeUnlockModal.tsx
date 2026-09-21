@@ -4,11 +4,24 @@ import { useState } from 'react'
 import CircleExclamationIcon from '@/components/icons/CircleExclamationIcon'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
-import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
+/**
+ * What a person sees while their device is waiting for its PIN.
+ *
+ * It reads the facade like every other screen and names no wallet: what is being unlocked is
+ * whichever wallet reported itself locked, and a retry goes back to that one.
+ */
 export function JadeUnlockModal() {
-  const { connectionStatus, walletType, error, isError, connect, usbDeviceDetected } = useWallet()
+  const {
+    connectionStatus,
+    connectorId,
+    walletVariant,
+    error,
+    isError,
+    connect,
+    usbDeviceDetected,
+  } = useWallet()
   const [prevConnectionStatus, setPrevConnectionStatus] = useState(connectionStatus)
   const [isOpen, setIsOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
@@ -28,8 +41,10 @@ export function JadeUnlockModal() {
   const handleDismiss = () => setIsOpen(false)
 
   const handleRetry = () => {
+    if (!connectorId) return
+
     setRetrying(true)
-    connect(walletType ?? DEFAULT_WALLET_TYPE)
+    connect(connectorId, { variant: walletVariant ?? undefined })
       .catch(console.warn)
       .finally(() => setRetrying(false))
   }

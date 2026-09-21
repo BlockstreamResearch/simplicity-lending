@@ -15,7 +15,7 @@ import { fetchBorrowerOffers, fetchFactoriesByScript, fetchOffer } from '@/api/i
 import { borrowerQueryKeys, factoryQueryKeys, offersQueryKeys } from '@/api/indexer/queryKeys'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { usePendingTxToasts } from '@/hooks/usePendingTxToasts'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 import { PendingTransactionsContext } from './PendingTransactionsContext'
 import { deletePendingTx, loadPendingTxsForWallet, putPendingTx } from './storage'

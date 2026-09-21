@@ -1,6 +1,6 @@
 import { useBorrowerOverview } from '@/api/indexer/hooks'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { findAssetAmount } from '@/utils/offers'
 
 export interface BorrowerStats {
