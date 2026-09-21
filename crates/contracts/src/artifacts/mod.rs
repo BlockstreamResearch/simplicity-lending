@@ -2,6 +2,8 @@
 
 #![allow(clippy::all)]
 #[rustfmt::skip]
+pub mod fee_collector;
+#[rustfmt::skip]
 pub mod asset_auth;
 #[rustfmt::skip]
 pub mod issuance_factory;
