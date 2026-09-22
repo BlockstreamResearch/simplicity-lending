@@ -9,6 +9,10 @@ const NAV = [
   { label: 'About', href: 'https://simplicity-lang.org/' },
   { label: 'Docs', href: 'https://docs.simplicity-lang.org/' },
   { label: 'GitHub', href: 'https://github.com/BlockstreamResearch/simplicity' },
+  {
+    label: 'Community',
+    href: 'https://community.simplicity-lang.org/c/share-your-projects/simplicity-lending-protocol/12',
+  },
 ]
 
 export function LandingFooter() {

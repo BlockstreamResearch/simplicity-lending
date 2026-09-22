@@ -27,6 +27,7 @@ const envSchema = zod.object({
     .optional()
     .default('')
     .transform(value => value === 'true'),
+  VITE_GA_MEASUREMENT_ID: zod.string().optional().default(''),
 })
 
 export const env = envSchema.parse({
@@ -40,6 +41,7 @@ export const env = envSchema.parse({
   VITE_DEBUG_MNEMONIC: import.meta.env.VITE_DEBUG_MNEMONIC,
   VITE_SIDESWAP_WS_URL: import.meta.env.VITE_SIDESWAP_WS_URL,
   VITE_DEMO_MODE: import.meta.env.VITE_DEMO_MODE,
+  VITE_GA_MEASUREMENT_ID: import.meta.env.VITE_GA_MEASUREMENT_ID,
 })
 
 export type AppEnv = zod.infer<typeof envSchema>

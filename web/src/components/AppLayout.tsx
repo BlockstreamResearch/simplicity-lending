@@ -1,4 +1,4 @@
-import { buttonVariants } from '@heroui/react'
+import { buttonVariants, Chip } from '@heroui/react'
 import { Link, Outlet } from 'react-router-dom'
 
 import { BellNotificationButton } from '@/components/BellNotificationButton'
@@ -30,10 +30,15 @@ export default function AppLayout() {
     <main className='bg-surface text-foreground min-h-screen'>
       <div className='mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pt-6 pb-12 sm:px-8 lg:gap-10 lg:px-20 lg:pt-10 lg:pb-20'>
         <header className='flex flex-wrap items-center justify-between gap-4'>
-          <Link to={RoutePath.Landing} className='flex flex-col gap-1.5'>
-            <h1 className='text-3xl leading-none font-black tracking-tight uppercase sm:text-4xl lg:text-[43px] lg:leading-10'>
-              Lending
-            </h1>
+          <Link to={RoutePath.Landing} className='flex flex-col gap-2'>
+            <div className='flex items-center gap-2'>
+              <h1 className='text-3xl leading-none font-black tracking-tight uppercase sm:text-4xl lg:text-[43px] lg:leading-10'>
+                Lending
+              </h1>
+              <Chip color='accent' variant='primary' size='sm'>
+                Beta
+              </Chip>
+            </div>
             <span className='text-foreground text-xs font-medium tracking-[0.16em] uppercase'>
               powered by Simplicity
             </span>
