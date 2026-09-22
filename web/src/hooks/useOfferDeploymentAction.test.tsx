@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises'
+
+import initLwk from '@lilbonekit/lwk-web'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { act, useState } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useAcceptOfferAction } from '@/hooks/useAcceptOfferAction'
 import { useCancelOfferAction } from '@/hooks/useCancelOfferAction'
@@ -23,13 +26,21 @@ import { installFakeExtension } from '@/test/appkitEnvironment'
  *
  * A person chooses nothing here: every value was fixed when the offer was created, and the
  * actions that follow declare no parameters. What this gathers is the deployment as the indexer
- * publishes it. What is proved is the joining — the recorded fields under the names the document
- * gives them, the two covenants these actions spend, and no covenant hash sent from a page that
- * cannot compute one.
+ * publishes it, and the covenant hashes compiled from it. What is proved is the joining — the
+ * recorded fields under the names the document gives them, the derived hashes beside them, and
+ * the two covenants these actions spend.
  *
  * Accepting and cancelling are checked together because they send the same request under two
  * names: what separates them is the branch of the covenant that runs, which the document states.
  */
+
+// Deriving the covenant hashes runs the real chain library, which the mocked loader below would
+// otherwise have initialized. Its loader fetches the `.wasm` by URL, so it is handed the bytes.
+beforeAll(async () => {
+  const wasm = await readFile('node_modules/@lilbonekit/lwk-web/lwk_wasm_bg.wasm')
+
+  await initLwk({ module_or_path: wasm })
+})
 
 vi.mock('@/lib/wallet/lwk', () => ({
   scriptPubkeyFromDescriptor: (descriptor: string) => Promise.resolve(`script:${descriptor}`),
@@ -64,6 +75,8 @@ vi.mock('@/api/indexer/methods', () => ({
       utxos: [{ spent_txid: null, txid: OFFER_TXID, utxo_type: 'pending_offer', vout: 5 }],
     }),
 }))
+
+const HASH = /^[0-9a-f]{64}$/
 
 const ACTIONS: [string, () => PerformOfferAction][] = [
   ['AcceptOffer', useAcceptOfferAction],
@@ -164,7 +177,7 @@ async function sentRequest(useAction: () => PerformOfferAction) {
 }
 
 describe.each(ACTIONS)('%s', (action, useAction) => {
-  it('sends the deployment the offer was recorded with, and asks for nothing of a person', async () => {
+  it('sends the deployment the offer was recorded with and its covenant hashes, and asks for nothing of a person', async () => {
     const request = await sentRequest(useAction)
 
     expect(request.action).toBe(action)
@@ -173,13 +186,21 @@ describe.each(ACTIONS)('%s', (action, useAction) => {
       BORROWER_NFT_ASSET_ID: BORROWER_NFT,
       COLLATERAL_AMOUNT: '30000',
       COLLATERAL_ASSET_ID: COLLATERAL_ASSET,
+      CURRENT_DEBT: '2100',
       FACTORY_ASSET_ID: FACTORY_ASSET,
+      FINALIZED_LENDER_VAULT_COV_HASH: expect.stringMatching(HASH),
+      FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH: expect.stringMatching(HASH),
       LENDER_NFT_ASSET_ID: LENDER_NFT,
+      LENDER_VAULT_COV_HASH: expect.stringMatching(HASH),
+      LENDING_COV_SCRIPT_HASH: expect.stringMatching(HASH),
       LOAN_EXPIRATION_TIME: '2580091',
       PRINCIPAL_AMOUNT: '2000',
       PRINCIPAL_ASSET_ID: PRINCIPAL_ASSET,
       PRINCIPAL_INTEREST_RATE: '500',
+      PRINCIPAL_OUTPUT_SCRIPT_HASH: expect.stringMatching(HASH),
       PROTOCOL_FEE_KEEPER_ASSET_ID: PRINCIPAL_ASSET,
+      PROTOCOL_FEE_VAULT_COV_HASH: expect.stringMatching(HASH),
+      ZERO_HASH: '0'.repeat(64),
     })
   })
 

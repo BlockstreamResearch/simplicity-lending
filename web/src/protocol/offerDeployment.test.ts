@@ -1,19 +1,38 @@
-import { describe, expect, it } from 'vitest'
+import { readFile } from 'node:fs/promises'
+
+import initLwk, { AssetId } from '@lilbonekit/lwk-web'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 import type { OfferDetails } from '@/api/indexer/schemas'
+import {
+  buildDerivedLendingOfferProgramParams,
+  buildLendingOfferSpendInfo,
+  loadLendingProgram,
+} from '@/simplicity/lending/program'
+import { bytes32ToHex } from '@/utils/hex'
+import { toBytes32, toUint16, toUint32, toUint64 } from '@/utils/uint'
 
 import { protocolActionRequest } from './actionRequest'
 import manifest from './lending_v3.manifest.json'
 import { offerCovenants, offerDeploymentInput } from './offerDeployment'
 
 /**
- * What an action on an existing offer sends, and what it deliberately does not.
+ * What an action on an existing offer sends.
  *
- * Accepting and cancelling both read the deployment the offer created. The values it was
- * recorded with are published; the covenant script hashes are compiler output and are the
- * wallet's to work out. A hash sent from here would be this dapp's own copy of what the document
- * derives, and nothing anywhere would compare the two.
+ * Every action after creation reads the deployment the offer created: the values it was recorded
+ * with, which the indexer publishes, and the covenant script hashes compiled from them, which are
+ * derived here. The hashes compile the covenants the wallet spends, so they must be the values
+ * the in-page path computes for the same offer.
+ *
+ * The derivation runs the real chain library. Its WebAssembly loader fetches the `.wasm` by URL,
+ * which there is nothing to serve here, so it is handed the bytes instead.
  */
+
+beforeAll(async () => {
+  const wasm = await readFile('node_modules/@lilbonekit/lwk-web/lwk_wasm_bg.wasm')
+
+  await initLwk({ module_or_path: wasm })
+})
 
 const TXID = 'e0154712bfc8e27adc9c87575bbf95fcb31fc5fb6554b833095bc34cb6e6484e'
 
@@ -49,6 +68,57 @@ function indexed(input: {
 
 const UNSPENT = { created_at_height: 1, offer_id: '3', spent_at_height: null, spent_txid: null }
 const PARTICIPANT = { ...UNSPENT, script_pubkey: '0014' + 'ab'.repeat(20) }
+
+const HASH = /^[0-9a-f]{64}$/
+
+const VAULT_AND_SCRIPT_HASHES = [
+  'LENDER_VAULT_COV_HASH',
+  'FINALIZED_LENDER_VAULT_COV_HASH',
+  'PROTOCOL_FEE_VAULT_COV_HASH',
+  'FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH',
+  'PRINCIPAL_OUTPUT_SCRIPT_HASH',
+]
+
+/** Per action, the deployment fields its covenants are compiled from beyond the recorded ten. */
+const FIELDS_READ_BEYOND_THE_RECORDED_VALUES: Record<string, string[]> = {
+  AcceptOffer: [...VAULT_AND_SCRIPT_HASHES, 'LENDING_COV_SCRIPT_HASH'],
+  CancelOffer: [...VAULT_AND_SCRIPT_HASHES, 'LENDING_COV_SCRIPT_HASH'],
+  ClaimLenderVault: ['ZERO_HASH'],
+  LiquidateOffer: VAULT_AND_SCRIPT_HASHES,
+  RepayLoan: [...VAULT_AND_SCRIPT_HASHES, 'ZERO_HASH'],
+}
+
+/** The covenant hashes as the in-page actions compute them, from asset ids read off the chain. */
+function inPageCovenantHashes(offer: typeof OFFER) {
+  const assetIdBytes = (assetId: string) => toBytes32(AssetId.fromString(assetId).toBytes())
+  const offerParameters = {
+    collateralAmount: toUint64(offer.collateralAmount),
+    principalAmount: toUint64(offer.principalAmount),
+    principalInterestRate: toUint16(offer.principalInterestRateBps),
+    loanExpirationTime: toUint32(offer.loanExpirationHeight),
+  }
+  const derived = buildDerivedLendingOfferProgramParams({
+    collateralAssetId: assetIdBytes(offer.collateralAssetId),
+    principalAssetId: assetIdBytes(offer.principalAssetId),
+    borrowerNftAssetId: assetIdBytes(offer.borrowerNftAssetId),
+    lenderNftAssetId: assetIdBytes(offer.lenderNftAssetId),
+    protocolFeeKeeperAssetId: assetIdBytes(offer.protocolFeeKeeperAssetId),
+    offerParameters,
+  })
+  const pendingLendingSpendInfo = buildLendingOfferSpendInfo(
+    loadLendingProgram(derived),
+    offerParameters,
+  )
+
+  return {
+    lenderVaultCovHash: bytes32ToHex(derived.lenderVaultCovHash),
+    finalizedLenderVaultCovHash: bytes32ToHex(derived.finalizedLenderVaultCovHash),
+    protocolFeeVaultCovHash: bytes32ToHex(derived.protocolFeeVaultCovHash),
+    finalizedProtocolFeeVaultCovHash: bytes32ToHex(derived.finalizedProtocolFeeVaultCovHash),
+    principalOutputScriptHash: bytes32ToHex(derived.principalOutputScriptHash),
+    pendingLendingScriptHash: pendingLendingSpendInfo.scriptPubkey.jet_sha256_hex(),
+  }
+}
 
 const SOURCES = {
   'asset_auth.simf': 'asset_auth source',
@@ -128,22 +198,74 @@ describe('the covenants an offer still holds', () => {
 })
 
 describe('an action on an existing offer', () => {
-  it('carries the deployment as it was recorded, and no value a compiler makes', () => {
+  it('carries the deployment as it was recorded, and the covenant hashes compiled from it', () => {
     const { instance } = offerDeploymentInput(OFFER)
 
     expect(instance).toEqual({
       BORROWER_NFT_ASSET_ID: OFFER.borrowerNftAssetId,
       COLLATERAL_AMOUNT: '30000',
       COLLATERAL_ASSET_ID: OFFER.collateralAssetId,
+      CURRENT_DEBT: '2100',
       FACTORY_ASSET_ID: OFFER.factoryAssetId,
+      FINALIZED_LENDER_VAULT_COV_HASH: expect.stringMatching(HASH),
+      FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH: expect.stringMatching(HASH),
       LENDER_NFT_ASSET_ID: OFFER.lenderNftAssetId,
+      LENDER_VAULT_COV_HASH: expect.stringMatching(HASH),
+      LENDING_COV_SCRIPT_HASH: expect.stringMatching(HASH),
       LOAN_EXPIRATION_TIME: '2580091',
       PRINCIPAL_AMOUNT: '2000',
       PRINCIPAL_ASSET_ID: OFFER.principalAssetId,
       PRINCIPAL_INTEREST_RATE: '500',
+      PRINCIPAL_OUTPUT_SCRIPT_HASH: expect.stringMatching(HASH),
       PROTOCOL_FEE_KEEPER_ASSET_ID: OFFER.protocolFeeKeeperAssetId,
+      PROTOCOL_FEE_VAULT_COV_HASH: expect.stringMatching(HASH),
+      ZERO_HASH: '0'.repeat(64),
     })
   })
+
+  it('derives the same covenant hashes the in-page path computes for the same offer', () => {
+    const { instance } = offerDeploymentInput(OFFER)
+    const inPage = inPageCovenantHashes(OFFER)
+
+    expect(instance.LENDER_VAULT_COV_HASH).toBe(inPage.lenderVaultCovHash)
+    expect(instance.FINALIZED_LENDER_VAULT_COV_HASH).toBe(inPage.finalizedLenderVaultCovHash)
+    expect(instance.PROTOCOL_FEE_VAULT_COV_HASH).toBe(inPage.protocolFeeVaultCovHash)
+    expect(instance.FINALIZED_PROTOCOL_FEE_VAULT_COV_HASH).toBe(
+      inPage.finalizedProtocolFeeVaultCovHash,
+    )
+    expect(instance.PRINCIPAL_OUTPUT_SCRIPT_HASH).toBe(inPage.principalOutputScriptHash)
+    expect(instance.LENDING_COV_SCRIPT_HASH).toBe(inPage.pendingLendingScriptHash)
+  })
+
+  it('computes the debt as the document does, multiplying before a flooring division', () => {
+    // 2001 * 333 / 10000 is 66.6333: flooring gives 66, rounding would give 67, and dividing the
+    // rate by 10000 first would give 0.
+    const { instance } = offerDeploymentInput({
+      ...OFFER,
+      principalAmount: 2_001n,
+      principalInterestRateBps: 333,
+    })
+
+    expect(instance.CURRENT_DEBT).toBe('2067')
+  })
+
+  it('keys the lending script hash to the offer terms', () => {
+    const { instance } = offerDeploymentInput(OFFER)
+    const { instance: otherTerms } = offerDeploymentInput({ ...OFFER, principalAmount: 2_001n })
+
+    expect(otherTerms.LENDING_COV_SCRIPT_HASH).not.toBe(instance.LENDING_COV_SCRIPT_HASH)
+  })
+
+  it.each(Object.entries(FIELDS_READ_BEYOND_THE_RECORDED_VALUES))(
+    'carries every field %s reads that the recorded values do not',
+    (_action, fields) => {
+      const { instance } = offerDeploymentInput(OFFER)
+
+      for (const field of fields) {
+        expect(instance[field], field).toMatch(HASH)
+      }
+    },
+  )
 
   it('locates whatever the offer still holds, under the types the document names', () => {
     const { state } = offerDeploymentInput(OFFER)
