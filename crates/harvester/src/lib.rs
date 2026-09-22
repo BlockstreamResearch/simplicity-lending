@@ -5,6 +5,7 @@ use lending_indexer::client::IndexerClient;
 
 use crate::config::Settings;
 
+mod batch;
 pub mod cli;
 pub mod commands;
 pub mod config;

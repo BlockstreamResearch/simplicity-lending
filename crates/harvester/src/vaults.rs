@@ -46,3 +46,13 @@ pub async fn fetch_claimable_vaults(ctx: &AppContext) -> Result<ClaimableVaults,
         items,
     })
 }
+
+pub fn parse_amount(vault: &ProtocolFeeVaultDto) -> Result<u64, HarvesterError> {
+    vault
+        .amount
+        .parse()
+        .map_err(|_| HarvesterError::InvalidAmount {
+            offer_id: vault.offer_id.clone(),
+            amount: vault.amount.clone(),
+        })
+}

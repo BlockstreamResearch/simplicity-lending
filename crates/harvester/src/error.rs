@@ -7,4 +7,7 @@ pub enum HarvesterError {
 
     #[error(transparent)]
     Indexer(#[from] IndexerClientError),
+
+    #[error("invalid protocol-fee vault amount `{amount}` for offer {offer_id}")]
+    InvalidAmount { offer_id: String, amount: String },
 }

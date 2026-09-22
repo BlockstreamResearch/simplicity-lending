@@ -1,4 +1,5 @@
 use crate::AppContext;
+use crate::batch::{self, TxCost};
 use crate::error::HarvesterError;
 use crate::vaults;
 
@@ -32,6 +33,24 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
             "protocol-fee vault"
         );
     }
+
+    let amounts = vaults
+        .items
+        .iter()
+        .map(vaults::parse_amount)
+        .collect::<Result<Vec<_>, _>>()?;
+    let batch = batch::select_profitable(
+        &amounts,
+        TxCost::harvest(ctx.settings.harvest.fee_rate),
+        ctx.settings.harvest.max_vaults_per_tx as usize,
+    );
+
+    tracing::info!(
+        selected = batch.count,
+        total_amount = batch.total_amount,
+        tx_fee = batch.tx_fee,
+        "selected protocol-fee batch"
+    );
 
     Ok(())
 }
