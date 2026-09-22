@@ -1,0 +1,26 @@
+indexer:
+  base_url: "http://127.0.0.1:8000"
+
+esplora:
+  base_url: "https://liquid.network/liquidtestnet/api"
+  network: "liquidtestnet"
+
+schedule:
+  interval_secs: 86400
+
+harvest:
+  min_vault_amount: 0
+  min_batch_total: 0
+  max_vaults_per_tx: 10
+  fee_rate: 1
+  mnemonic: ""
+
+principal_asset: "0000000000000000000000000000000000000000000000000000000000000000"
+keeper_asset: "0000000000000000000000000000000000000000000000000000000000000000"
+
+collector:
+  withdraw_pubkey: "0000000000000000000000000000000000000000000000000000000000000000"
+
+withdraw:
+  mnemonic: ""
+  destination_address: ""

@@ -1792,6 +1792,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "lending-harvester"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "config",
+ "dotenvy",
+ "lending-indexer",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lending-indexer"
 version = "0.1.0"
 dependencies = [

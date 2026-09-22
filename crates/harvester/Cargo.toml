@@ -1,0 +1,27 @@
+[package]
+name = "lending-harvester"
+version = "0.1.0"
+edition = "2024"
+description = "Simplicity Lending protocol-fee harvester"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[[bin]]
+name = "lending-harvester"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive", "env"] }
+config = { version = "0.15.16", default-features = true }
+dotenvy = "0.15"
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+lending-indexer = { path = "../indexer" }
