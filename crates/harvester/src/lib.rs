@@ -10,6 +10,7 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod state;
 mod vaults;
 
 pub struct AppContext {
@@ -24,7 +25,13 @@ impl AppContext {
 }
 
 pub fn configuration_dir() -> PathBuf {
-    std::env::current_dir()
-        .expect("Failed to determine the current directory")
-        .join("configuration")
+    process_dir().join("configuration")
+}
+
+pub fn state_path() -> PathBuf {
+    process_dir().join("state.json")
+}
+
+fn process_dir() -> PathBuf {
+    std::env::current_dir().expect("Failed to determine the current directory")
 }

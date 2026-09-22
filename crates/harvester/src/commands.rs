@@ -1,6 +1,7 @@
 use crate::AppContext;
 use crate::batch::{self, TxCost};
 use crate::error::HarvesterError;
+use crate::state::{self, State};
 use crate::vaults;
 
 pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
@@ -14,6 +15,31 @@ pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
 }
 
 pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
+    let path = crate::state_path();
+    match state::load(&path)? {
+        Some(State {
+            outpoint,
+            pending_txid: Some(pending_txid),
+        }) => {
+            tracing::info!(
+                path = %path.display(),
+                %outpoint,
+                %pending_txid,
+                "skipping harvest while a collector transaction is pending"
+            );
+            return Ok(());
+        }
+        Some(State {
+            outpoint,
+            pending_txid: None,
+        }) => {
+            tracing::info!(path = %path.display(), %outpoint, "loaded collector state");
+        }
+        None => {
+            tracing::info!(path = %path.display(), "collector state is absent");
+        }
+    }
+
     let vaults = vaults::fetch_claimable_vaults(ctx).await?;
 
     tracing::info!(

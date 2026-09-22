@@ -1801,6 +1801,7 @@ dependencies = [
  "dotenvy",
  "lending-indexer",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",

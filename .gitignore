@@ -13,3 +13,7 @@ logs.md
 tmp_vendor
 
 configuration.yaml
+
+# Harvester runtime state (collector outpoint moves after every harvest)
+crates/harvester/state.json
+crates/harvester/state.json.tmp
