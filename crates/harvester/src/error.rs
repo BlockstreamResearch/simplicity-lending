@@ -36,9 +36,44 @@ pub enum HarvesterError {
     )]
     NoBootstrapFunds { principal_asset: String },
 
-    #[error("total bootstrap amount overflows u64")]
+    #[error("amount overflows u64")]
     AmountOverflow,
+
+    #[error("invalid txid `{txid}`")]
+    InvalidTxid { txid: String },
+
+    #[error("invalid protocol-fee vault `{field}` `{value}` for offer {offer_id}")]
+    InvalidVaultField {
+        offer_id: String,
+        field: &'static str,
+        value: String,
+    },
+
+    #[error("collector UTXO {outpoint} was not found")]
+    MissingCollectorUtxo { outpoint: String },
+
+    #[error("transaction {txid} has {count} fee collector outputs")]
+    CollectorOutputs { txid: String, count: usize },
+
+    #[error("protocol-fee vault {outpoint} for offer {offer_id} was not found")]
+    MissingVaultUtxo { offer_id: String, outpoint: String },
+
+    #[error("harvest wallet has no unused keeper UTXO ({asset}) for offer {offer_id}")]
+    MissingKeeperUtxo { offer_id: String, asset: String },
+
+    #[error(
+        "protocol-fee vault {outpoint} for offer {offer_id} holds {on_chain}, indexer reports {indexed}"
+    )]
+    VaultAmountMismatch {
+        offer_id: String,
+        outpoint: String,
+        on_chain: u64,
+        indexed: u64,
+    },
 
     #[error(transparent)]
     Signer(#[from] simplex::signer::SignerError),
+
+    #[error(transparent)]
+    Provider(#[from] simplex::provider::ProviderError),
 }

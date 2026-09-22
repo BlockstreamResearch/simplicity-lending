@@ -1,11 +1,19 @@
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+use std::path::Path;
 use std::str::FromStr;
 
+use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
 use lending_contracts::programs::fee_collector::{FeeCollector, FeeCollectorParameters};
-use simplex::provider::EsploraProvider;
+use lending_contracts::programs::program::SimplexProgram;
+use lending_indexer::api::ProtocolFeeVaultDto;
+use simplex::provider::{EsploraProvider, SimplicityNetwork};
 use simplex::signer::Signer;
-use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::transaction::{FinalTransaction, PartialInput, RequiredSignature};
+use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
+use simplex::transaction::{
+    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
+};
 
 use crate::AppContext;
 use crate::batch::{self, TxCost};
@@ -25,7 +33,7 @@ pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
 
 pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
     let path = crate::state_path();
-    match state::load(&path)? {
+    let collector = match state::load(&path)? {
         Some(State {
             outpoint,
             pending_txid: Some(pending_txid),
@@ -34,20 +42,23 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
                 path = %path.display(),
                 %outpoint,
                 %pending_txid,
-                "skipping harvest while a collector transaction is pending"
+                "waiting for the pending collector transaction"
             );
-            return Ok(());
+            Some(confirm_collector_tx(ctx, &path, &pending_txid)?)
         }
-        Some(State {
-            outpoint,
-            pending_txid: None,
-        }) => {
-            tracing::info!(path = %path.display(), %outpoint, "loaded collector state");
+        Some(state) => {
+            tracing::info!(
+                path = %path.display(),
+                outpoint = %state.outpoint,
+                "loaded collector state"
+            );
+            Some(state)
         }
         None => {
             tracing::info!(path = %path.display(), "collector state is absent");
+            None
         }
-    }
+    };
 
     let vaults = vaults::fetch_claimable_vaults(ctx).await?;
 
@@ -87,7 +98,20 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
         "selected protocol-fee batch"
     );
 
-    Ok(())
+    let Some(collector) = collector else {
+        return Ok(());
+    };
+    if batch.count == 0 {
+        return Ok(());
+    }
+
+    submit_harvest(
+        ctx,
+        &path,
+        &collector,
+        &vaults.items[..batch.count],
+        batch.total_amount,
+    )
 }
 
 pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
@@ -97,16 +121,7 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
     }
 
     let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
-    let withdrawal_pubkey = parse_withdrawal_pubkey(&ctx.settings.collector.withdraw_pubkey)?;
-    let network = ctx.settings.esplora.simplicity_network()?;
-
-    let signer = Signer::new(
-        &ctx.settings.harvest.mnemonic,
-        Box::new(EsploraProvider::new(
-            ctx.settings.esplora.base_url.clone(),
-            network,
-        )),
-    );
+    let signer = harvest_signer(ctx)?;
 
     let funding_utxos = signer.get_utxos_asset(principal_asset)?;
     let total_amount = funding_utxos
@@ -120,10 +135,7 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
         });
     }
 
-    let fee_collector = FeeCollector::new(FeeCollectorParameters {
-        withdrawal_pubkey,
-        network,
-    });
+    let fee_collector = open_fee_collector(ctx)?;
 
     let mut ft = FinalTransaction::new();
     for utxo in funding_utxos {
@@ -153,6 +165,247 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
     );
 
     Ok(())
+}
+
+fn submit_harvest(
+    ctx: &AppContext,
+    path: &Path,
+    state: &State,
+    selected: &[ProtocolFeeVaultDto],
+    total_amount: u64,
+) -> Result<(), HarvesterError> {
+    let signer = harvest_signer(ctx)?;
+    let collector = open_fee_collector(ctx)?;
+    let collector_outpoint = parse_outpoint(&state.outpoint.txid, state.outpoint.vout)?;
+    let collector_utxo = signer
+        .get_provider()?
+        .fetch_scripthash_utxos(&collector.get_script_pubkey())?
+        .into_iter()
+        .find(|utxo| utxo.outpoint == collector_outpoint)
+        .ok_or_else(|| HarvesterError::MissingCollectorUtxo {
+            outpoint: state.outpoint.to_string(),
+        })?;
+
+    if collector_utxo
+        .explicit_amount()
+        .checked_add(total_amount)
+        .is_none()
+    {
+        return Err(HarvesterError::AmountOverflow);
+    }
+
+    let mut transaction = FinalTransaction::new();
+    let mut keepers: HashMap<AssetId, Vec<UTXO>> = HashMap::new();
+    let network = ctx.settings.esplora.simplicity_network()?;
+    let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
+    let change_script = signer.get_address().script_pubkey();
+
+    for vault in selected {
+        let program = finalized_vault(vault, principal_asset, network)?;
+        let indexed_amount = vaults::parse_amount(vault)?;
+        let outpoint = format!("{}:{}", vault.txid, vault.vout);
+        let vault_outpoint = parse_outpoint(&vault.txid, vault.vout)?;
+        let vault_utxo = signer
+            .get_provider()?
+            .fetch_scripthash_utxos(&program.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| utxo.outpoint == vault_outpoint)
+            .ok_or_else(|| HarvesterError::MissingVaultUtxo {
+                offer_id: vault.offer_id.clone(),
+                outpoint: outpoint.clone(),
+            })?;
+
+        let on_chain = vault_utxo.explicit_amount();
+        if on_chain != indexed_amount {
+            return Err(HarvesterError::VaultAmountMismatch {
+                offer_id: vault.offer_id.clone(),
+                outpoint,
+                on_chain,
+                indexed: indexed_amount,
+            });
+        }
+
+        let keeper_utxo = next_keeper(
+            &signer,
+            &mut keepers,
+            program.get_parameters().keeper_asset_id,
+        )?
+        .ok_or_else(|| HarvesterError::MissingKeeperUtxo {
+            offer_id: vault.offer_id.clone(),
+            asset: vault.protocol_fee_keeper_asset.clone(),
+        })?;
+
+        let keeper_amount = keeper_utxo.explicit_amount();
+        let keeper_asset_id = keeper_utxo.explicit_asset();
+        let input_keeper_index = transaction.n_inputs() as u32;
+        let output_keeper_index = transaction.n_outputs() as u32;
+        transaction.add_input(
+            PartialInput::new(keeper_utxo),
+            RequiredSignature::NativeEcdsa,
+        );
+        transaction.add_output(PartialOutput::new(
+            change_script.clone(),
+            keeper_amount,
+            keeper_asset_id,
+        ));
+        program.attach_withdrawing_all(
+            &mut transaction,
+            vault_utxo,
+            input_keeper_index,
+            output_keeper_index,
+        );
+    }
+
+    collector.attach_deposit(&mut transaction, collector_utxo, total_amount);
+
+    let receipt = signer.broadcast(&transaction)?;
+    let txid = receipt.txid().to_string();
+
+    state::save(
+        path,
+        &State {
+            outpoint: state.outpoint.clone(),
+            pending_txid: Some(txid.clone()),
+        },
+    )?;
+
+    tracing::info!(%txid, total_amount, "broadcast harvest transaction");
+
+    let confirmed = confirm_collector_tx(ctx, path, &txid)?;
+    tracing::info!(
+        outpoint = %confirmed.outpoint,
+        path = %path.display(),
+        "harvest transaction confirmed"
+    );
+
+    Ok(())
+}
+
+fn confirm_collector_tx(
+    ctx: &AppContext,
+    path: &Path,
+    pending_txid: &str,
+) -> Result<State, HarvesterError> {
+    let signer = harvest_signer(ctx)?;
+    let collector = open_fee_collector(ctx)?;
+    let txid = Txid::from_str(pending_txid).map_err(|_| HarvesterError::InvalidTxid {
+        txid: pending_txid.to_owned(),
+    })?;
+    let provider = signer.get_provider()?;
+    provider.wait(&txid)?;
+
+    let script = collector.get_script_pubkey();
+    let outputs = provider.fetch_transaction(&txid)?;
+    let vouts: Vec<u32> = outputs
+        .output
+        .iter()
+        .enumerate()
+        .filter(|(_, output)| output.script_pubkey == script)
+        .map(|(index, _)| index as u32)
+        .collect();
+    let &[vout] = vouts.as_slice() else {
+        return Err(HarvesterError::CollectorOutputs {
+            txid: pending_txid.to_owned(),
+            count: vouts.len(),
+        });
+    };
+
+    let confirmed = State {
+        outpoint: Outpoint {
+            txid: pending_txid.to_owned(),
+            vout,
+        },
+        pending_txid: None,
+    };
+    state::save(path, &confirmed)?;
+    Ok(confirmed)
+}
+
+fn finalized_vault(
+    vault: &ProtocolFeeVaultDto,
+    principal_asset: AssetId,
+    network: SimplicityNetwork,
+) -> Result<AssetAuthVault, HarvesterError> {
+    Ok(AssetAuthVault::new_finalized(AssetAuthVaultParameters {
+        vault_asset_id: principal_asset,
+        keeper_asset_id: parse_vault_asset(
+            &vault.offer_id,
+            "protocol_fee_keeper_asset",
+            &vault.protocol_fee_keeper_asset,
+        )?,
+        supplier_asset_id: parse_vault_asset(
+            &vault.offer_id,
+            "borrower_nft_asset",
+            &vault.borrower_nft_asset,
+        )?,
+        supply_goal: parse_vault_u64(&vault.offer_id, "supply_goal", &vault.supply_goal)?,
+        with_keeper_asset_burn: false,
+        with_supplier_asset_burn: false,
+        network,
+    }))
+}
+
+fn next_keeper(
+    signer: &Signer,
+    keepers: &mut HashMap<AssetId, Vec<UTXO>>,
+    asset: AssetId,
+) -> Result<Option<UTXO>, HarvesterError> {
+    if let Entry::Vacant(entry) = keepers.entry(asset) {
+        entry.insert(signer.get_utxos_asset(asset)?);
+    }
+
+    Ok(keepers.get_mut(&asset).and_then(Vec::pop))
+}
+
+fn harvest_signer(ctx: &AppContext) -> Result<Signer, HarvesterError> {
+    let network = ctx.settings.esplora.simplicity_network()?;
+    Ok(Signer::new(
+        &ctx.settings.harvest.mnemonic,
+        Box::new(EsploraProvider::new(
+            ctx.settings.esplora.base_url.clone(),
+            network,
+        )),
+    ))
+}
+
+fn open_fee_collector(ctx: &AppContext) -> Result<FeeCollector, HarvesterError> {
+    Ok(FeeCollector::new(FeeCollectorParameters {
+        withdrawal_pubkey: parse_withdrawal_pubkey(&ctx.settings.collector.withdraw_pubkey)?,
+        network: ctx.settings.esplora.simplicity_network()?,
+    }))
+}
+
+fn parse_outpoint(txid: &str, vout: u32) -> Result<OutPoint, HarvesterError> {
+    let txid = Txid::from_str(txid).map_err(|_| HarvesterError::InvalidTxid {
+        txid: txid.to_owned(),
+    })?;
+    Ok(OutPoint { txid, vout })
+}
+
+fn parse_vault_asset(
+    offer_id: &str,
+    field: &'static str,
+    value: &str,
+) -> Result<AssetId, HarvesterError> {
+    AssetId::from_str(value).map_err(|_| HarvesterError::InvalidVaultField {
+        offer_id: offer_id.to_owned(),
+        field,
+        value: value.to_owned(),
+    })
+}
+
+fn parse_vault_u64(
+    offer_id: &str,
+    field: &'static str,
+    value: &str,
+) -> Result<u64, HarvesterError> {
+    value
+        .parse()
+        .map_err(|_| HarvesterError::InvalidVaultField {
+            offer_id: offer_id.to_owned(),
+            field,
+            value: value.to_owned(),
+        })
 }
 
 fn parse_asset_id(field: &'static str, value: &str) -> Result<AssetId, HarvesterError> {
