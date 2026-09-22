@@ -31,6 +31,15 @@ pub enum HarvesterError {
     #[error("fee collector is already bootstrapped; state already exists at {path}")]
     AlreadyBootstrapped { path: std::path::PathBuf },
 
+    #[error("fee collector is not bootstrapped; state is absent at {path}")]
+    NotBootstrapped { path: std::path::PathBuf },
+
+    #[error("withdraw destination address is not set")]
+    MissingDestination,
+
+    #[error("invalid destination address `{address}`")]
+    InvalidAddress { address: String },
+
     #[error(
         "no principal-asset ({principal_asset}) funds in the harvest wallet to bootstrap the fee collector"
     )]

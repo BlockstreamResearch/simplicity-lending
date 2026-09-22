@@ -40,6 +40,14 @@ pub fn load(path: &Path) -> Result<Option<State>, HarvesterError> {
         })
 }
 
+pub fn remove(path: &Path) -> Result<(), HarvesterError> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(source) if source.kind() == ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(io_error(path, source)),
+    }
+}
+
 pub fn save(path: &Path, state: &State) -> Result<(), HarvesterError> {
     let tmp_path = temporary_path(path);
     if let Err(err) = write_temporary(path, &tmp_path, state) {
@@ -91,7 +99,7 @@ mod tests {
 
     use crate::error::HarvesterError;
 
-    use super::{Outpoint, State, load, save};
+    use super::{Outpoint, State, load, remove, save};
 
     #[test]
     fn roundtrip_replaces_the_previous_file() {
@@ -116,6 +124,27 @@ mod tests {
 
         assert_eq!(load(&path).unwrap().as_ref(), Some(&cleared));
         assert!(!dir.path.join("state.json.tmp").exists());
+    }
+
+    #[test]
+    fn remove_deletes_the_file() {
+        let dir = TempDir::new();
+        let path = dir.path.join("state.json");
+        save(
+            &path,
+            &State {
+                outpoint: Outpoint {
+                    txid: "aa".to_owned(),
+                    vout: 0,
+                },
+                pending_txid: None,
+            },
+        )
+        .unwrap();
+
+        remove(&path).unwrap();
+        assert_eq!(load(&path).unwrap(), None);
+        remove(&path).unwrap();
     }
 
     #[test]

@@ -7,10 +7,10 @@ use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVau
 use lending_contracts::programs::fee_collector::{FeeCollector, FeeCollectorParameters};
 use lending_contracts::programs::program::SimplexProgram;
 use lending_indexer::api::ProtocolFeeVaultDto;
-use simplex::provider::{EsploraProvider, SimplicityNetwork};
+use simplex::provider::{EsploraProvider, ProviderTrait, SimplicityNetwork};
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
+use simplex::simplicityhl::elements::{Address, AssetId, OutPoint, Script, Txid};
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
 };
@@ -44,7 +44,7 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
                 %pending_txid,
                 "waiting for the pending collector transaction"
             );
-            Some(confirm_collector_tx(ctx, &path, &pending_txid)?)
+            settle_pending(ctx, &path, &pending_txid)?
         }
         Some(state) => {
             tracing::info!(
@@ -176,15 +176,7 @@ fn submit_harvest(
 ) -> Result<(), HarvesterError> {
     let signer = harvest_signer(ctx)?;
     let collector = open_fee_collector(ctx)?;
-    let collector_outpoint = parse_outpoint(&state.outpoint.txid, state.outpoint.vout)?;
-    let collector_utxo = signer
-        .get_provider()?
-        .fetch_scripthash_utxos(&collector.get_script_pubkey())?
-        .into_iter()
-        .find(|utxo| utxo.outpoint == collector_outpoint)
-        .ok_or_else(|| HarvesterError::MissingCollectorUtxo {
-            outpoint: state.outpoint.to_string(),
-        })?;
+    let collector_utxo = collector_utxo(&signer, &collector, state)?;
 
     if collector_utxo
         .explicit_amount()
@@ -271,7 +263,9 @@ fn submit_harvest(
 
     tracing::info!(%txid, total_amount, "broadcast harvest transaction");
 
-    let confirmed = confirm_collector_tx(ctx, path, &txid)?;
+    let Some(confirmed) = settle_pending(ctx, path, &txid)? else {
+        return Err(HarvesterError::CollectorOutputs { txid, count: 0 });
+    };
     tracing::info!(
         outpoint = %confirmed.outpoint,
         path = %path.display(),
@@ -281,17 +275,16 @@ fn submit_harvest(
     Ok(())
 }
 
-fn confirm_collector_tx(
+fn settle_pending(
     ctx: &AppContext,
     path: &Path,
     pending_txid: &str,
-) -> Result<State, HarvesterError> {
-    let signer = harvest_signer(ctx)?;
+) -> Result<Option<State>, HarvesterError> {
     let collector = open_fee_collector(ctx)?;
     let txid = Txid::from_str(pending_txid).map_err(|_| HarvesterError::InvalidTxid {
         txid: pending_txid.to_owned(),
     })?;
-    let provider = signer.get_provider()?;
+    let provider = esplora_provider(ctx)?;
     provider.wait(&txid)?;
 
     let script = collector.get_script_pubkey();
@@ -303,22 +296,49 @@ fn confirm_collector_tx(
         .filter(|(_, output)| output.script_pubkey == script)
         .map(|(index, _)| index as u32)
         .collect();
-    let &[vout] = vouts.as_slice() else {
-        return Err(HarvesterError::CollectorOutputs {
+
+    match vouts.as_slice() {
+        [vout] => {
+            let confirmed = State {
+                outpoint: Outpoint {
+                    txid: pending_txid.to_owned(),
+                    vout: *vout,
+                },
+                pending_txid: None,
+            };
+            state::save(path, &confirmed)?;
+            Ok(Some(confirmed))
+        }
+        [] => {
+            state::remove(path)?;
+            tracing::info!(
+                txid = pending_txid,
+                path = %path.display(),
+                "confirmed transaction spent the collector; removed state"
+            );
+            Ok(None)
+        }
+        _ => Err(HarvesterError::CollectorOutputs {
             txid: pending_txid.to_owned(),
             count: vouts.len(),
-        });
-    };
+        }),
+    }
+}
 
-    let confirmed = State {
-        outpoint: Outpoint {
-            txid: pending_txid.to_owned(),
-            vout,
-        },
-        pending_txid: None,
-    };
-    state::save(path, &confirmed)?;
-    Ok(confirmed)
+fn collector_utxo(
+    signer: &Signer,
+    collector: &FeeCollector,
+    state: &State,
+) -> Result<UTXO, HarvesterError> {
+    let outpoint = parse_outpoint(&state.outpoint.txid, state.outpoint.vout)?;
+    signer
+        .get_provider()?
+        .fetch_scripthash_utxos(&collector.get_script_pubkey())?
+        .into_iter()
+        .find(|utxo| utxo.outpoint == outpoint)
+        .ok_or_else(|| HarvesterError::MissingCollectorUtxo {
+            outpoint: state.outpoint.to_string(),
+        })
 }
 
 fn finalized_vault(
@@ -357,15 +377,23 @@ fn next_keeper(
     Ok(keepers.get_mut(&asset).and_then(Vec::pop))
 }
 
-fn harvest_signer(ctx: &AppContext) -> Result<Signer, HarvesterError> {
-    let network = ctx.settings.esplora.simplicity_network()?;
-    Ok(Signer::new(
-        &ctx.settings.harvest.mnemonic,
-        Box::new(EsploraProvider::new(
-            ctx.settings.esplora.base_url.clone(),
-            network,
-        )),
+fn esplora_provider(ctx: &AppContext) -> Result<EsploraProvider, HarvesterError> {
+    Ok(EsploraProvider::new(
+        ctx.settings.esplora.base_url.clone(),
+        ctx.settings.esplora.simplicity_network()?,
     ))
+}
+
+fn signer(ctx: &AppContext, mnemonic: &str) -> Result<Signer, HarvesterError> {
+    Ok(Signer::new(mnemonic, Box::new(esplora_provider(ctx)?)))
+}
+
+fn harvest_signer(ctx: &AppContext) -> Result<Signer, HarvesterError> {
+    signer(ctx, &ctx.settings.harvest.mnemonic)
+}
+
+fn withdraw_signer(ctx: &AppContext) -> Result<Signer, HarvesterError> {
+    signer(ctx, &ctx.settings.withdraw.mnemonic)
 }
 
 fn open_fee_collector(ctx: &AppContext) -> Result<FeeCollector, HarvesterError> {
@@ -423,11 +451,68 @@ fn parse_withdrawal_pubkey(value: &str) -> Result<XOnlyPublicKey, HarvesterError
 }
 
 pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), HarvesterError> {
-    let destination = to.map(str::to_owned).or_else(|| {
-        let configured = ctx.settings.withdraw.destination_address.trim();
-        (!configured.is_empty()).then(|| configured.to_owned())
-    });
+    let destination = destination_script(ctx, to)?;
+    let path = crate::state_path();
+    let state = match state::load(&path)? {
+        None => return Err(HarvesterError::NotBootstrapped { path }),
+        Some(State {
+            outpoint,
+            pending_txid: Some(pending_txid),
+        }) => {
+            tracing::info!(
+                path = %path.display(),
+                %outpoint,
+                %pending_txid,
+                "waiting for the pending collector transaction"
+            );
+            match settle_pending(ctx, &path, &pending_txid)? {
+                Some(state) => state,
+                None => return Ok(()),
+            }
+        }
+        Some(state) => state,
+    };
 
-    tracing::info!(?destination, "withdraw is not implemented");
+    let signer = withdraw_signer(ctx)?;
+    let collector = open_fee_collector(ctx)?;
+    let collector_utxo = collector_utxo(&signer, &collector, &state)?;
+    let amount = collector_utxo.explicit_amount();
+    let asset = collector_utxo.explicit_asset();
+
+    let mut transaction = FinalTransaction::new();
+    collector.attach_withdrawal(&mut transaction, collector_utxo);
+    transaction.add_output(PartialOutput::new(destination, amount, asset));
+
+    let receipt = signer.broadcast(&transaction)?;
+    let txid = receipt.txid().to_string();
+    state::save(
+        &path,
+        &State {
+            outpoint: state.outpoint,
+            pending_txid: Some(txid.clone()),
+        },
+    )?;
+    tracing::info!(%txid, amount, "broadcast withdrawal");
+
+    if settle_pending(ctx, &path, &txid)?.is_some() {
+        return Err(HarvesterError::CollectorOutputs { txid, count: 1 });
+    }
+
     Ok(())
+}
+
+fn destination_script(ctx: &AppContext, to: Option<&str>) -> Result<Script, HarvesterError> {
+    let address = to
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            let configured = ctx.settings.withdraw.destination_address.trim();
+            (!configured.is_empty()).then(|| configured.to_owned())
+        })
+        .ok_or(HarvesterError::MissingDestination)?;
+
+    Address::from_str(&address)
+        .map(|address| address.script_pubkey())
+        .map_err(|_| HarvesterError::InvalidAddress { address })
 }
