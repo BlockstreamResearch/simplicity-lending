@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createBrowserRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom'
 
 import AppLayout from '@/components/AppLayout'
 import { env } from '@/constants/env'
 import { RoutePath } from '@/constants/routes'
 import { AppProviders } from '@/providers/AppProviders'
+import { initAnalytics, trackPageView } from '@/utils/analytics'
 
 import ErrorBoundary from './components/ErrorBoundary'
 import BorrowPage from './pages/Borrow'
@@ -20,6 +21,14 @@ function ProvidersLayout() {
   const [hasEnteredApp, setHasEnteredApp] = useState(() => isAppPath(pathname))
 
   if (!hasEnteredApp && isAppPath(pathname)) setHasEnteredApp(true)
+
+  useEffect(() => {
+    initAnalytics()
+  }, [])
+
+  useEffect(() => {
+    trackPageView(pathname)
+  }, [pathname])
 
   return hasEnteredApp ? (
     <AppProviders>
