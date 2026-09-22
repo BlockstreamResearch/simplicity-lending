@@ -24,4 +24,21 @@ pub enum HarvesterError {
         #[source]
         source: serde_json::Error,
     },
+
+    #[error("invalid `{field}` value `{value}` in configuration")]
+    InvalidSetting { field: &'static str, value: String },
+
+    #[error("fee collector is already bootstrapped; state already exists at {path}")]
+    AlreadyBootstrapped { path: std::path::PathBuf },
+
+    #[error(
+        "no principal-asset ({principal_asset}) funds in the harvest wallet to bootstrap the fee collector"
+    )]
+    NoBootstrapFunds { principal_asset: String },
+
+    #[error("total bootstrap amount overflows u64")]
+    AmountOverflow,
+
+    #[error(transparent)]
+    Signer(#[from] simplex::signer::SignerError),
 }

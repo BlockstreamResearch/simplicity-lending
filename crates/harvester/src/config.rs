@@ -1,6 +1,8 @@
 use serde::Deserialize;
+use simplex::provider::SimplicityNetwork;
 
 use crate::configuration_dir;
+use crate::error::HarvesterError;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Settings {
@@ -23,6 +25,20 @@ pub struct IndexerSettings {
 pub struct EsploraSettings {
     pub base_url: String,
     pub network: String,
+}
+
+impl EsploraSettings {
+    pub fn simplicity_network(&self) -> Result<SimplicityNetwork, HarvesterError> {
+        match self.network.to_lowercase().as_str() {
+            "liquid" => Ok(SimplicityNetwork::Liquid),
+            "liquidtestnet" => Ok(SimplicityNetwork::LiquidTestnet),
+            "regtest" | "elementsregtest" => Ok(SimplicityNetwork::default_regtest()),
+            other => Err(HarvesterError::InvalidSetting {
+                field: "esplora.network",
+                value: other.to_owned(),
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -112,7 +128,9 @@ impl TryFrom<String> for Environment {
 
 #[cfg(test)]
 mod tests {
-    use super::Settings;
+    use simplex::provider::SimplicityNetwork;
+
+    use super::{EsploraSettings, Settings};
 
     #[test]
     fn base_yaml_deserializes() {
@@ -131,5 +149,19 @@ mod tests {
         assert_eq!(settings.harvest.max_vaults_per_tx, 10);
         assert!(settings.collector.outpoint.is_none());
         assert!(settings.withdraw.destination_address.is_empty());
+        assert_eq!(
+            settings.esplora.simplicity_network().unwrap(),
+            SimplicityNetwork::LiquidTestnet
+        );
+    }
+
+    #[test]
+    fn simplicity_network_rejects_unknown_value() {
+        let settings = EsploraSettings {
+            base_url: "http://localhost".to_owned(),
+            network: "mainnet".to_owned(),
+        };
+
+        assert!(settings.simplicity_network().is_err());
     }
 }
