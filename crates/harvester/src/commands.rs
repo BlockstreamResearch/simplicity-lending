@@ -1,12 +1,10 @@
 use crate::AppContext;
 use crate::error::HarvesterError;
+use crate::vaults;
 
 pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
     let interval = ctx.harvest_interval();
-    tracing::info!(
-        interval_secs = interval.as_secs(),
-        "starting harvest loop (not implemented)"
-    );
+    tracing::info!(interval_secs = interval.as_secs(), "starting harvest loop");
 
     loop {
         harvest(ctx).await?;
@@ -15,11 +13,26 @@ pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
 }
 
 pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
+    let vaults = vaults::fetch_claimable_vaults(ctx).await?;
+
     tracing::info!(
-        indexer = %ctx.settings.indexer.base_url,
         principal_asset = %ctx.settings.principal_asset,
-        "harvest is not implemented"
+        total_count = vaults.total_count,
+        total_amount = %vaults.total_amount,
+        fetched = vaults.items.len(),
+        "fetched protocol-fee vaults"
     );
+
+    for vault in &vaults.items {
+        let outpoint = format!("{}:{}", vault.txid, vault.vout);
+        tracing::info!(
+            offer_id = %vault.offer_id,
+            %outpoint,
+            amount = %vault.amount,
+            "protocol-fee vault"
+        );
+    }
+
     Ok(())
 }
 

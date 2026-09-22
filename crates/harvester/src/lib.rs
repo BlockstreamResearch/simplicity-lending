@@ -9,6 +9,7 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod error;
+mod vaults;
 
 pub struct AppContext {
     pub settings: Settings,

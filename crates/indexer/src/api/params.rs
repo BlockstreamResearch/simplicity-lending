@@ -50,7 +50,7 @@ impl OfferSortBy {
 }
 
 pub(crate) const DEFAULT_LIST_LIMIT: u64 = 50;
-pub(crate) const MAX_LIST_LIMIT: u64 = 100;
+pub const MAX_LIST_LIMIT: u64 = 100;
 
 /// Shared offer-list filter query parameters.
 #[derive(Deserialize, Debug, Default)]
