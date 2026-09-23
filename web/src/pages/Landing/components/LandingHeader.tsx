@@ -17,7 +17,7 @@ const SCROLL_EXIT_THRESHOLD = 12
 const MENU_LINKS = [
   { label: 'About Simplicity', href: ABOUT_SIMPLICITY_URL },
   { label: 'Docs', href: 'https://docs.simplicity-lang.org/' },
-  { label: 'GitHub', href: 'https://github.com/BlockstreamResearch/simplicity' },
+  { label: 'GitHub', href: 'https://github.com/BlockstreamResearch/simplicity-lending)' },
   {
     label: 'Community',
     href: 'https://community.simplicity-lang.org/c/share-your-projects/simplicity-lending-protocol/12',
