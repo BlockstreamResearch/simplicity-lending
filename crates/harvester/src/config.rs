@@ -11,7 +11,6 @@ pub struct Settings {
     pub schedule: ScheduleSettings,
     pub harvest: HarvestSettings,
     pub principal_asset: String,
-    pub keeper_asset: String,
     pub collector: CollectorSettings,
     pub withdraw: WithdrawSettings,
 }
@@ -48,10 +47,7 @@ pub struct ScheduleSettings {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HarvestSettings {
-    pub min_vault_amount: u64,
-    pub min_batch_total: u64,
     pub max_vaults_per_tx: u32,
-    pub fee_rate: u64,
     pub mnemonic: String,
 }
 

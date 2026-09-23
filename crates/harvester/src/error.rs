@@ -48,6 +48,12 @@ pub enum HarvesterError {
     #[error("amount overflows u64")]
     AmountOverflow,
 
+    #[error("{wallet} wallet has no L-BTC to pay the transaction fee; {required_fee} is required")]
+    InsufficientFeeFunds {
+        wallet: &'static str,
+        required_fee: u64,
+    },
+
     #[error("invalid txid `{txid}`")]
     InvalidTxid { txid: String },
 
@@ -66,9 +72,6 @@ pub enum HarvesterError {
 
     #[error("protocol-fee vault {outpoint} for offer {offer_id} was not found")]
     MissingVaultUtxo { offer_id: String, outpoint: String },
-
-    #[error("harvest wallet has no unused keeper UTXO ({asset}) for offer {offer_id}")]
-    MissingKeeperUtxo { offer_id: String, asset: String },
 
     #[error(
         "protocol-fee vault {outpoint} for offer {offer_id} holds {on_chain}, indexer reports {indexed}"

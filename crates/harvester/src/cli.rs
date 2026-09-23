@@ -40,11 +40,15 @@ impl Cli {
         let indexer = IndexerClient::new(&settings.indexer.base_url)?;
         let ctx = AppContext { settings, indexer };
 
-        match self.command {
+        let result = match self.command {
             Command::Run => commands::run(&ctx).await,
             Command::Harvest => commands::harvest(&ctx).await,
             Command::Bootstrap => commands::bootstrap(&ctx).await,
             Command::Withdraw { to } => commands::withdraw(&ctx, to.as_deref()).await,
+        };
+        if let Err(error) = &result {
+            tracing::error!("{error}");
         }
+        result
     }
 }

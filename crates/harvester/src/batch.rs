@@ -1,188 +1,225 @@
-/// Stand-in virtual size until the harvest transaction is measured.
-const HARVEST_TX_BASE_VBYTES: u64 = 1_000;
-const HARVEST_TX_PER_VAULT_VBYTES: u64 = 500;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FeeBatch {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeeBatch<T> {
     pub count: usize,
     pub total_amount: u64,
     pub tx_fee: u64,
+    pub transaction: T,
 }
 
-impl FeeBatch {
-    const EMPTY: Self = Self {
-        count: 0,
-        total_amount: 0,
-        tx_fee: 0,
-    };
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct TxCost {
-    base_vbytes: u64,
-    per_vault_vbytes: u64,
-    fee_rate: u64,
-}
-
-impl TxCost {
-    pub fn new(base_vbytes: u64, per_vault_vbytes: u64, fee_rate: u64) -> Self {
-        Self {
-            base_vbytes,
-            per_vault_vbytes,
-            fee_rate,
-        }
-    }
-
-    pub fn harvest(fee_rate: u64) -> Self {
-        Self::new(
-            HARVEST_TX_BASE_VBYTES,
-            HARVEST_TX_PER_VAULT_VBYTES,
-            fee_rate,
-        )
-    }
-
-    fn marginal_fee(self) -> Option<u64> {
-        self.per_vault_vbytes.checked_mul(self.fee_rate)
-    }
-
-    fn fee(self, vault_count: u64) -> Option<u64> {
-        let inputs = self.per_vault_vbytes.checked_mul(vault_count)?;
-        let vbytes = self.base_vbytes.checked_add(inputs)?;
-        vbytes.checked_mul(self.fee_rate)
-    }
-}
-
-pub fn select_profitable(amounts_desc: &[u64], cost: TxCost, max_vaults: usize) -> FeeBatch {
+pub fn select_profitable<T, E>(
+    amounts_desc: &[u64],
+    max_vaults: usize,
+    mut finalize_vault: impl FnMut(usize, u64) -> Result<Option<(T, u64)>, E>,
+) -> Result<Option<FeeBatch<T>>, E> {
     debug_assert!(
         amounts_desc.is_sorted_by(|left, right| left >= right),
         "vault amounts must be sorted descending"
     );
 
-    let Some(marginal) = cost.marginal_fee() else {
-        return FeeBatch::EMPTY;
-    };
-
     let mut total_amount = 0u64;
-    let mut count = 0usize;
+    let mut selected = 0usize;
+    let mut best = None;
+    let mut previous_profit = 0u64;
 
-    for &amount in amounts_desc.iter().take(max_vaults) {
-        if amount <= marginal {
+    for (index, &amount) in amounts_desc.iter().enumerate() {
+        if selected >= max_vaults {
             break;
         }
         let Some(next_total) = total_amount.checked_add(amount) else {
             break;
         };
+        let Some((transaction, tx_fee)) = finalize_vault(index, next_total)? else {
+            continue;
+        };
+
+        let Some(profit) = next_total.checked_sub(tx_fee) else {
+            break;
+        };
+        if profit <= previous_profit {
+            break;
+        }
+
         total_amount = next_total;
-        count += 1;
+        previous_profit = profit;
+        selected += 1;
+        best = Some(FeeBatch {
+            count: selected,
+            total_amount,
+            tx_fee,
+            transaction,
+        });
     }
 
-    if count == 0 {
-        return FeeBatch::EMPTY;
-    }
-
-    let Some(tx_fee) = cost.fee(count as u64) else {
-        return FeeBatch::EMPTY;
-    };
-    if total_amount <= tx_fee {
-        return FeeBatch::EMPTY;
-    }
-
-    FeeBatch {
-        count,
-        total_amount,
-        tx_fee,
-    }
+    Ok(best)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{FeeBatch, TxCost, select_profitable};
+    use std::convert::Infallible;
 
-    fn cost(base: u64, per_vault: u64, fee_rate: u64) -> TxCost {
-        TxCost::new(base, per_vault, fee_rate)
+    use super::{FeeBatch, select_profitable};
+
+    fn select(amounts: &[u64], fees: &[u64], max_vaults: usize) -> Option<FeeBatch<usize>> {
+        select_profitable(amounts, max_vaults, |index, _| {
+            Ok::<_, Infallible>(Some((index + 1, fees[index])))
+        })
+        .unwrap()
     }
 
     #[test]
-    fn takes_prefix_above_marginal_cost() {
-        let batch = select_profitable(&[500, 400, 150, 100, 50], cost(100, 100, 1), 10);
+    fn takes_prefix_while_each_vault_increases_profit() {
+        let batch = select(&[500, 400, 150, 100, 50], &[200, 300, 400, 550, 600], 10);
 
         assert_eq!(
             batch,
-            FeeBatch {
+            Some(FeeBatch {
                 count: 3,
                 total_amount: 1_050,
                 tx_fee: 400,
-            }
+                transaction: 3,
+            })
         );
     }
 
     #[test]
     fn stops_at_max_vaults() {
-        let batch = select_profitable(&[500, 400, 150], cost(100, 100, 1), 2);
+        let batch = select(&[500, 400, 150], &[200, 300, 400], 2);
 
         assert_eq!(
             batch,
-            FeeBatch {
+            Some(FeeBatch {
                 count: 2,
                 total_amount: 900,
                 tx_fee: 300,
-            }
+                transaction: 2,
+            })
         );
     }
 
     #[test]
     fn rejects_prefix_that_does_not_cover_the_base_fee() {
-        let batch = select_profitable(&[500, 400, 150], cost(1_000, 100, 1), 10);
+        let batch = select(&[500, 400, 150], &[1_100, 1_200, 1_300], 10);
 
-        assert_eq!(batch, FeeBatch::EMPTY);
+        assert_eq!(batch, None);
     }
 
     #[test]
     fn rejects_batch_that_only_breaks_even() {
-        let batch = select_profitable(&[100], cost(50, 50, 1), 10);
+        let batch = select(&[100], &[100], 10);
 
-        assert_eq!(batch, FeeBatch::EMPTY);
+        assert_eq!(batch, None);
     }
 
     #[test]
     fn takes_a_single_vault_that_covers_the_transaction() {
-        let batch = select_profitable(&[2_000], cost(1_000, 100, 1), 10);
+        let batch = select(&[2_000], &[1_100], 10);
 
         assert_eq!(
             batch,
-            FeeBatch {
+            Some(FeeBatch {
                 count: 1,
                 total_amount: 2_000,
                 tx_fee: 1_100,
-            }
+                transaction: 1,
+            })
         );
     }
 
     #[test]
-    fn zero_fee_rate_takes_every_positive_amount() {
-        let batch = select_profitable(&[5, 1, 0], cost(1_000, 500, 0), 10);
+    fn stops_when_next_vault_only_covers_its_incremental_fee() {
+        let batch = select(&[500, 100, 50], &[200, 300, 301], 10);
 
         assert_eq!(
             batch,
-            FeeBatch {
-                count: 2,
-                total_amount: 6,
-                tx_fee: 0,
-            }
+            Some(FeeBatch {
+                count: 1,
+                total_amount: 500,
+                tx_fee: 200,
+                transaction: 1,
+            })
         );
     }
 
     #[test]
     fn empty_input_selects_nothing() {
-        let batch = select_profitable(&[], cost(100, 100, 1), 10);
+        let batch = select(&[], &[], 10);
 
-        assert_eq!(batch, FeeBatch::EMPTY);
+        assert_eq!(batch, None);
     }
 
     #[test]
     fn zero_cap_selects_nothing() {
-        let batch = select_profitable(&[2_000], cost(100, 100, 1), 0);
+        let batch = select(&[2_000], &[100], 0);
 
-        assert_eq!(batch, FeeBatch::EMPTY);
+        assert_eq!(batch, None);
+    }
+
+    #[test]
+    fn skips_a_vault_without_a_keeper_and_continues() {
+        let batch = select_profitable(&[500, 400, 150], 10, |index, _| {
+            Ok::<_, Infallible>(match index {
+                0 => Some((1, 200)),
+                1 => None,
+                2 => Some((3, 280)),
+                _ => panic!("vault {index} is past the profitability stop"),
+            })
+        })
+        .unwrap();
+
+        assert_eq!(
+            batch,
+            Some(FeeBatch {
+                count: 2,
+                total_amount: 650,
+                tx_fee: 280,
+                transaction: 3,
+            })
+        );
+    }
+
+    #[test]
+    fn a_skipped_vault_does_not_consume_a_transaction_slot() {
+        let batch = select_profitable(&[500, 400, 300, 200], 2, |index, _| {
+            Ok::<_, Infallible>(match index {
+                0 => None,
+                1 => Some((2, 100)),
+                2 => Some((3, 180)),
+                _ => panic!("selection reached vault {index}"),
+            })
+        })
+        .unwrap();
+
+        assert_eq!(
+            batch,
+            Some(FeeBatch {
+                count: 2,
+                total_amount: 700,
+                tx_fee: 180,
+                transaction: 3,
+            })
+        );
+    }
+
+    #[test]
+    fn stops_at_the_first_unprofitable_vault_after_a_skip() {
+        let batch = select_profitable(&[500, 400, 150, 50], 10, |index, _| {
+            Ok::<_, Infallible>(match index {
+                0 => Some((1, 200)),
+                1 => None,
+                2 => Some((3, 450)),
+                _ => panic!("vault {index} is past the profitability stop"),
+            })
+        })
+        .unwrap();
+
+        assert_eq!(
+            batch,
+            Some(FeeBatch {
+                count: 1,
+                total_amount: 500,
+                tx_fee: 200,
+                transaction: 1,
+            })
+        );
     }
 }

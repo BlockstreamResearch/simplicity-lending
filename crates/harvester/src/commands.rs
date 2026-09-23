@@ -8,15 +8,15 @@ use lending_contracts::programs::fee_collector::{FeeCollector, FeeCollectorParam
 use lending_contracts::programs::program::SimplexProgram;
 use lending_indexer::api::ProtocolFeeVaultDto;
 use simplex::provider::{EsploraProvider, ProviderTrait, SimplicityNetwork};
-use simplex::signer::Signer;
+use simplex::signer::{Signer, SignerError};
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::simplicityhl::elements::{Address, AssetId, OutPoint, Script, Txid};
+use simplex::simplicityhl::elements::{Address, AssetId, OutPoint, Script, Transaction, Txid};
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
 };
 
 use crate::AppContext;
-use crate::batch::{self, TxCost};
+use crate::batch::{self, FeeBatch};
 use crate::error::HarvesterError;
 use crate::state::{self, Outpoint, State};
 use crate::vaults;
@@ -85,11 +85,13 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
         .iter()
         .map(vaults::parse_amount)
         .collect::<Result<Vec<_>, _>>()?;
-    let batch = batch::select_profitable(
-        &amounts,
-        TxCost::harvest(ctx.settings.harvest.fee_rate),
-        ctx.settings.harvest.max_vaults_per_tx as usize,
-    );
+    let Some(collector) = collector else {
+        return Ok(());
+    };
+    let Some(batch) = prepare_harvest(ctx, &collector, &vaults.items, &amounts)? else {
+        tracing::info!("no profitable protocol-fee batch");
+        return Ok(());
+    };
 
     tracing::info!(
         selected = batch.count,
@@ -98,18 +100,11 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
         "selected protocol-fee batch"
     );
 
-    let Some(collector) = collector else {
-        return Ok(());
-    };
-    if batch.count == 0 {
-        return Ok(());
-    }
-
     submit_harvest(
         ctx,
         &path,
         &collector,
-        &vaults.items[..batch.count],
+        batch.transaction,
         batch.total_amount,
     )
 }
@@ -143,7 +138,9 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
     }
     fee_collector.attach_creation(&mut ft, principal_asset, total_amount);
 
-    let receipt = signer.broadcast(&ft)?;
+    let receipt = signer
+        .broadcast(&ft)
+        .map_err(|err| signer_error("harvest", err))?;
     let txid = receipt.txid().to_string();
 
     state::save(
@@ -167,90 +164,112 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
     Ok(())
 }
 
-fn submit_harvest(
+fn prepare_harvest(
     ctx: &AppContext,
-    path: &Path,
     state: &State,
-    selected: &[ProtocolFeeVaultDto],
-    total_amount: u64,
-) -> Result<(), HarvesterError> {
+    vaults: &[ProtocolFeeVaultDto],
+    amounts: &[u64],
+) -> Result<Option<FeeBatch<Transaction>>, HarvesterError> {
     let signer = harvest_signer(ctx)?;
     let collector = open_fee_collector(ctx)?;
     let collector_utxo = collector_utxo(&signer, &collector, state)?;
-
-    if collector_utxo
-        .explicit_amount()
-        .checked_add(total_amount)
-        .is_none()
-    {
-        return Err(HarvesterError::AmountOverflow);
-    }
-
     let mut transaction = FinalTransaction::new();
     let mut keepers: HashMap<AssetId, Vec<UTXO>> = HashMap::new();
     let network = ctx.settings.esplora.simplicity_network()?;
     let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
     let change_script = signer.get_address().script_pubkey();
 
-    for vault in selected {
-        let program = finalized_vault(vault, principal_asset, network)?;
-        let indexed_amount = vaults::parse_amount(vault)?;
-        let outpoint = format!("{}:{}", vault.txid, vault.vout);
-        let vault_outpoint = parse_outpoint(&vault.txid, vault.vout)?;
-        let vault_utxo = signer
-            .get_provider()?
-            .fetch_scripthash_utxos(&program.get_script_pubkey())?
-            .into_iter()
-            .find(|utxo| utxo.outpoint == vault_outpoint)
-            .ok_or_else(|| HarvesterError::MissingVaultUtxo {
-                offer_id: vault.offer_id.clone(),
-                outpoint: outpoint.clone(),
-            })?;
+    batch::select_profitable(
+        amounts,
+        ctx.settings.harvest.max_vaults_per_tx as usize,
+        |index, total_amount| {
+            let vault = &vaults[index];
+            let program = finalized_vault(vault, principal_asset, network)?;
+            let Some(keeper_utxo) = next_keeper(
+                &signer,
+                &mut keepers,
+                program.get_parameters().keeper_asset_id,
+            )?
+            else {
+                tracing::info!(
+                    offer_id = %vault.offer_id,
+                    asset = %vault.protocol_fee_keeper_asset,
+                    "skipping vault: no unused keeper UTXO"
+                );
+                return Ok(None);
+            };
 
-        let on_chain = vault_utxo.explicit_amount();
-        if on_chain != indexed_amount {
-            return Err(HarvesterError::VaultAmountMismatch {
-                offer_id: vault.offer_id.clone(),
-                outpoint,
-                on_chain,
-                indexed: indexed_amount,
-            });
-        }
+            if collector_utxo
+                .explicit_amount()
+                .checked_add(total_amount)
+                .is_none()
+            {
+                return Err(HarvesterError::AmountOverflow);
+            }
 
-        let keeper_utxo = next_keeper(
-            &signer,
-            &mut keepers,
-            program.get_parameters().keeper_asset_id,
-        )?
-        .ok_or_else(|| HarvesterError::MissingKeeperUtxo {
-            offer_id: vault.offer_id.clone(),
-            asset: vault.protocol_fee_keeper_asset.clone(),
-        })?;
+            let indexed_amount = vaults::parse_amount(vault)?;
+            let outpoint = format!("{}:{}", vault.txid, vault.vout);
+            let vault_outpoint = parse_outpoint(&vault.txid, vault.vout)?;
+            let vault_utxo = signer
+                .get_provider()?
+                .fetch_scripthash_utxos(&program.get_script_pubkey())?
+                .into_iter()
+                .find(|utxo| utxo.outpoint == vault_outpoint)
+                .ok_or_else(|| HarvesterError::MissingVaultUtxo {
+                    offer_id: vault.offer_id.clone(),
+                    outpoint: outpoint.clone(),
+                })?;
 
-        let keeper_amount = keeper_utxo.explicit_amount();
-        let keeper_asset_id = keeper_utxo.explicit_asset();
-        let input_keeper_index = transaction.n_inputs() as u32;
-        let output_keeper_index = transaction.n_outputs() as u32;
-        transaction.add_input(
-            PartialInput::new(keeper_utxo),
-            RequiredSignature::NativeEcdsa,
-        );
-        transaction.add_output(PartialOutput::new(
-            change_script.clone(),
-            keeper_amount,
-            keeper_asset_id,
-        ));
-        program.attach_withdrawing_all(
-            &mut transaction,
-            vault_utxo,
-            input_keeper_index,
-            output_keeper_index,
-        );
-    }
+            let on_chain = vault_utxo.explicit_amount();
+            if on_chain != indexed_amount {
+                return Err(HarvesterError::VaultAmountMismatch {
+                    offer_id: vault.offer_id.clone(),
+                    outpoint,
+                    on_chain,
+                    indexed: indexed_amount,
+                });
+            }
 
-    collector.attach_deposit(&mut transaction, collector_utxo, total_amount);
+            let keeper_amount = keeper_utxo.explicit_amount();
+            let keeper_asset_id = keeper_utxo.explicit_asset();
+            let input_keeper_index = transaction.n_inputs() as u32;
+            let output_keeper_index = transaction.n_outputs() as u32;
+            transaction.add_input(
+                PartialInput::new(keeper_utxo),
+                RequiredSignature::NativeEcdsa,
+            );
+            transaction.add_output(PartialOutput::new(
+                change_script.clone(),
+                keeper_amount,
+                keeper_asset_id,
+            ));
+            program.attach_withdrawing_all(
+                &mut transaction,
+                vault_utxo,
+                input_keeper_index,
+                output_keeper_index,
+            );
 
-    let receipt = signer.broadcast(&transaction)?;
+            let mut prefix = transaction.clone();
+            collector.attach_deposit(&mut prefix, collector_utxo.clone(), total_amount);
+            let finalized = signer
+                .finalize(&prefix)
+                .map_err(|err| signer_error("harvest", err))?;
+
+            Ok(Some(finalized))
+        },
+    )
+}
+
+fn submit_harvest(
+    ctx: &AppContext,
+    path: &Path,
+    state: &State,
+    transaction: Transaction,
+    total_amount: u64,
+) -> Result<(), HarvesterError> {
+    let signer = harvest_signer(ctx)?;
+    let receipt = signer.get_provider()?.broadcast_transaction(&transaction)?;
     let txid = receipt.txid().to_string();
 
     state::save(
@@ -388,6 +407,16 @@ fn signer(ctx: &AppContext, mnemonic: &str) -> Result<Signer, HarvesterError> {
     Ok(Signer::new(mnemonic, Box::new(esplora_provider(ctx)?)))
 }
 
+fn signer_error(wallet: &'static str, err: SignerError) -> HarvesterError {
+    match err {
+        SignerError::NotEnoughFunds(required_fee) => HarvesterError::InsufficientFeeFunds {
+            wallet,
+            required_fee,
+        },
+        err => err.into(),
+    }
+}
+
 fn harvest_signer(ctx: &AppContext) -> Result<Signer, HarvesterError> {
     signer(ctx, &ctx.settings.harvest.mnemonic)
 }
@@ -483,7 +512,9 @@ pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), Harveste
     collector.attach_withdrawal(&mut transaction, collector_utxo);
     transaction.add_output(PartialOutput::new(destination, amount, asset));
 
-    let receipt = signer.broadcast(&transaction)?;
+    let receipt = signer
+        .broadcast(&transaction)
+        .map_err(|err| signer_error("withdraw", err))?;
     let txid = receipt.txid().to_string();
     state::save(
         &path,
@@ -515,4 +546,25 @@ fn destination_script(ctx: &AppContext, to: Option<&str>) -> Result<Script, Harv
     Address::from_str(&address)
         .map(|address| address.script_pubkey())
         .map_err(|_| HarvesterError::InvalidAddress { address })
+}
+
+#[cfg(test)]
+mod tests {
+    use simplex::signer::SignerError;
+
+    use super::signer_error;
+    use crate::error::HarvesterError;
+
+    #[test]
+    fn not_enough_funds_reports_the_required_fee() {
+        let error = signer_error("harvest", SignerError::NotEnoughFunds(1_500));
+
+        assert!(matches!(
+            error,
+            HarvesterError::InsufficientFeeFunds {
+                wallet: "harvest",
+                required_fee: 1_500,
+            }
+        ));
+    }
 }
