@@ -28,8 +28,16 @@ pub enum HarvesterError {
     #[error("invalid `{field}` value `{value}` in configuration")]
     InvalidSetting { field: &'static str, value: String },
 
-    #[error("fee collector is already bootstrapped; state already exists at {path}")]
-    AlreadyBootstrapped { path: std::path::PathBuf },
+    #[error("fee collector is already bootstrapped")]
+    AlreadyBootstrapped,
+
+    #[error("`{field}` is empty or not a valid mnemonic")]
+    InvalidMnemonic { field: &'static str },
+
+    #[error(
+        "confirmed transaction {txid} has no output for the recorded fee collector script; collector state was left unchanged"
+    )]
+    CollectorScriptMismatch { txid: String },
 
     #[error("fee collector is not bootstrapped; state is absent at {path}")]
     NotBootstrapped { path: std::path::PathBuf },
@@ -56,6 +64,9 @@ pub enum HarvesterError {
 
     #[error("invalid txid `{txid}`")]
     InvalidTxid { txid: String },
+
+    #[error("saved collector transaction {txid} is not a valid transaction")]
+    InvalidPendingTx { txid: String },
 
     #[error("invalid protocol-fee vault `{field}` `{value}` for offer {offer_id}")]
     InvalidVaultField {

@@ -11,6 +11,10 @@ pub struct State {
     pub outpoint: Outpoint,
     #[serde(default)]
     pub pending_txid: Option<String>,
+    #[serde(default)]
+    pub pending_script: Option<String>,
+    #[serde(default)]
+    pub pending_tx: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,6 +115,8 @@ mod tests {
                 vout: 1,
             },
             pending_txid: Some("bb".to_owned()),
+            pending_script: Some("51".to_owned()),
+            pending_tx: Some("00".to_owned()),
         };
 
         save(&path, &state).unwrap();
@@ -138,6 +144,8 @@ mod tests {
                     vout: 0,
                 },
                 pending_txid: None,
+                pending_script: None,
+                pending_tx: None,
             },
         )
         .unwrap();
@@ -164,6 +172,17 @@ mod tests {
             load(&path).unwrap_err(),
             HarvesterError::InvalidState { .. }
         ));
+    }
+
+    #[test]
+    fn pending_script_defaults_when_absent() {
+        let parsed: State =
+            serde_json::from_str(r#"{"outpoint":{"txid":"aa","vout":0},"pending_txid":"bb"}"#)
+                .unwrap();
+
+        assert_eq!(parsed.pending_script, None);
+        assert_eq!(parsed.pending_tx, None);
+        assert_eq!(parsed.pending_txid.as_deref(), Some("bb"));
     }
 
     struct TempDir {
