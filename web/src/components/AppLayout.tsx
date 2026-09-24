@@ -72,7 +72,7 @@ export default function AppLayout() {
             {env.VITE_NETWORK === 'liquidtestnet' && (
               <a
                 className='text-accent inline-flex items-center gap-1 hover:underline'
-                href='https://liquidtestnet.com/faucet'
+                href={ExternalLink.Faucet}
                 target='_blank'
                 rel='noopener noreferrer'
               >
