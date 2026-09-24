@@ -10,6 +10,7 @@ import {
 } from '@lilbonekit/lwk-web'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -84,10 +85,10 @@ export function useLenderVaultClaim() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     const [lenderVaultTx, lenderNftTx, feeTxs, feeRate] = await Promise.all([
       fetchTransaction(lenderVaultOutpoint),
@@ -104,7 +105,7 @@ export function useLenderVaultClaim() {
     const lenderVaultTxOut = requireTxOut(lenderVaultTx, lenderVaultOutpoint.vout(), 'Lender vault')
     const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     const borrowerNftPreRepayTxOut = requireTxOut(
       borrowerNftPreRepayTx,
@@ -196,12 +197,13 @@ export function useLenderVaultClaim() {
             inputs: {
               '0 Finalized lender vault AssetAuthVault': params.lenderVaultOutpoint,
               '1 Lender NFT (wallet)': params.lenderNftOutpoint,
-              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`2+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
             },
             outputs: {
               '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
               '1 Unlocked principal to recipient': principalRecipient.toString(),
-              'L-BTC change': 'Managed by LWK',
+              [`${NETWORK_CONFIG.collateralAsset.symbol} change`]: 'Managed by LWK',
             },
             assetIds: {
               principalAssetId: principalAsset.toString(),

@@ -97,10 +97,10 @@ export function useRepayOffer() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     const principalWalletUtxos = params.principalOutpoints.map(o =>
       requireWalletUtxo(blindedWalletUtxos, o, 'Principal'),
@@ -123,7 +123,7 @@ export function useRepayOffer() {
       requireTxOut(tx, principalOutpoints[index].vout(), 'Principal'),
     )
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
 
     const collateralAsset = requireExplicitAsset(activeOfferTxOut, 'Active offer')
@@ -283,7 +283,8 @@ export function useRepayOffer() {
               '0 Borrower NFT': params.borrowerNftOutpoint,
               '1 Active offer Lending': params.activeOfferOutpoint,
               '2+ Principal wallet UTXO(s)': params.principalOutpoints.join(', '),
-              'Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
             },
             outputs: {
               '0 Borrower NFT burn': bytesToHex(burnScript.bytes()),
@@ -298,7 +299,8 @@ export function useRepayOffer() {
                 principalChangeAmount > 0n
                   ? `${principalChangeAmount.toString()} to ${walletReceiveAddress.toString()}`
                   : 'None',
-              'L-BTC change': 'Managed by LWK after covenant outputs',
+              [`${NETWORK_CONFIG.collateralAsset.symbol} change`]:
+                'Managed by LWK after covenant outputs',
             },
             assetIds: {
               collateralAssetId: collateralAsset.toString(),

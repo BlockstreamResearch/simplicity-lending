@@ -6,6 +6,7 @@ import { z as zod } from 'zod'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { type ChopUtxoResult, useUtxoChopper } from '@/hooks/useUtxoChopper'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
@@ -48,7 +49,7 @@ const positiveIntegerStringSchema = (label: string) =>
 
 const utxoChopperFormSchema = zod.object({
   fundingOutpoint: outpointSchema('Funding outpoint'),
-  feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
+  feeOutpoints: outpointListSchema(`Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint`),
   pieceAmount: positiveBigIntStringSchema('Piece amount'),
   pieceCount: positiveIntegerStringSchema('Piece count'),
   recipientAddress: zod.string().trim().optional(),
@@ -140,7 +141,7 @@ export default function UtxoChopperDemo() {
       seen.add(assetId)
       options.push({
         id: assetId,
-        label: assetId === policyAssetId ? 'L-BTC' : assetId,
+        label: assetId === policyAssetId ? NETWORK_CONFIG.collateralAsset.symbol : assetId,
       })
     }
     return options
@@ -163,7 +164,10 @@ export default function UtxoChopperDemo() {
         const height = utxo.height()
         const status = height === undefined ? 'mempool' : `height ${height}`
         const assetId = utxo.unblinded().asset().toString()
-        const assetLabel = assetId === policyAssetId ? 'L-BTC' : `${assetId.slice(0, 10)}...`
+        const assetLabel =
+          assetId === policyAssetId
+            ? NETWORK_CONFIG.collateralAsset.symbol
+            : `${assetId.slice(0, 10)}...`
         return {
           id: outpoint,
           label: `${outpoint} | ${utxo.unblinded().value().toString()} units | ${assetLabel} | ${status}`,
@@ -309,8 +313,9 @@ export default function UtxoChopperDemo() {
     <div className='rounded border border-gray-300 bg-white p-4'>
       <div className='font-bold'>UTXO Chopper Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-        Splits one wallet asset UTXO into many smaller wallet outputs. For non-L-BTC assets, add one
-        or more L-BTC fee outpoints.
+        Splits one wallet asset UTXO into many smaller wallet outputs. For non-
+        {NETWORK_CONFIG.collateralAsset.symbol} assets, add one or more{' '}
+        {NETWORK_CONFIG.collateralAsset.symbol} fee outpoints.
       </p>
 
       <div className='mt-4 flex flex-col gap-3'>
@@ -346,11 +351,11 @@ export default function UtxoChopperDemo() {
         />
         {renderTextField({
           name: 'feeOutpoints',
-          label: 'Fee L-BTC outpoint(s)',
+          label: `Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint(s)`,
           placeholder: 'txid:vout, txid:vout, ...',
           description: feeUtxoOptions.length
-            ? `Optional for L-BTC chops. Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
-            : 'Required for non-L-BTC chops; no wallet L-BTC UTXOs loaded',
+            ? `Optional for ${NETWORK_CONFIG.collateralAsset.symbol} chops. Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
+            : `Required for non-${NETWORK_CONFIG.collateralAsset.symbol} chops; no wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs loaded`,
         })}
         {renderTextField({
           name: 'pieceAmount',
@@ -380,14 +385,18 @@ export default function UtxoChopperDemo() {
         <div className='font-semibold'>Chop preview</div>
         <div className='mt-1 grid gap-1 sm:grid-cols-2'>
           <div>Selected funding: {chopPreview.fundingAmount.toString()} units</div>
-          <div>Selected fee L-BTC: {chopPreview.feeInputAmount.toString()} sats</div>
+          <div>
+            Selected fee {NETWORK_CONFIG.collateralAsset.symbol}:{' '}
+            {chopPreview.feeInputAmount.toString()} sats
+          </div>
           <div>Requested outputs: {chopPreview.requestedAmount.toString()} units</div>
           <div>Max pieces before fees: {chopPreview.maxPieces.toString()}</div>
         </div>
         {!chopPreview.ok ? (
           <p className='mt-2 text-amber-700'>
-            Pick a larger funding UTXO, lower piece count/amount, or add fee L-BTC when chopping a
-            non-L-BTC asset.
+            Pick a larger funding UTXO, lower piece count/amount, or add fee{' '}
+            {NETWORK_CONFIG.collateralAsset.symbol} when chopping a non-
+            {NETWORK_CONFIG.collateralAsset.symbol} asset.
           </p>
         ) : null}
       </div>

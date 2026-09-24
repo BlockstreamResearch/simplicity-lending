@@ -9,6 +9,7 @@ import {
 } from '@lilbonekit/lwk-web'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -87,10 +88,10 @@ export function useClaimPrincipal() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     const [principalTx, borrowerNftTx, feeTxs, feeRate] = await Promise.all([
       fetchTransaction(principalOutpoint),
@@ -102,7 +103,7 @@ export function useClaimPrincipal() {
     const principalTxOut = requireTxOut(principalTx, principalOutpoint.vout(), 'Principal')
     const borrowerNftTxOut = requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
 
     const principalAsset = requireExplicitAsset(principalTxOut, 'Principal')
@@ -185,12 +186,13 @@ export function useClaimPrincipal() {
             inputs: {
               '0 Principal AssetAuth': params.principalOutpoint,
               '1 Borrower NFT (wallet)': params.borrowerNftOutpoint,
-              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`2+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
             },
             outputs: {
               '0 Borrower NFT to recipient': borrowerNftRecipient.toString(),
               '1 Unlocked principal to recipient': principalRecipient.toString(),
-              'L-BTC change': 'Managed by LWK',
+              [`${NETWORK_CONFIG.collateralAsset.symbol} change`]: 'Managed by LWK',
             },
             assetIds: {
               principalAssetId: principalAsset.toString(),

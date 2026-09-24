@@ -15,6 +15,7 @@ import {
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { fetchLatestBlockHeight } from '@/api/esplora/methods'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { AssetKind, buildAssetContract, contractHashOrEmpty } from '@/lwk/assetContract'
 import {
   assertExplicitAmount,
@@ -324,7 +325,8 @@ export function useCreateOffer() {
             inputs: {
               '0 FactoryAuth': params.factoryAuthOutpoint,
               '1 IssuanceFactory covenant': params.issuanceFactoryOutpoint,
-              '2+ Collateral LBTC': params.collateralOutpoints.join(', '),
+              [`2+ Collateral ${NETWORK_CONFIG.collateralAsset.symbol}`]:
+                params.collateralOutpoints.join(', '),
               lenderNftIssuanceOutpoint: lenderNftIssuanceOutpointString,
             },
             outputs: {
