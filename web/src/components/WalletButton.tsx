@@ -4,6 +4,7 @@ import { useState } from 'react'
 import CopyButton from '@/components/CopyButton'
 import { ConnectWalletModal } from '@/components/modals/ConnectWalletModal'
 import { UiButton } from '@/components/ui/UiButton'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import type { PolicyAssetDenomination } from '@/providers/assetDenomination/constants'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
 import { useLwk } from '@/providers/lwk/useLwk'
@@ -82,13 +83,13 @@ export function WalletButton({ isDisabled }: { isDisabled?: boolean } = {}) {
                     id='lbtc'
                     className='text-muted hover:text-foreground data-[selected]:bg-surface data-[selected]:text-foreground data-[selected]:shadow-sm justify-center rounded-lg px-3 py-2 text-sm font-semibold transition'
                   >
-                    LBTC
+                    {NETWORK_CONFIG.collateralAsset.symbol}
                   </Tabs.Tab>
                   <Tabs.Tab
                     id='sats'
                     className='text-muted hover:text-foreground data-[selected]:bg-surface data-[selected]:text-foreground data-[selected]:shadow-sm justify-center rounded-lg px-3 py-2 text-sm font-semibold transition'
                   >
-                    Lsats
+                    {NETWORK_CONFIG.policyAssetSatsUnit}
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.Root>

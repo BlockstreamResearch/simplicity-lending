@@ -1,19 +1,19 @@
-import type { ReactNode } from 'react'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 
-import LbtcIcon from '@/components/icons/LbtcIcon'
-import UsdtIcon from '@/components/icons/UsdtIcon'
-
-const UNIT_LOGO: Record<string, ReactNode> = {
-  LBTC: <LbtcIcon className='size-4' />,
-  USDT: <UsdtIcon className='size-4' />,
-}
+const UNIT_ICON = Object.fromEntries(
+  [NETWORK_CONFIG.collateralAsset, NETWORK_CONFIG.principalAsset].map(asset => [
+    asset.symbol,
+    asset.icon,
+  ]),
+)
 
 export function AssetAmount({ value, unit }: { value: string; unit: string }) {
+  const Icon = UNIT_ICON[unit]
   return (
     <>
       {value}
       <span className='text-muted ml-1.5 inline-flex items-center gap-1 text-sm font-medium'>
-        {UNIT_LOGO[unit]}
+        {Icon && <Icon className='size-4' />}
         {unit}
       </span>
     </>

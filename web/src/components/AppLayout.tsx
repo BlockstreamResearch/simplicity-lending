@@ -7,10 +7,9 @@ import { JadeUnlockModal } from '@/components/JadeUnlockModal'
 import OfferActionModal from '@/components/modals/OfferActionModal'
 import { WalletButton } from '@/components/WalletButton'
 import { env } from '@/constants/env'
+import { ExternalLink } from '@/constants/links'
 import { RoutePath } from '@/constants/routes'
 import { useOfferModal } from '@/hooks/useOfferModal'
-
-const ABOUT_SIMPLICITY_URL = 'https://simplicity-lang.org/'
 
 const NAV = [
   { to: RoutePath.Dashboard, label: 'Dashboard' },
@@ -47,7 +46,7 @@ export default function AppLayout() {
           <div className='flex flex-wrap items-center gap-3'>
             <a
               className={buttonVariants({ variant: 'ghost' })}
-              href={ABOUT_SIMPLICITY_URL}
+              href={ExternalLink.AboutSimplicity}
               target='_blank'
               rel='noopener noreferrer'
             >

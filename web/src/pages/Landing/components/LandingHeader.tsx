@@ -7,21 +7,17 @@ import ArrowRightIcon from '@/components/icons/ArrowRightIcon'
 import ArrowSquareOutIcon from '@/components/icons/ArrowSquareOutIcon'
 import MenuIcon from '@/components/icons/MenuIcon'
 import { env } from '@/constants/env'
+import { ExternalLink } from '@/constants/links'
 import { RoutePath } from '@/constants/routes'
 
-const ABOUT_SIMPLICITY_URL = 'https://simplicity-lang.org/'
-const FAUCET_URL = 'https://liquidtestnet.com/faucet'
 const SCROLL_ENTER_THRESHOLD = 40
 const SCROLL_EXIT_THRESHOLD = 12
 
 const MENU_LINKS = [
-  { label: 'About Simplicity', href: ABOUT_SIMPLICITY_URL },
-  { label: 'Docs', href: 'https://docs.simplicity-lang.org/' },
-  { label: 'GitHub', href: 'https://github.com/BlockstreamResearch/simplicity-lending)' },
-  {
-    label: 'Community',
-    href: 'https://community.simplicity-lang.org/c/share-your-projects/simplicity-lending-protocol/12',
-  },
+  { label: 'About Simplicity', href: ExternalLink.AboutSimplicity },
+  { label: 'Docs', href: ExternalLink.Docs },
+  { label: 'GitHub', href: ExternalLink.GitHub },
+  { label: 'Community', href: ExternalLink.Community },
 ]
 
 export function LandingHeader() {
@@ -33,7 +29,7 @@ export function LandingHeader() {
   const menuLinks = useMemo(
     () =>
       env.VITE_NETWORK === 'liquidtestnet'
-        ? [...MENU_LINKS, { label: 'Get test funds', href: FAUCET_URL }]
+        ? [...MENU_LINKS, { label: 'Get test funds', href: ExternalLink.Faucet }]
         : MENU_LINKS,
     [],
   )
@@ -90,7 +86,7 @@ export function LandingHeader() {
           <div className='flex items-center gap-2 sm:gap-3'>
             <a
               className={`${buttonVariants({ variant: 'ghost' })} hidden sm:inline-flex`}
-              href={ABOUT_SIMPLICITY_URL}
+              href={ExternalLink.AboutSimplicity}
               target='_blank'
               rel='noopener noreferrer'
             >
@@ -108,7 +104,7 @@ export function LandingHeader() {
                     '--button-bg-pressed': 'var(--accent-soft-hover)',
                   } as CSSProperties
                 }
-                href={FAUCET_URL}
+                href={ExternalLink.Faucet}
                 target='_blank'
                 rel='noopener noreferrer'
               >
