@@ -1,18 +1,16 @@
 import { buttonVariants } from '@heroui/react'
 import { Link } from 'react-router-dom'
 
+import { ExternalLink } from '@/constants/links'
 import { RoutePath } from '@/constants/routes'
 
 import { LandingContainer } from './LandingContainer'
 
 const NAV = [
-  { label: 'About', href: 'https://simplicity-lang.org/' },
-  { label: 'Docs', href: 'https://docs.simplicity-lang.org/' },
-  { label: 'GitHub', href: 'https://github.com/BlockstreamResearch/simplicity' },
-  {
-    label: 'Community',
-    href: 'https://community.simplicity-lang.org/c/share-your-projects/simplicity-lending-protocol/12',
-  },
+  { label: 'About', href: ExternalLink.AboutSimplicity },
+  { label: 'Docs', href: ExternalLink.Docs },
+  { label: 'GitHub', href: ExternalLink.GitHub },
+  { label: 'Community', href: ExternalLink.Community },
 ]
 
 export function LandingFooter() {

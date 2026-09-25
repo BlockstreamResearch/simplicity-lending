@@ -176,18 +176,20 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
             disabled={jadeConnecting}
             onPress={() => void handleJadeConnect()}
           />
-          <ConnectOptionCard
-            icon={<SeedIcon className='size-5 text-white' />}
-            iconBadgeClassName='bg-accent'
-            title='Seed phrase'
-            subtitle='Paste or generate a 12-word phrase — no hardware needed'
-            badge={
-              <Chip color='warning' variant='soft' size='sm'>
-                Demo only
-              </Chip>
-            }
-            onPress={() => setMode('seed')}
-          />
+          {env.VITE_DEMO_MODE && (
+            <ConnectOptionCard
+              icon={<SeedIcon className='size-5 text-white' />}
+              iconBadgeClassName='bg-accent'
+              title='Seed phrase'
+              subtitle='Paste or generate a 12-word phrase — no hardware needed'
+              badge={
+                <Chip color='warning' variant='soft' size='sm'>
+                  Demo only
+                </Chip>
+              }
+              onPress={() => setMode('seed')}
+            />
+          )}
           {env.VITE_SIDESWAP_WS_URL && (
             <ConnectOptionCard
               icon={<SideSwapIcon className='size-5' />}

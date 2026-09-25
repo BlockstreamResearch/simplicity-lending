@@ -354,7 +354,7 @@ export default function CreateBorrowOfferModal({
       const collateralUtxos = selectByLargestFirst(utxos, collateralBase + feeBudgetSats)
       if (!collateralUtxos) {
         throw new Error(
-          `Insufficient confirmed L-BTC balance for the collateral and a fee reserve of ${formatFeeReserve(feeBudgetSats)}.`,
+          `Insufficient confirmed ${NETWORK_CONFIG.collateralAsset.symbol} balance for the collateral and a fee reserve of ${formatFeeReserve(feeBudgetSats)}.`,
         )
       }
 

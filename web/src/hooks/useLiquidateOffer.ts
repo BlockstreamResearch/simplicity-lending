@@ -87,10 +87,10 @@ export function useLiquidateOffer() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     // TODO: Handle with indexer
     // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction)
@@ -110,7 +110,7 @@ export function useLiquidateOffer() {
     )
     const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
 
     const collateralAsset = requireExplicitAsset(activeOfferTxOut, 'Active offer')
@@ -206,13 +206,14 @@ export function useLiquidateOffer() {
             inputs: {
               '0 Active offer Lending': params.activeOfferOutpoint,
               '1 Lender NFT (wallet)': params.lenderNftOutpoint,
-              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`2+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
               'Create-offer tx (metadata)': params.createOfferTxid,
             },
             outputs: {
               '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
               '1 Unlocked collateral': collateralRecipient.toString(),
-              'L-BTC change': 'Managed by LWK',
+              [`${NETWORK_CONFIG.collateralAsset.symbol} change`]: 'Managed by LWK',
             },
             assetIds: {
               collateralAssetId: collateralAsset.toString(),

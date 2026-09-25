@@ -87,10 +87,10 @@ export function useCancelOffer() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTxs, feeRate] = await Promise.all([
       fetchTransaction(pendingOfferOutpoint),
@@ -108,7 +108,7 @@ export function useCancelOffer() {
     const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
     const borrowerNftTxOut = requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
 
     const collateralAsset = requireExplicitAsset(pendingOfferTxOut, 'Pending offer')
@@ -230,7 +230,13 @@ export function useCancelOffer() {
           requireTxOut(pendingOfferTx, pendingOfferOutpoint.vout(), 'Pending offer'),
           requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT'),
           requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT'),
-          ...feeTxs.map((tx, index) => requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC')),
+          ...feeTxs.map((tx, index) =>
+            requireTxOut(
+              tx,
+              feeOutpoints[index].vout(),
+              `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`,
+            ),
+          ),
         ]
         const finalizedTx = scriptAuthProgram.finalizeTransactionWithSpendInfo(
           txWithLendingWitness,
@@ -250,7 +256,8 @@ export function useCancelOffer() {
               '0 Pending offer Lending': params.pendingOfferOutpoint,
               '1 Lender NFT ScriptAuth': params.lenderNftOutpoint,
               '2 Borrower NFT': params.borrowerNftOutpoint,
-              '3+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`3+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
             },
             outputs: {
               '0 Lender NFT burn': bytesToHex(burnScript.bytes()),

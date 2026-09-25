@@ -1,5 +1,6 @@
 import type { AssetId, WalletTxOut } from '@lilbonekit/lwk-web'
 
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 
 export interface DemoScriptAuthInputSelection {
@@ -34,7 +35,7 @@ export function selectDemoScriptAuthInputs(
 
   if (!fundingUtxo) {
     throw new Error(
-      'Need a confirmed wallet L-BTC UTXO larger than the fee reserve to fund ScriptAuth',
+      `Need a confirmed wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXO larger than the fee reserve to fund ScriptAuth`,
     )
   }
 
@@ -42,7 +43,9 @@ export function selectDemoScriptAuthInputs(
   const authUtxo = lbtcUtxos.find(utxo => utxoToOutpointString(utxo) !== fundingOutpoint)
 
   if (!authUtxo) {
-    throw new Error('Need a second confirmed wallet L-BTC UTXO to use as the ScriptAuth auth input')
+    throw new Error(
+      `Need a second confirmed wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXO to use as the ScriptAuth auth input`,
+    )
   }
 
   return { authUtxo, fundingUtxo }

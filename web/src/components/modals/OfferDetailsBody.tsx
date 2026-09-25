@@ -57,12 +57,12 @@ export default function OfferDetailsBody({
       {
         label: 'Collateral Amount',
         value: formatCollateralDisplay(offer.collateral_amount),
-        tooltip: 'The LBTC you locked as collateral for this loan.',
+        tooltip: `The ${NETWORK_CONFIG.collateralAsset.symbol} you locked as collateral for this loan.`,
       },
       {
         label: 'Loan Amount',
         value: formatPrincipalAmount(offer.principal_amount),
-        tooltip: 'The USDT you borrowed and now repay.',
+        tooltip: `The ${NETWORK_CONFIG.principalAsset.symbol} you borrowed and now repay.`,
       },
       {
         label: 'Expected Earning',

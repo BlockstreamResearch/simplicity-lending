@@ -100,10 +100,10 @@ export function useAcceptOffer() {
       requireWalletUtxo(blindedWalletUtxos, o, 'Principal'),
     )
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTxs, feeRate] = await Promise.all([
       fetchTransaction(pendingOfferOutpoint),
@@ -124,7 +124,7 @@ export function useAcceptOffer() {
       'Borrower NFT reference',
     )
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
 
     const collateralAsset = requireExplicitAsset(pendingOfferTxOut, 'Pending offer')
@@ -391,7 +391,13 @@ export function useAcceptOffer() {
           ...principalTransactions.map((tx, index) =>
             requireTxOut(tx, principalOutpoints[index].vout(), 'Principal input'),
           ),
-          ...feeTxs.map((tx, index) => requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC')),
+          ...feeTxs.map((tx, index) =>
+            requireTxOut(
+              tx,
+              feeOutpoints[index].vout(),
+              `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`,
+            ),
+          ),
         ]
         const finalizedTx = scriptAuthProgram.finalizeTransactionWithSpendInfo(
           txWithLendingWitness,
@@ -411,7 +417,8 @@ export function useAcceptOffer() {
               '0 Pending offer Lending': params.pendingOfferOutpoint,
               '1 Lender NFT ScriptAuth': params.lenderNftOutpoint,
               '2+ Principal wallet UTXO(s)': params.principalOutpoints.join(', '),
-              'Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
               'Reference Borrower NFT': params.borrowerNftReferenceOutpoint,
             },
             outputs: {
@@ -424,7 +431,8 @@ export function useAcceptOffer() {
                 principalChangeAmount > 0n
                   ? `${principalChangeAmount.toString()} to ${walletReceiveAddress.toString()}`
                   : 'None',
-              'L-BTC change': 'Managed by LWK after covenant outputs',
+              [`${NETWORK_CONFIG.collateralAsset.symbol} change`]:
+                'Managed by LWK after covenant outputs',
             },
             assetIds: {
               collateralAssetId: collateralAsset.toString(),
