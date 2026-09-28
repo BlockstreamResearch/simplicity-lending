@@ -15,6 +15,8 @@ pub struct State {
     pub pending_script: Option<String>,
     #[serde(default)]
     pub pending_tx: Option<String>,
+    #[serde(default)]
+    pub closed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +119,7 @@ mod tests {
             pending_txid: Some("bb".to_owned()),
             pending_script: Some("51".to_owned()),
             pending_tx: Some("00".to_owned()),
+            closed: false,
         };
 
         save(&path, &state).unwrap();
@@ -130,6 +133,16 @@ mod tests {
 
         assert_eq!(load(&path).unwrap().as_ref(), Some(&cleared));
         assert!(!dir.path.join("state.json.tmp").exists());
+
+        let closed = State {
+            closed: true,
+            pending_txid: None,
+            pending_script: None,
+            pending_tx: None,
+            ..cleared
+        };
+        save(&path, &closed).unwrap();
+        assert_eq!(load(&path).unwrap().as_ref(), Some(&closed));
     }
 
     #[test]
@@ -146,6 +159,7 @@ mod tests {
                 pending_txid: None,
                 pending_script: None,
                 pending_tx: None,
+                closed: false,
             },
         )
         .unwrap();
@@ -183,6 +197,7 @@ mod tests {
         assert_eq!(parsed.pending_script, None);
         assert_eq!(parsed.pending_tx, None);
         assert_eq!(parsed.pending_txid.as_deref(), Some("bb"));
+        assert!(!parsed.closed);
     }
 
     struct TempDir {

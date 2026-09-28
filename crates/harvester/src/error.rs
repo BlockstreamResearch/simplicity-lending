@@ -42,6 +42,12 @@ pub enum HarvesterError {
     #[error("fee collector is not bootstrapped; state is absent at {path}")]
     NotBootstrapped { path: std::path::PathBuf },
 
+    #[error("collector transaction {txid} is still in the mempool")]
+    PendingInMempool { txid: String },
+
+    #[error("no pending collector transaction to abandon at {path}")]
+    NothingToAbandon { path: std::path::PathBuf },
+
     #[error("withdraw destination address is not set")]
     MissingDestination,
 
@@ -75,8 +81,20 @@ pub enum HarvesterError {
         value: String,
     },
 
-    #[error("collector UTXO {outpoint} was not found")]
+    #[error(
+        "saved collector outpoint {outpoint} is spent and the collector script has no unspent UTXO"
+    )]
     MissingCollectorUtxo { outpoint: String },
+
+    #[error(
+        "saved collector outpoint {outpoint} is spent and the collector script has {count} unspent UTXOs"
+    )]
+    AmbiguousCollectorUtxo { outpoint: String, count: usize },
+
+    #[error(
+        "saved collector outpoint {outpoint} is spent while collector transaction {txid} is still pending"
+    )]
+    PendingCollectorOutpoint { outpoint: String, txid: String },
 
     #[error("transaction {txid} has {count} fee collector outputs")]
     CollectorOutputs { txid: String, count: usize },
