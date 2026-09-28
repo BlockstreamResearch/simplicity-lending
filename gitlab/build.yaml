@@ -32,5 +32,5 @@ build_web:
       VITE_WATERFALLS_RECIPIENT=age1ajng86w5g0qleku0k7eqjre5l7e6qaynjrnlyuc08w3ddu0etdcs379rr3
       VITE_SIDESWAP_WS_URL=wss://api-testnet.sideswap.io/server-connect
       VITE_GA_MEASUREMENT_ID=G-CPMC9XLYJ
-      VITE_PUBLIC_URL=https://lending.dev.blockstream.com
+      VITE_PUBLIC_URL=https://lending.blockstream.com
     REQUIRED_BUILD_ARGS: VITE_API_URL VITE_ESPLORA_BASE_URL VITE_NETWORK VITE_WATERFALLS_URL
