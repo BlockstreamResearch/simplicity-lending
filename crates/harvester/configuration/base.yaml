@@ -10,7 +10,6 @@ schedule:
 
 harvest:
   max_vaults_per_tx: 10
-  mnemonic: ""
 
 principal_asset: "0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -18,5 +17,4 @@ collector:
   withdraw_pubkey: "0000000000000000000000000000000000000000000000000000000000000000"
 
 withdraw:
-  mnemonic: ""
   destination_address: ""

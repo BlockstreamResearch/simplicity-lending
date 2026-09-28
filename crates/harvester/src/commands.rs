@@ -120,7 +120,7 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
         return Err(HarvesterError::AlreadyBootstrapped);
     }
 
-    let network = ctx.settings.esplora.simplicity_network()?;
+    let network = ctx.settings.esplora.simplicity_network();
     let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
     let signer = harvest_signer(ctx)?;
 
@@ -195,7 +195,7 @@ fn prepare_harvest(
     let mut transaction = FinalTransaction::new();
     let mut keepers: HashMap<AssetId, Vec<UTXO>> = HashMap::new();
     let mut attached_keepers: HashMap<AssetId, (u32, u32)> = HashMap::new();
-    let network = ctx.settings.esplora.simplicity_network()?;
+    let network = ctx.settings.esplora.simplicity_network();
     let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
     let change_script = signer.get_address().script_pubkey();
 
@@ -364,7 +364,7 @@ fn settle_pending(
     let txid = Txid::from_str(pending_txid).map_err(|_| HarvesterError::InvalidTxid {
         txid: pending_txid.to_owned(),
     })?;
-    let provider = esplora_provider(ctx)?;
+    let provider = esplora_provider(ctx);
     match tx_presence(&provider, &txid)? {
         TxPresence::InMempool => {
             tracing::info!(
@@ -563,16 +563,16 @@ fn explicit_keeper_utxos(mut utxos: Vec<UTXO>) -> Vec<UTXO> {
     utxos
 }
 
-fn esplora_provider(ctx: &AppContext) -> Result<EsploraProvider, HarvesterError> {
-    Ok(EsploraProvider::new(
+fn esplora_provider(ctx: &AppContext) -> EsploraProvider {
+    EsploraProvider::new(
         ctx.settings.esplora.base_url.clone(),
-        ctx.settings.esplora.simplicity_network()?,
-    ))
+        ctx.settings.esplora.simplicity_network(),
+    )
 }
 
 fn signer(ctx: &AppContext, mnemonic: &str, field: &'static str) -> Result<Signer, HarvesterError> {
     let mnemonic = validate_mnemonic(field, mnemonic)?;
-    Ok(Signer::new(&mnemonic, Box::new(esplora_provider(ctx)?)))
+    Ok(Signer::new(&mnemonic, Box::new(esplora_provider(ctx))))
 }
 
 fn validate_mnemonic(field: &'static str, mnemonic: &str) -> Result<String, HarvesterError> {
@@ -604,7 +604,7 @@ fn withdraw_signer(ctx: &AppContext) -> Result<Signer, HarvesterError> {
 fn open_fee_collector(ctx: &AppContext) -> Result<FeeCollector, HarvesterError> {
     Ok(FeeCollector::new(FeeCollectorParameters {
         withdrawal_pubkey: parse_withdrawal_pubkey(&ctx.settings.collector.withdraw_pubkey)?,
-        network: ctx.settings.esplora.simplicity_network()?,
+        network: ctx.settings.esplora.simplicity_network(),
     }))
 }
 
@@ -670,7 +670,7 @@ pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), Harveste
     let signer = withdraw_signer(ctx)?;
     let collector = open_fee_collector(ctx)?;
     let (collector_utxo, state) = collector_utxo(&path, &signer, &collector, &state)?;
-    let network = ctx.settings.esplora.simplicity_network()?;
+    let network = ctx.settings.esplora.simplicity_network();
     let (transaction, amount) = finalize_withdrawal(
         &signer,
         &collector,
@@ -834,7 +834,7 @@ fn publish(
     transaction: &Transaction,
     script_hex: &str,
 ) -> Result<PendingOutcome, HarvesterError> {
-    let provider = esplora_provider(ctx)?;
+    let provider = esplora_provider(ctx);
     let txid = transaction.txid();
     let pending = State {
         outpoint,
@@ -979,7 +979,7 @@ pub fn abandon(ctx: &AppContext) -> Result<(), HarvesterError> {
     let txid = Txid::from_str(&pending_txid).map_err(|_| HarvesterError::InvalidTxid {
         txid: pending_txid.clone(),
     })?;
-    let provider = esplora_provider(ctx)?;
+    let provider = esplora_provider(ctx);
     match tx_presence(&provider, &txid)? {
         TxPresence::Confirmed => {
             apply_confirmation(ctx, &path, &state, &provider, &txid)?;
