@@ -2,12 +2,20 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import react from '@vitejs/plugin-react'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { checker } from 'vite-plugin-checker'
 
 import { simplicitySourcesPlugin } from './plugins/simplicitySourcesPlugin'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
+
+// Link previews (Telegram, X, Facebook) ignore relative og:image URLs.
+function publicUrlPlugin(publicUrl = ''): Plugin {
+  return {
+    name: 'public-url',
+    transformIndexHtml: html => html.replaceAll('%PUBLIC_URL%', publicUrl.replace(/\/$/, '')),
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -17,6 +25,7 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     plugins: [
+      publicUrlPlugin(configEnv.VITE_PUBLIC_URL),
       simplicitySourcesPlugin({
         configPath: './simplicity-covenants.config.json',
       }),
