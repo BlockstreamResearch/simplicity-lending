@@ -8,6 +8,7 @@ use lending_contracts::programs::fee_collector::{FeeCollector, FeeCollectorParam
 use lending_contracts::programs::program::SimplexProgram;
 use lending_indexer::api::ProtocolFeeVaultDto;
 use serde::Deserialize;
+use simplex::constants::MIN_FEE;
 use simplex::provider::{EsploraProvider, ProviderError, ProviderTrait, SimplicityNetwork};
 use simplex::signer::{Signer, SignerError};
 use simplex::simplicityhl::elements::encode::{deserialize, serialize_hex};
@@ -762,15 +763,33 @@ fn finalize_bootstrap(
         return Ok((transaction, total_amount));
     }
 
+    let confidential_change = funding_utxos
+        .iter()
+        .any(|utxo| !utxo.txout.asset.is_explicit() || !utxo.txout.value.is_explicit())
+        .then(|| {
+            PartialOutput::new(
+                signer.get_address().script_pubkey(),
+                MIN_FEE,
+                principal_asset,
+            )
+            .with_blinding_key(signer.get_blinding_public_key())
+        });
+    let change_amount = confidential_change
+        .as_ref()
+        .map_or(0, |output| output.amount);
+
     let mut reserved = 0u64;
     loop {
-        if total_amount <= reserved {
+        let Some(kept) = reserved.checked_add(change_amount) else {
+            return Err(HarvesterError::AmountOverflow);
+        };
+        if total_amount <= kept {
             return Err(HarvesterError::InsufficientFeeFunds {
                 wallet: "harvest",
-                required_fee: reserved,
+                required_fee: kept,
             });
         }
-        let pool_amount = total_amount - reserved;
+        let pool_amount = total_amount - kept;
 
         let mut transaction = FinalTransaction::new();
         for utxo in &funding_utxos {
@@ -780,6 +799,9 @@ fn finalize_bootstrap(
             );
         }
         fee_collector.attach_creation(&mut transaction, principal_asset, pool_amount);
+        if let Some(change) = confidential_change.clone() {
+            transaction.add_output(change);
+        }
 
         match signer.finalize(&transaction) {
             Ok((transaction, _fee)) => return Ok((transaction, pool_amount)),
