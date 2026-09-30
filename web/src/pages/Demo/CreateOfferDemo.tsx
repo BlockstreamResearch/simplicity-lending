@@ -235,7 +235,8 @@ export default function CreateOfferDemo() {
       <div className='font-bold'>Create Offer Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
         Builds one offer creation transaction: FactoryAuth input, IssuanceFactory covenant input,
-        and one or more LBTC collateral inputs. Borrower account UTXOs are entered manually.
+        and one or more {NETWORK_CONFIG.collateralAsset.symbol} collateral inputs. Borrower account
+        UTXOs are entered manually.
       </p>
 
       <div className='mt-4 flex flex-col gap-3'>
@@ -257,11 +258,11 @@ export default function CreateOfferDemo() {
         })}
         {renderTextField({
           name: 'collateralOutpoints',
-          label: 'Collateral LBTC outpoint(s)',
+          label: `Collateral ${NETWORK_CONFIG.collateralAsset.symbol} outpoint(s)`,
           placeholder: 'txid:vout, txid:vout, ...',
           description: collateralUtxoOptions.length
             ? `Available: ${collateralUtxoOptions.map(option => option.label).join(' | ')}`
-            : 'No wallet LBTC UTXOs loaded',
+            : `No wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs loaded`,
         })}
 
         {renderTextField({
@@ -305,7 +306,7 @@ export default function CreateOfferDemo() {
           loadingText='Refreshing...'
           onPress={refreshWalletUtxos}
         >
-          Refresh LBTC UTXOs
+          Refresh {NETWORK_CONFIG.collateralAsset.symbol} UTXOs
         </UiButton>
         <UiButton
           isDisabled={connectionStatus !== 'ready'}

@@ -1,6 +1,8 @@
 import type { ComponentType, SVGProps } from 'react'
 
 import LbtcIcon from '@/components/icons/LbtcIcon'
+import TestAssetIcon from '@/components/icons/TestAssetIcon'
+import TestnetLbtcIcon from '@/components/icons/TestnetLbtcIcon'
 import UsdtIcon from '@/components/icons/UsdtIcon'
 import { env, type NetworkName } from '@/constants/env'
 
@@ -17,6 +19,8 @@ export interface NetworkConfig {
   collateralAsset: ConfigAsset
   principalAsset: ConfigAsset
   protocolFeeAsset: ConfigAsset
+  /** Display unit for the policy asset's base unit (sats). */
+  policyAssetSatsUnit: string
 }
 
 // Which asset plays the collateral vs principal role, per network. Covenants
@@ -42,29 +46,30 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
       symbol: 'USDT',
       icon: UsdtIcon,
     },
+    policyAssetSatsUnit: 'Lsats',
   },
   liquidtestnet: {
     collateralAsset: {
       id: '144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49',
       decimals: 8,
-      symbol: 'LBTC',
-      icon: LbtcIcon,
+      symbol: 'tL-BTC',
+      icon: TestnetLbtcIcon,
     },
-    // TEST asset used as the principal on testnet (in place of USDT) — see the offer demos.
-    // Labeled TEST-USDT and given the USDT icon so it reads clearly as "this is what USDT
-    // looks like here" instead of an unfamiliar token.
+    // liquidtestnet.com's "Testnet Asset" (ticker TEST) stands in for USDT as the principal.
+    // Labeled and iconed as its own asset so it isn't mistaken for real USDT.
     principalAsset: {
       id: '38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5',
       decimals: 3,
-      symbol: 'TEST-USDT',
-      icon: UsdtIcon,
+      symbol: 'TEST',
+      icon: TestAssetIcon,
     },
     protocolFeeAsset: {
       id: '38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5',
       decimals: 3,
-      symbol: 'TEST-USDT',
-      icon: UsdtIcon,
+      symbol: 'TEST',
+      icon: TestAssetIcon,
     },
+    policyAssetSatsUnit: 'tLsats',
   },
   regtest: {
     collateralAsset: {
@@ -85,6 +90,7 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
       symbol: 'USDT',
       icon: UsdtIcon,
     },
+    policyAssetSatsUnit: 'Lsats',
   },
 }
 

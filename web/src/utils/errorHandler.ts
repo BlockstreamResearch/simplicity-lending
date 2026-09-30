@@ -20,7 +20,7 @@ function describeInsufficientAsset(message: string): string | null {
   const amount = BigInt(match[1].replaceAll(',', ''))
   const assetId = match[2].toLowerCase()
   if (assetId === NETWORK_CONFIG.collateralAsset.id.toLowerCase()) {
-    return `Insufficient L-BTC balance: missing ${formatFeeReserve(amount)}.`
+    return `Insufficient ${NETWORK_CONFIG.collateralAsset.symbol} balance: missing ${formatFeeReserve(amount)}.`
   }
 
   const asset = [NETWORK_CONFIG.principalAsset, NETWORK_CONFIG.protocolFeeAsset].find(

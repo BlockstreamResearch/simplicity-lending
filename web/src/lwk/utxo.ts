@@ -1,5 +1,6 @@
 import type { AssetId, WalletTxOut } from '@lilbonekit/lwk-web'
 
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { formatFeeReserve } from '@/utils/format'
 import { selectByLargestFirst } from '@/utils/utxo'
 
@@ -119,7 +120,7 @@ export function selectFeeUtxos(
   })
   if (!selected) {
     throw new Error(
-      `Insufficient confirmed L-BTC balance. This transaction requires a fee reserve of ${formatFeeReserve(budgetSats)}.`,
+      `Insufficient confirmed ${NETWORK_CONFIG.collateralAsset.symbol} balance. This transaction requires a fee reserve of ${formatFeeReserve(budgetSats)}.`,
     )
   }
   return selected.map(item => item.utxo)

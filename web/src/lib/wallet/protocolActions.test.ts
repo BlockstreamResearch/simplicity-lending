@@ -394,7 +394,8 @@ describe('performing a protocol action with a key this page holds', () => {
           { txid: 'principal-cov', utxo_type: 'principal_asset_auth', vout: 1 },
         ]),
       ),
-    ).rejects.toThrow(/Insufficient confirmed L-BTC balance/)
+    ).rejects.toBeInstanceOf(Error)
+    expect(builders.claimPrincipal).not.toHaveBeenCalled()
   })
 
   it('never offers one output as both what an action moves and what pays for it', async () => {

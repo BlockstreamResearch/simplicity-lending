@@ -35,7 +35,7 @@ const acceptOfferFormSchema = zod.object({
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
   borrowerNftReferenceOutpoint: outpointSchema('Borrower NFT reference outpoint'),
   principalOutpoints: outpointListSchema('Principal outpoint'),
-  feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
+  feeOutpoints: outpointListSchema(`Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint`),
 })
 
 type AcceptOfferForm = zod.input<typeof acceptOfferFormSchema>
@@ -254,11 +254,11 @@ export default function AcceptOfferDemo() {
         })}
         {renderTextField({
           name: 'feeOutpoints',
-          label: 'Fee L-BTC outpoint(s)',
+          label: `Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint(s)`,
           placeholder: 'txid:vout, txid:vout, ...',
           description: feeUtxoOptions.length
             ? `Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
-            : 'No wallet L-BTC UTXOs loaded',
+            : `No wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs loaded`,
         })}
       </div>
 

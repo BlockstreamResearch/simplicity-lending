@@ -1,10 +1,9 @@
 import { buttonVariants } from '@heroui/react'
 
+import { ExternalLink } from '@/constants/links'
+
 import { LandingContainer } from './LandingContainer'
 import { Reveal } from './Reveal'
-
-const NOTIFY_FORM_URL =
-  'https://docs.google.com/forms/d/e/1FAIpQLSeY0vxIRrWz7QU-5V2FHmLKdK-JwmV5ZJlUY0qNBBw-NEajUQ/viewform?usp=sharing&ouid=102090179835098963155'
 
 export function GetStarted() {
   return (
@@ -20,7 +19,7 @@ export function GetStarted() {
         <Reveal delay={0.15}>
           <a
             className={buttonVariants({ variant: 'primary' })}
-            href={NOTIFY_FORM_URL}
+            href={ExternalLink.NotifyForm}
             target='_blank'
             rel='noopener noreferrer'
           >

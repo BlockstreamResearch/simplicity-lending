@@ -17,6 +17,7 @@ import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { AssetKind, buildAssetContract, contractHashOrEmpty } from '@/lwk/assetContract'
 import type { UpdatedPset } from '@/lwk/transaction'
 import {
@@ -102,7 +103,7 @@ export function useBorrowerAccount() {
 
     if (!feeUtxo) {
       throw new Error(
-        `Need a confirmed wallet L-BTC UTXO larger than ${formatFeeReserve(BORROWER_ACCOUNT_FEE_RESERVE_SATS)} to cover the borrower account fee reserve.`,
+        `Need a confirmed wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXO larger than ${formatFeeReserve(BORROWER_ACCOUNT_FEE_RESERVE_SATS)} to cover the borrower account fee reserve.`,
       )
     }
 

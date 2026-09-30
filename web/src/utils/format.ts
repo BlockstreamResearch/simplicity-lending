@@ -1,3 +1,5 @@
+import { NETWORK_CONFIG } from '@/constants/network-config'
+
 const MINUTES_PER_BLOCK = 1 // Liquid ~1 min/block
 const MINUTES_PER_HOUR = 60
 const MINUTES_PER_DAY = 1440
@@ -22,7 +24,7 @@ export function formatAmount(amount: bigint, decimals: number): string {
 }
 
 export function formatFeeReserve(amountSats: bigint): string {
-  return `${amountSats.toLocaleString(GROUP_LOCALE)} Lsats`
+  return `${amountSats.toLocaleString(GROUP_LOCALE)} ${NETWORK_CONFIG.policyAssetSatsUnit}`
 }
 
 // blocks remaining → "Expired" / "~Xm" / "~Xh" / ">Xd".

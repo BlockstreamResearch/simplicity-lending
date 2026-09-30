@@ -19,7 +19,7 @@ export function getPolicyAssetUnit(
   denomination: PolicyAssetDenomination,
   asset: ConfigAsset = NETWORK_CONFIG.collateralAsset,
 ): string {
-  return denomination === 'sats' ? 'Lsats' : asset.symbol
+  return denomination === 'sats' ? NETWORK_CONFIG.policyAssetSatsUnit : asset.symbol
 }
 
 export function getAssetUnit(denomination: PolicyAssetDenomination, asset: ConfigAsset): string {

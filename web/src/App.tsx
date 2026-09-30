@@ -1,9 +1,11 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { createBrowserRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom'
 
 import AppLayout from '@/components/AppLayout'
 import { env } from '@/constants/env'
 import { RoutePath } from '@/constants/routes'
 import { AppProviders } from '@/providers/AppProviders'
+import { initAnalytics, trackPageView } from '@/utils/analytics'
 
 import ErrorBoundary from './components/ErrorBoundary'
 import BorrowPage from './pages/Borrow'
@@ -13,49 +15,77 @@ import DesignSystemPage from './pages/DesignSystem'
 import LandingPage from './pages/Landing'
 import SupplyPage from './pages/Supply'
 
+function ProvidersLayout() {
+  const { pathname } = useLocation()
+  // Once true, stays true: keeps providers mounted so the wallet session is not lost
+  const [hasEnteredApp, setHasEnteredApp] = useState(() => isAppPath(pathname))
+
+  if (!hasEnteredApp && isAppPath(pathname)) setHasEnteredApp(true)
+
+  useEffect(() => {
+    initAnalytics()
+  }, [])
+
+  useEffect(() => {
+    trackPageView(pathname)
+  }, [pathname])
+
+  return hasEnteredApp ? (
+    <AppProviders>
+      <Outlet />
+    </AppProviders>
+  ) : (
+    <Outlet />
+  )
+}
+
+function isAppPath(pathname: string) {
+  return pathname === RoutePath.Dashboard || pathname.startsWith(`${RoutePath.Dashboard}/`)
+}
+
 const router = createBrowserRouter([
   {
-    path: RoutePath.Landing,
-    element: <LandingPage />,
-    errorElement: <ErrorBoundary />,
-  },
-  {
-    path: RoutePath.Dashboard,
-    element: <AppLayout />,
+    element: <ProvidersLayout />,
     errorElement: <ErrorBoundary />,
     children: [
       {
-        index: true,
-        element: <DashboardPage />,
+        path: RoutePath.Landing,
+        element: <LandingPage />,
       },
       {
-        path: RoutePath.Borrow,
-        element: <BorrowPage />,
+        path: RoutePath.Dashboard,
+        element: <AppLayout />,
+        children: [
+          {
+            index: true,
+            element: <DashboardPage />,
+          },
+          {
+            path: RoutePath.Borrow,
+            element: <BorrowPage />,
+          },
+          {
+            path: RoutePath.Supply,
+            element: <SupplyPage />,
+          },
+          ...(env.DEV
+            ? [
+                {
+                  path: RoutePath.DesignSystem,
+                  element: <DesignSystemPage />,
+                },
+                {
+                  path: RoutePath.Demo,
+                  element: <DemoPage />,
+                },
+              ]
+            : []),
+        ],
       },
-      {
-        path: RoutePath.Supply,
-        element: <SupplyPage />,
-      },
-      ...(env.DEV
-        ? [
-            {
-              path: RoutePath.DesignSystem,
-              element: <DesignSystemPage />,
-            },
-            {
-              path: RoutePath.Demo,
-              element: <DemoPage />,
-            },
-          ]
-        : []),
     ],
   },
 ])
 
 export default function App() {
-  return (
-    <AppProviders>
-      <RouterProvider router={router} />
-    </AppProviders>
-  )
+  return <RouterProvider router={router} />
 }
