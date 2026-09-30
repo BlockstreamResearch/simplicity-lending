@@ -11,6 +11,8 @@ pub mod commands;
 pub mod config;
 pub mod error;
 pub mod state;
+#[cfg(test)]
+pub(crate) mod test_utils;
 mod vaults;
 
 pub struct AppContext {

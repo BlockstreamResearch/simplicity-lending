@@ -1,5 +1,6 @@
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Write};
+use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -31,6 +32,24 @@ impl std::fmt::Display for Outpoint {
     }
 }
 
+#[must_use = "the collector state stays locked until this value is dropped"]
+pub struct StateLock {
+    _file: File,
+}
+
+pub fn lock(path: &Path) -> Result<StateLock, HarvesterError> {
+    let lock_path = lock_path(path);
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|source| io_error(&lock_path, source))?;
+    lock_exclusive(&file).map_err(|source| io_error(&lock_path, source))?;
+    Ok(StateLock { _file: file })
+}
+
 pub fn load(path: &Path) -> Result<Option<State>, HarvesterError> {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
@@ -44,14 +63,6 @@ pub fn load(path: &Path) -> Result<Option<State>, HarvesterError> {
             path: path.to_path_buf(),
             source,
         })
-}
-
-pub fn remove(path: &Path) -> Result<(), HarvesterError> {
-    match std::fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(source) if source.kind() == ErrorKind::NotFound => Ok(()),
-        Err(source) => Err(io_error(path, source)),
-    }
 }
 
 pub fn save(path: &Path, state: &State) -> Result<(), HarvesterError> {
@@ -83,6 +94,24 @@ fn write_temporary(path: &Path, tmp_path: &Path, state: &State) -> Result<(), Ha
     Ok(())
 }
 
+fn lock_exclusive(file: &File) -> std::io::Result<()> {
+    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+fn lock_path(path: &Path) -> PathBuf {
+    let name = path
+        .file_name()
+        .unwrap_or(std::ffi::OsStr::new("state.json"));
+    let mut lock_name = name.to_os_string();
+    lock_name.push(".lock");
+    path.with_file_name(lock_name)
+}
+
 fn temporary_path(path: &Path) -> PathBuf {
     let name = path
         .file_name()
@@ -101,11 +130,10 @@ fn io_error(path: &Path, source: std::io::Error) -> HarvesterError {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
-
     use crate::error::HarvesterError;
+    use crate::test_utils::TempDir;
 
-    use super::{Outpoint, State, load, remove, save};
+    use super::{Outpoint, State, load, lock, save};
 
     #[test]
     fn roundtrip_replaces_the_previous_file() {
@@ -146,27 +174,15 @@ mod tests {
     }
 
     #[test]
-    fn remove_deletes_the_file() {
+    fn lock_can_be_taken_again_after_it_is_dropped() {
         let dir = TempDir::new();
         let path = dir.path.join("state.json");
-        save(
-            &path,
-            &State {
-                outpoint: Outpoint {
-                    txid: "aa".to_owned(),
-                    vout: 0,
-                },
-                pending_txid: None,
-                pending_script: None,
-                pending_tx: None,
-                closed: false,
-            },
-        )
-        .unwrap();
 
-        remove(&path).unwrap();
-        assert_eq!(load(&path).unwrap(), None);
-        remove(&path).unwrap();
+        let held = lock(&path).unwrap();
+        assert!(dir.path.join("state.json.lock").exists());
+        drop(held);
+
+        let _again = lock(&path).unwrap();
     }
 
     #[test]
@@ -198,28 +214,5 @@ mod tests {
         assert_eq!(parsed.pending_tx, None);
         assert_eq!(parsed.pending_txid.as_deref(), Some("bb"));
         assert!(!parsed.closed);
-    }
-
-    struct TempDir {
-        path: std::path::PathBuf,
-    }
-
-    impl TempDir {
-        fn new() -> Self {
-            static NEXT: AtomicU64 = AtomicU64::new(0);
-            let n = NEXT.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "lending-harvester-state-{}-{n}",
-                std::process::id()
-            ));
-            std::fs::create_dir_all(&path).unwrap();
-            Self { path }
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.path);
-        }
     }
 }

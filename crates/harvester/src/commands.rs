@@ -14,7 +14,9 @@ use simplex::signer::{Signer, SignerError};
 use simplex::simplicityhl::elements::encode::{deserialize, serialize_hex};
 use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::simplicityhl::elements::{Address, AssetId, OutPoint, Script, Transaction, Txid};
+use simplex::simplicityhl::elements::{
+    Address, AssetId, OutPoint, Script, Sequence, Transaction, Txid,
+};
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
 };
@@ -25,6 +27,8 @@ use crate::config::CollectorSettings;
 use crate::error::HarvesterError;
 use crate::state::{self, Outpoint, State};
 use crate::vaults;
+
+const BOOTSTRAP_AMOUNT: u64 = 1_000;
 
 pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
     let interval = ctx.harvest_interval();
@@ -45,23 +49,21 @@ pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
 
 pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
     let path = crate::state_path();
+    let _lock = state::lock(&path)?;
     let collector = match load_collector(ctx)? {
-        Some(state) => match settle_pending(ctx, &path, &state)? {
+        Some(state) => match settle_pending(ctx, &path, &state, CollectorOp::Harvest)? {
             PendingOutcome::Ready(state) => {
                 tracing::info!(
                     path = %path.display(),
                     outpoint = %state.outpoint,
                     "loaded collector state"
                 );
-                Some(state)
+                state
             }
             PendingOutcome::Waiting => return Err(pending_in_mempool(&state)),
-            PendingOutcome::Spent => return Ok(()),
+            PendingOutcome::Spent => return Err(HarvesterError::NotBootstrapped { path }),
         },
-        None => {
-            tracing::info!(path = %path.display(), "collector state is absent");
-            None
-        }
+        None => return Err(HarvesterError::NotBootstrapped { path }),
     };
 
     let vaults = vaults::fetch_claimable_vaults(ctx).await?;
@@ -74,24 +76,11 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
         "fetched protocol-fee vaults"
     );
 
-    for vault in &vaults.items {
-        let outpoint = format!("{}:{}", vault.txid, vault.vout);
-        tracing::info!(
-            offer_id = %vault.offer_id,
-            %outpoint,
-            amount = %vault.amount,
-            "protocol-fee vault"
-        );
-    }
-
     let amounts = vaults
         .items
         .iter()
         .map(vaults::parse_amount)
         .collect::<Result<Vec<_>, _>>()?;
-    let Some(collector) = collector else {
-        return Ok(());
-    };
     let Some((batch, collector)) =
         prepare_harvest(ctx, &path, &collector, &vaults.items, &amounts)?
     else {
@@ -117,6 +106,7 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
 
 pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
     let path = crate::state_path();
+    let _lock = state::lock(&path)?;
     if load_collector(ctx)?.is_some() {
         return Err(HarvesterError::AlreadyBootstrapped);
     }
@@ -131,7 +121,7 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
         .try_fold(0u64, |acc, utxo| acc.checked_add(utxo.amount()))
         .ok_or(HarvesterError::AmountOverflow)?;
 
-    if funding_utxos.is_empty() || total_amount == 0 {
+    if total_amount < BOOTSTRAP_AMOUNT {
         return Err(HarvesterError::NoBootstrapFunds {
             principal_asset: ctx.settings.principal_asset.clone(),
         });
@@ -142,9 +132,9 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
         &signer,
         &fee_collector,
         principal_asset,
-        funding_utxos,
-        total_amount,
-        principal_asset == network.policy_asset(),
+        network.policy_asset(),
+        &ctx.settings.principal_asset,
+        &funding_utxos,
     )?;
     let script = fee_collector.get_script_pubkey().to_hex();
     let txid = transaction.txid().to_string();
@@ -193,14 +183,16 @@ fn prepare_harvest(
     let signer = harvest_signer(ctx)?;
     let collector = open_fee_collector(ctx)?;
     let (collector_utxo, state) = collector_utxo(path, &signer, &collector, state)?;
-    let mut transaction = FinalTransaction::new();
+    let mut transaction = new_transaction();
     let mut keepers: HashMap<AssetId, Vec<UTXO>> = HashMap::new();
     let mut attached_keepers: HashMap<AssetId, (u32, u32)> = HashMap::new();
     let network = ctx.settings.esplora.simplicity_network();
     let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
+    let policy_asset = network.policy_asset();
+    let min_fee = fee_floor(&state, policy_asset)?;
     let change_script = signer.get_address().script_pubkey();
 
-    let selection = if principal_asset == network.policy_asset() {
+    let selection = if principal_asset == policy_asset {
         Selection::Profitable
     } else {
         Selection::All
@@ -214,12 +206,13 @@ fn prepare_harvest(
             let vault = &vaults[index];
             let program = finalized_vault(vault, principal_asset, network)?;
             let keeper_asset = program.get_parameters().keeper_asset_id;
-            let has_utxo = if attached_keepers.contains_key(&keeper_asset) {
+            let wallet_has_utxo = if attached_keepers.contains_key(&keeper_asset) {
                 false
             } else {
                 keeper_available(&signer, &mut keepers, keeper_asset)?
             };
-            if choose_keeper(&attached_keepers, has_utxo, keeper_asset) == KeeperChoice::Missing {
+            let keeper_choice = choose_keeper(&attached_keepers, wallet_has_utxo, keeper_asset);
+            if keeper_choice == KeeperChoice::Missing {
                 tracing::info!(
                     offer_id = %vault.offer_id,
                     asset = %vault.protocol_fee_keeper_asset,
@@ -236,7 +229,7 @@ fn prepare_harvest(
                 return Err(HarvesterError::AmountOverflow);
             }
 
-            let indexed_amount = vaults::parse_amount(vault)?;
+            let indexed_amount = amounts[index];
             let outpoint = format!("{}:{}", vault.txid, vault.vout);
             let vault_outpoint = parse_outpoint(&vault.txid, vault.vout)?;
             let Some(vault_utxo) = signer
@@ -265,19 +258,14 @@ fn prepare_harvest(
                 return Ok(Step::Skip);
             }
 
-            let (input_keeper_index, output_keeper_index) =
-                if let Some(&(input_index, output_index)) = attached_keepers.get(&keeper_asset) {
-                    (input_index, output_index)
-                } else {
-                    let Some(keeper_utxo) = next_keeper(&signer, &mut keepers, keeper_asset)?
-                    else {
-                        tracing::info!(
-                            offer_id = %vault.offer_id,
-                            asset = %vault.protocol_fee_keeper_asset,
-                            "skipping vault: no keeper UTXO"
-                        );
-                        return Ok(Step::Skip);
-                    };
+            let (input_keeper_index, output_keeper_index) = match keeper_choice {
+                KeeperChoice::Reuse {
+                    input_index,
+                    output_index,
+                } => (input_index, output_index),
+                KeeperChoice::Attach => {
+                    let keeper_utxo = next_keeper(&signer, &mut keepers, keeper_asset)?
+                        .expect("explicit keeper UTXO is cached");
                     let keeper_amount = keeper_utxo.explicit_amount();
                     let keeper_asset_id = keeper_utxo.explicit_asset();
                     let input_keeper_index = transaction.n_inputs() as u32;
@@ -294,7 +282,9 @@ fn prepare_harvest(
                     attached_keepers
                         .insert(keeper_asset, (input_keeper_index, output_keeper_index));
                     (input_keeper_index, output_keeper_index)
-                };
+                }
+                KeeperChoice::Missing => unreachable!("missing keeper already skipped"),
+            };
             program.attach_withdrawing_all(
                 &mut transaction,
                 vault_utxo,
@@ -304,11 +294,15 @@ fn prepare_harvest(
 
             let mut prefix = transaction.clone();
             collector.attach_deposit(&mut prefix, collector_utxo.clone(), total_amount);
+            attach_fee_floor(&mut prefix, policy_asset, min_fee);
             match signer.finalize(&prefix) {
-                Ok((transaction, tx_fee)) => Ok(Step::Ready {
-                    transaction,
-                    tx_fee,
-                }),
+                Ok((transaction, _)) => {
+                    let tx_fee = transaction.fee_in(policy_asset);
+                    Ok(Step::Ready {
+                        transaction,
+                        tx_fee,
+                    })
+                }
                 Err(SignerError::NotEnoughFunds(required_fee)) => {
                     Ok(Step::Stop(HarvesterError::InsufficientFeeFunds {
                         wallet: "harvest",
@@ -358,6 +352,7 @@ fn settle_pending(
     ctx: &AppContext,
     path: &Path,
     state: &State,
+    op: CollectorOp,
 ) -> Result<PendingOutcome, HarvesterError> {
     let Some(pending_txid) = state.pending_txid.as_deref() else {
         return Ok(PendingOutcome::Ready(state.clone()));
@@ -368,15 +363,45 @@ fn settle_pending(
     let provider = esplora_provider(ctx);
     match tx_presence(&provider, &txid)? {
         TxPresence::InMempool => {
-            tracing::info!(
-                txid = pending_txid,
-                "collector transaction is still in the mempool"
-            );
-            Ok(PendingOutcome::Waiting)
+            if replace_underpriced(state, &provider, op)? {
+                tracing::info!(
+                    txid = pending_txid,
+                    "replacing underpriced collector transaction"
+                );
+                Ok(PendingOutcome::Ready(state.clone()))
+            } else {
+                tracing::info!(
+                    txid = pending_txid,
+                    "collector transaction is still in the mempool"
+                );
+                Ok(PendingOutcome::Waiting)
+            }
         }
         TxPresence::Confirmed => apply_confirmation(ctx, path, state, &provider, &txid),
-        TxPresence::Absent => rebroadcast_pending(ctx, path, state, &provider, &txid),
+        TxPresence::Absent => settle_absent(path, state, op),
     }
+}
+
+fn settle_absent(
+    path: &Path,
+    state: &State,
+    op: CollectorOp,
+) -> Result<PendingOutcome, HarvesterError> {
+    let txid = state.pending_txid.as_deref().unwrap_or_default();
+    if saved_transaction(state)?
+        .as_ref()
+        .and_then(|transaction| pending_op(state, transaction))
+        == Some(op)
+    {
+        tracing::warn!(
+            txid,
+            "collector transaction left the mempool; building a replacement"
+        );
+        return Ok(PendingOutcome::Ready(state.clone()));
+    }
+
+    tracing::warn!(txid, "pending collector transaction was dropped");
+    finish_drop(path, state)
 }
 
 fn apply_confirmation(
@@ -552,13 +577,6 @@ fn cache_explicit_keepers(
     Ok(())
 }
 
-/// Vault authorization reads the explicit asset and amount of the keeper input.
-///
-/// `Signer::get_utxos_asset` also returns unblinded confidential UTXOs of the
-/// same asset, appended after the explicit ones. `UTXO::asset` and
-/// `UTXO::amount` expose those unblinded values, but the transaction input
-/// stays confidential and the covenant rejects it. `explicit_amount` panics on
-/// that output, so confidential UTXOs are dropped before `Vec::pop`.
 fn explicit_keeper_utxos(mut utxos: Vec<UTXO>) -> Vec<UTXO> {
     utxos.retain(|utxo| utxo.txout.asset.is_explicit() && utxo.txout.value.is_explicit());
     utxos
@@ -659,9 +677,10 @@ fn parse_withdrawal_pubkey(value: &str) -> Result<XOnlyPublicKey, HarvesterError
 pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), HarvesterError> {
     let destination = destination_script(ctx, to)?;
     let path = crate::state_path();
+    let _lock = state::lock(&path)?;
     let state = match load_collector(ctx)? {
         None => return Err(HarvesterError::NotBootstrapped { path }),
-        Some(state) => match settle_pending(ctx, &path, &state)? {
+        Some(state) => match settle_pending(ctx, &path, &state, CollectorOp::Withdraw)? {
             PendingOutcome::Ready(state) => state,
             PendingOutcome::Waiting => return Err(pending_in_mempool(&state)),
             PendingOutcome::Spent => return Ok(()),
@@ -671,13 +690,14 @@ pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), Harveste
     let signer = withdraw_signer(ctx)?;
     let collector = open_fee_collector(ctx)?;
     let (collector_utxo, state) = collector_utxo(&path, &signer, &collector, &state)?;
-    let network = ctx.settings.esplora.simplicity_network();
+    let policy_asset = ctx.settings.esplora.simplicity_network().policy_asset();
     let (transaction, amount) = finalize_withdrawal(
         &signer,
         &collector,
         collector_utxo,
         destination,
-        network.policy_asset(),
+        policy_asset,
+        fee_floor(&state, policy_asset)?,
     )?;
     let pending_script = collector.get_script_pubkey().to_hex();
     tracing::info!(txid = %transaction.txid(), amount, "submitting withdrawal");
@@ -697,120 +717,110 @@ fn finalize_withdrawal(
     collector_utxo: UTXO,
     destination: Script,
     policy_asset: AssetId,
+    min_fee: u64,
 ) -> Result<(Transaction, u64), HarvesterError> {
     let pool_amount = collector_utxo.explicit_amount();
     let asset = collector_utxo.explicit_asset();
-
-    if asset != policy_asset {
-        let mut transaction = FinalTransaction::new();
-        collector.attach_withdrawal(&mut transaction, collector_utxo);
-        transaction.add_output(PartialOutput::new(destination, pool_amount, asset));
-        let (transaction, _fee) = signer
-            .finalize(&transaction)
-            .map_err(|err| signer_error("withdraw", err))?;
-        return Ok((transaction, pool_amount));
-    }
-
-    let fee_rate = signer
-        .get_provider()
-        .map_err(|err| signer_error("withdraw", err))?
-        .fetch_fee_rate(1)?;
-    let mut reserved = simplex::constants::MIN_FEE;
-    loop {
-        if pool_amount <= reserved {
-            return Err(HarvesterError::InsufficientFeeFunds {
-                wallet: "withdraw",
-                required_fee: reserved,
-            });
-        }
-        let recipient_amount = pool_amount - reserved;
-
-        let mut transaction = FinalTransaction::new();
-        collector.attach_withdrawal(&mut transaction, collector_utxo.clone());
-        transaction.add_output(PartialOutput::new(
-            destination.clone(),
-            recipient_amount,
-            asset,
-        ));
-
-        match signer.finalize_strict(&transaction, fee_rate) {
-            Ok((transaction, _)) => return Ok((transaction, recipient_amount)),
-            Err(SignerError::NotEnoughFeeAmount(_, required)) if required > reserved => {
-                reserved = required;
-            }
-            Err(err) => return Err(signer_error("withdraw", err)),
-        }
-    }
+    let mut transaction = new_transaction();
+    collector.attach_withdrawal(&mut transaction, collector_utxo);
+    transaction.add_output(PartialOutput::new(destination, pool_amount, asset));
+    attach_fee_floor(&mut transaction, policy_asset, min_fee);
+    let (transaction, _fee) = signer
+        .finalize(&transaction)
+        .map_err(|err| signer_error("withdraw", err))?;
+    Ok((transaction, pool_amount))
 }
 
 fn finalize_bootstrap(
     signer: &Signer,
     fee_collector: &FeeCollector,
     principal_asset: AssetId,
-    funding_utxos: Vec<UTXO>,
-    total_amount: u64,
-    pays_fee_from_principal: bool,
+    policy_asset: AssetId,
+    principal_name: &str,
+    funding_utxos: &[UTXO],
 ) -> Result<(Transaction, u64), HarvesterError> {
-    if !pays_fee_from_principal {
-        let mut transaction = FinalTransaction::new();
-        for utxo in funding_utxos {
+    let mut transaction = new_transaction();
+    let mut change_output = None;
+    let pool_amount = if principal_asset == policy_asset {
+        BOOTSTRAP_AMOUNT
+    } else {
+        let selected = select_bootstrap_utxos(funding_utxos, principal_name)?;
+        let total = selected
+            .iter()
+            .try_fold(0u64, |acc, utxo| acc.checked_add(utxo.amount()))
+            .ok_or(HarvesterError::AmountOverflow)?;
+        let confidential = selected.iter().any(is_confidential);
+        let (pool_amount, change) = bootstrap_split(total, confidential);
+        for utxo in selected {
             transaction.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
         }
-        fee_collector.attach_creation(&mut transaction, principal_asset, total_amount);
-        let (transaction, _fee) = signer
-            .finalize(&transaction)
-            .map_err(|err| signer_error("harvest", err))?;
-        return Ok((transaction, total_amount));
-    }
-
-    let confidential_change = funding_utxos
-        .iter()
-        .any(|utxo| !utxo.txout.asset.is_explicit() || !utxo.txout.value.is_explicit())
-        .then(|| {
-            PartialOutput::new(
+        if change > 0 {
+            let mut output = PartialOutput::new(
                 signer.get_address().script_pubkey(),
-                MIN_FEE,
+                change,
                 principal_asset,
-            )
-            .with_blinding_key(signer.get_blinding_public_key())
-        });
-    let change_amount = confidential_change
-        .as_ref()
-        .map_or(0, |output| output.amount);
-
-    let mut reserved = 0u64;
-    loop {
-        let Some(kept) = reserved.checked_add(change_amount) else {
-            return Err(HarvesterError::AmountOverflow);
-        };
-        if total_amount <= kept {
-            return Err(HarvesterError::InsufficientFeeFunds {
-                wallet: "harvest",
-                required_fee: kept,
-            });
-        }
-        let pool_amount = total_amount - kept;
-
-        let mut transaction = FinalTransaction::new();
-        for utxo in &funding_utxos {
-            transaction.add_input(
-                PartialInput::new(utxo.clone()),
-                RequiredSignature::NativeEcdsa,
             );
-        }
-        fee_collector.attach_creation(&mut transaction, principal_asset, pool_amount);
-        if let Some(change) = confidential_change.clone() {
-            transaction.add_output(change);
-        }
-
-        match signer.finalize(&transaction) {
-            Ok((transaction, _fee)) => return Ok((transaction, pool_amount)),
-            Err(SignerError::NotEnoughFunds(required)) if required > reserved => {
-                reserved = required;
+            if confidential {
+                output = output.with_blinding_key(signer.get_blinding_public_key());
             }
-            Err(err) => return Err(signer_error("harvest", err)),
+            change_output = Some(output);
+        }
+        pool_amount
+    };
+
+    fee_collector.attach_creation(&mut transaction, principal_asset, pool_amount);
+    if let Some(output) = change_output {
+        transaction.add_output(output);
+    }
+
+    let (transaction, _fee) = signer
+        .finalize(&transaction)
+        .map_err(|err| signer_error("harvest", err))?;
+    Ok((transaction, pool_amount))
+}
+
+fn select_bootstrap_utxos(
+    funding_utxos: &[UTXO],
+    principal_asset: &str,
+) -> Result<Vec<UTXO>, HarvesterError> {
+    let mut utxos = funding_utxos.to_vec();
+    utxos.sort_by_key(UTXO::amount);
+
+    if let Some(index) = utxos
+        .iter()
+        .position(|utxo| utxo.amount() >= BOOTSTRAP_AMOUNT)
+    {
+        return Ok(vec![utxos.swap_remove(index)]);
+    }
+
+    let mut selected = Vec::new();
+    let mut total = 0u64;
+    for utxo in utxos {
+        total = total
+            .checked_add(utxo.amount())
+            .ok_or(HarvesterError::AmountOverflow)?;
+        selected.push(utxo);
+        if total >= BOOTSTRAP_AMOUNT {
+            return Ok(selected);
         }
     }
+
+    Err(HarvesterError::NoBootstrapFunds {
+        principal_asset: principal_asset.to_owned(),
+    })
+}
+
+fn bootstrap_split(total: u64, confidential: bool) -> (u64, u64) {
+    let change = total.saturating_sub(BOOTSTRAP_AMOUNT);
+    if change == 0 || confidential || change >= BOOTSTRAP_AMOUNT {
+        (BOOTSTRAP_AMOUNT, change)
+    } else {
+        (total, 0)
+    }
+}
+
+fn is_confidential(utxo: &UTXO) -> bool {
+    !utxo.txout.asset.is_explicit() || !utxo.txout.value.is_explicit()
 }
 
 fn load_collector(ctx: &AppContext) -> Result<Option<State>, HarvesterError> {
@@ -856,6 +866,7 @@ fn publish(
     transaction: &Transaction,
     script_hex: &str,
 ) -> Result<PendingOutcome, HarvesterError> {
+    let previous = state::load(path)?;
     let provider = esplora_provider(ctx);
     let txid = transaction.txid();
     let pending = State {
@@ -870,88 +881,88 @@ fn publish(
     match provider.broadcast_transaction(transaction) {
         Ok(_) => {
             tracing::info!(txid = %txid, "broadcast collector transaction");
-        }
-        Err(ProviderError::BroadcastRejected { message, .. }) if already_known(&message) => {
-            tracing::info!(txid = %txid, "collector transaction is already known");
-        }
-        Err(err @ ProviderError::BroadcastRejected { .. }) => {
-            tracing::warn!(txid = %txid, error = %err, "collector broadcast was rejected");
-            finish_drop(path, &pending)?;
-            return Err(err.into());
-        }
-        Err(err) => return Err(err.into()),
-    }
-
-    settle_pending(ctx, path, &pending)
-}
-
-fn rebroadcast_pending(
-    ctx: &AppContext,
-    path: &Path,
-    state: &State,
-    provider: &EsploraProvider,
-    txid: &Txid,
-) -> Result<PendingOutcome, HarvesterError> {
-    let pending_txid = txid.to_string();
-    let Some(raw) = state.pending_tx.as_deref() else {
-        tracing::warn!(
-            txid = %pending_txid,
-            "pending collector transaction is absent and has no saved payload"
-        );
-        return finish_drop(path, state);
-    };
-
-    let transaction = decode_raw_transaction(raw, &pending_txid)?;
-    match provider.broadcast_transaction(&transaction) {
-        Ok(_) => {
-            tracing::info!(txid = %pending_txid, "rebroadcast pending collector transaction");
             Ok(PendingOutcome::Waiting)
         }
-        Err(ProviderError::BroadcastRejected { message, .. }) if already_known(&message) => {
-            follow_known(ctx, path, state, provider, txid)
-        }
-        Err(ProviderError::BroadcastRejected { message, .. }) => match tx_presence(provider, txid)?
-        {
-            TxPresence::Confirmed => apply_confirmation(ctx, path, state, provider, txid),
-            TxPresence::InMempool => {
-                tracing::info!(
-                    txid = %pending_txid,
-                    "collector transaction is still in the mempool"
-                );
-                Ok(PendingOutcome::Waiting)
-            }
-            TxPresence::Absent => {
-                tracing::warn!(
-                    txid = %pending_txid,
-                    reason = %message,
-                    "pending collector transaction was dropped"
-                );
-                finish_drop(path, state)
+        Err(ProviderError::BroadcastRejected {
+            message,
+            status,
+            url,
+        }) => match follow_broadcast(ctx, path, &pending, &provider, &txid, &message)? {
+            Followed::Live(outcome) => Ok(outcome),
+            Followed::Dropped => {
+                restore_live_previous(path, &provider, previous.as_ref(), &pending)?;
+                Err(ProviderError::BroadcastRejected {
+                    message,
+                    status,
+                    url,
+                }
+                .into())
             }
         },
         Err(err) => Err(err.into()),
     }
 }
 
-fn follow_known(
+fn restore_live_previous(
+    path: &Path,
+    provider: &EsploraProvider,
+    previous: Option<&State>,
+    published: &State,
+) -> Result<(), HarvesterError> {
+    let Some(previous) = previous else {
+        return Ok(());
+    };
+    let Some(txid) = previous.pending_txid.as_deref() else {
+        return Ok(());
+    };
+    if published.pending_txid.as_deref() == Some(txid) {
+        return Ok(());
+    }
+
+    let parsed = Txid::from_str(txid).map_err(|_| HarvesterError::InvalidTxid {
+        txid: txid.to_owned(),
+    })?;
+    if tx_presence(provider, &parsed)? == TxPresence::InMempool {
+        state::save(path, previous)?;
+        tracing::info!(
+            txid,
+            "replacement was rejected; kept the collector transaction that is still in the mempool"
+        );
+    }
+    Ok(())
+}
+
+fn follow_broadcast(
     ctx: &AppContext,
     path: &Path,
     state: &State,
     provider: &EsploraProvider,
     txid: &Txid,
-) -> Result<PendingOutcome, HarvesterError> {
+    message: &str,
+) -> Result<Followed, HarvesterError> {
     match tx_presence(provider, txid)? {
-        TxPresence::Confirmed => apply_confirmation(ctx, path, state, provider, txid),
+        TxPresence::Confirmed => {
+            apply_confirmation(ctx, path, state, provider, txid).map(Followed::Live)
+        }
         TxPresence::InMempool => {
             tracing::info!(
                 txid = %txid,
                 "collector transaction is still in the mempool"
             );
-            Ok(PendingOutcome::Waiting)
+            Ok(Followed::Live(PendingOutcome::Waiting))
+        }
+        TxPresence::Absent if already_known(message) && in_flight(message) => {
+            tracing::info!(txid = %txid, "collector transaction is already known");
+            Ok(Followed::Live(PendingOutcome::Waiting))
         }
         TxPresence::Absent => {
-            tracing::info!(txid = %txid, "collector transaction is already known");
-            Ok(PendingOutcome::Waiting)
+            tracing::warn!(
+                txid = %txid,
+                reason = %message,
+                "pending collector transaction was dropped"
+            );
+            finish_drop(path, state)?;
+            Ok(Followed::Dropped)
         }
     }
 }
@@ -971,8 +982,7 @@ fn finish_drop(path: &Path, state: &State) -> Result<PendingOutcome, HarvesterEr
 }
 
 fn pending_drop(state: &State) -> PendingDrop {
-    let unconfirmed_bootstrap = state.pending_txid.as_deref() == Some(state.outpoint.txid.as_str());
-    if unconfirmed_bootstrap {
+    if unconfirmed_bootstrap(state) {
         PendingDrop::Remove
     } else {
         PendingDrop::Keep(clear_pending(state, false))
@@ -997,6 +1007,7 @@ fn pending_in_mempool(state: &State) -> HarvesterError {
 
 pub fn abandon(ctx: &AppContext) -> Result<(), HarvesterError> {
     let path = crate::state_path();
+    let _lock = state::lock(&path)?;
     let (state, pending_txid) = load_pending(&path)?;
     let txid = Txid::from_str(&pending_txid).map_err(|_| HarvesterError::InvalidTxid {
         txid: pending_txid.clone(),
@@ -1012,9 +1023,9 @@ pub fn abandon(ctx: &AppContext) -> Result<(), HarvesterError> {
             Ok(())
         }
         TxPresence::InMempool => {
-            tracing::warn!(
+            tracing::info!(
                 txid = %pending_txid,
-                "abandoning mempool transaction; it may still confirm and the saved outpoint will diverge from the chain"
+                "abandoning collector transaction that is still in the mempool"
             );
             finish_drop(&path, &state)?;
             Ok(())
@@ -1078,6 +1089,11 @@ fn already_known(message: &str) -> bool {
         || message.contains("txn-already")
 }
 
+fn in_flight(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("already in block") || message.contains("already-in-mempool")
+}
+
 fn choose_keeper(
     attached: &HashMap<AssetId, (u32, u32)>,
     wallet_has_utxo: bool,
@@ -1095,10 +1111,114 @@ fn choose_keeper(
     }
 }
 
+fn new_transaction() -> FinalTransaction {
+    let mut transaction = FinalTransaction::new();
+    transaction.set_sequence(Sequence::ENABLE_RBF_NO_LOCKTIME);
+    transaction
+}
+
+fn attach_fee_floor(transaction: &mut FinalTransaction, policy_asset: AssetId, floor: u64) {
+    if floor > 0 {
+        transaction.add_output(PartialOutput::new(Script::new(), floor, policy_asset));
+    }
+}
+
+fn fee_floor(state: &State, policy_asset: AssetId) -> Result<u64, HarvesterError> {
+    Ok(saved_transaction(state)?
+        .map(|transaction| bumped_fee(transaction.fee_in(policy_asset)))
+        .unwrap_or(0))
+}
+
+fn bumped_fee(previous: u64) -> u64 {
+    if previous == 0 {
+        0
+    } else {
+        previous.saturating_add(MIN_FEE.max(previous / 4))
+    }
+}
+
+fn saved_transaction(state: &State) -> Result<Option<Transaction>, HarvesterError> {
+    let Some(raw) = state.pending_tx.as_deref() else {
+        return Ok(None);
+    };
+    let txid = state.pending_txid.as_deref().unwrap_or_default();
+    decode_raw_transaction(raw, txid).map(Some)
+}
+
+fn pending_op(state: &State, transaction: &Transaction) -> Option<CollectorOp> {
+    if unconfirmed_bootstrap(state) {
+        return None;
+    }
+    let script = state.pending_script.as_deref()?;
+    let recreates = transaction
+        .output
+        .iter()
+        .any(|output| output.script_pubkey.to_hex() == script);
+    Some(if recreates {
+        CollectorOp::Harvest
+    } else {
+        CollectorOp::Withdraw
+    })
+}
+
+fn unconfirmed_bootstrap(state: &State) -> bool {
+    state.pending_txid.as_deref() == Some(state.outpoint.txid.as_str())
+}
+
+fn replace_underpriced(
+    state: &State,
+    provider: &EsploraProvider,
+    op: CollectorOp,
+) -> Result<bool, HarvesterError> {
+    let Some(transaction) = saved_transaction(state)? else {
+        return Ok(false);
+    };
+    if pending_op(state, &transaction) != Some(op) || !signals_rbf(&transaction) {
+        return Ok(false);
+    }
+
+    let paid = transaction.fee_in(provider.network.policy_asset());
+    let market = market_fee(transaction.discount_weight(), provider.fetch_fee_rate(1)?);
+    Ok(underpriced(paid, market))
+}
+
+fn signals_rbf(transaction: &Transaction) -> bool {
+    let opt_in = Sequence::ENABLE_LOCKTIME_NO_RBF.to_consensus_u32();
+    transaction
+        .input
+        .iter()
+        .any(|input| input.sequence.to_consensus_u32() < opt_in)
+}
+
+fn underpriced(paid: u64, market: u64) -> bool {
+    market > paid.saturating_add(MIN_FEE.max(paid / 4))
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
+fn market_fee(weight: usize, fee_rate: f32) -> u64 {
+    let vsize = weight.div_ceil(4).max(1) as f32;
+    (vsize * fee_rate / 1000.0).ceil() as u64
+}
+
 enum PendingOutcome {
     Ready(State),
     Spent,
     Waiting,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CollectorOp {
+    Harvest,
+    Withdraw,
+}
+
+enum Followed {
+    Live(PendingOutcome),
+    Dropped,
 }
 
 enum PendingDrop {
@@ -1106,6 +1226,7 @@ enum PendingDrop {
     Keep(State),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TxPresence {
     Confirmed,
     InMempool,
@@ -1148,12 +1269,74 @@ mod tests {
     use simplex::simplicityhl::elements::confidential::{
         self, AssetBlindingFactor, ValueBlindingFactor,
     };
+    use simplex::simplicityhl::elements::encode::serialize_hex;
+    use simplex::simplicityhl::elements::hex::ToHex;
     use simplex::simplicityhl::elements::secp256k1_zkp::Secp256k1;
-    use simplex::simplicityhl::elements::{AssetId, OutPoint, TxOut, TxOutSecrets, Txid};
+    use simplex::simplicityhl::elements::{
+        AssetId, LockTime, OutPoint, Script, Sequence, Transaction, TxIn, TxOut, TxOutSecrets, Txid,
+    };
     use simplex::transaction::UTXO;
 
     use super::signer_error;
     use crate::error::HarvesterError;
+    use crate::test_utils::TempDir;
+
+    #[test]
+    fn bootstrap_spends_the_smallest_utxo_that_covers_the_seed() {
+        let asset = asset_id("11");
+        let selected = super::select_bootstrap_utxos(
+            &[
+                explicit_keeper(asset, 500, 0),
+                explicit_keeper(asset, super::BOOTSTRAP_AMOUNT, 1),
+                explicit_keeper(asset, 50_000, 2),
+            ],
+            "11",
+        )
+        .unwrap();
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].amount(), super::BOOTSTRAP_AMOUNT);
+    }
+
+    #[test]
+    fn bootstrap_combines_utxos_until_the_seed_is_covered() {
+        let asset = asset_id("11");
+        let selected = super::select_bootstrap_utxos(
+            &[
+                explicit_keeper(asset, 400, 0),
+                explicit_keeper(asset, 400, 1),
+                explicit_keeper(asset, 400, 2),
+            ],
+            "11",
+        )
+        .unwrap();
+
+        let total: u64 = selected.iter().map(UTXO::amount).sum();
+        assert_eq!(selected.len(), 3);
+        assert_eq!(total, 1_200);
+    }
+
+    #[test]
+    fn bootstrap_rejects_a_wallet_below_the_seed() {
+        let asset = asset_id("11");
+        let error =
+            super::select_bootstrap_utxos(&[explicit_keeper(asset, 400, 0)], "asset").unwrap_err();
+
+        assert!(matches!(error, HarvesterError::NoBootstrapFunds { .. }));
+    }
+
+    #[test]
+    fn explicit_change_below_the_seed_stays_in_the_collector() {
+        assert_eq!(super::bootstrap_split(1_500, false), (1_500, 0));
+        assert_eq!(
+            super::bootstrap_split(5_000, false),
+            (super::BOOTSTRAP_AMOUNT, 4_000)
+        );
+        assert_eq!(
+            super::bootstrap_split(1_005, true),
+            (super::BOOTSTRAP_AMOUNT, 5)
+        );
+    }
 
     #[test]
     fn not_enough_funds_reports_the_required_fee() {
@@ -1235,7 +1418,6 @@ mod tests {
         assert_eq!(confidential.amount(), 9);
         assert_eq!(confidential.asset(), asset);
 
-        // `get_utxos_asset` appends unblinded confidential UTXOs after explicit ones.
         let mut keepers = super::explicit_keeper_utxos(vec![first, second, confidential]);
 
         let chosen = keepers.pop().expect("explicit keeper");
@@ -1410,6 +1592,14 @@ mod tests {
     }
 
     #[test]
+    fn unindexed_reject_filter_is_not_left_in_flight() {
+        assert!(super::in_flight("Transaction already in block chain"));
+        assert!(super::in_flight("txn-already-in-mempool"));
+        assert!(!super::in_flight("txn-already-known"));
+        assert!(!super::in_flight("bad-txns-inputs-missingorspent"));
+    }
+
+    #[test]
     fn rejected_bootstrap_drops_the_unconfirmed_pool() {
         let txid = "aa".repeat(32);
         let state = crate::state::State {
@@ -1541,6 +1731,81 @@ mod tests {
     }
 
     #[test]
+    fn replacement_fee_exceeds_the_previous_fee() {
+        assert_eq!(super::bumped_fee(0), 0);
+        assert_eq!(super::bumped_fee(16), 26);
+        assert_eq!(super::bumped_fee(100), 125);
+    }
+
+    #[test]
+    fn a_fee_inside_the_bump_band_is_left_in_the_mempool() {
+        assert!(!super::underpriced(1_000, 1_250));
+        assert!(super::underpriced(1_000, 1_251));
+        assert!(!super::underpriced(0, 10));
+        assert!(super::underpriced(0, 11));
+    }
+
+    #[test]
+    fn market_fee_is_denominated_in_sats_per_thousand_vbytes() {
+        assert_eq!(super::market_fee(4, 1_000.0), 1);
+        assert_eq!(super::market_fee(8, 1_500.0), 3);
+    }
+
+    #[test]
+    fn only_an_opted_in_transaction_can_be_replaced() {
+        assert!(super::signals_rbf(&bare_transaction(
+            Sequence::ENABLE_RBF_NO_LOCKTIME,
+            Script::new(),
+        )));
+        assert!(!super::signals_rbf(&bare_transaction(
+            Sequence::MAX,
+            Script::new(),
+        )));
+    }
+
+    #[test]
+    fn pending_payload_selects_the_collector_operation() {
+        let script = Script::new_op_return(&[1]);
+        let harvest = bare_transaction(Sequence::ENABLE_RBF_NO_LOCKTIME, script.clone());
+        let state = operation_state(&script.to_hex(), false);
+
+        assert_eq!(
+            super::pending_op(&state, &harvest),
+            Some(super::CollectorOp::Harvest)
+        );
+        assert_eq!(
+            super::pending_op(&operation_state("51", false), &harvest),
+            Some(super::CollectorOp::Withdraw)
+        );
+        assert_eq!(
+            super::pending_op(&operation_state(&script.to_hex(), true), &harvest),
+            None
+        );
+        assert_eq!(
+            super::fee_floor(&operation_state("51", false), asset_id("11")).unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn fee_floor_bumps_the_saved_transaction_fee() {
+        let asset = asset_id("11");
+        let transaction = Transaction {
+            version: 2,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                ..TxIn::default()
+            }],
+            output: vec![TxOut::new_fee(100, asset)],
+        };
+        let mut state = operation_state("51", false);
+        state.pending_tx = Some(serialize_hex(&transaction));
+
+        assert_eq!(super::fee_floor(&state, asset).unwrap(), 125);
+    }
+
+    #[test]
     fn abandon_requires_a_pending_transaction() {
         let dir = TempDir::new();
         let path = dir.path.join("state.json");
@@ -1557,6 +1822,40 @@ mod tests {
             Err(HarvesterError::NothingToAbandon { .. })
         ));
         assert_eq!(crate::state::load(&path).unwrap().as_ref(), Some(&state));
+    }
+
+    fn bare_transaction(sequence: Sequence, script: Script) -> Transaction {
+        Transaction {
+            version: 2,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                sequence,
+                ..TxIn::default()
+            }],
+            output: vec![TxOut {
+                script_pubkey: script,
+                ..TxOut::default()
+            }],
+        }
+    }
+
+    fn operation_state(script: &str, bootstrap: bool) -> crate::state::State {
+        let outpoint = "aa".repeat(32);
+        let pending = if bootstrap {
+            outpoint.clone()
+        } else {
+            "bb".repeat(32)
+        };
+        crate::state::State {
+            outpoint: crate::state::Outpoint {
+                txid: outpoint,
+                vout: 1,
+            },
+            pending_txid: Some(pending),
+            pending_script: Some(script.to_owned()),
+            pending_tx: None,
+            closed: false,
+        }
     }
 
     fn collector_settings(txid: &str, vout: u32) -> crate::config::CollectorSettings {
@@ -1581,29 +1880,6 @@ mod tests {
             pending_tx: pending_txid.as_ref().map(|_| "00".to_owned()),
             pending_txid,
             closed,
-        }
-    }
-
-    struct TempDir {
-        path: std::path::PathBuf,
-    }
-
-    impl TempDir {
-        fn new() -> Self {
-            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "lending-harvester-commands-{}-{n}",
-                std::process::id()
-            ));
-            std::fs::create_dir_all(&path).unwrap();
-            Self { path }
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.path);
         }
     }
 

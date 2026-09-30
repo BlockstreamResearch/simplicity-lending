@@ -1803,6 +1803,7 @@ dependencies = [
  "hex",
  "lending-contracts",
  "lending-indexer",
+ "libc",
  "minreq 3.0.0",
  "serde",
  "serde_json",

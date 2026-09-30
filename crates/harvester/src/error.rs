@@ -39,7 +39,7 @@ pub enum HarvesterError {
     )]
     CollectorScriptMismatch { txid: String },
 
-    #[error("fee collector is not bootstrapped; state is absent at {path}")]
+    #[error("fee collector is not bootstrapped at {path}")]
     NotBootstrapped { path: std::path::PathBuf },
 
     #[error("collector transaction {txid} is still in the mempool")]
