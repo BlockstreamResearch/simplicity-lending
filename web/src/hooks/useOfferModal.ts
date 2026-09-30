@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useOffer } from '@/api/indexer/hooks'
 import { offersQueryKeys } from '@/api/indexer/queryKeys'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 const OFFER_ID_PARAM = 'offer-id'
 

@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 export function useCopyToClipboard(resetDelayMs = 1500): [boolean, (text: string) => void] {
   const [copied, setCopied] = useState(false)
-  const timeoutRef = useRef<ReturnType<typeof window.setTimeout>>(-1)
+  // Left unset rather than seeded with a sentinel id: AppKit's dependencies pull Node's
+  // ambient types into this program, where a timer handle is an object and no number is a
+  // valid one. `clearTimeout` accepts nothing in both worlds, so this spells the same thing
+  // in either.
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => () => clearTimeout(timeoutRef.current), [])
 

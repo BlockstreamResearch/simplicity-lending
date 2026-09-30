@@ -2,3 +2,16 @@ dist
 node_modules
 *.min.js
 src/lib/wallet-core/connector/sideswap/rp_api
+
+# Generated, not source to format.
+pnpm-lock.yaml
+graphify-out
+
+# Vendored byte for byte. The protocol document is identified by its exact bytes —
+# the deployment's indexer keys on tags derived from them — so reformatting it
+# would change what it is.
+src/protocol/lending_v3.manifest.json
+
+# Vendored byte for byte from the humid repository, whose formatting is its own.
+# Reformatting it would turn every future re-sync from a copy into a merge.
+src/lib/humid/appkit-injected-adapter

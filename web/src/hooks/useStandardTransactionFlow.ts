@@ -4,7 +4,7 @@ import { broadcastTx } from '@/api/esplora/methods'
 import { getStandardTransactionSteps } from '@/components/TransactionStepper/transactionSteps'
 import type { UpdatedPset } from '@/lwk/transaction'
 import { useTxProgress } from '@/providers/txProgress/useTxProgress'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 export interface TransactionFlowResult<TSummary> {
   txid: string
