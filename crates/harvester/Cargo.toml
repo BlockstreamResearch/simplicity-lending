@@ -20,6 +20,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 hex = { workspace = true }
 libc = "0.2"
 minreq = { version = "3.0.0", features = ["https", "json-using-serde"] }
+rustls = { version = "0.23.40", default-features = false, features = ["ring", "std"] }
 config = { version = "0.15.16", default-features = true }
 dotenvy = "0.15"
 serde = { workspace = true }

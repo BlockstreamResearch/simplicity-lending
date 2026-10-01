@@ -11,7 +11,9 @@ pub struct Settings {
     pub schedule: ScheduleSettings,
     pub harvest: HarvestSettings,
     pub principal_asset: String,
+    #[serde(default)]
     pub collector: CollectorSettings,
+    #[serde(default)]
     pub withdraw: WithdrawSettings,
 }
 
@@ -79,8 +81,9 @@ pub struct HarvestSettings {
     pub mnemonic: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct CollectorSettings {
+    #[serde(default)]
     pub withdraw_pubkey: String,
     #[serde(default)]
     pub outpoint: Option<OutpointSettings>,
@@ -92,7 +95,7 @@ pub struct OutpointSettings {
     pub vout: u32,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct WithdrawSettings {
     #[serde(default)]
     pub mnemonic: String,
@@ -148,10 +151,20 @@ mod tests {
     fn base_yaml_deserializes() {
         let settings = load_base();
 
+        assert_eq!(settings.indexer.base_url, "http://127.0.0.1:8000");
+        assert_eq!(
+            settings.esplora.base_url,
+            "https://liquid.network/liquidtestnet/api"
+        );
         assert_eq!(settings.schedule.interval_secs, 86400);
-        assert_eq!(settings.harvest.max_vaults_per_tx, 10);
+        assert_eq!(settings.harvest.max_vaults_per_tx, 25);
+        assert_eq!(
+            settings.principal_asset,
+            "38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5"
+        );
         assert!(settings.harvest.mnemonic.is_empty());
         assert!(settings.withdraw.mnemonic.is_empty());
+        assert!(settings.collector.withdraw_pubkey.is_empty());
         assert!(settings.collector.outpoint.is_none());
         assert!(settings.withdraw.destination_address.is_empty());
         assert_eq!(
@@ -174,7 +187,7 @@ mod tests {
 
         assert_eq!(settings.schedule.interval_secs, 30);
         assert_eq!(settings.harvest.mnemonic, "secret");
-        assert_eq!(settings.harvest.max_vaults_per_tx, 10);
+        assert_eq!(settings.harvest.max_vaults_per_tx, 25);
     }
 
     #[test]

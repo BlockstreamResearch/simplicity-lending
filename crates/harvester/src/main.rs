@@ -3,6 +3,8 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let _ = dotenvy::dotenv();
     init_tracing();
 
