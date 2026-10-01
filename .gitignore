@@ -13,3 +13,8 @@ logs.md
 tmp_vendor
 
 configuration.yaml
+
+# Harvester runtime state 
+crates/harvester/state.json
+crates/harvester/state.json.tmp
+crates/harvester/state.json.lock
