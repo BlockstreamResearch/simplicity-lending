@@ -45,9 +45,6 @@ pub enum HarvesterError {
     #[error("collector transaction {txid} is still in the mempool")]
     PendingInMempool { txid: String },
 
-    #[error("no pending collector transaction to abandon at {path}")]
-    NothingToAbandon { path: std::path::PathBuf },
-
     #[error("withdraw destination address is not set")]
     MissingDestination,
 

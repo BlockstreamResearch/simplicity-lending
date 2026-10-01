@@ -28,8 +28,6 @@ enum Command {
         #[arg(long)]
         to: Option<String>,
     },
-    /// Abandon a pending collector transaction
-    Abandon,
 }
 
 impl Cli {
@@ -47,7 +45,6 @@ impl Cli {
             Command::Harvest => commands::harvest(&ctx).await,
             Command::Bootstrap => commands::bootstrap(&ctx).await,
             Command::Withdraw { to } => commands::withdraw(&ctx, to.as_deref()).await,
-            Command::Abandon => commands::abandon(&ctx),
         };
         if let Err(error) = &result {
             tracing::error!("{error}");

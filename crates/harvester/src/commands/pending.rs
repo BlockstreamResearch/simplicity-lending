@@ -62,7 +62,7 @@ fn settle_absent(
     finish_drop(path, state)
 }
 
-pub(super) fn apply_confirmation(
+fn apply_confirmation(
     ctx: &AppContext,
     path: &Path,
     state: &State,
@@ -232,7 +232,7 @@ fn follow_broadcast(
     }
 }
 
-pub(super) fn finish_drop(path: &Path, state: &State) -> Result<PendingOutcome, HarvesterError> {
+fn finish_drop(path: &Path, state: &State) -> Result<PendingOutcome, HarvesterError> {
     match pending_drop(state) {
         PendingDrop::Remove => {
             let closed = clear_pending(state, true);
@@ -270,20 +270,6 @@ pub(super) fn pending_in_mempool(state: &State) -> HarvesterError {
     }
 }
 
-pub(super) fn load_pending(path: &Path) -> Result<(State, String), HarvesterError> {
-    let state = state::load(path)?.ok_or_else(|| HarvesterError::NothingToAbandon {
-        path: path.to_path_buf(),
-    })?;
-    let pending_txid =
-        state
-            .pending_txid
-            .clone()
-            .ok_or_else(|| HarvesterError::NothingToAbandon {
-                path: path.to_path_buf(),
-            })?;
-    Ok((state, pending_txid))
-}
-
 fn decode_raw_transaction(raw: &str, txid: &str) -> Result<Transaction, HarvesterError> {
     let bytes = hex::decode(raw).map_err(|_| HarvesterError::InvalidPendingTx {
         txid: txid.to_owned(),
@@ -293,10 +279,7 @@ fn decode_raw_transaction(raw: &str, txid: &str) -> Result<Transaction, Harveste
     })
 }
 
-pub(super) fn tx_presence(
-    provider: &EsploraProvider,
-    txid: &Txid,
-) -> Result<TxPresence, HarvesterError> {
+fn tx_presence(provider: &EsploraProvider, txid: &Txid) -> Result<TxPresence, HarvesterError> {
     let url = format!("{}/tx/{txid}/status", provider.esplora_url);
     let response = minreq::get(url)
         .with_timeout(provider.timeout.as_secs())
@@ -385,7 +368,7 @@ enum PendingDrop {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum TxPresence {
+enum TxPresence {
     Confirmed,
     InMempool,
     Absent,
@@ -401,7 +384,6 @@ mod tests {
     use simplex::simplicityhl::elements::hex::ToHex;
     use simplex::simplicityhl::elements::{LockTime, Script, Sequence, Transaction, TxIn, TxOut};
 
-    use crate::error::HarvesterError;
     use crate::test_utils::TempDir;
 
     #[test]
@@ -525,25 +507,6 @@ mod tests {
             super::pending_op(&operation_state(&script.to_hex(), true), &harvest),
             None
         );
-    }
-
-    #[test]
-    fn abandon_requires_a_pending_transaction() {
-        let dir = TempDir::new();
-        let path = dir.path.join("state.json");
-        assert!(matches!(
-            super::load_pending(&path),
-            Err(HarvesterError::NothingToAbandon { .. })
-        ));
-
-        let state = collector_state("aa".repeat(32), 1, None, false);
-        crate::state::save(&path, &state).unwrap();
-
-        assert!(matches!(
-            super::load_pending(&path),
-            Err(HarvesterError::NothingToAbandon { .. })
-        ));
-        assert_eq!(crate::state::load(&path).unwrap().as_ref(), Some(&state));
     }
 
     fn bare_transaction(sequence: Sequence, script: Script) -> Transaction {

@@ -19,10 +19,7 @@ use crate::vaults;
 mod pending;
 mod tx;
 
-use pending::{
-    CollectorOp, PendingOutcome, TxPresence, apply_confirmation, finish_drop, load_pending,
-    pending_in_mempool, publish, settle_pending, tx_presence,
-};
+use pending::{CollectorOp, PendingOutcome, pending_in_mempool, publish, settle_pending};
 use tx::{
     BOOTSTRAP_AMOUNT, destination_script, finalize_bootstrap, finalize_withdrawal, prepare_harvest,
 };
@@ -197,34 +194,6 @@ pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), Harveste
             txid: transaction.txid().to_string(),
             count: 1,
         }),
-    }
-}
-
-pub fn abandon(ctx: &AppContext) -> Result<(), HarvesterError> {
-    let path = crate::state_path();
-    let _lock = state::lock(&path)?;
-    let (state, pending_txid) = load_pending(&path)?;
-    let txid = Txid::from_str(&pending_txid).map_err(|_| HarvesterError::InvalidTxid {
-        txid: pending_txid.clone(),
-    })?;
-    let provider = esplora_provider(ctx);
-    match tx_presence(&provider, &txid)? {
-        TxPresence::Confirmed => {
-            apply_confirmation(ctx, &path, &state, &provider, &txid)?;
-            Ok(())
-        }
-        TxPresence::Absent => {
-            finish_drop(&path, &state)?;
-            Ok(())
-        }
-        TxPresence::InMempool => {
-            tracing::info!(
-                txid = %pending_txid,
-                "abandoning collector transaction that is still in the mempool"
-            );
-            finish_drop(&path, &state)?;
-            Ok(())
-        }
     }
 }
 
