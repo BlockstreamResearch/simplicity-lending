@@ -19,7 +19,6 @@ use crate::batch::{self, FeeBatch, Selection, Step};
 use crate::error::HarvesterError;
 use crate::state::State;
 
-use super::pending::fee_floor;
 use super::{
     collector_utxo, harvest_signer, open_fee_collector, parse_asset_id, parse_outpoint,
     parse_vault_asset, parse_vault_u64, signer_error,
@@ -43,7 +42,6 @@ pub(super) fn prepare_harvest(
     let network = ctx.settings.esplora.simplicity_network();
     let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
     let policy_asset = network.policy_asset();
-    let min_fee = fee_floor(&state, policy_asset)?;
     let change_script = signer.get_address().script_pubkey();
 
     let selection = if principal_asset == policy_asset {
@@ -148,7 +146,6 @@ pub(super) fn prepare_harvest(
 
             let mut prefix = transaction.clone();
             collector.attach_deposit(&mut prefix, collector_utxo.clone(), total_amount);
-            attach_fee_floor(&mut prefix, policy_asset, min_fee);
             match signer.finalize(&prefix) {
                 Ok((transaction, _)) => {
                     let tx_fee = transaction.fee_in(policy_asset);
@@ -257,15 +254,12 @@ pub(super) fn finalize_withdrawal(
     collector: &FeeCollector,
     collector_utxo: UTXO,
     destination: Script,
-    policy_asset: AssetId,
-    min_fee: u64,
 ) -> Result<(Transaction, u64), HarvesterError> {
     let pool_amount = collector_utxo.explicit_amount();
     let asset = collector_utxo.explicit_asset();
     let mut transaction = new_transaction();
     collector.attach_withdrawal(&mut transaction, collector_utxo);
     transaction.add_output(PartialOutput::new(destination, pool_amount, asset));
-    attach_fee_floor(&mut transaction, policy_asset, min_fee);
     let (transaction, _fee) = signer
         .finalize(&transaction)
         .map_err(|err| signer_error("withdraw", err))?;
@@ -368,12 +362,6 @@ fn new_transaction() -> FinalTransaction {
     let mut transaction = FinalTransaction::new();
     transaction.set_sequence(Sequence::ENABLE_RBF_NO_LOCKTIME);
     transaction
-}
-
-fn attach_fee_floor(transaction: &mut FinalTransaction, policy_asset: AssetId, floor: u64) {
-    if floor > 0 {
-        transaction.add_output(PartialOutput::new(Script::new(), floor, policy_asset));
-    }
 }
 
 pub(super) fn destination_script(

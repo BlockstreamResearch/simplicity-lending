@@ -20,8 +20,8 @@ mod pending;
 mod tx;
 
 use pending::{
-    CollectorOp, PendingOutcome, TxPresence, apply_confirmation, fee_floor, finish_drop,
-    load_pending, pending_in_mempool, publish, settle_pending, tx_presence,
+    CollectorOp, PendingOutcome, TxPresence, apply_confirmation, finish_drop, load_pending,
+    pending_in_mempool, publish, settle_pending, tx_presence,
 };
 use tx::{
     BOOTSTRAP_AMOUNT, destination_script, finalize_bootstrap, finalize_withdrawal, prepare_harvest,
@@ -186,15 +186,8 @@ pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), Harveste
     let signer = withdraw_signer(ctx)?;
     let collector = open_fee_collector(ctx)?;
     let (collector_utxo, state) = collector_utxo(&path, &signer, &collector, &state)?;
-    let policy_asset = ctx.settings.esplora.simplicity_network().policy_asset();
-    let (transaction, amount) = finalize_withdrawal(
-        &signer,
-        &collector,
-        collector_utxo,
-        destination,
-        policy_asset,
-        fee_floor(&state, policy_asset)?,
-    )?;
+    let (transaction, amount) =
+        finalize_withdrawal(&signer, &collector, collector_utxo, destination)?;
     let pending_script = collector.get_script_pubkey().to_hex();
     tracing::info!(txid = %transaction.txid(), amount, "submitting withdrawal");
 

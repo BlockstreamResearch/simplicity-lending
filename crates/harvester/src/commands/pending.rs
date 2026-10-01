@@ -3,11 +3,10 @@ use std::str::FromStr;
 
 use lending_contracts::programs::program::SimplexProgram;
 use serde::Deserialize;
-use simplex::constants::MIN_FEE;
 use simplex::provider::{EsploraProvider, ProviderError, ProviderTrait};
 use simplex::simplicityhl::elements::encode::{deserialize, serialize_hex};
 use simplex::simplicityhl::elements::hex::ToHex;
-use simplex::simplicityhl::elements::{AssetId, Script, Sequence, Transaction, Txid};
+use simplex::simplicityhl::elements::{Script, Transaction, Txid};
 
 use crate::AppContext;
 use crate::error::HarvesterError;
@@ -30,19 +29,11 @@ pub(super) fn settle_pending(
     let provider = esplora_provider(ctx);
     match tx_presence(&provider, &txid)? {
         TxPresence::InMempool => {
-            if replace_underpriced(state, &provider, op)? {
-                tracing::info!(
-                    txid = pending_txid,
-                    "replacing underpriced collector transaction"
-                );
-                Ok(PendingOutcome::Ready(state.clone()))
-            } else {
-                tracing::info!(
-                    txid = pending_txid,
-                    "collector transaction is still in the mempool"
-                );
-                Ok(PendingOutcome::Waiting)
-            }
+            tracing::info!(
+                txid = pending_txid,
+                "collector transaction is still in the mempool"
+            );
+            Ok(PendingOutcome::Waiting)
         }
         TxPresence::Confirmed => apply_confirmation(ctx, path, state, &provider, &txid),
         TxPresence::Absent => settle_absent(path, state, op),
@@ -343,20 +334,6 @@ fn in_flight(message: &str) -> bool {
     message.contains("already in block") || message.contains("already-in-mempool")
 }
 
-pub(super) fn fee_floor(state: &State, policy_asset: AssetId) -> Result<u64, HarvesterError> {
-    Ok(saved_transaction(state)?
-        .map(|transaction| bumped_fee(transaction.fee_in(policy_asset)))
-        .unwrap_or(0))
-}
-
-fn bumped_fee(previous: u64) -> u64 {
-    if previous == 0 {
-        0
-    } else {
-        previous.saturating_add(MIN_FEE.max(previous / 4))
-    }
-}
-
 fn saved_transaction(state: &State) -> Result<Option<Transaction>, HarvesterError> {
     let Some(raw) = state.pending_tx.as_deref() else {
         return Ok(None);
@@ -383,45 +360,6 @@ fn pending_op(state: &State, transaction: &Transaction) -> Option<CollectorOp> {
 
 fn unconfirmed_bootstrap(state: &State) -> bool {
     state.pending_txid.as_deref() == Some(state.outpoint.txid.as_str())
-}
-
-fn replace_underpriced(
-    state: &State,
-    provider: &EsploraProvider,
-    op: CollectorOp,
-) -> Result<bool, HarvesterError> {
-    let Some(transaction) = saved_transaction(state)? else {
-        return Ok(false);
-    };
-    if pending_op(state, &transaction) != Some(op) || !signals_rbf(&transaction) {
-        return Ok(false);
-    }
-
-    let paid = transaction.fee_in(provider.network.policy_asset());
-    let market = market_fee(transaction.discount_weight(), provider.fetch_fee_rate(1)?);
-    Ok(underpriced(paid, market))
-}
-
-fn signals_rbf(transaction: &Transaction) -> bool {
-    let opt_in = Sequence::ENABLE_LOCKTIME_NO_RBF.to_consensus_u32();
-    transaction
-        .input
-        .iter()
-        .any(|input| input.sequence.to_consensus_u32() < opt_in)
-}
-
-fn underpriced(paid: u64, market: u64) -> bool {
-    market > paid.saturating_add(MIN_FEE.max(paid / 4))
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss
-)]
-fn market_fee(weight: usize, fee_rate: f32) -> u64 {
-    let vsize = weight.div_ceil(4).max(1) as f32;
-    (vsize * fee_rate / 1000.0).ceil() as u64
 }
 
 pub(super) enum PendingOutcome {
@@ -460,9 +398,6 @@ struct TxStatus {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use simplex::simplicityhl::elements::encode::serialize_hex;
     use simplex::simplicityhl::elements::hex::ToHex;
     use simplex::simplicityhl::elements::{LockTime, Script, Sequence, Transaction, TxIn, TxOut};
 
@@ -573,39 +508,6 @@ mod tests {
     }
 
     #[test]
-    fn replacement_fee_exceeds_the_previous_fee() {
-        assert_eq!(super::bumped_fee(0), 0);
-        assert_eq!(super::bumped_fee(16), 26);
-        assert_eq!(super::bumped_fee(100), 125);
-    }
-
-    #[test]
-    fn a_fee_inside_the_bump_band_is_left_in_the_mempool() {
-        assert!(!super::underpriced(1_000, 1_250));
-        assert!(super::underpriced(1_000, 1_251));
-        assert!(!super::underpriced(0, 10));
-        assert!(super::underpriced(0, 11));
-    }
-
-    #[test]
-    fn market_fee_is_denominated_in_sats_per_thousand_vbytes() {
-        assert_eq!(super::market_fee(4, 1_000.0), 1);
-        assert_eq!(super::market_fee(8, 1_500.0), 3);
-    }
-
-    #[test]
-    fn only_an_opted_in_transaction_can_be_replaced() {
-        assert!(super::signals_rbf(&bare_transaction(
-            Sequence::ENABLE_RBF_NO_LOCKTIME,
-            Script::new(),
-        )));
-        assert!(!super::signals_rbf(&bare_transaction(
-            Sequence::MAX,
-            Script::new(),
-        )));
-    }
-
-    #[test]
     fn pending_payload_selects_the_collector_operation() {
         let script = Script::new_op_return(&[1]);
         let harvest = bare_transaction(Sequence::ENABLE_RBF_NO_LOCKTIME, script.clone());
@@ -623,28 +525,6 @@ mod tests {
             super::pending_op(&operation_state(&script.to_hex(), true), &harvest),
             None
         );
-        assert_eq!(
-            super::fee_floor(&operation_state("51", false), asset_id("11")).unwrap(),
-            0
-        );
-    }
-
-    #[test]
-    fn fee_floor_bumps_the_saved_transaction_fee() {
-        let asset = asset_id("11");
-        let transaction = Transaction {
-            version: 2,
-            lock_time: LockTime::ZERO,
-            input: vec![TxIn {
-                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-                ..TxIn::default()
-            }],
-            output: vec![TxOut::new_fee(100, asset)],
-        };
-        let mut state = operation_state("51", false);
-        state.pending_tx = Some(serialize_hex(&transaction));
-
-        assert_eq!(super::fee_floor(&state, asset).unwrap(), 125);
     }
 
     #[test]
@@ -723,9 +603,5 @@ mod tests {
             pending_txid,
             closed,
         }
-    }
-
-    fn asset_id(byte: &str) -> simplex::simplicityhl::elements::AssetId {
-        simplex::simplicityhl::elements::AssetId::from_str(&byte.repeat(32)).unwrap()
     }
 }
