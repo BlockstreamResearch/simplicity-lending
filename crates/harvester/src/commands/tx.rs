@@ -8,7 +8,7 @@ use lending_contracts::programs::fee_collector::FeeCollector;
 use lending_contracts::programs::program::SimplexProgram;
 use lending_indexer::api::ProtocolFeeVaultDto;
 use simplex::provider::SimplicityNetwork;
-use simplex::signer::{Signer, SignerError};
+use simplex::signer::Signer;
 use simplex::simplicityhl::elements::{Address, AssetId, Script, Sequence, Transaction};
 use simplex::transaction::{
     FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
@@ -56,12 +56,18 @@ pub(super) fn prepare_harvest(
         selection,
         |index, total_amount| {
             let vault = &vaults[index];
-            let program = finalized_vault(vault, principal_asset, network)?;
+            let program = match finalized_vault(vault, principal_asset, network) {
+                Ok(program) => program,
+                Err(err) => return vault_fault(&vault.offer_id, err),
+            };
             let keeper_asset = program.get_parameters().keeper_asset_id;
             let wallet_has_utxo = if attached_keepers.contains_key(&keeper_asset) {
                 false
             } else {
-                keeper_available(&signer, &mut keepers, keeper_asset)?
+                match keeper_available(&signer, &mut keepers, keeper_asset) {
+                    Ok(available) => available,
+                    Err(err) => return vault_fault(&vault.offer_id, err),
+                }
             };
             let keeper_choice = choose_keeper(&attached_keepers, wallet_has_utxo, keeper_asset);
             if keeper_choice == KeeperChoice::Missing {
@@ -78,15 +84,25 @@ pub(super) fn prepare_harvest(
                 .checked_add(total_amount)
                 .is_none()
             {
-                return Err(HarvesterError::AmountOverflow);
+                return vault_fault(&vault.offer_id, HarvesterError::AmountOverflow);
             }
 
             let indexed_amount = amounts[index];
             let outpoint = format!("{}:{}", vault.txid, vault.vout);
-            let vault_outpoint = parse_outpoint(&vault.txid, vault.vout)?;
-            let Some(vault_utxo) = signer
-                .get_provider()?
-                .fetch_scripthash_utxos(&program.get_script_pubkey())?
+            let vault_outpoint = match parse_outpoint(&vault.txid, vault.vout) {
+                Ok(outpoint) => outpoint,
+                Err(err) => return vault_fault(&vault.offer_id, err),
+            };
+            let vault_utxos = match signer.get_provider() {
+                Ok(provider) => {
+                    match provider.fetch_scripthash_utxos(&program.get_script_pubkey()) {
+                        Ok(utxos) => utxos,
+                        Err(err) => return vault_fault(&vault.offer_id, err.into()),
+                    }
+                }
+                Err(err) => return vault_fault(&vault.offer_id, signer_error("harvest", err)),
+            };
+            let Some(vault_utxo) = vault_utxos
                 .into_iter()
                 .find(|utxo| utxo.outpoint == vault_outpoint)
             else {
@@ -116,8 +132,10 @@ pub(super) fn prepare_harvest(
                     output_index,
                 } => (input_index, output_index),
                 KeeperChoice::Attach => {
-                    let keeper_utxo = next_keeper(&signer, &mut keepers, keeper_asset)?
-                        .expect("explicit keeper UTXO is cached");
+                    let keeper_utxo = match next_keeper(&signer, &mut keepers, keeper_asset) {
+                        Ok(utxo) => utxo.expect("explicit keeper UTXO is cached"),
+                        Err(err) => return vault_fault(&vault.offer_id, err),
+                    };
                     let keeper_amount = keeper_utxo.explicit_amount();
                     let keeper_asset_id = keeper_utxo.explicit_asset();
                     let input_keeper_index = transaction.n_inputs() as u32;
@@ -154,17 +172,31 @@ pub(super) fn prepare_harvest(
                         tx_fee,
                     })
                 }
-                Err(SignerError::NotEnoughFunds(required_fee)) => {
-                    Ok(Step::Stop(HarvesterError::InsufficientFeeFunds {
-                        wallet: "harvest",
-                        required_fee,
-                    }))
-                }
-                Err(err) => Err(signer_error("harvest", err)),
+                Err(err) => vault_fault(&vault.offer_id, signer_error("harvest", err)),
             }
         },
     )?;
     Ok(batch.map(|batch| (batch, state)))
+}
+
+fn vault_fault<T>(
+    offer_id: &str,
+    err: HarvesterError,
+) -> Result<Step<T, HarvesterError>, HarvesterError> {
+    match &err {
+        HarvesterError::InvalidVaultField { .. } | HarvesterError::InvalidTxid { .. } => {
+            tracing::warn!(offer_id, error = %err, "skipping vault");
+            Ok(Step::Skip)
+        }
+        _ => {
+            tracing::warn!(
+                offer_id,
+                error = %err,
+                "stopping the harvest batch at this vault"
+            );
+            Ok(Step::Stop(err))
+        }
+    }
 }
 
 fn finalized_vault(
@@ -394,7 +426,37 @@ mod tests {
     use simplex::simplicityhl::elements::{AssetId, OutPoint, TxOut, TxOutSecrets, Txid};
     use simplex::transaction::UTXO;
 
+    use crate::batch::Step;
     use crate::error::HarvesterError;
+
+    #[test]
+    fn a_bad_vault_field_is_skipped_and_a_provider_failure_stops_the_batch() {
+        let skipped = super::vault_fault::<()>(
+            "1",
+            HarvesterError::InvalidVaultField {
+                offer_id: "1".to_owned(),
+                field: "supply_goal",
+                value: "nope".to_owned(),
+            },
+        )
+        .unwrap();
+        assert!(matches!(skipped, Step::Skip));
+
+        let bad_txid = super::vault_fault::<()>(
+            "1",
+            HarvesterError::InvalidTxid {
+                txid: "zz".to_owned(),
+            },
+        )
+        .unwrap();
+        assert!(matches!(bad_txid, Step::Skip));
+
+        let stopped = super::vault_fault::<()>("1", HarvesterError::AmountOverflow).unwrap();
+        assert!(matches!(
+            stopped,
+            Step::Stop(HarvesterError::AmountOverflow)
+        ));
+    }
 
     #[test]
     fn bootstrap_spends_the_smallest_utxo_that_covers_the_seed() {

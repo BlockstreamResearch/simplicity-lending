@@ -216,7 +216,7 @@ fn follow_broadcast(
             );
             Ok(Followed::Live(PendingOutcome::Waiting))
         }
-        TxPresence::Absent if already_known(message) && in_flight(message) => {
+        TxPresence::Absent if in_flight(message) => {
             tracing::info!(txid = %txid, "collector transaction is already known");
             Ok(Followed::Live(PendingOutcome::Waiting))
         }
@@ -304,14 +304,6 @@ fn tx_presence(provider: &EsploraProvider, txid: &Txid) -> Result<TxPresence, Ha
     }
 }
 
-fn already_known(message: &str) -> bool {
-    let message = message.to_ascii_lowercase();
-    message.contains("already in block")
-        || message.contains("already-known")
-        || message.contains("already-in-mempool")
-        || message.contains("txn-already")
-}
-
 fn in_flight(message: &str) -> bool {
     let message = message.to_ascii_lowercase();
     message.contains("already in block") || message.contains("already-in-mempool")
@@ -385,14 +377,6 @@ mod tests {
     use simplex::simplicityhl::elements::{LockTime, Script, Sequence, Transaction, TxIn, TxOut};
 
     use crate::test_utils::TempDir;
-
-    #[test]
-    fn already_known_broadcasts_are_not_rejections() {
-        assert!(super::already_known("Transaction already in block chain"));
-        assert!(super::already_known("txn-already-in-mempool"));
-        assert!(super::already_known("txn-already-known"));
-        assert!(!super::already_known("bad-txns-inputs-missingorspent"));
-    }
 
     #[test]
     fn unindexed_reject_filter_is_not_left_in_flight() {

@@ -96,19 +96,6 @@ pub enum HarvesterError {
     #[error("transaction {txid} has {count} fee collector outputs")]
     CollectorOutputs { txid: String, count: usize },
 
-    #[error("protocol-fee vault {outpoint} for offer {offer_id} was not found")]
-    MissingVaultUtxo { offer_id: String, outpoint: String },
-
-    #[error(
-        "protocol-fee vault {outpoint} for offer {offer_id} holds {on_chain}, indexer reports {indexed}"
-    )]
-    VaultAmountMismatch {
-        offer_id: String,
-        outpoint: String,
-        on_chain: u64,
-        indexed: u64,
-    },
-
     #[error(transparent)]
     Signer(#[from] simplex::signer::SignerError),
 
