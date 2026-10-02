@@ -6,9 +6,11 @@ on:
       - main
     paths-ignore:
       - 'web/**'
+      - 'docs/**'
   pull_request:
     paths-ignore:
       - 'web/**'
+      - 'docs/**'
   workflow_call:
 
 permissions:
