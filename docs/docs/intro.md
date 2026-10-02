@@ -8,7 +8,9 @@ The borrower can cancel an offer before a lender accepts it.
 
 ## Documentation map
 
-- [Concepts](./concepts/participants.md) — who takes part, which terms an offer carries, and how a position changes state
-- [Lifecycle](./lifecycle/create-offer.md) — create, cancel, accept, repay, and liquidate
-- [Components](./components/contracts.md) — contracts, CLI, indexer, and the demo web app
-- [Guides](./guides/docker.md) — run the stack with Docker or locally
+- [Simplicity](./simplicity.md) — the language the contracts are written in
+- [Roles](./roles.md) — what borrowers and lenders can do
+- [Offer parameters](./offer-parameters.md) — collateral, loan amount, fee, and term
+- [Borrower](./borrower/create-account.md) and [Lender](./lender/review-offer.md) — the steps each role takes
+- [Contracts](./contracts/lending.md) — reference for the Simplicity programs
+- [Developers](./developers/versions.md) — versions, build, and how to run the stack

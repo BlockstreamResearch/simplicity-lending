@@ -1,4 +1,4 @@
-# Local setup
+# Run locally
 
 The demo frontend needs the indexer API.
 
@@ -6,3 +6,5 @@ The demo frontend needs the indexer API.
 2. Install dependencies and start the web app. See `web/README.md`.
 
 The web app expects the API at `http://localhost:8000` unless `VITE_API_URL` is set.
+
+The CLI in `crates/cli` builds and signs protocol transactions. It is separate from the web app flow.

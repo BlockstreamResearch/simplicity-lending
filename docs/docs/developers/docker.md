@@ -1,4 +1,4 @@
-# Docker
+# Run with Docker
 
 From the repository root, copy `.env.example` to `.env` and start the stack:
 
