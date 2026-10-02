@@ -49,14 +49,12 @@ const config: Config = {
 
   themeConfig: {
     colorMode: {
-      respectPrefersColorScheme: true,
+      defaultMode: 'light',
+      disableSwitch: true,
+      respectPrefersColorScheme: false,
     },
     navbar: {
-      title: 'Simplicity Lending',
-      logo: {
-        alt: 'Simplicity Lending',
-        src: 'img/logo.svg',
-      },
+      title: 'Lending',
       items: [
         {
           type: 'docSidebar',
@@ -72,7 +70,7 @@ const config: Config = {
       ],
     },
     footer: {
-      style: 'dark',
+      style: 'light',
       links: [
         {
           title: 'Docs',
@@ -93,10 +91,11 @@ const config: Config = {
           ],
         },
       ],
+      copyright: `© ${new Date().getFullYear()} Simplicity. All rights reserved.`,
     },
     prism: {
       theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      darkTheme: prismThemes.github,
     },
   } satisfies Preset.ThemeConfig,
 };

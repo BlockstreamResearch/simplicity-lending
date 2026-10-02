@@ -1,30 +1,163 @@
-/**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
- */
+@import '@fontsource-variable/inter';
 
-/* You can override the default Infima variables here. */
-:root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+/*
+ * Colors, type, and radii follow web/src/styles/tokens.css and theme.css.
+ * The web app is light-only, so the dark theme uses the same palette.
+ */
+:root,
+[data-theme='dark'] {
+  color-scheme: light;
+
+  --ifm-color-primary: #2706cf;
+  --ifm-color-primary-dark: #573ed5;
+  --ifm-color-primary-darker: #4a32c8;
+  --ifm-color-primary-darkest: #1b0490;
+  --ifm-color-primary-light: #573ed5;
+  --ifm-color-primary-lighter: #d4cdf5;
+  --ifm-color-primary-lightest: #dedaf8;
+  --ifm-color-primary-contrast-background: #2706cf;
+  --ifm-color-primary-contrast-foreground: #fcfcfc;
+
+  --ifm-color-success: #17c964;
+  --ifm-color-warning: #f5a524;
+  --ifm-color-danger: #ff383c;
+
+  --ifm-background-color: #f5f5f5;
+  --ifm-background-surface-color: #ffffff;
+  --ifm-font-color-base: #18181b;
+  --ifm-font-color-secondary: #71717a;
+  --ifm-heading-color: #18181b;
+  --ifm-color-content: #18181b;
+  --ifm-color-content-secondary: #71717a;
+  --ifm-color-emphasis-200: #e4e4e7;
+  --ifm-color-emphasis-300: #dedee0;
+  --ifm-hr-background-color: #e4e4e7;
+  --ifm-hover-overlay: rgba(39, 6, 207, 0.03);
+
+  --ifm-link-color: #2706cf;
+  --ifm-link-hover-color: #573ed5;
+  --ifm-link-hover-decoration: none;
+
+  --ifm-font-family-base: 'Inter Variable', Inter, system-ui, sans-serif;
+  --ifm-font-family-monospace:
+    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --ifm-line-height-base: 1.5;
+  --ifm-heading-font-weight: 700;
+  --ifm-font-weight-semibold: 600;
+  --ifm-h1-font-size: 2.25rem;
+  --ifm-h2-font-size: 1.5rem;
+  --ifm-h3-font-size: 1.25rem;
+  --ifm-h4-font-size: 1rem;
+
+  --ifm-global-radius: 0.5rem;
+  --ifm-button-border-radius: 0.25rem;
+  --ifm-code-border-radius: 0.25rem;
+  --ifm-pre-border-radius: 0.75rem;
+  --ifm-code-font-size: 90%;
+  --ifm-code-background: #efeff0;
+  --ifm-code-color: #18181b;
+  --ifm-pre-background: #fafafa;
+  --ifm-pre-color: #18181b;
+
+  --ifm-navbar-background-color: #ffffff;
+  --ifm-navbar-shadow: none;
+  --ifm-navbar-height: 4.5rem;
+  --ifm-navbar-link-color: #18181b;
+  --ifm-navbar-link-hover-color: #2706cf;
+
+  --ifm-menu-color: #18181b;
+  --ifm-menu-color-active: #2706cf;
+  --ifm-menu-color-background-active: rgba(39, 6, 207, 0.15);
+  --ifm-menu-color-background-hover: rgba(39, 6, 207, 0.03);
+
+  --ifm-toc-border-color: #e4e4e7;
+  --ifm-footer-background-color: #f5f5f5;
+  --ifm-footer-color: #71717a;
+  --ifm-footer-link-color: #18181b;
+  --ifm-footer-link-hover-color: #2706cf;
+  --ifm-footer-title-color: #18181b;
+
+  --docusaurus-highlighted-code-line-bg: rgba(39, 6, 207, 0.08);
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
-[data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+.navbar {
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.navbar__title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.navbar__link {
+  font-weight: 500;
+}
+
+.menu__link {
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+
+.menu__link--active {
+  font-weight: 600;
+}
+
+.markdown > h1,
+.markdown > h2,
+.markdown > h3 {
+  letter-spacing: -0.02em;
+}
+
+.markdown > h1 {
+  font-weight: 800;
+}
+
+.markdown > h2 {
+  font-weight: 700;
+}
+
+.markdown > h3,
+.markdown > h4 {
+  font-weight: 600;
+}
+
+.button {
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+
+.button--primary {
+  background-color: #2706cf;
+  border-color: #2706cf;
+  color: #fcfcfc;
+}
+
+.button--primary:hover {
+  background-color: #573ed5;
+  border-color: #573ed5;
+  color: #fcfcfc;
+}
+
+.theme-code-block {
+  border: 1px solid #dedee0;
+  border-radius: 0.75rem;
+  box-shadow:
+    0 0 1px 0 rgba(0, 0, 0, 0.06),
+    0 1px 2px 0 rgba(0, 0, 0, 0.06),
+    0 2px 4px 0 rgba(0, 0, 0, 0.04);
+}
+
+.footer {
+  border-top: 1px solid #e4e4e7;
+}
+
+.footer__title {
+  font-weight: 600;
+}
+
+.footer__copyright {
+  font-size: 0.875rem;
 }
