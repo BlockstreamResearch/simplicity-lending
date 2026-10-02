@@ -75,18 +75,37 @@ const config: Config = {
         {
           title: 'Docs',
           items: [
-            {
-              label: 'Introduction',
-              to: '/docs/intro',
-            },
+            {label: 'Introduction', to: '/docs/intro'},
+            {label: 'Roles', to: '/docs/roles'},
+            {label: 'Offer parameters', to: '/docs/offer-parameters'},
+            {label: 'Contracts', to: '/docs/contracts/lending'},
           ],
         },
         {
-          title: 'Repository',
+          title: 'Simplicity',
+          items: [
+            {label: 'About Simplicity', href: 'https://simplicity-lang.org/'},
+            {
+              label: 'SimplicityHL reference',
+              href: 'https://docs.simplicity-lang.org/simplicityhl-reference/',
+            },
+            {label: 'Liquid testnet faucet', href: 'https://liquidtestnet.com/faucet'},
+          ],
+        },
+        {
+          title: 'Community',
           items: [
             {
               label: 'GitHub',
               href: 'https://github.com/BlockstreamResearch/simplicity-lending',
+            },
+            {
+              label: 'Forum',
+              href: 'https://community.simplicity-lang.org/c/share-your-projects/simplicity-lending-protocol/12',
+            },
+            {
+              label: 'Report an issue',
+              href: 'https://github.com/BlockstreamResearch/simplicity-lending/issues/new/choose',
             },
           ],
         },

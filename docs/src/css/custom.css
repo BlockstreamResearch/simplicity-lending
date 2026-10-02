@@ -22,7 +22,7 @@
   --ifm-color-warning: #f5a524;
   --ifm-color-danger: #ff383c;
 
-  --ifm-background-color: #f5f5f5;
+  --ifm-background-color: #ffffff;
   --ifm-background-surface-color: #ffffff;
   --ifm-font-color-base: #18181b;
   --ifm-font-color-secondary: #71717a;
@@ -32,7 +32,7 @@
   --ifm-color-emphasis-200: #e4e4e7;
   --ifm-color-emphasis-300: #dedee0;
   --ifm-hr-background-color: #e4e4e7;
-  --ifm-hover-overlay: rgba(39, 6, 207, 0.03);
+  --ifm-hover-overlay: #ffffff;
 
   --ifm-link-color: #2706cf;
   --ifm-link-hover-color: #573ed5;
@@ -68,10 +68,10 @@
   --ifm-menu-color: #18181b;
   --ifm-menu-color-active: #2706cf;
   --ifm-menu-color-background-active: rgba(39, 6, 207, 0.15);
-  --ifm-menu-color-background-hover: rgba(39, 6, 207, 0.03);
+  --ifm-menu-color-background-hover: #ffffff;
 
   --ifm-toc-border-color: #e4e4e7;
-  --ifm-footer-background-color: #f5f5f5;
+  --ifm-footer-background-color: #ffffff;
   --ifm-footer-color: #71717a;
   --ifm-footer-link-color: #18181b;
   --ifm-footer-link-hover-color: #2706cf;
@@ -99,6 +99,10 @@
 .menu__link {
   border-radius: 0.25rem;
   font-weight: 500;
+}
+
+.menu__link:hover {
+  color: #2706cf;
 }
 
 .menu__link--active {
