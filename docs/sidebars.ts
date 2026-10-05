@@ -4,8 +4,18 @@ const sidebars: SidebarsConfig = {
   docsSidebar: [
     'intro',
     'simplicity',
-    'roles',
-    'offer-parameters',
+    {
+      type: 'category',
+      label: 'Protocol',
+      link: {
+        type: 'generated-index',
+        title: 'Protocol',
+        description:
+          'How a loan is split between a borrower and a lender, which actions each of them can take and when, and the collateral, principal, fee, and term that an offer fixes when it is created.',
+        slug: '/protocol',
+      },
+      items: ['protocol/roles', 'protocol/offer-parameters'],
+    },
     {
       type: 'category',
       label: 'Borrower',

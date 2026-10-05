@@ -90,8 +90,8 @@ An indexer service watches the chain and lists open offers so that the app can d
 ## Documentation map
 
 - [Simplicity](./simplicity.md) — the language the contracts are written in
-- [Roles](./roles.md) — what borrowers and lenders can do
-- [Offer parameters](./offer-parameters.md) — collateral, loan amount, fee, and term
+- [Roles](./protocol/roles.md) — what borrowers and lenders can do
+- [Offer parameters](./protocol/offer-parameters.md) — collateral, loan amount, fee, and term
 - [Borrower](./borrower/create-account.md) and [Lender](./lender/review-offer.md) — the steps each role takes
 - [Contracts](./contracts/lending.md) — reference for the Simplicity programs
 - [Developers](./developers/versions.md) — versions, build, and how to run the stack
