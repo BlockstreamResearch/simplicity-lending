@@ -24,7 +24,7 @@ use super::core::{
     parse_vault_asset, parse_vault_u64, signer_error,
 };
 
-pub(super) const BOOTSTRAP_AMOUNT: u64 = 1_000;
+pub(super) const INITIAL_COLLECTOR_AMOUNT: u64 = 1_000;
 
 pub(super) fn prepare_harvest(
     ctx: &AppContext,
@@ -292,7 +292,7 @@ pub(super) fn finalize_withdrawal(
     Ok((transaction, pool_amount))
 }
 
-pub(super) fn finalize_bootstrap(
+pub(super) fn finalize_collector_creation(
     signer: &Signer,
     fee_collector: &FeeCollector,
     principal_asset: AssetId,
@@ -303,15 +303,15 @@ pub(super) fn finalize_bootstrap(
     let mut transaction = new_transaction();
     let mut change_output = None;
     let pool_amount = if principal_asset == policy_asset {
-        BOOTSTRAP_AMOUNT
+        INITIAL_COLLECTOR_AMOUNT
     } else {
-        let selected = select_bootstrap_utxos(funding_utxos, principal_name)?;
+        let selected = select_initial_funding_utxos(funding_utxos, principal_name)?;
         let total = selected
             .iter()
             .try_fold(0u64, |acc, utxo| acc.checked_add(utxo.amount()))
             .ok_or(HarvesterError::AmountOverflow)?;
         let confidential = selected.iter().any(is_confidential);
-        let (pool_amount, change) = bootstrap_split(total, confidential);
+        let (pool_amount, change) = split_initial_collector_amount(total, confidential);
         for utxo in selected {
             transaction.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
         }
@@ -340,7 +340,7 @@ pub(super) fn finalize_bootstrap(
     Ok((transaction, pool_amount))
 }
 
-fn select_bootstrap_utxos(
+fn select_initial_funding_utxos(
     funding_utxos: &[UTXO],
     principal_asset: &str,
 ) -> Result<Vec<UTXO>, HarvesterError> {
@@ -349,7 +349,7 @@ fn select_bootstrap_utxos(
 
     if let Some(index) = utxos
         .iter()
-        .position(|utxo| utxo.amount() >= BOOTSTRAP_AMOUNT)
+        .position(|utxo| utxo.amount() >= INITIAL_COLLECTOR_AMOUNT)
     {
         return Ok(vec![utxos.swap_remove(index)]);
     }
@@ -361,20 +361,20 @@ fn select_bootstrap_utxos(
             .checked_add(utxo.amount())
             .ok_or(HarvesterError::AmountOverflow)?;
         selected.push(utxo);
-        if total >= BOOTSTRAP_AMOUNT {
+        if total >= INITIAL_COLLECTOR_AMOUNT {
             return Ok(selected);
         }
     }
 
-    Err(HarvesterError::NoBootstrapFunds {
+    Err(HarvesterError::NoCollectorFunds {
         principal_asset: principal_asset.to_owned(),
     })
 }
 
-fn bootstrap_split(total: u64, confidential: bool) -> (u64, u64) {
-    let change = total.saturating_sub(BOOTSTRAP_AMOUNT);
-    if change == 0 || confidential || change >= BOOTSTRAP_AMOUNT {
-        (BOOTSTRAP_AMOUNT, change)
+fn split_initial_collector_amount(total: u64, confidential: bool) -> (u64, u64) {
+    let change = total.saturating_sub(INITIAL_COLLECTOR_AMOUNT);
+    if change == 0 || confidential || change >= INITIAL_COLLECTOR_AMOUNT {
+        (INITIAL_COLLECTOR_AMOUNT, change)
     } else {
         (total, 0)
     }
@@ -453,12 +453,12 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_spends_the_smallest_utxo_that_covers_the_seed() {
+    fn collector_creation_spends_the_smallest_utxo_that_covers_the_initial_amount() {
         let asset = asset_id("11");
-        let selected = super::select_bootstrap_utxos(
+        let selected = super::select_initial_funding_utxos(
             &[
                 explicit_keeper(asset, 500, 0),
-                explicit_keeper(asset, super::BOOTSTRAP_AMOUNT, 1),
+                explicit_keeper(asset, super::INITIAL_COLLECTOR_AMOUNT, 1),
                 explicit_keeper(asset, 50_000, 2),
             ],
             "11",
@@ -466,13 +466,13 @@ mod tests {
         .unwrap();
 
         assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].amount(), super::BOOTSTRAP_AMOUNT);
+        assert_eq!(selected[0].amount(), super::INITIAL_COLLECTOR_AMOUNT);
     }
 
     #[test]
-    fn bootstrap_combines_utxos_until_the_seed_is_covered() {
+    fn collector_creation_combines_utxos_until_the_initial_amount_is_covered() {
         let asset = asset_id("11");
-        let selected = super::select_bootstrap_utxos(
+        let selected = super::select_initial_funding_utxos(
             &[
                 explicit_keeper(asset, 400, 0),
                 explicit_keeper(asset, 400, 1),
@@ -488,24 +488,27 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_rejects_a_wallet_below_the_seed() {
+    fn collector_creation_rejects_a_wallet_below_the_initial_amount() {
         let asset = asset_id("11");
-        let error =
-            super::select_bootstrap_utxos(&[explicit_keeper(asset, 400, 0)], "asset").unwrap_err();
+        let error = super::select_initial_funding_utxos(&[explicit_keeper(asset, 400, 0)], "asset")
+            .unwrap_err();
 
-        assert!(matches!(error, HarvesterError::NoBootstrapFunds { .. }));
+        assert!(matches!(error, HarvesterError::NoCollectorFunds { .. }));
     }
 
     #[test]
-    fn explicit_change_below_the_seed_stays_in_the_collector() {
-        assert_eq!(super::bootstrap_split(1_500, false), (1_500, 0));
+    fn explicit_change_below_the_initial_amount_stays_in_the_collector() {
         assert_eq!(
-            super::bootstrap_split(5_000, false),
-            (super::BOOTSTRAP_AMOUNT, 4_000)
+            super::split_initial_collector_amount(1_500, false),
+            (1_500, 0)
         );
         assert_eq!(
-            super::bootstrap_split(1_005, true),
-            (super::BOOTSTRAP_AMOUNT, 5)
+            super::split_initial_collector_amount(5_000, false),
+            (super::INITIAL_COLLECTOR_AMOUNT, 4_000)
+        );
+        assert_eq!(
+            super::split_initial_collector_amount(1_005, true),
+            (super::INITIAL_COLLECTOR_AMOUNT, 5)
         );
     }
 

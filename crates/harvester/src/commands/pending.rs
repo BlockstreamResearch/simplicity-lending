@@ -247,7 +247,7 @@ fn finish_drop(path: &Path, state: &State) -> Result<PendingOutcome, HarvesterEr
 }
 
 fn pending_drop(state: &State) -> PendingDrop {
-    if unconfirmed_bootstrap(state) {
+    if is_initial_collector_creation(state) {
         PendingDrop::Remove
     } else {
         PendingDrop::Keep(clear_pending(state, false))
@@ -318,7 +318,7 @@ fn saved_transaction(state: &State) -> Result<Option<Transaction>, HarvesterErro
 }
 
 fn pending_op(state: &State, transaction: &Transaction) -> Option<CollectorOp> {
-    if unconfirmed_bootstrap(state) {
+    if is_initial_collector_creation(state) {
         return None;
     }
     let script = state.pending_script.as_deref()?;
@@ -333,7 +333,7 @@ fn pending_op(state: &State, transaction: &Transaction) -> Option<CollectorOp> {
     })
 }
 
-fn unconfirmed_bootstrap(state: &State) -> bool {
+fn is_initial_collector_creation(state: &State) -> bool {
     state.pending_txid.as_deref() == Some(state.outpoint.txid.as_str())
 }
 
@@ -391,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn rejected_bootstrap_drops_the_unconfirmed_pool() {
+    fn rejected_collector_creation_removes_the_unconfirmed_collector() {
         let txid = "aa".repeat(32);
         let state = crate::state::State {
             outpoint: crate::state::Outpoint {
@@ -434,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn rejected_bootstrap_closes_state_instead_of_deleting_it() {
+    fn rejected_collector_creation_closes_state_instead_of_deleting_it() {
         let dir = TempDir::new();
         let path = dir.path.join("state.json");
         let txid = "aa".repeat(32);
@@ -515,9 +515,9 @@ mod tests {
         }
     }
 
-    fn operation_state(script: &str, bootstrap: bool) -> crate::state::State {
+    fn operation_state(script: &str, initial_creation: bool) -> crate::state::State {
         let outpoint = "aa".repeat(32);
-        let pending = if bootstrap {
+        let pending = if initial_creation {
             outpoint.clone()
         } else {
             "bb".repeat(32)

@@ -12,7 +12,8 @@ use simplex::transaction::UTXO;
 
 use super::pending::{CollectorOp, PendingOutcome, pending_in_mempool, publish, settle_pending};
 use super::tx::{
-    BOOTSTRAP_AMOUNT, destination_script, finalize_bootstrap, finalize_withdrawal, prepare_harvest,
+    INITIAL_COLLECTOR_AMOUNT, destination_script, finalize_collector_creation, finalize_withdrawal,
+    prepare_harvest,
 };
 use crate::AppContext;
 use crate::config::CollectorSettings;
@@ -40,20 +41,9 @@ pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
 pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
     let path = crate::state_path();
     let _lock = StateLock::lock(&path)?;
-    let collector = match load_collector(ctx)? {
-        Some(state) => match settle_pending(ctx, &path, &state, CollectorOp::Harvest)? {
-            PendingOutcome::Ready(state) => {
-                tracing::info!(
-                    path = %path.display(),
-                    outpoint = %state.outpoint,
-                    "loaded collector state"
-                );
-                state
-            }
-            PendingOutcome::Waiting => return Err(pending_in_mempool(&state)),
-            PendingOutcome::Spent => return Err(HarvesterError::NotBootstrapped { path }),
-        },
-        None => return Err(HarvesterError::NotBootstrapped { path }),
+    let collector = match ensure_collector(ctx, &path)? {
+        CollectorStatus::Ready(state) => state,
+        CollectorStatus::Pending => return Ok(()),
     };
 
     let vaults = vaults::fetch_claimable_vaults(ctx).await?;
@@ -94,13 +84,26 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
     )
 }
 
-pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
-    let path = crate::state_path();
-    let _lock = StateLock::lock(&path)?;
-    if load_collector(ctx)?.is_some() {
-        return Err(HarvesterError::AlreadyBootstrapped);
-    }
+fn ensure_collector(ctx: &AppContext, path: &Path) -> Result<CollectorStatus, HarvesterError> {
+    let Some(state) = load_collector(ctx)? else {
+        return create_collector(ctx, path);
+    };
 
+    match settle_pending(ctx, path, &state, CollectorOp::Harvest)? {
+        PendingOutcome::Ready(state) => {
+            tracing::info!(
+                path = %path.display(),
+                outpoint = %state.outpoint,
+                "loaded collector state"
+            );
+            Ok(CollectorStatus::Ready(state))
+        }
+        PendingOutcome::Waiting => Err(pending_in_mempool(&state)),
+        PendingOutcome::Spent => create_collector(ctx, path),
+    }
+}
+
+fn create_collector(ctx: &AppContext, path: &Path) -> Result<CollectorStatus, HarvesterError> {
     let network = ctx.settings.esplora.simplicity_network();
     let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
     let signer = harvest_signer(ctx)?;
@@ -111,14 +114,14 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
         .try_fold(0u64, |acc, utxo| acc.checked_add(utxo.amount()))
         .ok_or(HarvesterError::AmountOverflow)?;
 
-    if total_amount < BOOTSTRAP_AMOUNT {
-        return Err(HarvesterError::NoBootstrapFunds {
+    if total_amount < INITIAL_COLLECTOR_AMOUNT {
+        return Err(HarvesterError::NoCollectorFunds {
             principal_asset: ctx.settings.principal_asset.clone(),
         });
     }
 
     let fee_collector = open_fee_collector(ctx)?;
-    let (transaction, pool_amount) = finalize_bootstrap(
+    let (transaction, pool_amount) = finalize_collector_creation(
         &signer,
         &fee_collector,
         principal_asset,
@@ -131,7 +134,7 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
 
     match publish(
         ctx,
-        &path,
+        path,
         Outpoint {
             txid: txid.clone(),
             vout: 0,
@@ -144,23 +147,21 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
                 outpoint = %state.outpoint,
                 pool_amount,
                 path = %path.display(),
-                "bootstrapped the fee collector pool"
+                "created fee collector"
             );
+            Ok(CollectorStatus::Ready(state))
         }
         PendingOutcome::Waiting => {
             tracing::info!(
                 %txid,
                 pool_amount,
                 path = %path.display(),
-                "bootstrapped the fee collector pool"
+                "created fee collector; awaiting confirmation"
             );
+            Ok(CollectorStatus::Pending)
         }
-        PendingOutcome::Spent => {
-            return Err(HarvesterError::CollectorOutputs { txid, count: 0 });
-        }
+        PendingOutcome::Spent => Err(HarvesterError::CollectorOutputs { txid, count: 0 }),
     }
-
-    Ok(())
 }
 
 pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), HarvesterError> {
@@ -168,7 +169,7 @@ pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), Harveste
     let path = crate::state_path();
     let _lock = StateLock::lock(&path)?;
     let state = match load_collector(ctx)? {
-        None => return Err(HarvesterError::NotBootstrapped { path }),
+        None => return Err(HarvesterError::NoCollector { path }),
         Some(state) => match settle_pending(ctx, &path, &state, CollectorOp::Withdraw)? {
             PendingOutcome::Ready(state) => state,
             PendingOutcome::Waiting => return Err(pending_in_mempool(&state)),
@@ -402,6 +403,11 @@ fn configured_collector(collector: &CollectorSettings) -> Option<State> {
         pending_tx: None,
         closed: false,
     })
+}
+
+enum CollectorStatus {
+    Ready(State),
+    Pending,
 }
 
 #[cfg(test)]

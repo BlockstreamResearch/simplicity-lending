@@ -28,9 +28,6 @@ pub enum HarvesterError {
     #[error("invalid `{field}` value `{value}` in configuration")]
     InvalidSetting { field: &'static str, value: String },
 
-    #[error("fee collector is already bootstrapped")]
-    AlreadyBootstrapped,
-
     #[error("`{field}` is empty or not a valid mnemonic")]
     InvalidMnemonic { field: &'static str },
 
@@ -39,8 +36,8 @@ pub enum HarvesterError {
     )]
     CollectorScriptMismatch { txid: String },
 
-    #[error("fee collector is not bootstrapped at {path}")]
-    NotBootstrapped { path: std::path::PathBuf },
+    #[error("no active fee collector at {path}")]
+    NoCollector { path: std::path::PathBuf },
 
     #[error("collector transaction {txid} is still in the mempool")]
     PendingInMempool { txid: String },
@@ -52,9 +49,9 @@ pub enum HarvesterError {
     InvalidAddress { address: String },
 
     #[error(
-        "no principal-asset ({principal_asset}) funds in the harvest wallet to bootstrap the fee collector"
+        "no principal-asset ({principal_asset}) funds in the harvest wallet to create the fee collector"
     )]
-    NoBootstrapFunds { principal_asset: String },
+    NoCollectorFunds { principal_asset: String },
 
     #[error("amount overflows u64")]
     AmountOverflow,

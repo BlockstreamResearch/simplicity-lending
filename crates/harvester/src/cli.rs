@@ -20,8 +20,6 @@ enum Command {
     Run,
     /// Run a single harvest pass
     Harvest,
-    /// Create the initial fee collector UTXO
-    Bootstrap,
     /// Withdraw from the fee collector
     Withdraw {
         /// Destination address (overrides config)
@@ -43,7 +41,6 @@ impl Cli {
         let result = match self.command {
             Command::Run => commands::run(&ctx).await,
             Command::Harvest => commands::harvest(&ctx).await,
-            Command::Bootstrap => commands::bootstrap(&ctx).await,
             Command::Withdraw { to } => commands::withdraw(&ctx, to.as_deref()).await,
         };
         if let Err(error) = &result {
