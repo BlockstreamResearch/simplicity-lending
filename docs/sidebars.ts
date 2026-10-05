@@ -11,10 +11,10 @@ const sidebars: SidebarsConfig = {
         type: 'generated-index',
         title: 'Protocol',
         description:
-          'How a loan is split between a borrower and a lender, which actions each of them can take and when, and the collateral, principal, fee, and term that an offer fixes when it is created.',
+          'Who the borrower and the lender are, which actions an offer allows in each state, and the collateral, principal, fee, and term fixed when the offer is created.',
         slug: '/protocol',
       },
-      items: ['protocol/roles', 'protocol/offer-parameters'],
+      items: ['protocol/roles', 'protocol/actions', 'protocol/offer-parameters'],
     },
     {
       type: 'category',
@@ -23,6 +23,7 @@ const sidebars: SidebarsConfig = {
         'borrower/create-account',
         'borrower/create-offer',
         'borrower/cancel-offer',
+        'borrower/claim-principal',
         'borrower/repay',
       ],
     },

@@ -21,18 +21,19 @@ The protocol is a demo running on Liquid testnet. It is being actively tested an
 
 The fee is a single rate, fixed for the whole term, and the lender receives 90% of it. How that rate is stored, and what the protocol keeps, is in [Offer parameters](./protocol/offer-parameters.md).
 
-Collateral never moves to the counterparty or to the protocol. It sits in a contract output, and a role token in your own wallet is what lets you act on the loan. [Roles](./protocol/roles.md) lists each action and the token it requires.
+Collateral never moves to the counterparty or to the protocol. It sits in a contract output, and a role token in your own wallet is what lets you act on the loan. [Roles](./protocol/roles.md) explains that token. [Actions](./protocol/actions.md) lists what it authorizes.
 
 An indexer watches the chain and lists open offers for the app. It only reads: it cannot move funds, and every change still requires a transaction signed by you.
 
 ## Liquidation follows the term, not the price
 
-The contract has no price feed. A fall in the collateral's price during the term does not liquidate the loan. The deadline does. The app's loan-to-value check, and how the deadline is measured, are in [Offer parameters](./protocol/offer-parameters.md). What becomes possible once that deadline is reached is in [Roles](./protocol/roles.md).
+The contract has no price feed. A fall in the collateral's price during the term does not liquidate the loan. The deadline does. The app's loan-to-value check, and how the deadline is measured, are in [Offer parameters](./protocol/offer-parameters.md). What becomes possible once that deadline is reached is in [Actions](./protocol/actions.md).
 
 ## Documentation map
 
 - [Simplicity](./simplicity.md) — the language the contracts are written in
-- [Roles](./protocol/roles.md) — what borrowers and lenders can do
+- [Roles](./protocol/roles.md) — the token that makes someone a borrower or a lender
+- [Actions](./protocol/actions.md) — what each role can do, and when
 - [Offer parameters](./protocol/offer-parameters.md) — collateral, loan amount, fee, and term
 - [Borrower](./borrower/create-account.md) and [Lender](./lender/review-offer.md) — the steps each role takes
 - [Contracts](./contracts/lending.md) — reference for the Simplicity programs

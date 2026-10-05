@@ -14,7 +14,7 @@ The collateral is the amount of tL-BTC the borrower locks in the contract. It st
 
 ## Principal
 
-The principal is the amount of TEST the borrower wants to receive. The app requires at least 0.1 TEST. The lender provides it when funding the offer, and it sits in an output the borrower then claims. Until that claim, the app offers no repayment action.
+The principal is the amount of TEST the borrower wants to receive. The app requires at least 0.1 TEST. The lender provides it when funding the offer, and it sits in an output the borrower then [claims](../borrower/claim-principal.md). Until that claim, the app offers no repayment action.
 
 ## Fee
 
@@ -28,7 +28,7 @@ The app also shows an APR. That figure annualizes the fee against the principal 
 
 The term is a block height: the height of the block the offer is created in, plus a number of blocks chosen up front. The app offers 7, 14, 30, and 90 days and converts them at roughly one Liquid block per minute, so 7 days is 10080 blocks. Blocks are not exactly one minute apart, so the deadline in clock time is an estimate.
 
-Which actions this height blocks is covered in [Roles](./roles.md).
+Which actions this height blocks is covered in [Actions](./actions.md).
 
 ## Loan-to-value
 

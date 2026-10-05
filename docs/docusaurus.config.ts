@@ -77,6 +77,7 @@ const config: Config = {
           items: [
             {label: 'Introduction', to: '/docs/intro'},
             {label: 'Roles', to: '/docs/protocol/roles'},
+            {label: 'Actions', to: '/docs/protocol/actions'},
             {label: 'Offer parameters', to: '/docs/protocol/offer-parameters'},
             {label: 'Contracts', to: '/docs/contracts/lending'},
           ],
