@@ -6,7 +6,7 @@ description: Which actions a borrower and a lender can take, when each one is av
 
 Two parties take part in a loan. The borrower publishes an offer and locks collateral. The lender funds that offer and is repaid, or claims the collateral if the deadline passes unpaid.
 
-Holding the role token is what makes someone the borrower or the lender of a given offer. A pending offer has no lender yet, so anyone can fund it. Funding moves the lender NFT into that person's wallet, and from then on the role belongs to whoever holds the token.
+Holding the role token is what makes someone the borrower or the lender of a given offer. A pending offer has no lender yet, so anyone can fund it. Funding moves the lender NFT into that person's wallet, and from then on the role belongs to whoever holds the token. A position follows that token rather than a person: whoever controls the output can act in the role, and handing the output to someone else hands the role over with it.
 
 ## What each role can do
 
@@ -29,5 +29,13 @@ Once an offer is cancelled, or the lender has claimed the repayment, neither par
 The contract checks the deadline in one place: liquidating an active loan. Funding a pending offer does not consult it, and neither does cancelling. The app hides the funding action once the deadline block has passed, but that is only a check in the interface. A transaction built outside the app is still valid.
 
 Leaving an expired offer open means a lender can fund it and liquidate immediately afterwards, because the loan is already past its deadline. The collateral comes back when the borrower cancels, and cancellation stays possible for as long as the offer is pending.
+
+:::
+
+:::warning[Repay before the deadline, not on it]
+
+There is no grace period on an active loan. Liquidation becomes available the moment the deadline block is reached, and the contract does not block repayment after that point either. Both transactions are valid at the same time, and the position goes to whichever one confirms first. A late borrower is relying on the lender not having broadcast yet.
+
+Leave margin instead of planning to repay on the final day. The deadline is a block height, and [Offer parameters](./offer-parameters.md) explains how the app turns a number of days into one.
 
 :::

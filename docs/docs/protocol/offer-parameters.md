@@ -6,7 +6,7 @@ description: The four fields an offer fixes when it is created — collateral, p
 
 An offer fixes four things when it is created: how much collateral is locked, how much principal the borrower wants, the fee on top of that principal, and how long the loan lasts. All four become parameters of the contract, so publishing an offer with different values means publishing a different contract. Nothing here can be edited afterwards.
 
-On Liquid testnet the collateral asset is tL-BTC and the principal asset is TEST. The amounts below are in those assets.
+On Liquid testnet the collateral asset is [tL-BTC](https://blockstream.info/liquidtestnet/asset/144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49) and the principal asset is [TEST](https://blockstream.info/liquidtestnet/asset/38fca2d939696061a8f76d4e6b5eecd54e3b4221c846f24a6b279e79952850a5). The amounts below are in those assets.
 
 ## Collateral
 
