@@ -37,61 +37,65 @@ pub struct StateLock {
     _file: File,
 }
 
-pub fn lock(path: &Path) -> Result<StateLock, HarvesterError> {
-    let lock_path = lock_path(path);
-    let file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(&lock_path)
-        .map_err(|source| io_error(&lock_path, source))?;
-    lock_exclusive(&file).map_err(|source| io_error(&lock_path, source))?;
-    Ok(StateLock { _file: file })
-}
-
-pub fn load(path: &Path) -> Result<Option<State>, HarvesterError> {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(source) if source.kind() == ErrorKind::NotFound => return Ok(None),
-        Err(source) => return Err(io_error(path, source)),
-    };
-
-    serde_json::from_slice(&bytes)
-        .map(Some)
-        .map_err(|source| HarvesterError::InvalidState {
-            path: path.to_path_buf(),
-            source,
-        })
-}
-
-pub fn save(path: &Path, state: &State) -> Result<(), HarvesterError> {
-    let tmp_path = temporary_path(path);
-    if let Err(err) = write_temporary(path, &tmp_path, state) {
-        let _ = std::fs::remove_file(&tmp_path);
-        return Err(err);
+impl StateLock {
+    pub fn lock(path: &Path) -> Result<Self, HarvesterError> {
+        let lock_path = lock_path(path);
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .map_err(|source| io_error(&lock_path, source))?;
+        lock_exclusive(&file).map_err(|source| io_error(&lock_path, source))?;
+        Ok(Self { _file: file })
     }
-    if let Err(source) = std::fs::rename(&tmp_path, path) {
-        let _ = std::fs::remove_file(&tmp_path);
-        return Err(io_error(path, source));
-    }
-    Ok(())
 }
 
-fn write_temporary(path: &Path, tmp_path: &Path, state: &State) -> Result<(), HarvesterError> {
-    let mut payload =
-        serde_json::to_vec_pretty(state).map_err(|source| HarvesterError::InvalidState {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    payload.push(b'\n');
+impl State {
+    pub fn load(path: &Path) -> Result<Option<Self>, HarvesterError> {
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(source) if source.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(source) => return Err(io_error(path, source)),
+        };
 
-    let mut file = File::create(tmp_path).map_err(|source| io_error(tmp_path, source))?;
-    file.write_all(&payload)
-        .map_err(|source| io_error(tmp_path, source))?;
-    file.sync_all()
-        .map_err(|source| io_error(tmp_path, source))?;
-    Ok(())
+        serde_json::from_slice(&bytes)
+            .map(Some)
+            .map_err(|source| HarvesterError::InvalidState {
+                path: path.to_path_buf(),
+                source,
+            })
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), HarvesterError> {
+        let tmp_path = temporary_path(path);
+        if let Err(err) = self.write_temporary(path, &tmp_path) {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(err);
+        }
+        if let Err(source) = std::fs::rename(&tmp_path, path) {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(io_error(path, source));
+        }
+        Ok(())
+    }
+
+    fn write_temporary(&self, path: &Path, tmp_path: &Path) -> Result<(), HarvesterError> {
+        let mut payload =
+            serde_json::to_vec_pretty(self).map_err(|source| HarvesterError::InvalidState {
+                path: path.to_path_buf(),
+                source,
+            })?;
+        payload.push(b'\n');
+
+        let mut file = File::create(tmp_path).map_err(|source| io_error(tmp_path, source))?;
+        file.write_all(&payload)
+            .map_err(|source| io_error(tmp_path, source))?;
+        file.sync_all()
+            .map_err(|source| io_error(tmp_path, source))?;
+        Ok(())
+    }
 }
 
 fn lock_exclusive(file: &File) -> std::io::Result<()> {
@@ -133,7 +137,7 @@ mod tests {
     use crate::error::HarvesterError;
     use crate::test_utils::TempDir;
 
-    use super::{Outpoint, State, load, lock, save};
+    use super::{Outpoint, State, StateLock};
 
     #[test]
     fn roundtrip_replaces_the_previous_file() {
@@ -150,16 +154,16 @@ mod tests {
             closed: false,
         };
 
-        save(&path, &state).unwrap();
-        assert_eq!(load(&path).unwrap().as_ref(), Some(&state));
+        state.save(&path).unwrap();
+        assert_eq!(State::load(&path).unwrap().as_ref(), Some(&state));
 
         let cleared = State {
             pending_txid: None,
             ..state
         };
-        save(&path, &cleared).unwrap();
+        cleared.save(&path).unwrap();
 
-        assert_eq!(load(&path).unwrap().as_ref(), Some(&cleared));
+        assert_eq!(State::load(&path).unwrap().as_ref(), Some(&cleared));
         assert!(!dir.path.join("state.json.tmp").exists());
 
         let closed = State {
@@ -169,8 +173,8 @@ mod tests {
             pending_tx: None,
             ..cleared
         };
-        save(&path, &closed).unwrap();
-        assert_eq!(load(&path).unwrap().as_ref(), Some(&closed));
+        closed.save(&path).unwrap();
+        assert_eq!(State::load(&path).unwrap().as_ref(), Some(&closed));
     }
 
     #[test]
@@ -178,18 +182,18 @@ mod tests {
         let dir = TempDir::new();
         let path = dir.path.join("state.json");
 
-        let held = lock(&path).unwrap();
+        let held = StateLock::lock(&path).unwrap();
         assert!(dir.path.join("state.json.lock").exists());
         drop(held);
 
-        let _again = lock(&path).unwrap();
+        let _again = StateLock::lock(&path).unwrap();
     }
 
     #[test]
     fn missing_file_is_absent_state() {
         let dir = TempDir::new();
 
-        assert_eq!(load(&dir.path.join("state.json")).unwrap(), None);
+        assert_eq!(State::load(&dir.path.join("state.json")).unwrap(), None);
     }
 
     #[test]
@@ -199,7 +203,7 @@ mod tests {
         std::fs::write(&path, b"{").unwrap();
 
         assert!(matches!(
-            load(&path).unwrap_err(),
+            State::load(&path).unwrap_err(),
             HarvesterError::InvalidState { .. }
         ));
     }

@@ -17,7 +17,7 @@ use super::tx::{
 use crate::AppContext;
 use crate::config::CollectorSettings;
 use crate::error::HarvesterError;
-use crate::state::{self, Outpoint, State};
+use crate::state::{Outpoint, State, StateLock};
 use crate::vaults;
 
 pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
@@ -39,7 +39,7 @@ pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
 
 pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
     let path = crate::state_path();
-    let _lock = state::lock(&path)?;
+    let _lock = StateLock::lock(&path)?;
     let collector = match load_collector(ctx)? {
         Some(state) => match settle_pending(ctx, &path, &state, CollectorOp::Harvest)? {
             PendingOutcome::Ready(state) => {
@@ -96,7 +96,7 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
 
 pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
     let path = crate::state_path();
-    let _lock = state::lock(&path)?;
+    let _lock = StateLock::lock(&path)?;
     if load_collector(ctx)?.is_some() {
         return Err(HarvesterError::AlreadyBootstrapped);
     }
@@ -166,7 +166,7 @@ pub async fn bootstrap(ctx: &AppContext) -> Result<(), HarvesterError> {
 pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), HarvesterError> {
     let destination = destination_script(ctx, to)?;
     let path = crate::state_path();
-    let _lock = state::lock(&path)?;
+    let _lock = StateLock::lock(&path)?;
     let state = match load_collector(ctx)? {
         None => return Err(HarvesterError::NotBootstrapped { path }),
         Some(state) => match settle_pending(ctx, &path, &state, CollectorOp::Withdraw)? {
@@ -274,7 +274,7 @@ fn sync_collector_outpoint(
         },
         ..state.clone()
     };
-    state::save(path, &updated)?;
+    updated.save(path)?;
     tracing::info!(
         previous = %state.outpoint,
         outpoint = %updated.outpoint,
@@ -383,7 +383,7 @@ pub(super) fn load_collector_at(
     path: &Path,
     collector: &CollectorSettings,
 ) -> Result<Option<State>, HarvesterError> {
-    match state::load(path)? {
+    match State::load(path)? {
         Some(state) if state.closed => Ok(None),
         Some(state) => Ok(Some(state)),
         None => Ok(configured_collector(collector)),
@@ -491,7 +491,10 @@ mod tests {
         assert_eq!(stored.outpoint.vout, 3);
         assert!(!stored.closed);
         assert_eq!(stored.pending_txid, None);
-        assert_eq!(crate::state::load(&path).unwrap().as_ref(), Some(&stored));
+        assert_eq!(
+            crate::state::State::load(&path).unwrap().as_ref(),
+            Some(&stored)
+        );
 
         let again = super::select_collector_utxo(
             &stored,
@@ -561,7 +564,9 @@ mod tests {
         let dir = TempDir::new();
         let path = dir.path.join("state.json");
         let yaml_txid = "11".repeat(32);
-        crate::state::save(&path, &collector_state("22".repeat(32), 0, None, true)).unwrap();
+        collector_state("22".repeat(32), 0, None, true)
+            .save(&path)
+            .unwrap();
 
         assert_eq!(
             super::load_collector_at(&path, &collector_settings(&yaml_txid, 4)).unwrap(),
@@ -590,7 +595,9 @@ mod tests {
         let dir = TempDir::new();
         let path = dir.path.join("state.json");
         let file_txid = "22".repeat(32);
-        crate::state::save(&path, &collector_state(file_txid.clone(), 1, None, false)).unwrap();
+        collector_state(file_txid.clone(), 1, None, false)
+            .save(&path)
+            .unwrap();
 
         let state = super::load_collector_at(&path, &collector_settings(&"11".repeat(32), 4))
             .unwrap()

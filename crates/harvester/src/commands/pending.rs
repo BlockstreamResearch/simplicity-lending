@@ -10,7 +10,7 @@ use simplex::simplicityhl::elements::{Script, Transaction, Txid};
 
 use crate::AppContext;
 use crate::error::HarvesterError;
-use crate::state::{self, Outpoint, State};
+use crate::state::{Outpoint, State};
 
 use super::core::{esplora_provider, open_fee_collector};
 
@@ -98,7 +98,7 @@ fn apply_confirmation(
                 pending_tx: None,
                 closed: false,
             };
-            state::save(path, &confirmed)?;
+            confirmed.save(path)?;
             tracing::info!(
                 outpoint = %confirmed.outpoint,
                 path = %path.display(),
@@ -108,7 +108,7 @@ fn apply_confirmation(
         }
         [] if state.pending_script.is_some() => {
             let closed = clear_pending(state, true);
-            state::save(path, &closed)?;
+            closed.save(path)?;
             tracing::info!(
                 txid = %pending_txid,
                 path = %path.display(),
@@ -131,7 +131,7 @@ pub(super) fn publish(
     transaction: &Transaction,
     script_hex: &str,
 ) -> Result<PendingOutcome, HarvesterError> {
-    let previous = state::load(path)?;
+    let previous = State::load(path)?;
     let provider = esplora_provider(ctx);
     let txid = transaction.txid();
     let pending = State {
@@ -141,7 +141,7 @@ pub(super) fn publish(
         pending_tx: Some(serialize_hex(transaction)),
         closed: false,
     };
-    state::save(path, &pending)?;
+    pending.save(path)?;
 
     match provider.broadcast_transaction(transaction) {
         Ok(_) => {
@@ -188,7 +188,7 @@ fn restore_live_previous(
         txid: txid.to_owned(),
     })?;
     if tx_presence(provider, &parsed)? == TxPresence::InMempool {
-        state::save(path, previous)?;
+        previous.save(path)?;
         tracing::info!(
             txid,
             "replacement was rejected; kept the collector transaction that is still in the mempool"
@@ -236,11 +236,11 @@ fn finish_drop(path: &Path, state: &State) -> Result<PendingOutcome, HarvesterEr
     match pending_drop(state) {
         PendingDrop::Remove => {
             let closed = clear_pending(state, true);
-            state::save(path, &closed)?;
+            closed.save(path)?;
             Ok(PendingOutcome::Spent)
         }
         PendingDrop::Keep(cleared) => {
-            state::save(path, &cleared)?;
+            cleared.save(path)?;
             Ok(PendingOutcome::Ready(cleared))
         }
     }
@@ -445,7 +445,7 @@ mod tests {
             super::PendingOutcome::Spent
         ));
 
-        let stored = crate::state::load(&path)
+        let stored = crate::state::State::load(&path)
             .unwrap()
             .expect("closed state stays on disk");
         assert!(stored.closed);
@@ -474,7 +474,10 @@ mod tests {
         assert!(!cleared.closed);
         assert_eq!(cleared.outpoint.vout, 1);
         assert_eq!(cleared.pending_txid, None);
-        assert_eq!(crate::state::load(&path).unwrap().as_ref(), Some(&cleared));
+        assert_eq!(
+            crate::state::State::load(&path).unwrap().as_ref(),
+            Some(&cleared)
+        );
     }
 
     #[test]
