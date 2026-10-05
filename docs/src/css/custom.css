@@ -132,6 +132,13 @@
   text-align: left;
 }
 
+.markdown details img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 1rem 0;
+}
+
 .button {
   border-radius: 0.25rem;
   font-weight: 500;
