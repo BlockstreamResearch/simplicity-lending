@@ -1,7 +1,9 @@
+use std::path::PathBuf;
+
 use serde::Deserialize;
 use simplex::provider::SimplicityNetwork;
+use simplex::simplicityhl::elements::OutPoint;
 
-use crate::configuration_dir;
 use crate::error::HarvesterError;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,13 +88,7 @@ pub struct CollectorSettings {
     #[serde(default)]
     pub withdraw_pubkey: String,
     #[serde(default)]
-    pub outpoint: Option<OutpointSettings>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct OutpointSettings {
-    pub txid: String,
-    pub vout: u32,
+    pub outpoint: Option<OutPoint>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -105,6 +101,23 @@ pub struct WithdrawSettings {
 
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
     load_configuration(&configuration_dir(), environment_source())
+}
+
+fn configuration_dir() -> PathBuf {
+    resolve_configuration_dir(
+        std::env::var("HARVESTER_CONFIGURATION_DIR").ok().as_deref(),
+        std::env::current_dir()
+            .expect("Failed to determine the current directory")
+            .join("configuration"),
+    )
+}
+
+fn resolve_configuration_dir(override_path: Option<&str>, default_dir: PathBuf) -> PathBuf {
+    override_path
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or(default_dir)
 }
 
 fn load_configuration(
@@ -132,7 +145,9 @@ mod tests {
 
     use simplex::provider::SimplicityNetwork;
 
-    use super::{EsploraSettings, environment_source, load_configuration};
+    use super::{
+        EsploraSettings, environment_source, load_configuration, resolve_configuration_dir,
+    };
     use crate::error::HarvesterError;
 
     fn configuration_dir() -> std::path::PathBuf {
@@ -188,6 +203,56 @@ mod tests {
         assert_eq!(settings.schedule.interval_secs, 30);
         assert_eq!(settings.harvest.mnemonic, "secret");
         assert_eq!(settings.harvest.max_vaults_per_tx, 25);
+    }
+
+    #[test]
+    fn collector_outpoint_parses_txid_and_vout() {
+        let txid = "11".repeat(32);
+        let settings = load_configuration(
+            &configuration_dir(),
+            environment_source().source(Some(HashMap::from([(
+                "HARVESTER_COLLECTOR__OUTPOINT".into(),
+                format!("{txid}:2"),
+            )]))),
+        )
+        .expect("load configuration");
+
+        let outpoint = settings.collector.outpoint.expect("outpoint");
+        assert_eq!(outpoint.txid.to_string(), txid);
+        assert_eq!(outpoint.vout, 2);
+    }
+
+    #[test]
+    fn collector_outpoint_rejects_an_invalid_txid() {
+        let error = load_configuration(
+            &configuration_dir(),
+            environment_source().source(Some(HashMap::from([(
+                "HARVESTER_COLLECTOR__OUTPOINT".into(),
+                "zz:0".into(),
+            )]))),
+        )
+        .expect_err("invalid outpoint");
+
+        let message = error.to_string();
+        assert!(message.contains("collector.outpoint"), "{message}");
+    }
+
+    #[test]
+    fn configuration_dir_prefers_the_environment_override() {
+        let default_dir = std::path::PathBuf::from("/app/configuration");
+
+        assert_eq!(
+            resolve_configuration_dir(None, default_dir.clone()),
+            default_dir
+        );
+        assert_eq!(
+            resolve_configuration_dir(Some("  "), default_dir.clone()),
+            default_dir
+        );
+        assert_eq!(
+            resolve_configuration_dir(Some("/etc/harvester"), default_dir),
+            std::path::PathBuf::from("/etc/harvester")
+        );
     }
 
     #[test]

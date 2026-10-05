@@ -19,7 +19,7 @@ use crate::batch::{self, FeeBatch, Selection, Step};
 use crate::error::HarvesterError;
 use crate::state::State;
 
-use super::{
+use super::core::{
     collector_utxo, harvest_signer, open_fee_collector, parse_asset_id, parse_outpoint,
     parse_vault_asset, parse_vault_u64, signer_error,
 };

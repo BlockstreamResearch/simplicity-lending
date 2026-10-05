@@ -12,7 +12,7 @@ use crate::AppContext;
 use crate::error::HarvesterError;
 use crate::state::{self, Outpoint, State};
 
-use super::{esplora_provider, open_fee_collector};
+use super::core::{esplora_provider, open_fee_collector};
 
 pub(super) fn settle_pending(
     ctx: &AppContext,
@@ -373,8 +373,12 @@ struct TxStatus {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use simplex::simplicityhl::elements::hex::ToHex;
-    use simplex::simplicityhl::elements::{LockTime, Script, Sequence, Transaction, TxIn, TxOut};
+    use simplex::simplicityhl::elements::{
+        LockTime, OutPoint, Script, Sequence, Transaction, TxIn, TxOut, Txid,
+    };
 
     use crate::test_utils::TempDir;
 
@@ -450,7 +454,7 @@ mod tests {
         assert_eq!(stored.pending_script, None);
         assert_eq!(stored.pending_tx, None);
         assert_eq!(
-            super::super::load_collector_at(&path, &collector_settings(&"11".repeat(32), 3))
+            super::super::core::load_collector_at(&path, &collector_settings(&"11".repeat(32), 3))
                 .unwrap(),
             None
         );
@@ -530,8 +534,8 @@ mod tests {
     fn collector_settings(txid: &str, vout: u32) -> crate::config::CollectorSettings {
         crate::config::CollectorSettings {
             withdraw_pubkey: String::new(),
-            outpoint: Some(crate::config::OutpointSettings {
-                txid: txid.to_owned(),
+            outpoint: Some(OutPoint {
+                txid: Txid::from_str(txid).unwrap(),
                 vout,
             }),
         }
