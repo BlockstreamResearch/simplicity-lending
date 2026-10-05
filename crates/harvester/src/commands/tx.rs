@@ -15,7 +15,7 @@ use simplex::transaction::{
 };
 
 use crate::AppContext;
-use crate::batch::{self, FeeBatch, Selection, Step};
+use crate::batch::{self, BuildStep, FeeBatch};
 use crate::error::HarvesterError;
 use crate::state::State;
 
@@ -44,16 +44,10 @@ pub(super) fn prepare_harvest(
     let policy_asset = network.policy_asset();
     let change_script = signer.get_address().script_pubkey();
 
-    let selection = if principal_asset == policy_asset {
-        Selection::Profitable
-    } else {
-        Selection::All
-    };
-
-    let batch = batch::select(
+    let batch = batch::build(
         amounts,
+        ctx.settings.harvest.min_vaults_per_tx as usize,
         ctx.settings.harvest.max_vaults_per_tx as usize,
-        selection,
         |index, total_amount| {
             let vault = &vaults[index];
             let program = match finalized_vault(vault, principal_asset, network) {
@@ -76,7 +70,7 @@ pub(super) fn prepare_harvest(
                     asset = %vault.protocol_fee_keeper_asset,
                     "skipping vault: no keeper UTXO"
                 );
-                return Ok(Step::Skip);
+                return Ok(BuildStep::Skip);
             }
 
             if collector_utxo
@@ -111,7 +105,7 @@ pub(super) fn prepare_harvest(
                     %outpoint,
                     "skipping vault: protocol-fee UTXO was not found"
                 );
-                return Ok(Step::Skip);
+                return Ok(BuildStep::Skip);
             };
 
             let on_chain = vault_utxo.explicit_amount();
@@ -123,7 +117,7 @@ pub(super) fn prepare_harvest(
                     indexed = indexed_amount,
                     "skipping vault: on-chain amount does not match the indexer"
                 );
-                return Ok(Step::Skip);
+                return Ok(BuildStep::Skip);
             }
 
             let (input_keeper_index, output_keeper_index) = match keeper_choice {
@@ -167,7 +161,7 @@ pub(super) fn prepare_harvest(
             match signer.finalize(&prefix) {
                 Ok((transaction, _)) => {
                     let tx_fee = transaction.fee_in(policy_asset);
-                    Ok(Step::Ready {
+                    Ok(BuildStep::Ready {
                         transaction,
                         tx_fee,
                     })
@@ -182,11 +176,11 @@ pub(super) fn prepare_harvest(
 fn vault_fault<T>(
     offer_id: &str,
     err: HarvesterError,
-) -> Result<Step<T, HarvesterError>, HarvesterError> {
+) -> Result<BuildStep<T, HarvesterError>, HarvesterError> {
     match &err {
         HarvesterError::InvalidVaultField { .. } | HarvesterError::InvalidTxid { .. } => {
             tracing::warn!(offer_id, error = %err, "skipping vault");
-            Ok(Step::Skip)
+            Ok(BuildStep::Skip)
         }
         _ => {
             tracing::warn!(
@@ -194,7 +188,7 @@ fn vault_fault<T>(
                 error = %err,
                 "stopping the harvest batch at this vault"
             );
-            Ok(Step::Stop(err))
+            Ok(BuildStep::Stop(err))
         }
     }
 }
@@ -426,7 +420,7 @@ mod tests {
     use simplex::simplicityhl::elements::{AssetId, OutPoint, TxOut, TxOutSecrets, Txid};
     use simplex::transaction::UTXO;
 
-    use crate::batch::Step;
+    use crate::batch::BuildStep;
     use crate::error::HarvesterError;
 
     #[test]
@@ -440,7 +434,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(matches!(skipped, Step::Skip));
+        assert!(matches!(skipped, BuildStep::Skip));
 
         let bad_txid = super::vault_fault::<()>(
             "1",
@@ -449,12 +443,12 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(matches!(bad_txid, Step::Skip));
+        assert!(matches!(bad_txid, BuildStep::Skip));
 
         let stopped = super::vault_fault::<()>("1", HarvesterError::AmountOverflow).unwrap();
         assert!(matches!(
             stopped,
-            Step::Stop(HarvesterError::AmountOverflow)
+            BuildStep::Stop(HarvesterError::AmountOverflow)
         ));
     }
 

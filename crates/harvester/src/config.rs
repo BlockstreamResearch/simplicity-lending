@@ -76,11 +76,45 @@ pub struct ScheduleSettings {
     pub interval_secs: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct HarvestSettings {
+    pub min_vaults_per_tx: u32,
     pub max_vaults_per_tx: u32,
-    #[serde(default)]
     pub mnemonic: String,
+}
+
+impl<'de> Deserialize<'de> for HarvestSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawHarvestSettings {
+            min_vaults_per_tx: u32,
+            max_vaults_per_tx: u32,
+            #[serde(default)]
+            mnemonic: String,
+        }
+
+        let raw = RawHarvestSettings::deserialize(deserializer)?;
+
+        if raw.min_vaults_per_tx == 0 {
+            return Err(serde::de::Error::custom(
+                "harvest.min_vaults_per_tx must be greater than zero",
+            ));
+        }
+        if raw.min_vaults_per_tx > raw.max_vaults_per_tx {
+            return Err(serde::de::Error::custom(
+                "harvest.min_vaults_per_tx must not exceed harvest.max_vaults_per_tx",
+            ));
+        }
+
+        Ok(Self {
+            min_vaults_per_tx: raw.min_vaults_per_tx,
+            max_vaults_per_tx: raw.max_vaults_per_tx,
+            mnemonic: raw.mnemonic,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -172,6 +206,7 @@ mod tests {
             "https://liquid.network/liquidtestnet/api"
         );
         assert_eq!(settings.schedule.interval_secs, 86400);
+        assert_eq!(settings.harvest.min_vaults_per_tx, 5);
         assert_eq!(settings.harvest.max_vaults_per_tx, 25);
         assert_eq!(
             settings.principal_asset,
@@ -195,6 +230,7 @@ mod tests {
             environment_source().source(Some(HashMap::from([
                 ("HARVESTER_SCHEDULE__INTERVAL_SECS".into(), "30".into()),
                 ("HARVESTER_HARVEST__MNEMONIC".into(), "secret".into()),
+                ("HARVESTER_HARVEST__MIN_VAULTS_PER_TX".into(), "7".into()),
                 ("SCHEDULE__INTERVAL_SECS".into(), "1".into()),
             ]))),
         )
@@ -202,7 +238,27 @@ mod tests {
 
         assert_eq!(settings.schedule.interval_secs, 30);
         assert_eq!(settings.harvest.mnemonic, "secret");
+        assert_eq!(settings.harvest.min_vaults_per_tx, 7);
         assert_eq!(settings.harvest.max_vaults_per_tx, 25);
+    }
+
+    #[test]
+    fn harvest_vault_limits_must_be_valid() {
+        for (min, max, message) in [
+            ("0", "25", "must be greater than zero"),
+            ("26", "25", "must not exceed"),
+        ] {
+            let error = load_configuration(
+                &configuration_dir(),
+                environment_source().source(Some(HashMap::from([
+                    ("HARVESTER_HARVEST__MIN_VAULTS_PER_TX".into(), min.into()),
+                    ("HARVESTER_HARVEST__MAX_VAULTS_PER_TX".into(), max.into()),
+                ]))),
+            )
+            .expect_err("invalid harvest vault limits");
+
+            assert!(error.to_string().contains(message), "{error}");
+        }
     }
 
     #[test]
