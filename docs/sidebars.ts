@@ -40,6 +40,13 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Contracts',
+      link: {
+        type: 'generated-index',
+        title: 'Contracts',
+        description:
+          'The five programs that guard the outputs a loan moves through, and what each one checks before it lets an output be spent.',
+        slug: '/contracts',
+      },
       items: [
         'contracts/lending',
         'contracts/asset-auth',
