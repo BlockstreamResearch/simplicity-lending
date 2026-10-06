@@ -1,3 +1,7 @@
+---
+description: "Publish an offer: lock the collateral and fix the principal, fee, and deadline in a new lending output."
+---
+
 # Create an offer
 
 The borrower publishes an offer and locks the collateral that backs it. The collateral stays in the [lending](../contracts/lending.md) output until the offer is repaid, cancelled, or liquidated. The principal is paid out only after a lender funds the offer.
@@ -8,16 +12,8 @@ The transaction spends the account's authorization token and the factory output,
 
 The collateral inputs are tL-BTC from the wallet, and they also cover the network fee. Anything above the locked collateral comes back to the wallet.
 
-<details>
-<summary>Transaction structure</summary>
+<TxDiagram>
 
 ![Offer creation transaction](../schemas/borrower/create-offer.svg)
 
-<details>
-<summary>Legend</summary>
-
-![Transaction diagram legend](../schemas/schemas-legend.svg)
-
-</details>
-
-</details>
+</TxDiagram>

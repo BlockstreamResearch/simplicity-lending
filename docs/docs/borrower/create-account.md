@@ -1,3 +1,7 @@
+---
+description: Set up the issuance factory a borrower needs before publishing a first offer.
+---
+
 # Create an account
 
 A borrower creates an account before publishing an offer. The account is an [issuance factory](../contracts/issuance-factory.md): one output that can issue the assets later offers need, and a token of the same asset that authorizes it.
@@ -6,16 +10,8 @@ The app creates one account for a wallet. The transaction spends a confirmed tL-
 
 Whatever tL-BTC is not spent on the network fee comes back to the wallet. The fee input has to be larger than the reserve the app keeps for that fee.
 
-<details>
-<summary>Transaction structure</summary>
+<TxDiagram>
 
 ![IssuanceFactory creation transaction](../schemas/borrower/create-account.svg)
 
-<details>
-<summary>Legend</summary>
-
-![Transaction diagram legend](../schemas/schemas-legend.svg)
-
-</details>
-
-</details>
+</TxDiagram>

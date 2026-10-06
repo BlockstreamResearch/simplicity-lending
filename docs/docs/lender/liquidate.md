@@ -1,3 +1,7 @@
+---
+description: Claim the collateral of an active loan that was not repaid by its deadline.
+---
+
 # Liquidate
 
 Once an active loan reaches its deadline block, the lender can take the collateral. This is the only lending path that reads the deadline. Repayment stays valid at the same moment, and [Actions](../protocol/actions.md) describes how the first confirmed transaction wins.
@@ -6,16 +10,8 @@ The transaction spends the active [lending](../contracts/lending.md) output and 
 
 The app offers this action on an active loan after the deadline block.
 
-<details>
-<summary>Transaction structure</summary>
+<TxDiagram>
 
 ![Liquidation transaction](../schemas/lender/liquidate-offer.svg)
 
-<details>
-<summary>Legend</summary>
-
-![Transaction diagram legend](../schemas/schemas-legend.svg)
-
-</details>
-
-</details>
+</TxDiagram>
