@@ -6,16 +6,8 @@ The app creates one account for a wallet. The transaction spends a confirmed tL-
 
 Whatever tL-BTC is not spent on the network fee comes back to the wallet. The fee input has to be larger than the reserve the app keeps for that fee.
 
-<details>
-<summary>Transaction structure</summary>
+<TxDiagram>
 
 ![IssuanceFactory creation transaction](../schemas/borrower/create-account.svg)
 
-<details>
-<summary>Legend</summary>
-
-![Transaction diagram legend](../schemas/schemas-legend.svg)
-
-</details>
-
-</details>
+</TxDiagram>

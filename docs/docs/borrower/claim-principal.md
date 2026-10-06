@@ -4,17 +4,8 @@ When a lender funds the offer, the principal is paid into an output the borrower
 
 The offer has to be active, or already liquidated if the principal was never claimed. Until the claim is done, the app offers no repayment action. tL-BTC inputs from the wallet pay the network fee, and the remainder comes back.
 
-<details>
-<summary>Transaction structure</summary>
+<TxDiagram>
 
 ![Claim principal transaction](../schemas/borrower/claim-principal.svg)
 
-<details>
-<summary>Legend</summary>
-
-![Transaction diagram legend](../schemas/schemas-legend.svg)
-
-</details>
-
-
-</details>
+</TxDiagram>

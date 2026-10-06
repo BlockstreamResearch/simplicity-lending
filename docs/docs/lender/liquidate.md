@@ -6,16 +6,8 @@ The transaction spends the active [lending](../contracts/lending.md) output and 
 
 The app offers this action on an active loan after the deadline block.
 
-<details>
-<summary>Transaction structure</summary>
+<TxDiagram>
 
 ![Liquidation transaction](../schemas/lender/liquidate-offer.svg)
 
-<details>
-<summary>Legend</summary>
-
-![Transaction diagram legend](../schemas/schemas-legend.svg)
-
-</details>
-
-</details>
+</TxDiagram>

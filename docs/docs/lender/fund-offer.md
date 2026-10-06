@@ -6,16 +6,8 @@ The transaction spends the pending offer and the lender NFT held by [script auth
 
 The contract accepts this at any block height. The app hides the action once the deadline block has passed. [Actions](../protocol/actions.md) describes what that leaves open.
 
-<details>
-<summary>Transaction structure</summary>
+<TxDiagram>
 
 ![Offer funding transaction](../schemas/lender/accept-offer.svg)
 
-<details>
-<summary>Legend</summary>
-
-![Transaction diagram legend](../schemas/schemas-legend.svg)
-
-</details>
-
-</details>
+</TxDiagram>

@@ -8,16 +8,8 @@ The transaction spends the account's authorization token and the factory output,
 
 The collateral inputs are tL-BTC from the wallet, and they also cover the network fee. Anything above the locked collateral comes back to the wallet.
 
-<details>
-<summary>Transaction structure</summary>
+<TxDiagram>
 
 ![Offer creation transaction](../schemas/borrower/create-offer.svg)
 
-<details>
-<summary>Legend</summary>
-
-![Transaction diagram legend](../schemas/schemas-legend.svg)
-
-</details>
-
-</details>
+</TxDiagram>
