@@ -23,6 +23,13 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Borrower',
+      link: {
+        type: 'generated-index',
+        title: 'Borrower',
+        description:
+          'The steps a borrower takes: create an account, publish an offer, cancel it or claim the principal, and repay.',
+        slug: '/borrower',
+      },
       items: [
         {type: 'doc', id: 'borrower/create-account', label: '🪪 Create an account'},
         {type: 'doc', id: 'borrower/create-offer', label: '📝 Create an offer'},
@@ -34,6 +41,13 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Lender',
+      link: {
+        type: 'generated-index',
+        title: 'Lender',
+        description:
+          'The steps a lender takes: review and fund an offer, claim the repayment, or liquidate an unpaid loan.',
+        slug: '/lender',
+      },
       items: [
         {type: 'doc', id: 'lender/review-offer', label: '🔍 Review an offer'},
         {type: 'doc', id: 'lender/fund-offer', label: '💸 Fund an offer'},
