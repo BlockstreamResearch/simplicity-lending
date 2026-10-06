@@ -1,6 +1,6 @@
 export const ExternalLink = {
   AboutSimplicity: 'https://simplicity-lang.org/',
-  Docs: 'https://docs.simplicity-lang.org/',
+  Docs: 'https://blockstreamresearch.github.io/simplicity-lending/',
   GitHub: 'https://github.com/BlockstreamResearch/simplicity-lending',
   Community:
     'https://community.simplicity-lang.org/c/share-your-projects/simplicity-lending-protocol/12',
