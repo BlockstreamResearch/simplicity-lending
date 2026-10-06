@@ -48,7 +48,7 @@ async function fetchTxFeeRateSatPerKvb(txid: string): Promise<number | null> {
 // txids (e.g. a retry after one got stuck) — floors the live estimate so it always clears
 // whatever those already paid, instead of risking an equal/lower rate that can't replace them.
 export async function fetchFeeRateSatPerKvbAbovePending(
-  pendingTxids: string[],
+  pendingTxids: readonly string[],
   targetBlocks: number = DEFAULT_TARGET_BLOCKS,
 ): Promise<number> {
   const [baseline, pendingFeeRates] = await Promise.all([

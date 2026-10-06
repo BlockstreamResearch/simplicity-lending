@@ -13,6 +13,14 @@ interface BalanceCardProps {
   asset: ConfigAsset
   amount: bigint
   pendingAmount?: bigint
+  /**
+   * Why this balance is not known, when it is not.
+   *
+   * An amount of zero is a fact about the account. A balance the wallet did not answer is a fact
+   * about the wallet, and rendering it as zero states the first when only the second is true —
+   * which is how a refused read reads as "you hold nothing" and hides itself.
+   */
+  unavailableReason?: string | null
   className?: string
 }
 
@@ -20,6 +28,7 @@ export default function BalanceCard({
   asset,
   amount,
   pendingAmount,
+  unavailableReason,
   className = '',
 }: BalanceCardProps) {
   const { id, icon: Icon, decimals } = asset
@@ -42,22 +51,31 @@ export default function BalanceCard({
       </span>
       <h3 className='text-muted text-h4'>Available Amount</h3>
       <div className='flex flex-col gap-1'>
-        <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-          <span
-            title={displayedAmount}
-            className='text-foreground min-w-0 truncate text-xl font-semibold'
-          >
-            {displayedAmount}
+        {unavailableReason ? (
+          <span title={unavailableReason} className='text-danger text-sm font-medium'>
+            Not known
           </span>
-          {hasPending && (
-            <PendingBalanceBadge
-              label={formatAssetAmount(pendingAmount)}
-              tooltip={`${formatAssetAmount(pendingAmount)} ${displayedSymbol} is unconfirmed and on the way. It will be spendable once the transaction confirms.`}
-            />
-          )}
-        </div>
-        <span title={usdValue ?? undefined} className='text-muted truncate text-xs'>
-          {usdValue ?? '—'}
+        ) : (
+          <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+            <span
+              title={displayedAmount}
+              className='text-foreground min-w-0 truncate text-xl font-semibold'
+            >
+              {displayedAmount}
+            </span>
+            {hasPending && (
+              <PendingBalanceBadge
+                label={formatAssetAmount(pendingAmount)}
+                tooltip={`${formatAssetAmount(pendingAmount)} ${displayedSymbol} is unconfirmed and on the way. It will be spendable once the transaction confirms.`}
+              />
+            )}
+          </div>
+        )}
+        <span
+          title={unavailableReason ?? usdValue ?? undefined}
+          className='text-muted truncate text-xs'
+        >
+          {unavailableReason ?? usdValue ?? '—'}
         </span>
       </div>
     </div>

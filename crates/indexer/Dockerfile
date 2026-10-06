@@ -1,12 +1,25 @@
 FROM rust:1.96-bookworm AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates git && rm -rf /var/lib/apt/lists/*
+
+# The contract crate's `artifacts` module is generated from simf/*.simf and is gitignored, so
+# nothing in a checkout supplies it and `cargo build` fails on every contract at once. The
+# generator is pinned to the same commit CI and deployment/Dockerfile.backend use; cargo resolves
+# it, which avoids simplexup needing git >= 2.49 and jq.
+ENV SIMPLEX_COMMIT=1945d11b47fff8838c3e99c210133519a9522324
+RUN cargo install --locked --git https://github.com/BlockstreamResearch/smplx --rev "${SIMPLEX_COMMIT}" smplx-cli
 
 WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
 COPY .sqlx ./.sqlx
 COPY crates ./crates
+
+# Generate the contract artifacts before compiling, and fail here rather than in the compiler if
+# the generator produced nothing.
+RUN cd crates/contracts \
+    && simplex build \
+    && test -f src/artifacts/mod.rs
 
 RUN SQLX_OFFLINE=true cargo build --locked --release -p lending-indexer --bin simplicity-lending-indexer
 

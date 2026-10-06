@@ -1,0 +1,274 @@
+import {
+  Address,
+  AssetId,
+  ExternalUtxo,
+  OutPoint,
+  type Pset,
+  Script,
+  SimplicityLogLevel,
+  TxBuilder,
+  TxOutSecrets,
+  XOnlyPublicKey,
+} from '@lilbonekit/lwk-web'
+
+import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
+import { NETWORK_CONFIG } from '@/constants/network-config'
+import type { ProtocolBuilderAccess } from '@/lib/wallet/protocolBuilderAccess'
+import {
+  assertDistinctOutpoints,
+  assertExplicitAmount,
+  assertScriptMatches,
+  fetchTransaction,
+  requireExplicitAmount,
+  requireExplicitAsset,
+  requireTxOut,
+  type UpdatedPset,
+} from '@/lwk/transaction'
+import {
+  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+  isPolicyAssetUtxo,
+  requireWalletUtxo,
+  WALLET_INPUT_RBF_SEQUENCE,
+} from '@/lwk/utxo'
+import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
+import {
+  buildDerivedLendingOfferProgramParams,
+  buildLendingOfferSpendInfo,
+  buildLendingWitness,
+  LENDING_MAX_WEIGHT_TO_SATISFY,
+  loadLendingProgram,
+} from '@/simplicity/lending/program'
+import {
+  buildScriptAuthWitness,
+  loadScriptAuthProgram,
+  SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY,
+} from '@/simplicity/script-auth/program'
+import { buildCovenantSpendInfo, UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
+import { bytesToHex, hexToBytes } from '@/utils/hex'
+import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
+
+const NFT_AMOUNT = 1n
+const BURN_PAYLOAD = new TextEncoder().encode('burn')
+
+export interface CancelOfferParams {
+  pendingOfferOutpoint: string
+  lenderNftOutpoint: string
+  borrowerNftOutpoint: string
+  collateralRecipientAddress: string
+  feeOutpoints: string[]
+}
+
+export interface CancelOfferSummary {
+  inputs: Record<string, string>
+  outputs: Record<string, string>
+  assetIds: Record<string, string>
+}
+
+/**
+ * The builder, with the wallet it acts through given to it rather than read from a hook.
+ *
+ * Called on a product screen through `useCancelOffer` below, and directly by a wallet that
+ * performs this action for itself, which cannot use a hook to reach the facade.
+ */
+export function cancelOfferBuilder(access: ProtocolBuilderAccess) {
+  const { lwkNetwork, getBlindedWalletUtxos, getWollet, syncWallet, processingTxids } = access
+
+  const cancelOffer = async (
+    params: CancelOfferParams,
+  ): Promise<UpdatedPset<CancelOfferSummary>> => {
+    const pendingOfferOutpoint = new OutPoint(params.pendingOfferOutpoint)
+    const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
+    const borrowerNftOutpoint = new OutPoint(params.borrowerNftOutpoint)
+    const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
+    assertDistinctOutpoints(
+      [pendingOfferOutpoint, lenderNftOutpoint, borrowerNftOutpoint, ...feeOutpoints],
+      'Cancellation inputs must use distinct outpoints',
+    )
+    const wollet = await getWollet()
+    await syncWallet()
+    const blindedWalletUtxos = await getBlindedWalletUtxos()
+    const feeUtxos = params.feeOutpoints.map(o =>
+      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+    )
+    if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
+      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+    }
+    const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTxs, feeRate] = await Promise.all([
+      fetchTransaction(pendingOfferOutpoint),
+      fetchTransaction(lenderNftOutpoint),
+      fetchTransaction(borrowerNftOutpoint),
+      Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
+      fetchFeeRateSatPerKvbAbovePending(processingTxids),
+    ])
+    const pendingOfferTxOut = requireTxOut(
+      pendingOfferTx,
+      pendingOfferOutpoint.vout(),
+      'Pending offer',
+    )
+
+    const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
+    const borrowerNftTxOut = requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT')
+    const feeTxOuts = feeTxs.map((tx, index) =>
+      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+    )
+
+    const collateralAsset = requireExplicitAsset(pendingOfferTxOut, 'Pending offer')
+    const collateralAmount = requireExplicitAmount(pendingOfferTxOut, 'Pending offer')
+    const lenderNftAsset = requireExplicitAsset(lenderNftTxOut, 'Lender NFT')
+    assertExplicitAmount(lenderNftTxOut, NFT_AMOUNT, 'Lender NFT')
+
+    const borrowerNftAsset = requireExplicitAsset(borrowerNftTxOut, 'Borrower NFT')
+    assertExplicitAmount(borrowerNftTxOut, NFT_AMOUNT, 'Borrower NFT')
+    const metadata = await findPendingOfferMetadata(pendingOfferTx)
+    const protocolFeeKeeperAssetId = toBytes32(
+      AssetId.fromString(NETWORK_CONFIG.protocolFeeAsset.id).toBytes(),
+      'protocolFeeKeeperAssetId',
+    )
+    // TODO: Indexer will handle this
+    const derivedLendingParams = buildDerivedLendingOfferProgramParams({
+      collateralAssetId: toBytes32(collateralAsset.toBytes(), 'collateralAssetId'),
+      principalAssetId: metadata.principalAssetId,
+      borrowerNftAssetId: toBytes32(borrowerNftAsset.toBytes(), 'borrowerNftAssetId'),
+      lenderNftAssetId: toBytes32(lenderNftAsset.toBytes(), 'lenderNftAssetId'),
+      protocolFeeKeeperAssetId,
+      offerParameters: {
+        collateralAmount: toUint64(collateralAmount, 'collateralAmount'),
+        principalAmount: metadata.principalAmount,
+        principalInterestRate: metadata.principalInterestRate,
+        loanExpirationTime: metadata.loanExpirationTime,
+      },
+    })
+    const lendingProgram = loadLendingProgram(derivedLendingParams)
+    // TODO: Probably we will be able to obtain this info from
+    // the indexer in the future, so we won't need to reconstruct the spend info on the client side
+    const lendingSpendInfo = buildLendingOfferSpendInfo(lendingProgram, {
+      principalAmount: metadata.principalAmount,
+      principalInterestRate: metadata.principalInterestRate,
+    })
+
+    assertScriptMatches(
+      pendingOfferTxOut.scriptPubkey(),
+      lendingSpendInfo.scriptPubkey,
+      'Pending offer output does not match the reconstructed Lending covenant',
+    )
+
+    const lendingScriptHash = toBytes32(
+      hexToBytes(lendingSpendInfo.scriptPubkey.jet_sha256_hex()),
+      'lendingScriptHash',
+    )
+    const scriptAuthProgram = loadScriptAuthProgram(lendingScriptHash)
+    const scriptAuthAddress = scriptAuthProgram.createP2trAddress(
+      XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
+      lwkNetwork,
+    )
+    assertScriptMatches(
+      lenderNftTxOut.scriptPubkey(),
+      scriptAuthAddress.scriptPubkey(),
+      'Lender NFT output is not locked by this pending offer ScriptAuth covenant',
+    )
+    const burnScript = Script.newOpReturn(BURN_PAYLOAD)
+    const collateralRecipient = Address.parse(params.collateralRecipientAddress, lwkNetwork)
+    const pendingOfferVout = pendingOfferOutpoint.vout()
+    const lenderNftVout = lenderNftOutpoint.vout()
+    const borrowerNftVout = borrowerNftOutpoint.vout()
+    const firstFeeOutpoint = params.feeOutpoints[0]
+    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
+    const pset = new TxBuilder(lwkNetwork)
+      .feeRate(feeRate)
+      .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
+      .setInputOrder([
+        new OutPoint(params.pendingOfferOutpoint),
+        new OutPoint(params.lenderNftOutpoint),
+        new OutPoint(params.borrowerNftOutpoint),
+        ...params.feeOutpoints.map(o => new OutPoint(o)),
+      ])
+      .addExternalUtxos([
+        new ExternalUtxo(
+          pendingOfferVout,
+          pendingOfferTx,
+          TxOutSecrets.fromExplicit(collateralAsset, collateralAmount),
+          LENDING_MAX_WEIGHT_TO_SATISFY.OfferCancellation,
+          true,
+        ),
+        new ExternalUtxo(
+          lenderNftVout,
+          lenderNftTx,
+          TxOutSecrets.fromExplicit(lenderNftAsset, NFT_AMOUNT),
+          SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY,
+          true,
+        ),
+        new ExternalUtxo(
+          borrowerNftVout,
+          borrowerNftTx,
+          TxOutSecrets.fromExplicit(borrowerNftAsset, NFT_AMOUNT),
+          EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+          true,
+        ),
+      ])
+      .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
+      .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
+      .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
+      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
+      .finish(wollet)
+
+    return {
+      pset,
+      finalize: (signedPset: Pset) => {
+        const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
+
+        const prevouts = [pendingOfferTxOut, lenderNftTxOut, borrowerNftTxOut, ...feeTxOuts]
+        const txWithLendingWitness = lendingProgram.finalizeTransactionWithSpendInfo(
+          txWithWalletWitnesses,
+          lendingSpendInfo,
+          prevouts,
+          0,
+          buildLendingWitness({ branch: 'OfferCancellation' }),
+          lwkNetwork,
+          SimplicityLogLevel.Trace,
+        )
+
+        const prevoutsForScriptAuth = [
+          requireTxOut(pendingOfferTx, pendingOfferOutpoint.vout(), 'Pending offer'),
+          requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT'),
+          requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT'),
+          ...feeTxs.map((tx, index) => requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC')),
+        ]
+        const finalizedTx = scriptAuthProgram.finalizeTransactionWithSpendInfo(
+          txWithLendingWitness,
+          buildCovenantSpendInfo(scriptAuthProgram),
+          prevoutsForScriptAuth,
+          1,
+          buildScriptAuthWitness(toUint32(0, 'lendingInputIndex')),
+          lwkNetwork,
+          SimplicityLogLevel.Trace,
+        )
+
+        return {
+          finalizedTx,
+          // TODO: Remove debug summary before release
+          summary: {
+            inputs: {
+              '0 Pending offer Lending': params.pendingOfferOutpoint,
+              '1 Lender NFT ScriptAuth': params.lenderNftOutpoint,
+              '2 Borrower NFT': params.borrowerNftOutpoint,
+              '3+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+            },
+            outputs: {
+              '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
+              '1 Borrower NFT burn': bytesToHex(burnScript.bytes()),
+              '2 Unlocked collateral': collateralRecipient.toString(),
+            },
+            assetIds: {
+              collateralAssetId: collateralAsset.toString(),
+              principalAssetId: AssetId.fromBytes(metadata.principalAssetId).toString(),
+              borrowerNftAssetId: borrowerNftAsset.toString(),
+              lenderNftAssetId: lenderNftAsset.toString(),
+            },
+          },
+        }
+      },
+    }
+  }
+
+  return { cancelOffer }
+}

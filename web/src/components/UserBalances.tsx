@@ -1,10 +1,10 @@
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { useWallet } from '@/providers/wallet/useWallet'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 
 import BalanceCard from './BalanceCard'
 
 export default function UserBalances() {
-  const { confirmedBalances, pendingBalances } = useWallet()
+  const { confirmedBalances, pendingBalances, balancesUnavailableReason } = useWallet()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
 
   return (
@@ -19,6 +19,7 @@ export default function UserBalances() {
             asset={asset}
             amount={BigInt(confirmedBalances[asset.id] ?? 0)}
             pendingAmount={BigInt(pendingBalances[asset.id] ?? 0)}
+            unavailableReason={balancesUnavailableReason}
             className='sm:w-65.5'
           />
         ))}

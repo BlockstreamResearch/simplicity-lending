@@ -2,29 +2,14 @@ import { Chip } from '@heroui/react'
 import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
-import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
-import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { resolveNftOutpoints, toOutpoint } from '@/api/indexer/utils'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { useClaimPrincipal } from '@/hooks/useClaimPrincipal'
-import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
-import {
-  estimateFeeBudgetSats,
-  EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-  selectFeeUtxos,
-  utxoToOutpointString,
-} from '@/lwk/utxo'
-import { useLwk } from '@/providers/lwk/useLwk'
+import { useClaimPrincipalAction } from '@/hooks/useClaimPrincipalAction'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
-import { useWallet } from '@/providers/wallet/useWallet'
-import { ASSET_AUTH_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth/program'
+import { useWallet } from '@/providers/walletFacade/useWallet'
 import { formatAmount } from '@/utils/format'
-
-const CLAIM_PRINCIPAL_WEIGHT_UNITS =
-  ASSET_AUTH_MAX_WEIGHT_TO_SATISFY + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
 
 interface ClaimPrincipalModalProps {
   isOpen: boolean
@@ -40,47 +25,15 @@ export default function ClaimPrincipalModal({
   onSuccess,
 }: ClaimPrincipalModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
-  const { lwkNetwork } = useLwk()
-  const { claimPrincipal } = useClaimPrincipal()
-  const runStandardTransactionFlow = useStandardTransactionFlow()
+  const { scriptPubkey } = useWallet()
+  const claimPrincipal = useClaimPrincipalAction()
   const { addPendingTx } = usePendingTransactions()
 
-  const claimBorrowerPrincipal = () =>
-    runStandardTransactionFlow(async () => {
-      if (!offer.borrower_principal_utxo) throw new Error('Borrower principal UTXO not found')
-      const principalOutpoint = toOutpoint(offer.borrower_principal_utxo)
-
-      const fullOffer = await fetchOffer(offer.id)
-      const nftOutpoints = resolveNftOutpoints(fullOffer)
-      if (!nftOutpoints) throw new Error('Offer NFT participants not found')
-
-      await syncWallet()
-      const [blindedWalletUtxos, feeRate] = await Promise.all([
-        getBlindedWalletUtxos(),
-        fetchFeeRateSatPerKvb(),
-      ])
-
-      const feeBudgetSats = estimateFeeBudgetSats(CLAIM_PRINCIPAL_WEIGHT_UNITS, feeRate)
-      const feeUtxos = selectFeeUtxos(
-        blindedWalletUtxos,
-        lwkNetwork.policyAsset(),
-        feeBudgetSats,
-        feeRate,
-      )
-
-      return claimPrincipal({
-        principalOutpoint,
-        borrowerNftOutpoint: nftOutpoints.borrowerNft,
-        feeOutpoints: feeUtxos.map(utxoToOutpointString),
-      })
-    })
-
   const { mutate, reset, data, status } = useMutation({
-    mutationFn: claimBorrowerPrincipal,
-    onSuccess: result => {
+    mutationFn: () => claimPrincipal(offer.id),
+    onSuccess: ({ txid }) => {
       void addPendingTx({
-        txid: result.txid,
+        txid,
         kind: 'claim_principal',
         walletScriptPubkey: scriptPubkey ?? '',
         offerId: offer.id,
