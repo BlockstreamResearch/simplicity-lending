@@ -20,7 +20,9 @@ The principal is the amount of TEST the borrower wants to receive. The app requi
 
 The fee is an interest rate in basis points, fixed for the whole term. A basis point is a hundredth of a percent, and 10000 of them make 100%, so the amount owed on top of the principal is `principal × rate ÷ 10000`. A rate of 500 is 5%: 1000 TEST borrowed costs 50 TEST, and the borrower repays 1050 TEST. The rate does not accrue. Repaying on the first day costs the same as repaying on the last.
 
-The app lets the borrower type the fee as an amount. It divides that amount by the principal, keeps the whole number of basis points, and stores the rate. Both that division and the contract's own multiplication round down, so the fee the contract actually collects can come out slightly below the amount that was typed. The smallest fee the app accepts is 0.1 TEST, and the rate has to fit in the field the contract stores, which tops out at 65535 basis points, or 655.35%.
+The app lets the borrower type the fee as an amount. It divides that amount by the principal, keeps the whole number of basis points, and stores the rate. Both that division and the contract's own multiplication round down, so the fee the contract actually collects can come out slightly below the amount that was typed. The smallest fee the app accepts is 0.1 TEST.
+
+The rate is stored in two places, at two widths. Publishing an offer writes it into the `OP_RETURN` metadata as a `u16`, and the app enforces the same bound, so a published offer stops at 65535 basis points, or 655.35%. The lending program then takes that value as `PRINCIPAL_INTEREST_RATE`, a `u64`, and places no such ceiling of its own.
 
 The app also shows an APR. That figure annualizes the fee against the principal and the term so offers of different lengths can be compared. It is not a rate the contract charges, and it is computed from the whole fee. The protocol keeps 10% of the fee as it is paid, so a lender's return is about a tenth lower than the APR on screen. The borrower still owes the full fee.
 

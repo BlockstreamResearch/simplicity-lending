@@ -16,7 +16,7 @@ The protocol is a demo running on Liquid testnet. It is being actively tested an
 
 1. **A borrower publishes an offer.** They lock collateral in a contract and state how much principal they want, the fee they will pay for it, and how long the loan lasts. Until someone funds the offer, the borrower can cancel it and take the collateral back.
 2. **A lender funds the offer.** The lender provides the principal to the borrower. The loan is now active and its deadline is fixed.
-3. **The borrower repays.** The borrower repays the principal plus the fee, in one go or in parts, and the collateral is released back to them.
+3. **The borrower repays.** The borrower repays the principal plus the fee in one transaction, and the collateral is released back to them.
 4. **Or the term expires.** If the debt has not been cleared by the deadline, the lender can liquidate the position and claim the collateral.
 
 The fee is a single rate, fixed for the whole term, and the lender receives 90% of it. How that rate is stored, and what the protocol keeps, is in [Offer parameters](./protocol/offer-parameters.md).
