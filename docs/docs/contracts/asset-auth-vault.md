@@ -31,7 +31,7 @@ These values are fixed when the output is created. Changing any of them produces
 
 | Path | Witness | What it checks |
 | --- | --- | --- |
-| [Supply](../borrower/repay.md) | `input_supplier_index: u32`, `output_supplier_index: u32`, `vault_output_index: u32`, `amount_to_supply: u64` | The vault is active. At least one unit of the supplier asset is presented and returned. The output holds the previous balance plus `amount_to_supply`, under the same script. |
+| Supply | `input_supplier_index: u32`, `output_supplier_index: u32`, `vault_output_index: u32`, `amount_to_supply: u64` | The vault is active. At least one unit of the supplier asset is presented and returned. The output holds the previous balance plus `amount_to_supply`, under the same script. |
 | [Final supply](../borrower/repay.md) | `input_supplier_index: u32`, `output_supplier_index: u32`, `vault_output_index: u32`, `amount_to_supply: u64` | The vault is active. The output script is `FINALIZED_VAULT_COV_HASH`, and the balance grows by `amount_to_supply`. The supplier asset is burned when `WITH_SUPPLIER_ASSET_BURN` is set. |
 | Withdraw part | `input_keeper_index: u32`, `output_keeper_index: u32`, `vault_output_index: u32`, `amount_to_withdraw: u64` | The vault is active, and `amount_to_withdraw` is strictly less than the balance. The remainder stays under the same script. The keeper asset is presented and returned. |
 | [Withdraw all](../lender/claim-repayment.md) | `input_keeper_index: u32`, `output_keeper_index: u32` | The vault is finalized. The keeper asset is presented for at least `KEEPER_AUTH_ASSET_AMOUNT`, and it is burned when `WITH_KEEPER_ASSET_BURN` is set. |
