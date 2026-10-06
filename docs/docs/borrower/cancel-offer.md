@@ -1,3 +1,7 @@
+---
+description: Take the collateral back from an offer that nobody has funded, burning both role tokens.
+---
+
 # Cancel an offer
 
 The borrower can cancel an offer while it is still pending and take the collateral back. Funding is not required, and the deadline does not close this action. [Actions](../protocol/actions.md) covers what stays possible after the deadline block.

@@ -1,3 +1,7 @@
+---
+description: Pay the principal into a pending offer, turning it into an active loan and taking the lender NFT.
+---
+
 # Fund an offer
 
 A lender funds a pending offer by paying the principal. The offer becomes an active loan. The principal is paid into an [asset auth](../contracts/asset-auth.md) output locked to the borrower NFT, and the borrower [claims it](../borrower/claim-principal.md) from there. The collateral stays in the [lending](../contracts/lending.md) output at the same amount, now marked active.

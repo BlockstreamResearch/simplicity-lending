@@ -1,3 +1,7 @@
+---
+description: Withdraw the lender's share of the repayment from the asset auth vault.
+---
+
 # Claim repayment
 
 The lender's share of each [repayment](../borrower/repay.md) sits in an [asset auth vault](../contracts/asset-auth-vault.md): the lender's part of the fee first, then the principal. The protocol fee stays in its own vault.

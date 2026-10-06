@@ -1,3 +1,7 @@
+---
+description: Set up the issuance factory a borrower needs before publishing a first offer.
+---
+
 # Create an account
 
 A borrower creates an account before publishing an offer. The account is an [issuance factory](../contracts/issuance-factory.md): one output that can issue the assets later offers need, and a token of the same asset that authorizes it.

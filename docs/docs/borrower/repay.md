@@ -1,3 +1,7 @@
+---
+description: Pay back the principal and the fee, and release the collateral locked in the offer.
+---
+
 # Repay
 
 Once the loan is active and the principal has been [claimed](./claim-principal.md), the borrower pays the debt down with the principal asset. The fee is settled before the principal. Of the fee paid in a transaction, ten percent goes to the protocol fee vault and the rest goes to the lender's vault, together with any principal in that same payment. [Offer parameters](../protocol/offer-parameters.md) defines the fee, and [asset auth vault](../contracts/asset-auth-vault.md) is the output that holds each share.
