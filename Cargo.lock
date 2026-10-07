@@ -1792,6 +1792,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lending-contracts-v2"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "ring",
+ "smplx-std",
+ "thiserror",
+]
+
+[[package]]
 name = "lending-indexer"
 version = "0.1.0"
 dependencies = [
