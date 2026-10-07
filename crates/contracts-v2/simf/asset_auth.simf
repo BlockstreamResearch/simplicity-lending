@@ -1,0 +1,32 @@
+use std::lib::utxo::getters::asset_id::get_explicit_input_asset_id;
+use std::lib::asserts::assert_eq_256;
+
+use crate::utils::storage::{get_u256_slot_leaf, get_script_hash_for_tap_node};
+
+fn script_hash_for(auth_asset_id: u256) -> u256 {
+    let auth_asset_id_slot_leaf: u256 = get_u256_slot_leaf(auth_asset_id);
+
+    let tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), auth_asset_id_slot_leaf);
+
+    get_script_hash_for_tap_node(tap_node)
+}
+
+fn assert_storage_with_current(auth_asset_id: u256) {
+    assert_eq_256(jet::current_script_hash(), script_hash_for(auth_asset_id));
+}
+
+fn assert_input_explicit_asset_id(input_index: u32, expected_asset_id: u256) {
+    let input_asset_id: u256 = get_explicit_input_asset_id(input_index);
+
+    assert_eq_256(input_asset_id, expected_asset_id);
+}
+
+fn asset_auth_check(auth_input_index: u32, auth_asset_id: u256) {
+    assert_storage_with_current(auth_asset_id);
+
+    assert_input_explicit_asset_id(auth_input_index, auth_asset_id);
+}
+
+fn main() {
+    asset_auth_check(witness::AUTH_INPUT_INDEX, witness::AUTH_ASSET_ID);
+}

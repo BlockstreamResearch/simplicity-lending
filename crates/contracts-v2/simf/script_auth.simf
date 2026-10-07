@@ -26,6 +26,6 @@ fn script_auth_check(auth_input_index: u32, auth_script_hash: u256) {
     assert_input_script_hash(auth_input_index, auth_script_hash);
 }
 
-fn main () {
+fn main() {
     script_auth_check(witness::AUTH_INPUT_INDEX, witness::AUTH_SCRIPT_HASH);
 }
