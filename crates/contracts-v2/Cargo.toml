@@ -1,0 +1,23 @@
+[package]
+name = "lending-contracts-v2"
+version = "0.1.0"
+edition = "2024"
+description = "Simplicity Lending contract V2"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/BlockstreamResearch/simplicity-lending"
+readme = "README.md"
+keywords = ["simplicity", "lending", "liquid", "bitcoin", "elements", "contracts"]
+categories = ["cryptography::cryptocurrencies"]
+
+[lints]
+workspace = true
+
+[dependencies]
+ring = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+
+smplx-std = { workspace = true }
+
+[dev-dependencies]
+anyhow = "1"
