@@ -4,32 +4,15 @@ use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use simplex::simplicityhl::elements::{OutPoint, Txid};
 
 use crate::error::HarvesterError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct State {
-    pub outpoint: Outpoint,
-    #[serde(default)]
-    pub pending_txid: Option<String>,
-    #[serde(default)]
-    pub pending_script: Option<String>,
-    #[serde(default)]
-    pub pending_tx: Option<String>,
-    #[serde(default)]
-    pub closed: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Outpoint {
-    pub txid: String,
-    pub vout: u32,
-}
-
-impl std::fmt::Display for Outpoint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.txid, self.vout)
-    }
+    pub outpoint: Option<OutPoint>,
+    pub pending_txid: Option<Txid>,
+    pub pending_collector_output: bool,
 }
 
 #[must_use = "the collector state stays locked until this value is dropped"]
@@ -79,6 +62,14 @@ impl State {
             return Err(io_error(path, source));
         }
         Ok(())
+    }
+
+    pub fn remove(path: &Path) -> Result<(), HarvesterError> {
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(source) if source.kind() == ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(io_error(path, source)),
+        }
     }
 
     fn write_temporary(&self, path: &Path, tmp_path: &Path) -> Result<(), HarvesterError> {
@@ -134,24 +125,26 @@ fn io_error(path: &Path, source: std::io::Error) -> HarvesterError {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use simplex::simplicityhl::elements::{OutPoint, Txid};
+
     use crate::error::HarvesterError;
     use crate::test_utils::TempDir;
 
-    use super::{Outpoint, State, StateLock};
+    use super::{State, StateLock};
 
     #[test]
     fn roundtrip_replaces_the_previous_file() {
         let dir = TempDir::new();
         let path = dir.path.join("state.json");
         let state = State {
-            outpoint: Outpoint {
-                txid: "aa".to_owned(),
+            outpoint: Some(OutPoint {
+                txid: Txid::from_str(&"aa".repeat(32)).unwrap(),
                 vout: 1,
-            },
-            pending_txid: Some("bb".to_owned()),
-            pending_script: Some("51".to_owned()),
-            pending_tx: Some("00".to_owned()),
-            closed: false,
+            }),
+            pending_txid: Some(Txid::from_str(&"bb".repeat(32)).unwrap()),
+            pending_collector_output: true,
         };
 
         state.save(&path).unwrap();
@@ -159,6 +152,7 @@ mod tests {
 
         let cleared = State {
             pending_txid: None,
+            pending_collector_output: false,
             ..state
         };
         cleared.save(&path).unwrap();
@@ -166,15 +160,13 @@ mod tests {
         assert_eq!(State::load(&path).unwrap().as_ref(), Some(&cleared));
         assert!(!dir.path.join("state.json.tmp").exists());
 
-        let closed = State {
-            closed: true,
+        let empty = State {
+            outpoint: None,
             pending_txid: None,
-            pending_script: None,
-            pending_tx: None,
-            ..cleared
+            pending_collector_output: false,
         };
-        closed.save(&path).unwrap();
-        assert_eq!(State::load(&path).unwrap().as_ref(), Some(&closed));
+        empty.save(&path).unwrap();
+        assert_eq!(State::load(&path).unwrap().as_ref(), Some(&empty));
     }
 
     #[test]
@@ -209,14 +201,11 @@ mod tests {
     }
 
     #[test]
-    fn pending_script_defaults_when_absent() {
-        let parsed: State =
-            serde_json::from_str(r#"{"outpoint":{"txid":"aa","vout":0},"pending_txid":"bb"}"#)
-                .unwrap();
+    fn remove_tolerates_a_missing_state_file() {
+        let dir = TempDir::new();
+        let path = dir.path.join("state.json");
 
-        assert_eq!(parsed.pending_script, None);
-        assert_eq!(parsed.pending_tx, None);
-        assert_eq!(parsed.pending_txid.as_deref(), Some("bb"));
-        assert!(!parsed.closed);
+        State::remove(&path).unwrap();
+        assert!(!path.exists());
     }
 }

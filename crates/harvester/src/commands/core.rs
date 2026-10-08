@@ -5,20 +5,15 @@ use lending_contracts::programs::fee_collector::{FeeCollector, FeeCollectorParam
 use lending_contracts::programs::program::SimplexProgram;
 use simplex::provider::EsploraProvider;
 use simplex::signer::{Signer, SignerError};
-use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::simplicityhl::elements::{AssetId, OutPoint, Transaction, Txid};
+use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
 use simplex::transaction::UTXO;
 
-use super::pending::{CollectorOp, PendingOutcome, pending_in_mempool, publish, settle_pending};
-use super::tx::{
-    INITIAL_COLLECTOR_AMOUNT, destination_script, finalize_collector_creation, finalize_withdrawal,
-    prepare_harvest,
-};
+use super::pending::{publish, settle_pending};
+use super::tx::{destination_script, finalize_withdrawal, prepare_harvest};
 use crate::AppContext;
-use crate::config::CollectorSettings;
 use crate::error::HarvesterError;
-use crate::state::{Outpoint, State, StateLock};
+use crate::state::{State, StateLock};
 use crate::vaults;
 
 pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
@@ -27,12 +22,7 @@ pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
 
     loop {
         if let Err(error) = harvest(ctx).await {
-            match error {
-                HarvesterError::PendingInMempool { txid } => {
-                    tracing::warn!(%txid, "collector transaction is still in the mempool");
-                }
-                error => tracing::error!(error = %error, "harvest failed"),
-            }
+            tracing::error!(error = %error, "harvest failed");
         }
         tokio::time::sleep(interval).await;
     }
@@ -41,11 +31,7 @@ pub async fn run(ctx: &AppContext) -> Result<(), HarvesterError> {
 pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
     let path = crate::state_path();
     let _lock = StateLock::lock(&path)?;
-    let collector = match ensure_collector(ctx, &path)? {
-        CollectorStatus::Ready(state) => state,
-        CollectorStatus::Pending => return Ok(()),
-    };
-
+    let collector = settle_pending(ctx, &path, load_collector(&path)?)?;
     let vaults = vaults::fetch_claimable_vaults(ctx).await?;
 
     tracing::info!(
@@ -61,8 +47,7 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
         .iter()
         .map(vaults::parse_amount)
         .collect::<Result<Vec<_>, _>>()?;
-    let Some((batch, collector)) =
-        prepare_harvest(ctx, &path, &collector, &vaults.items, &amounts)?
+    let Some(batch) = prepare_harvest(ctx, &path, collector.as_ref(), &vaults.items, &amounts)?
     else {
         tracing::info!("no protocol-fee batch");
         return Ok(());
@@ -74,156 +59,24 @@ pub async fn harvest(ctx: &AppContext) -> Result<(), HarvesterError> {
         tx_fee = batch.tx_fee,
         "selected protocol-fee batch"
     );
-
-    submit_harvest(
-        ctx,
-        &path,
-        &collector,
-        batch.transaction,
-        batch.total_amount,
-    )
-}
-
-fn ensure_collector(ctx: &AppContext, path: &Path) -> Result<CollectorStatus, HarvesterError> {
-    let Some(state) = load_collector(ctx)? else {
-        return create_collector(ctx, path);
-    };
-
-    match settle_pending(ctx, path, &state, CollectorOp::Harvest)? {
-        PendingOutcome::Ready(state) => {
-            tracing::info!(
-                path = %path.display(),
-                outpoint = %state.outpoint,
-                "loaded collector state"
-            );
-            Ok(CollectorStatus::Ready(state))
-        }
-        PendingOutcome::Waiting => Err(pending_in_mempool(&state)),
-        PendingOutcome::Spent => create_collector(ctx, path),
-    }
-}
-
-fn create_collector(ctx: &AppContext, path: &Path) -> Result<CollectorStatus, HarvesterError> {
-    let network = ctx.settings.esplora.simplicity_network();
-    let principal_asset = parse_asset_id("principal_asset", &ctx.settings.principal_asset)?;
-    let signer = harvest_signer(ctx)?;
-
-    let funding_utxos = signer.get_utxos_asset(principal_asset)?;
-    let total_amount = funding_utxos
-        .iter()
-        .try_fold(0u64, |acc, utxo| acc.checked_add(utxo.amount()))
-        .ok_or(HarvesterError::AmountOverflow)?;
-
-    if total_amount < INITIAL_COLLECTOR_AMOUNT {
-        return Err(HarvesterError::NoCollectorFunds {
-            principal_asset: ctx.settings.principal_asset.clone(),
-        });
-    }
-
-    let fee_collector = open_fee_collector(ctx)?;
-    let (transaction, pool_amount) = finalize_collector_creation(
-        &signer,
-        &fee_collector,
-        principal_asset,
-        network.policy_asset(),
-        &ctx.settings.principal_asset,
-        &funding_utxos,
-    )?;
-    let script = fee_collector.get_script_pubkey().to_hex();
-    let txid = transaction.txid().to_string();
-
-    match publish(
-        ctx,
-        path,
-        Outpoint {
-            txid: txid.clone(),
-            vout: 0,
-        },
-        &transaction,
-        &script,
-    )? {
-        PendingOutcome::Ready(state) => {
-            tracing::info!(
-                outpoint = %state.outpoint,
-                pool_amount,
-                path = %path.display(),
-                "created fee collector"
-            );
-            Ok(CollectorStatus::Ready(state))
-        }
-        PendingOutcome::Waiting => {
-            tracing::info!(
-                %txid,
-                pool_amount,
-                path = %path.display(),
-                "created fee collector; awaiting confirmation"
-            );
-            Ok(CollectorStatus::Pending)
-        }
-        PendingOutcome::Spent => Err(HarvesterError::CollectorOutputs { txid, count: 0 }),
-    }
+    publish(ctx, &path, collector.as_ref(), &batch.transaction, true)
 }
 
 pub async fn withdraw(ctx: &AppContext, to: Option<&str>) -> Result<(), HarvesterError> {
     let destination = destination_script(ctx, to)?;
     let path = crate::state_path();
     let _lock = StateLock::lock(&path)?;
-    let state = match load_collector(ctx)? {
-        None => return Err(HarvesterError::NoCollector { path }),
-        Some(state) => match settle_pending(ctx, &path, &state, CollectorOp::Withdraw)? {
-            PendingOutcome::Ready(state) => state,
-            PendingOutcome::Waiting => return Err(pending_in_mempool(&state)),
-            PendingOutcome::Spent => return Ok(()),
-        },
+    let Some(state) = settle_pending(ctx, &path, load_collector(&path)?)? else {
+        return Err(HarvesterError::NoCollector { path });
     };
 
     let signer = withdraw_signer(ctx)?;
     let collector = open_fee_collector(ctx)?;
-    let (collector_utxo, state) = collector_utxo(&path, &signer, &collector, &state)?;
+    let collector_utxo = collector_utxo(&path, &signer, &collector, &state)?;
     let (transaction, amount) =
         finalize_withdrawal(&signer, &collector, collector_utxo, destination)?;
-    let pending_script = collector.get_script_pubkey().to_hex();
     tracing::info!(txid = %transaction.txid(), amount, "submitting withdrawal");
-
-    match publish(ctx, &path, state.outpoint, &transaction, &pending_script)? {
-        PendingOutcome::Spent | PendingOutcome::Waiting => Ok(()),
-        PendingOutcome::Ready(_) => Err(HarvesterError::CollectorOutputs {
-            txid: transaction.txid().to_string(),
-            count: 1,
-        }),
-    }
-}
-
-fn submit_harvest(
-    ctx: &AppContext,
-    path: &Path,
-    state: &State,
-    transaction: Transaction,
-    total_amount: u64,
-) -> Result<(), HarvesterError> {
-    let pending_script = open_fee_collector(ctx)?.get_script_pubkey().to_hex();
-    match publish(
-        ctx,
-        path,
-        state.outpoint.clone(),
-        &transaction,
-        &pending_script,
-    )? {
-        PendingOutcome::Ready(confirmed) => {
-            tracing::info!(
-                outpoint = %confirmed.outpoint,
-                total_amount,
-                path = %path.display(),
-                "harvest transaction confirmed"
-            );
-            Ok(())
-        }
-        PendingOutcome::Waiting => Ok(()),
-        PendingOutcome::Spent => Err(HarvesterError::CollectorOutputs {
-            txid: transaction.txid().to_string(),
-            count: 0,
-        }),
-    }
+    publish(ctx, &path, Some(&state), &transaction, false)
 }
 
 pub(super) fn collector_utxo(
@@ -231,57 +84,21 @@ pub(super) fn collector_utxo(
     signer: &Signer,
     collector: &FeeCollector,
     state: &State,
-) -> Result<(UTXO, State), HarvesterError> {
-    let utxos = signer
+) -> Result<UTXO, HarvesterError> {
+    let saved = state
+        .outpoint
+        .as_ref()
+        .ok_or_else(|| HarvesterError::NoCollector {
+            path: path.to_path_buf(),
+        })?;
+    signer
         .get_provider()?
-        .fetch_scripthash_utxos(&collector.get_script_pubkey())?;
-    let utxo = select_collector_utxo(state, utxos)?;
-    let state = sync_collector_outpoint(path, state, &utxo.outpoint)?;
-    Ok((utxo, state))
-}
-
-fn select_collector_utxo(state: &State, mut utxos: Vec<UTXO>) -> Result<UTXO, HarvesterError> {
-    let saved = parse_outpoint(&state.outpoint.txid, state.outpoint.vout)?;
-    if let Some(position) = utxos.iter().position(|utxo| utxo.outpoint == saved) {
-        return Ok(utxos.swap_remove(position));
-    }
-
-    let outpoint = state.outpoint.to_string();
-    if let Some(txid) = state.pending_txid.clone() {
-        return Err(HarvesterError::PendingCollectorOutpoint { outpoint, txid });
-    }
-
-    match utxos.len() {
-        1 => Ok(utxos.swap_remove(0)),
-        0 => Err(HarvesterError::MissingCollectorUtxo { outpoint }),
-        count => Err(HarvesterError::AmbiguousCollectorUtxo { outpoint, count }),
-    }
-}
-
-fn sync_collector_outpoint(
-    path: &Path,
-    state: &State,
-    chosen: &OutPoint,
-) -> Result<State, HarvesterError> {
-    let saved = parse_outpoint(&state.outpoint.txid, state.outpoint.vout)?;
-    if saved == *chosen {
-        return Ok(state.clone());
-    }
-
-    let updated = State {
-        outpoint: Outpoint {
-            txid: chosen.txid.to_string(),
-            vout: chosen.vout,
-        },
-        ..state.clone()
-    };
-    updated.save(path)?;
-    tracing::info!(
-        previous = %state.outpoint,
-        outpoint = %updated.outpoint,
-        "collector outpoint moved to the only unspent collector UTXO"
-    );
-    Ok(updated)
+        .fetch_scripthash_utxos(&collector.get_script_pubkey())?
+        .into_iter()
+        .find(|utxo| utxo.outpoint == *saved)
+        .ok_or_else(|| HarvesterError::MissingCollectorUtxo {
+            outpoint: saved.to_string(),
+        })
 }
 
 pub(super) fn esplora_provider(ctx: &AppContext) -> EsploraProvider {
@@ -376,51 +193,16 @@ fn parse_withdrawal_pubkey(value: &str) -> Result<XOnlyPublicKey, HarvesterError
     })
 }
 
-fn load_collector(ctx: &AppContext) -> Result<Option<State>, HarvesterError> {
-    load_collector_at(&crate::state_path(), &ctx.settings.collector)
-}
-
-pub(super) fn load_collector_at(
-    path: &Path,
-    collector: &CollectorSettings,
-) -> Result<Option<State>, HarvesterError> {
-    match State::load(path)? {
-        Some(state) if state.closed => Ok(None),
-        Some(state) => Ok(Some(state)),
-        None => Ok(configured_collector(collector)),
-    }
-}
-
-fn configured_collector(collector: &CollectorSettings) -> Option<State> {
-    let outpoint = collector.outpoint?;
-    Some(State {
-        outpoint: Outpoint {
-            txid: outpoint.txid.to_string(),
-            vout: outpoint.vout,
-        },
-        pending_txid: None,
-        pending_script: None,
-        pending_tx: None,
-        closed: false,
-    })
-}
-
-enum CollectorStatus {
-    Ready(State),
-    Pending,
+fn load_collector(path: &Path) -> Result<Option<State>, HarvesterError> {
+    State::load(path)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use simplex::signer::SignerError;
-    use simplex::simplicityhl::elements::{OutPoint, TxOut, Txid};
-    use simplex::transaction::UTXO;
 
     use super::signer_error;
     use crate::error::HarvesterError;
-    use crate::test_utils::TempDir;
 
     #[test]
     fn not_enough_funds_reports_the_required_fee() {
@@ -452,202 +234,5 @@ mod tests {
             super::validate_mnemonic("harvest.mnemonic", mnemonic).unwrap(),
             mnemonic
         );
-    }
-
-    #[test]
-    fn configured_outpoint_becomes_collector_state() {
-        let txid = "11".repeat(32);
-        let collector = crate::config::CollectorSettings {
-            withdraw_pubkey: String::new(),
-            outpoint: Some(outpoint(&txid, 2)),
-        };
-
-        let state = super::configured_collector(&collector).expect("configured outpoint");
-
-        assert_eq!(state.outpoint.txid, txid);
-        assert_eq!(state.outpoint.vout, 2);
-        assert_eq!(state.pending_txid, None);
-    }
-
-    #[test]
-    fn saved_collector_utxo_wins_over_other_script_utxos() {
-        let saved = "aa".repeat(32);
-        let state = collector_state(saved.clone(), 1, None, false);
-
-        let selected = super::select_collector_utxo(
-            &state,
-            vec![utxo_at(&"bb".repeat(32), 0), utxo_at(&saved, 1)],
-        )
-        .unwrap();
-
-        assert_eq!(selected.outpoint, outpoint(&saved, 1));
-    }
-
-    #[test]
-    fn spent_collector_outpoint_follows_the_only_remaining_utxo() {
-        let dir = TempDir::new();
-        let path = dir.path.join("state.json");
-        let saved = "aa".repeat(32);
-        let moved = "bb".repeat(32);
-        let state = collector_state(saved, 0, None, false);
-        let selected = super::select_collector_utxo(&state, vec![utxo_at(&moved, 3)]).unwrap();
-        let stored = super::sync_collector_outpoint(&path, &state, &selected.outpoint).unwrap();
-
-        assert_eq!(stored.outpoint.txid, moved);
-        assert_eq!(stored.outpoint.vout, 3);
-        assert!(!stored.closed);
-        assert_eq!(stored.pending_txid, None);
-        assert_eq!(
-            crate::state::State::load(&path).unwrap().as_ref(),
-            Some(&stored)
-        );
-
-        let again = super::select_collector_utxo(
-            &stored,
-            vec![utxo_at(&moved, 3), utxo_at(&"cc".repeat(32), 0)],
-        )
-        .unwrap();
-        assert_eq!(again.outpoint, outpoint(&moved, 3));
-    }
-
-    #[test]
-    fn spent_collector_outpoint_with_no_utxo_is_an_error() {
-        let state = collector_state("aa".repeat(32), 0, None, false);
-
-        assert!(matches!(
-            super::select_collector_utxo(&state, Vec::new()),
-            Err(HarvesterError::MissingCollectorUtxo { .. })
-        ));
-    }
-
-    #[test]
-    fn spent_collector_outpoint_with_several_utxos_is_an_error() {
-        let state = collector_state("aa".repeat(32), 0, None, false);
-
-        assert!(matches!(
-            super::select_collector_utxo(
-                &state,
-                vec![utxo_at(&"bb".repeat(32), 0), utxo_at(&"cc".repeat(32), 1)],
-            ),
-            Err(HarvesterError::AmbiguousCollectorUtxo { count: 2, .. })
-        ));
-    }
-
-    #[test]
-    fn pending_collector_does_not_follow_a_foreign_utxo() {
-        let saved = "aa".repeat(32);
-        let pending = "bb".repeat(32);
-        let state = collector_state(saved.clone(), 1, Some(pending.clone()), false);
-
-        let kept = super::select_collector_utxo(
-            &state,
-            vec![utxo_at(&"cc".repeat(32), 0), utxo_at(&saved, 1)],
-        )
-        .unwrap();
-        assert_eq!(kept.outpoint, outpoint(&saved, 1));
-
-        assert!(matches!(
-            super::select_collector_utxo(&state, vec![utxo_at(&"cc".repeat(32), 4)]),
-            Err(HarvesterError::PendingCollectorOutpoint { txid, .. }) if txid == pending
-        ));
-    }
-
-    #[test]
-    fn matching_collector_outpoint_is_not_rewritten() {
-        let dir = TempDir::new();
-        let path = dir.path.join("state.json");
-        let saved = "aa".repeat(32);
-        let state = collector_state(saved.clone(), 2, None, false);
-
-        let stored = super::sync_collector_outpoint(&path, &state, &outpoint(&saved, 2)).unwrap();
-
-        assert_eq!(stored, state);
-        assert!(!path.exists());
-    }
-
-    #[test]
-    fn closed_state_file_ignores_the_configured_outpoint() {
-        let dir = TempDir::new();
-        let path = dir.path.join("state.json");
-        let yaml_txid = "11".repeat(32);
-        collector_state("22".repeat(32), 0, None, true)
-            .save(&path)
-            .unwrap();
-
-        assert_eq!(
-            super::load_collector_at(&path, &collector_settings(&yaml_txid, 4)).unwrap(),
-            None
-        );
-    }
-
-    #[test]
-    fn missing_state_file_uses_the_configured_outpoint() {
-        let dir = TempDir::new();
-        let path = dir.path.join("state.json");
-        let txid = "11".repeat(32);
-
-        let state = super::load_collector_at(&path, &collector_settings(&txid, 2))
-            .unwrap()
-            .expect("yaml outpoint");
-
-        assert_eq!(state.outpoint.txid, txid);
-        assert_eq!(state.outpoint.vout, 2);
-        assert!(!state.closed);
-        assert!(!path.exists());
-    }
-
-    #[test]
-    fn open_state_file_wins_over_the_configured_outpoint() {
-        let dir = TempDir::new();
-        let path = dir.path.join("state.json");
-        let file_txid = "22".repeat(32);
-        collector_state(file_txid.clone(), 1, None, false)
-            .save(&path)
-            .unwrap();
-
-        let state = super::load_collector_at(&path, &collector_settings(&"11".repeat(32), 4))
-            .unwrap()
-            .expect("state file");
-
-        assert_eq!(state.outpoint.txid, file_txid);
-        assert_eq!(state.outpoint.vout, 1);
-        assert!(!state.closed);
-    }
-
-    fn collector_settings(txid: &str, vout: u32) -> crate::config::CollectorSettings {
-        crate::config::CollectorSettings {
-            withdraw_pubkey: String::new(),
-            outpoint: Some(outpoint(txid, vout)),
-        }
-    }
-
-    fn collector_state(
-        txid: String,
-        vout: u32,
-        pending_txid: Option<String>,
-        closed: bool,
-    ) -> crate::state::State {
-        crate::state::State {
-            outpoint: crate::state::Outpoint { txid, vout },
-            pending_script: pending_txid.as_ref().map(|_| "51".to_owned()),
-            pending_tx: pending_txid.as_ref().map(|_| "00".to_owned()),
-            pending_txid,
-            closed,
-        }
-    }
-
-    fn outpoint(txid: &str, vout: u32) -> OutPoint {
-        OutPoint {
-            txid: Txid::from_str(txid).unwrap(),
-            vout,
-        }
-    }
-
-    fn utxo_at(txid: &str, vout: u32) -> UTXO {
-        UTXO {
-            outpoint: outpoint(txid, vout),
-            txout: TxOut::default(),
-            secrets: None,
-        }
     }
 }

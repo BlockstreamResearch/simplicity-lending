@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 use simplex::provider::SimplicityNetwork;
-use simplex::simplicityhl::elements::OutPoint;
 
 use crate::error::HarvesterError;
 
@@ -121,8 +120,6 @@ impl<'de> Deserialize<'de> for HarvestSettings {
 pub struct CollectorSettings {
     #[serde(default)]
     pub withdraw_pubkey: String,
-    #[serde(default)]
-    pub outpoint: Option<OutPoint>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -215,7 +212,6 @@ mod tests {
         assert!(settings.harvest.mnemonic.is_empty());
         assert!(settings.withdraw.mnemonic.is_empty());
         assert!(settings.collector.withdraw_pubkey.is_empty());
-        assert!(settings.collector.outpoint.is_none());
         assert!(settings.withdraw.destination_address.is_empty());
         assert_eq!(
             settings.esplora.simplicity_network(),
@@ -259,38 +255,6 @@ mod tests {
 
             assert!(error.to_string().contains(message), "{error}");
         }
-    }
-
-    #[test]
-    fn collector_outpoint_parses_txid_and_vout() {
-        let txid = "11".repeat(32);
-        let settings = load_configuration(
-            &configuration_dir(),
-            environment_source().source(Some(HashMap::from([(
-                "HARVESTER_COLLECTOR__OUTPOINT".into(),
-                format!("{txid}:2"),
-            )]))),
-        )
-        .expect("load configuration");
-
-        let outpoint = settings.collector.outpoint.expect("outpoint");
-        assert_eq!(outpoint.txid.to_string(), txid);
-        assert_eq!(outpoint.vout, 2);
-    }
-
-    #[test]
-    fn collector_outpoint_rejects_an_invalid_txid() {
-        let error = load_configuration(
-            &configuration_dir(),
-            environment_source().source(Some(HashMap::from([(
-                "HARVESTER_COLLECTOR__OUTPOINT".into(),
-                "zz:0".into(),
-            )]))),
-        )
-        .expect_err("invalid outpoint");
-
-        let message = error.to_string();
-        assert!(message.contains("collector.outpoint"), "{message}");
     }
 
     #[test]

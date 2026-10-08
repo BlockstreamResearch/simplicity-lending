@@ -32,7 +32,7 @@ pub enum HarvesterError {
     InvalidMnemonic { field: &'static str },
 
     #[error(
-        "confirmed transaction {txid} has no output for the recorded fee collector script; collector state was left unchanged"
+        "confirmed transaction {txid} has no output for the expected fee collector; collector state was left unchanged"
     )]
     CollectorScriptMismatch { txid: String },
 
@@ -48,11 +48,6 @@ pub enum HarvesterError {
     #[error("invalid destination address `{address}`")]
     InvalidAddress { address: String },
 
-    #[error(
-        "no principal-asset ({principal_asset}) funds in the harvest wallet to create the fee collector"
-    )]
-    NoCollectorFunds { principal_asset: String },
-
     #[error("amount overflows u64")]
     AmountOverflow,
 
@@ -65,9 +60,6 @@ pub enum HarvesterError {
     #[error("invalid txid `{txid}`")]
     InvalidTxid { txid: String },
 
-    #[error("saved collector transaction {txid} is not a valid transaction")]
-    InvalidPendingTx { txid: String },
-
     #[error("invalid protocol-fee vault `{field}` `{value}` for offer {offer_id}")]
     InvalidVaultField {
         offer_id: String,
@@ -79,16 +71,6 @@ pub enum HarvesterError {
         "saved collector outpoint {outpoint} is spent and the collector script has no unspent UTXO"
     )]
     MissingCollectorUtxo { outpoint: String },
-
-    #[error(
-        "saved collector outpoint {outpoint} is spent and the collector script has {count} unspent UTXOs"
-    )]
-    AmbiguousCollectorUtxo { outpoint: String, count: usize },
-
-    #[error(
-        "saved collector outpoint {outpoint} is spent while collector transaction {txid} is still pending"
-    )]
-    PendingCollectorOutpoint { outpoint: String, txid: String },
 
     #[error("transaction {txid} has {count} fee collector outputs")]
     CollectorOutputs { txid: String, count: usize },

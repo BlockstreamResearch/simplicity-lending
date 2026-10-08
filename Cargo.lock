@@ -1800,7 +1800,6 @@ dependencies = [
  "clap",
  "config",
  "dotenvy",
- "hex",
  "lending-contracts",
  "lending-indexer",
  "libc",

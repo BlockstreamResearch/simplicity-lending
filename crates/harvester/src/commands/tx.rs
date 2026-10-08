@@ -24,18 +24,18 @@ use super::core::{
     parse_vault_asset, parse_vault_u64, signer_error,
 };
 
-pub(super) const INITIAL_COLLECTOR_AMOUNT: u64 = 1_000;
-
 pub(super) fn prepare_harvest(
     ctx: &AppContext,
     path: &Path,
-    state: &State,
+    state: Option<&State>,
     vaults: &[ProtocolFeeVaultDto],
     amounts: &[u64],
-) -> Result<Option<(FeeBatch<Transaction>, State)>, HarvesterError> {
+) -> Result<Option<FeeBatch<Transaction>>, HarvesterError> {
     let signer = harvest_signer(ctx)?;
     let collector = open_fee_collector(ctx)?;
-    let (collector_utxo, state) = collector_utxo(path, &signer, &collector, state)?;
+    let collector_utxo = state
+        .map(|state| collector_utxo(path, &signer, &collector, state))
+        .transpose()?;
     let mut transaction = new_transaction();
     let mut keepers: HashMap<AssetId, Vec<UTXO>> = HashMap::new();
     let mut attached_keepers: HashMap<AssetId, (u32, u32)> = HashMap::new();
@@ -73,10 +73,11 @@ pub(super) fn prepare_harvest(
                 return Ok(BuildStep::Skip);
             }
 
-            if collector_utxo
-                .explicit_amount()
-                .checked_add(total_amount)
-                .is_none()
+            if let Some(collector_utxo) = &collector_utxo
+                && collector_utxo
+                    .explicit_amount()
+                    .checked_add(total_amount)
+                    .is_none()
             {
                 return vault_fault(&vault.offer_id, HarvesterError::AmountOverflow);
             }
@@ -157,7 +158,12 @@ pub(super) fn prepare_harvest(
             );
 
             let mut prefix = transaction.clone();
-            collector.attach_deposit(&mut prefix, collector_utxo.clone(), total_amount);
+            match &collector_utxo {
+                Some(collector_utxo) => {
+                    collector.attach_deposit(&mut prefix, collector_utxo.clone(), total_amount);
+                }
+                None => collector.attach_creation(&mut prefix, principal_asset, total_amount),
+            }
             match signer.finalize(&prefix) {
                 Ok((transaction, _)) => {
                     let tx_fee = transaction.fee_in(policy_asset);
@@ -170,7 +176,7 @@ pub(super) fn prepare_harvest(
             }
         },
     )?;
-    Ok(batch.map(|batch| (batch, state)))
+    Ok(batch)
 }
 
 fn vault_fault<T>(
@@ -292,98 +298,6 @@ pub(super) fn finalize_withdrawal(
     Ok((transaction, pool_amount))
 }
 
-pub(super) fn finalize_collector_creation(
-    signer: &Signer,
-    fee_collector: &FeeCollector,
-    principal_asset: AssetId,
-    policy_asset: AssetId,
-    principal_name: &str,
-    funding_utxos: &[UTXO],
-) -> Result<(Transaction, u64), HarvesterError> {
-    let mut transaction = new_transaction();
-    let mut change_output = None;
-    let pool_amount = if principal_asset == policy_asset {
-        INITIAL_COLLECTOR_AMOUNT
-    } else {
-        let selected = select_initial_funding_utxos(funding_utxos, principal_name)?;
-        let total = selected
-            .iter()
-            .try_fold(0u64, |acc, utxo| acc.checked_add(utxo.amount()))
-            .ok_or(HarvesterError::AmountOverflow)?;
-        let confidential = selected.iter().any(is_confidential);
-        let (pool_amount, change) = split_initial_collector_amount(total, confidential);
-        for utxo in selected {
-            transaction.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
-        }
-        if change > 0 {
-            let mut output = PartialOutput::new(
-                signer.get_address().script_pubkey(),
-                change,
-                principal_asset,
-            );
-            if confidential {
-                output = output.with_blinding_key(signer.get_blinding_public_key());
-            }
-            change_output = Some(output);
-        }
-        pool_amount
-    };
-
-    fee_collector.attach_creation(&mut transaction, principal_asset, pool_amount);
-    if let Some(output) = change_output {
-        transaction.add_output(output);
-    }
-
-    let (transaction, _fee) = signer
-        .finalize(&transaction)
-        .map_err(|err| signer_error("harvest", err))?;
-    Ok((transaction, pool_amount))
-}
-
-fn select_initial_funding_utxos(
-    funding_utxos: &[UTXO],
-    principal_asset: &str,
-) -> Result<Vec<UTXO>, HarvesterError> {
-    let mut utxos = funding_utxos.to_vec();
-    utxos.sort_by_key(UTXO::amount);
-
-    if let Some(index) = utxos
-        .iter()
-        .position(|utxo| utxo.amount() >= INITIAL_COLLECTOR_AMOUNT)
-    {
-        return Ok(vec![utxos.swap_remove(index)]);
-    }
-
-    let mut selected = Vec::new();
-    let mut total = 0u64;
-    for utxo in utxos {
-        total = total
-            .checked_add(utxo.amount())
-            .ok_or(HarvesterError::AmountOverflow)?;
-        selected.push(utxo);
-        if total >= INITIAL_COLLECTOR_AMOUNT {
-            return Ok(selected);
-        }
-    }
-
-    Err(HarvesterError::NoCollectorFunds {
-        principal_asset: principal_asset.to_owned(),
-    })
-}
-
-fn split_initial_collector_amount(total: u64, confidential: bool) -> (u64, u64) {
-    let change = total.saturating_sub(INITIAL_COLLECTOR_AMOUNT);
-    if change == 0 || confidential || change >= INITIAL_COLLECTOR_AMOUNT {
-        (INITIAL_COLLECTOR_AMOUNT, change)
-    } else {
-        (total, 0)
-    }
-}
-
-fn is_confidential(utxo: &UTXO) -> bool {
-    !utxo.txout.asset.is_explicit() || !utxo.txout.value.is_explicit()
-}
-
 fn new_transaction() -> FinalTransaction {
     let mut transaction = FinalTransaction::new();
     transaction.set_sequence(Sequence::ENABLE_RBF_NO_LOCKTIME);
@@ -450,66 +364,6 @@ mod tests {
             stopped,
             BuildStep::Stop(HarvesterError::AmountOverflow)
         ));
-    }
-
-    #[test]
-    fn collector_creation_spends_the_smallest_utxo_that_covers_the_initial_amount() {
-        let asset = asset_id("11");
-        let selected = super::select_initial_funding_utxos(
-            &[
-                explicit_keeper(asset, 500, 0),
-                explicit_keeper(asset, super::INITIAL_COLLECTOR_AMOUNT, 1),
-                explicit_keeper(asset, 50_000, 2),
-            ],
-            "11",
-        )
-        .unwrap();
-
-        assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].amount(), super::INITIAL_COLLECTOR_AMOUNT);
-    }
-
-    #[test]
-    fn collector_creation_combines_utxos_until_the_initial_amount_is_covered() {
-        let asset = asset_id("11");
-        let selected = super::select_initial_funding_utxos(
-            &[
-                explicit_keeper(asset, 400, 0),
-                explicit_keeper(asset, 400, 1),
-                explicit_keeper(asset, 400, 2),
-            ],
-            "11",
-        )
-        .unwrap();
-
-        let total: u64 = selected.iter().map(UTXO::amount).sum();
-        assert_eq!(selected.len(), 3);
-        assert_eq!(total, 1_200);
-    }
-
-    #[test]
-    fn collector_creation_rejects_a_wallet_below_the_initial_amount() {
-        let asset = asset_id("11");
-        let error = super::select_initial_funding_utxos(&[explicit_keeper(asset, 400, 0)], "asset")
-            .unwrap_err();
-
-        assert!(matches!(error, HarvesterError::NoCollectorFunds { .. }));
-    }
-
-    #[test]
-    fn explicit_change_below_the_initial_amount_stays_in_the_collector() {
-        assert_eq!(
-            super::split_initial_collector_amount(1_500, false),
-            (1_500, 0)
-        );
-        assert_eq!(
-            super::split_initial_collector_amount(5_000, false),
-            (super::INITIAL_COLLECTOR_AMOUNT, 4_000)
-        );
-        assert_eq!(
-            super::split_initial_collector_amount(1_005, true),
-            (super::INITIAL_COLLECTOR_AMOUNT, 5)
-        );
     }
 
     #[test]
