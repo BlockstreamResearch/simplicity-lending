@@ -653,10 +653,10 @@ async fn protocol_vault_withdraw_all_does_not_claim_offer() -> anyhow::Result<()
     let protocol_fee = params.offer_parameters.get_total_protocol_fee();
 
     let claim_tx = build_protocol_vault_withdraw_all_tx(
-        OutPoint {
+        vec![OutPoint {
             txid: repay_txid,
             vout: 2,
-        },
+        }],
         &offer,
         protocol_fee,
     )?;
@@ -684,6 +684,71 @@ async fn protocol_vault_withdraw_all_does_not_claim_offer() -> anyhow::Result<()
     assert!(withdrawals[0].is_full);
     assert_eq!(withdrawals[0].amount_withdrawn, protocol_fee as i64);
     assert_eq!(withdrawals[0].vault_amount_after, 0);
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn batch_withdraw_of_protocol_vaults_indexes_each_vault() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
+
+    let mut seeded = Vec::new();
+    for txid_seed in [11, 12] {
+        seeded.push(seed_trackable_active_offer(&pool, factory_id, txid_seed, 100).await?);
+    }
+
+    let mut registry = load_registry(&pool).await?;
+    let mut protocol_vaults = Vec::new();
+    for (height, (offer_id, active_outpoint, offer)) in (TRACKABLE_REPAYMENT_HEIGHT..).zip(&seeded)
+    {
+        let repay_tx = build_full_repayment_tx(*active_outpoint, offer)?;
+        process_tx_through_registry(&pool, &mut registry, &repay_tx, height).await?;
+        protocol_vaults.push((*offer_id, OutPoint::new(repay_tx.txid(), 2)));
+    }
+
+    let offer = &seeded[0].2;
+    let protocol_fee = offer_lending_params(offer)?
+        .offer_parameters
+        .get_total_protocol_fee();
+
+    let batch_tx = build_protocol_vault_withdraw_all_tx(
+        protocol_vaults
+            .iter()
+            .map(|(_, outpoint)| *outpoint)
+            .collect(),
+        offer,
+        protocol_fee * protocol_vaults.len() as u64,
+    )?;
+    let batch_txid = batch_tx.txid().to_byte_array().to_vec();
+
+    process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &batch_tx,
+        TRACKABLE_REPAYMENT_HEIGHT + 10,
+    )
+    .await?;
+
+    for (offer_id, _) in &protocol_vaults {
+        assert_eq!(
+            fetch_offer_status(&pool, *offer_id).await?,
+            OfferStatus::Repaid
+        );
+
+        let active_vaults = fetch_active_vault_rows(&pool, *offer_id).await?;
+        assert_eq!(active_vaults.len(), 1);
+        assert_eq!(active_vaults[0].vault_type, VaultType::Lender);
+
+        let withdrawals = fetch_offer_vault_withdrawals(&pool, *offer_id).await?;
+        assert_eq!(withdrawals.len(), 1);
+        assert_eq!(withdrawals[0].txid, batch_txid);
+        assert_eq!(withdrawals[0].vault_type, VaultType::ProtocolFee);
+        assert!(withdrawals[0].is_full);
+        assert_eq!(withdrawals[0].amount_withdrawn, protocol_fee as i64);
+        assert_eq!(withdrawals[0].vault_amount_after, 0);
+    }
 
     Ok(())
 }
