@@ -75,7 +75,8 @@ export interface RepayOfferSummary {
 
 export function useRepayOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, fundWithWalletCoins } =
+    useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const repayOffer = async (params: RepayOfferParams): Promise<UpdatedPset<RepayOfferSummary>> => {
@@ -212,9 +213,12 @@ export function useRepayOffer() {
     const firstWalletOutpoint = walletInputOutpointStrings[0]
     if (!firstWalletOutpoint) throw new Error('At least one wallet UTXO is required')
 
-    let txBuilder = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(walletInputOutpointStrings.map(o => new OutPoint(o)))
+    let txBuilder = (
+      await fundWithWalletCoins(
+        new TxBuilder(lwkNetwork).feeRate(feeRate),
+        walletInputOutpointStrings.map(o => new OutPoint(o)),
+      )
+    )
       .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
       .addExternalUtxos([
         new ExternalUtxo(

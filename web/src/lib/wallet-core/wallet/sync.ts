@@ -1,5 +1,6 @@
 import { type EsploraClient, type Transaction, TxOpt, type Wollet } from '@lilbonekit/lwk-web'
 
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo } from '@/lwk/utxo'
 
 export interface WalletBalances {
@@ -88,4 +89,27 @@ export function reconcilePendingBroadcasts(
     }
   }
   return confirmedTxids
+}
+
+export function readCoinBalances(coins: WalletCoin[]): WalletBalances {
+  const total: Record<string, bigint> = {}
+  const confirmed: Record<string, bigint> = {}
+  for (const coin of coins) {
+    const unblinded = coin.unblinded()
+    const assetId = unblinded.asset().toString()
+    total[assetId] = (total[assetId] ?? 0n) + unblinded.value()
+    if (isConfirmedWalletUtxo(coin)) {
+      confirmed[assetId] = (confirmed[assetId] ?? 0n) + unblinded.value()
+    }
+  }
+  const pending: Record<string, string> = {}
+  for (const [assetId, amount] of Object.entries(total)) {
+    const pendingAmount = amount - (confirmed[assetId] ?? 0n)
+    if (pendingAmount !== 0n) pending[assetId] = pendingAmount.toString()
+  }
+  const toStrings = (amounts: Record<string, bigint>) =>
+    Object.fromEntries(
+      Object.entries(amounts).map(([assetId, amount]) => [assetId, amount.toString()]),
+    )
+  return { total: toStrings(total), confirmed: toStrings(confirmed), pending }
 }

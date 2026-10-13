@@ -13,9 +13,13 @@ function getStageLabel(
     case 'constructing':
       return { title: 'Constructing Transaction', subtitle: 'Building inputs and outputs' }
     case 'signing':
-      return signerType === 'jade'
-        ? { title: 'Sign on Jade', subtitle: 'Confirm the transaction on your device' }
-        : { title: 'Signing Transaction', subtitle: 'Authorizing with your wallet' }
+      if (signerType === 'jade') {
+        return { title: 'Sign on Jade', subtitle: 'Confirm the transaction on your device' }
+      }
+      if (signerType === 'humid') {
+        return { title: 'Sign in Humid', subtitle: 'Confirm the transaction in the extension' }
+      }
+      return { title: 'Signing Transaction', subtitle: 'Authorizing with your wallet' }
     case 'finalizing':
       return { title: 'Finalizing Transaction', subtitle: 'Putting on the finishing touches' }
     case 'broadcasting':

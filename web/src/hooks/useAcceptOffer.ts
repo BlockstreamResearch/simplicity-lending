@@ -66,7 +66,8 @@ export interface AcceptOfferSummary {
 
 export function useAcceptOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, fundWithWalletCoins } =
+    useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const acceptOffer = async (
@@ -215,9 +216,12 @@ export function useAcceptOffer() {
     const lenderNftVout = lenderNftOutpoint.vout()
     const firstWalletOutpoint = walletInputOutpointStrings[0]
     if (!firstWalletOutpoint) throw new Error('At least one wallet UTXO is required')
-    let txBuilder = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(walletInputOutpointStrings.map(outpoint => new OutPoint(outpoint)))
+    let txBuilder = (
+      await fundWithWalletCoins(
+        new TxBuilder(lwkNetwork).feeRate(feeRate),
+        walletInputOutpointStrings.map(outpoint => new OutPoint(outpoint)),
+      )
+    )
       .setInputOrder(inputOrderStrings.map(outpoint => new OutPoint(outpoint)))
       .addExternalUtxos([
         new ExternalUtxo(

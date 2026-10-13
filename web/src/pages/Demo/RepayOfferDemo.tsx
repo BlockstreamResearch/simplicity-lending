@@ -1,4 +1,3 @@
-import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -9,6 +8,7 @@ import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type RepayOfferSummary, useRepayOffer } from '@/hooks/useRepayOffer'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -103,7 +103,7 @@ export default function RepayOfferDemo() {
     resolver: repayOfferFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
-  const [walletUtxos, setWalletUtxos] = useState<WalletTxOut[]>([])
+  const [walletUtxos, setWalletUtxos] = useState<WalletCoin[]>([])
   const [walletUtxosState, setWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,

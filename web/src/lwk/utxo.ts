@@ -1,6 +1,7 @@
-import type { AssetId, WalletTxOut } from '@lilbonekit/lwk-web'
+import type { AssetId } from '@lilbonekit/lwk-web'
 
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { formatFeeReserve } from '@/utils/format'
 import { selectByLargestFirst } from '@/utils/utxo'
 
@@ -16,28 +17,28 @@ export const WALLET_INPUT_RBF_SEQUENCE = 0xfffffffd
 // (sig + pubkey = 104-105 bytes), plus margin.
 export const EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY = 150
 
-export function utxoToOutpointString(utxo: WalletTxOut): string {
+export function utxoToOutpointString(utxo: WalletCoin): string {
   const outpoint = utxo.outpoint()
   return `${outpoint.txid().toString()}:${outpoint.vout()}`
 }
 
 export function findWalletUtxo(
-  walletUtxos: WalletTxOut[],
+  walletUtxos: WalletCoin[],
   outpoint: string,
-): WalletTxOut | undefined {
+): WalletCoin | undefined {
   const normalizedOutpoint = outpoint.trim()
   return walletUtxos.find(utxo => utxoToOutpointString(utxo) === normalizedOutpoint)
 }
 
-export function isConfirmedWalletUtxo(utxo: WalletTxOut): boolean {
+export function isConfirmedWalletUtxo(utxo: WalletCoin): boolean {
   return utxo.height() !== undefined
 }
 
 export function requireWalletUtxo(
-  walletUtxos: WalletTxOut[],
+  walletUtxos: WalletCoin[],
   outpoint: string,
   label: string,
-): WalletTxOut {
+): WalletCoin {
   const utxo = findWalletUtxo(walletUtxos, outpoint)
   if (!utxo) throw new Error(`${label} wallet UTXO not found`)
   if (!isConfirmedWalletUtxo(utxo)) throw new Error(`${label} wallet UTXO is not confirmed yet`)
@@ -45,7 +46,7 @@ export function requireWalletUtxo(
 }
 
 export function assertWalletUtxoAssetAndMinimumAmount(
-  utxo: WalletTxOut,
+  utxo: WalletCoin,
   assetId: AssetId | string,
   minimumAmount: bigint,
   label: string,
@@ -61,11 +62,11 @@ export function assertWalletUtxoAssetAndMinimumAmount(
 }
 
 export function selectAssetUtxos(
-  walletUtxos: WalletTxOut[],
+  walletUtxos: WalletCoin[],
   assetId: AssetId | string,
   amount: bigint,
   label: string,
-): WalletTxOut[] {
+): WalletCoin[] {
   const candidates = walletUtxos
     .filter(
       utxo =>
@@ -77,7 +78,7 @@ export function selectAssetUtxos(
   return selected.map(item => item.utxo)
 }
 
-export function isPolicyAssetUtxo(utxo: WalletTxOut, policyAsset: AssetId | string): boolean {
+export function isPolicyAssetUtxo(utxo: WalletCoin, policyAsset: AssetId | string): boolean {
   return utxo.unblinded().asset().toString() === policyAsset.toString()
 }
 
@@ -107,11 +108,11 @@ export function estimateFeeBudgetSats(
 }
 
 export function selectFeeUtxos(
-  walletUtxos: WalletTxOut[],
+  walletUtxos: WalletCoin[],
   policyAsset: AssetId | string,
   budgetSats: bigint,
   feeRateSatPerKvb: number,
-): WalletTxOut[] {
+): WalletCoin[] {
   const candidates = walletUtxos
     .filter(utxo => isConfirmedWalletUtxo(utxo) && isPolicyAssetUtxo(utxo, policyAsset))
     .map(utxo => ({ value: utxo.unblinded().value(), utxo }))
