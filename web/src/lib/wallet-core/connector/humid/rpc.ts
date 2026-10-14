@@ -29,7 +29,6 @@ export interface HumidWalletDescriptorResult {
 
 export interface HumidAddressResult {
   address: string
-  unconfidentialAddress: string
 }
 
 export interface HumidUtxo {

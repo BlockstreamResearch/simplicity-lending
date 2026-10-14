@@ -111,7 +111,10 @@ export class HumidConnector implements WalletConnector {
         descriptorType: 'publicWalletDescriptor',
         descriptorFormat: [{ format: 'bip380-bip389-multipath' }],
       }),
-      invokeMethod<HumidAddressResult>(provider, this.chainId, 'getAddress'),
+      invokeMethod<HumidAddressResult>(provider, this.chainId, 'getAddress', {
+        index: 0,
+        confidential: true,
+      }),
     ])
     const publicDescriptor = result.descriptors[0]?.descriptor
     if (!publicDescriptor) throw new Error('Humid did not return a wallet descriptor')
@@ -172,8 +175,8 @@ export class HumidConnector implements WalletConnector {
 
   async signPset(pset: Pset): Promise<WalletRequest<Pset>> {
     const provider = this.requireProvider()
-    const { unconfidentialAddress } = this.requireFirstAddress()
-    const firstScriptHex = bytesToHex(new Address(unconfidentialAddress).scriptPubkey().bytes())
+    const firstAddress = new Address(this.requireFirstAddress().address).toUnconfidential()
+    const firstScriptHex = bytesToHex(firstAddress.scriptPubkey().bytes())
 
     const signInputs = pset.inputs().flatMap((input, index) => {
       const coin = this.coins.get(
@@ -182,7 +185,7 @@ export class HumidConnector implements WalletConnector {
       const address = (() => {
         if (coin) return coin.address
         const script = input.previousScriptPubkey()
-        if (script && bytesToHex(script.bytes()) === firstScriptHex) return unconfidentialAddress
+        if (script && bytesToHex(script.bytes()) === firstScriptHex) return firstAddress.toString()
         return null
       })()
       return address ? [{ index, address, sighashTypes: [SIGHASH_ALL] }] : []
