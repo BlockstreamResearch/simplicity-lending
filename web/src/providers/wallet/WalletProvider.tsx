@@ -74,20 +74,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<WalletState>(INITIAL_WALLET_STATE)
   const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
 
-  // Humid keeps its blinding key, so its coins come from the wallet rather than from a scan.
-  const loadBalances = useCallback(async (session: WalletSession): Promise<WalletBalances> => {
-    if (session.connector instanceof HumidConnector) {
-      const balances = readCoinBalances(await session.connector.getCoins(APP_ASSET_IDS))
-      const receiveAddress = session.connector.receiveAddress()
-      if (receiveAddress)
-        setState(s => (s.receiveAddress === receiveAddress ? s : { ...s, receiveAddress }))
-      return balances
-    }
-    await syncBalances(session.wollet, session.esploraClient)
-    const confirmedTxids = reconcilePendingBroadcasts(session.wollet, pendingBroadcastsRef.current)
-    confirmedTxids.forEach(txid => pendingBroadcastsRef.current.delete(txid))
-    return readWalletBalances(session.wollet)
-  }, [])
+  const loadBalances = useCallback(
+    async (session: WalletSession, attempt: number): Promise<WalletBalances | null> => {
+      const { connector } = session
+      if (connector.getCoins) {
+        const coins = await connector.getCoins(APP_ASSET_IDS)
+        if (attempt !== connectionChangeCounterRef.current) return null
+        return readCoinBalances(coins)
+      }
+      await syncBalances(session.wollet, session.esploraClient)
+      if (attempt !== connectionChangeCounterRef.current) return null
+      const confirmedTxids = reconcilePendingBroadcasts(
+        session.wollet,
+        pendingBroadcastsRef.current,
+      )
+      confirmedTxids.forEach(txid => pendingBroadcastsRef.current.delete(txid))
+      return readWalletBalances(session.wollet)
+    },
+    [],
+  )
 
   const endSession = useCallback(
     async ({
@@ -193,9 +198,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (Date.now() - lastSyncAtRef.current < MIN_SYNC_GAP_MS) return
       syncInFlightRef.current = true
       const attempt = connectionChangeCounterRef.current
-      loadBalances(session)
-        .then(({ total, confirmed, pending }) => {
-          if (attempt !== connectionChangeCounterRef.current) return
+      loadBalances(session, attempt)
+        .then(balances => {
+          if (!balances) return
+          const { total, confirmed, pending } = balances
 
           setState(s => ({
             ...s,
@@ -261,7 +267,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         connector = (() => {
           if (useSideSwap) return new SideSwapConnector(env.VITE_SIDESWAP_WS_URL!)
-          if (useHumid) return new HumidConnector(lwkNetwork, network)
+          if (useHumid) return new HumidConnector(network)
           if (mnemonic === null) return new JadeConnector(lwkNetwork)
           return new SeedConnector(lwkNetwork, mnemonic)
         })()
@@ -335,24 +341,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
         setSavedSession(saved)
 
-        const {
-          total: balances,
-          confirmed: confirmedBalances,
-          pending: pendingBalances,
-        } = await loadBalances(sessionRef.current)
+        const loaded = await loadBalances(sessionRef.current, attempt)
         lastSyncAtRef.current = Date.now()
-        if (attempt !== connectionChangeCounterRef.current) {
+        if (!loaded) {
           openedCache.close().catch(console.warn)
           return
         }
+        const { total: balances, confirmed: confirmedBalances, pending: pendingBalances } = loaded
 
         const address = wollet.address(0).address()
-        // Humid's own confidential address is only known from its coins; until it reports one,
-        // show the explicit form of the same script (ours would carry our ELIP-151 blinding key).
-        const receiveAddress =
-          connector instanceof HumidConnector
-            ? (connector.receiveAddress() ?? address.toUnconfidential().toString())
-            : address.toString()
+        const receiveAddress = connector.receiveAddress?.() ?? address.toString()
         const scriptPubkey = address.scriptPubkey().toString()
 
         setState(s => ({
@@ -423,12 +421,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const attempt = connectionChangeCounterRef.current
 
     try {
-      const {
-        total: balances,
-        confirmed: confirmedBalances,
-        pending: pendingBalances,
-      } = await loadBalances(session)
-      if (attempt !== connectionChangeCounterRef.current) return
+      const loaded = await loadBalances(session, attempt)
+      if (!loaded) return
+      const { total: balances, confirmed: confirmedBalances, pending: pendingBalances } = loaded
 
       setState(s => ({ ...s, syncing: false, balances, confirmedBalances, pendingBalances }))
     } catch (err) {
@@ -448,8 +443,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // this outcome, so failures here (e.g. a full scan racing this call) must not throw.
   const applyBroadcastTx = useCallback((tx: Transaction) => {
     const session = sessionRef.current
-    // Humid's coins aren't in our Wollet; the next sync picks the change up from Humid.
-    if (!session || session.connector instanceof HumidConnector) return
+    if (!session || session.connector.getCoins) return
 
     try {
       const { total, confirmed, pending } = applyBroadcastTransaction(session.wollet, tx)
@@ -518,26 +512,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     [withAssetContracts],
   )
 
-  // Returns the snapshot derived once on connect — single source of truth for the
-  // deterministic address(0). Live wollet/utxos still come from get* below.
-  const getReceiveAddress = useCallback(async (): Promise<string | null> => {
-    const connector = sessionRef.current?.connector
-    if (connector instanceof HumidConnector) {
-      const address = connector.receiveAddress()
-      if (!address) {
-        throw new Error(
-          "Humid hasn't reported a confidential address on its first address yet. Receive some L-BTC to it first",
-        )
-      }
-      return address
-    }
-    return state.receiveAddress
-  }, [state.receiveAddress])
+  const getReceiveAddress = useCallback(
+    async (): Promise<string | null> =>
+      sessionRef.current?.connector.receiveAddress?.() ?? state.receiveAddress,
+    [state.receiveAddress],
+  )
 
   const verifyReceiveAddress = useCallback(async (): Promise<string> => {
     const session = sessionRef.current
     if (!session) throw new Error('WalletProvider: not connected')
-    if (session.connector instanceof HumidConnector) return getReceiveAddress().then(String)
+    if (session.connector.receiveAddress) return getReceiveAddress().then(String)
     if (!session.connector.getVerifiedReceiveAddress) {
       return session.wollet.address(0).address().toString()
     }
@@ -555,9 +539,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       throw new Error('WalletProvider: not connected')
     }
 
-    if (session.connector instanceof HumidConnector) {
-      return session.connector.getCoins(APP_ASSET_IDS)
-    }
+    if (session.connector.getCoins) return session.connector.getCoins(APP_ASSET_IDS)
     // LWK returns blinded UTXOs, which are spendable by LWK
     return session.wollet.utxos()
   }, [])
@@ -567,7 +549,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const session = sessionRef.current
       if (!session) throw new Error('WalletProvider: not connected')
 
-      if (session.connector instanceof HumidConnector) {
+      if (session.connector.fundTxBuilder) {
         return session.connector.fundTxBuilder(txBuilder, outpoints)
       }
       return txBuilder.setWalletUtxos(outpoints)

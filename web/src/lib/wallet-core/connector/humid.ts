@@ -2,12 +2,10 @@ import {
   Address,
   AssetId,
   ExternalUtxo,
-  type Network,
   OutPoint,
   Pset,
   type TxBuilder,
   TxOutSecrets,
-  Wollet,
   WolletDescriptor,
 } from '@lilbonekit/lwk-web'
 
@@ -19,6 +17,7 @@ import { bytesToHex } from '@/utils/hex'
 import type { ConnectionStatus, WalletCoin } from '../types'
 import {
   createSession,
+  type HumidAddressResult,
   humidChainId,
   type HumidGetUtxosResult,
   type HumidProvider,
@@ -64,25 +63,19 @@ function toWalletCoin(utxo: HumidUtxo): WalletCoin {
  * public `elwpkh(xpub)` descriptor and reports coins through `getUTXOs` (asset and amount,
  * no blinding factors). So the app can't see the user's coins through its own Wollet:
  * - coins come from `getUTXOs` (see getCoins);
- * - they enter TxBuilder as external UTXOs with `skipBlinding()`, and change goes to one of
- *   Humid's confidential addresses (see fundTxBuilder);
+ * - they enter TxBuilder as external UTXOs with `skipBlinding()`, and change goes to Humid's
+ *   first address (see fundTxBuilder);
  * - Humid blinds the outputs with its own secrets and signs its inputs (see signPset).
- *
- * The descriptor is wrapped as `ct(elip151, …)`: scripts match Humid's, which is all the
- * Wollet is needed for (deriving the first address and finalizing Humid's signatures).
  */
 export class HumidConnector implements WalletConnector {
   private provider: HumidProvider | null = null
-  private wollet: Wollet | null = null
+  private firstAddress: HumidAddressResult | null = null
   private _id: string | null = null
   private readonly chainId: string
   /** Coins from the last getCoins call, by outpoint. */
   private coins = new Map<string, HumidUtxo>()
 
-  constructor(
-    private readonly lwkNetwork: Network,
-    network: NetworkName,
-  ) {
+  constructor(network: NetworkName) {
     this.chainId = humidChainId(network)
   }
 
@@ -107,28 +100,25 @@ export class HumidConnector implements WalletConnector {
     this.provider = null
     this._id = null
     this.coins.clear()
-    this.wollet?.free()
-    this.wollet = null
+    this.firstAddress = null
     if (provider) await revokeSession(provider).catch(() => undefined)
   }
 
   async getDescriptor(): Promise<WalletRequest<WolletDescriptor>> {
-    const result = await invokeMethod<HumidWalletDescriptorResult>(
-      this.requireProvider(),
-      this.chainId,
-      'getWalletDescriptor',
-      {
+    const provider = this.requireProvider()
+    const [result, firstAddress] = await Promise.all([
+      invokeMethod<HumidWalletDescriptorResult>(provider, this.chainId, 'getWalletDescriptor', {
         descriptorType: 'publicWalletDescriptor',
         descriptorFormat: [{ format: 'bip380-bip389-multipath' }],
-      },
-    )
+      }),
+      invokeMethod<HumidAddressResult>(provider, this.chainId, 'getAddress'),
+    ])
     const publicDescriptor = result.descriptors[0]?.descriptor
     if (!publicDescriptor) throw new Error('Humid did not return a wallet descriptor')
 
-    const descriptor = new WolletDescriptor(`ct(elip151,${publicDescriptor.split('#')[0]})`)
-    this.wollet?.free()
-    this.wollet = new Wollet(this.lwkNetwork, descriptor)
+    this.firstAddress = firstAddress
     this._id = result.accountIdentifier
+    const descriptor = new WolletDescriptor(`ct(elip151,${publicDescriptor.split('#')[0]})`)
     return { id: null, result: Promise.resolve(descriptor) }
   }
 
@@ -177,16 +167,14 @@ export class HumidConnector implements WalletConnector {
     return txBuilder
       .addExternalUtxos(externalUtxos)
       .skipBlinding()
-      .setChangeAddress(this.changeAddress())
+      .setChangeAddress(new Address(this.requireFirstAddress().address))
   }
 
   async signPset(pset: Pset): Promise<WalletRequest<Pset>> {
     const provider = this.requireProvider()
-    const firstAddress = this.requireWollet().address(0).address().toUnconfidential()
-    const firstScriptHex = bytesToHex(firstAddress.scriptPubkey().bytes())
+    const { unconfidentialAddress } = this.requireFirstAddress()
+    const firstScriptHex = bytesToHex(new Address(unconfidentialAddress).scriptPubkey().bytes())
 
-    // Humid refuses to sign a wallet input the request doesn't list, so every one of its
-    // inputs goes here: coins from getUTXOs, plus explicit coins (NFTs) on its first address.
     const signInputs = pset.inputs().flatMap((input, index) => {
       const coin = this.coins.get(
         outpointKey(input.previousTxid().toString(), input.previousVout()),
@@ -194,7 +182,7 @@ export class HumidConnector implements WalletConnector {
       const address = (() => {
         if (coin) return coin.address
         const script = input.previousScriptPubkey()
-        if (script && bytesToHex(script.bytes()) === firstScriptHex) return firstAddress.toString()
+        if (script && bytesToHex(script.bytes()) === firstScriptHex) return unconfidentialAddress
         return null
       })()
       return address ? [{ index, address, sighashTypes: [SIGHASH_ALL] }] : []
@@ -211,35 +199,12 @@ export class HumidConnector implements WalletConnector {
     return { id: null, result }
   }
 
-  /**
-   * Humid's confidential address for its first script, where the app sends the user's funds
-   * (and, in explicit form, NFTs — the only place Humid tracks explicit coins). Humid has no
-   * RPC for addresses, so it is read off a reported coin on that script; null until one exists.
-   */
   receiveAddress(): string | null {
-    const firstScriptHex = this.firstScriptHex()
-    const coin = [...this.coins.values()].find(
-      utxo => utxo.scriptPubKey === firstScriptHex && new Address(utxo.address).isBlinded(),
-    )
-    return coin?.address ?? null
+    return this.firstAddress?.address ?? null
   }
 
   async getConnectionStatus(): Promise<ConnectionStatus> {
     return this.provider ? 'ready' : 'disconnected'
-  }
-
-  // Humid gives no RPC for a fresh address, so change reuses the confidential address of a
-  // coin it reported (its blinding pubkey is what Humid blinds the change output to).
-  private changeAddress(): Address {
-    const address =
-      this.receiveAddress() ??
-      [...this.coins.values()].find(utxo => new Address(utxo.address).isBlinded())?.address
-    if (!address) throw new Error('Humid reported no confidential address to send change to')
-    return new Address(address)
-  }
-
-  private firstScriptHex(): string {
-    return bytesToHex(this.requireWollet().address(0).address().scriptPubkey().bytes())
   }
 
   private requireProvider(): HumidProvider {
@@ -247,8 +212,8 @@ export class HumidConnector implements WalletConnector {
     return this.provider
   }
 
-  private requireWollet(): Wollet {
-    if (!this.wollet) throw new Error('Humid wallet descriptor is not loaded')
-    return this.wollet
+  private requireFirstAddress(): HumidAddressResult {
+    if (!this.firstAddress) throw new Error('Humid wallet address is not loaded')
+    return this.firstAddress
   }
 }

@@ -27,6 +27,11 @@ export interface HumidWalletDescriptorResult {
   descriptors: Array<{ descriptor?: string; format: string }>
 }
 
+export interface HumidAddressResult {
+  address: string
+  unconfidentialAddress: string
+}
+
 export interface HumidUtxo {
   /** Confidential when the coin is: carries the wallet's blinding pubkey for that script. */
   address: string
@@ -34,12 +39,10 @@ export interface HumidUtxo {
   amount: string
   /** CAIP-19-style id: `bip122:<chain>/elip144:<asset hex>`. */
   assetId: string
-  confidential: boolean
   scriptPubKey: string
   /** False while unconfirmed. */
   spendable: boolean
   txid: string
-  txOut: string
   vout: number
 }
 
@@ -55,7 +58,6 @@ export interface HumidSignPsetParams {
 
 export interface HumidSignPsetResult {
   pset: string
-  txid?: string
 }
 
 const PROVIDER_WAIT_MS = 3_000
@@ -65,7 +67,7 @@ const CHAIN_IDS: Partial<Record<NetworkName, string>> = {
   liquidtestnet: 'bip122:a771da8e52ee6ad581ed1e9a99825e5b',
 }
 
-export const HUMID_METHODS = ['getWalletDescriptor', 'getUTXOs', 'getBalance', 'signPset']
+const HUMID_METHODS = ['getWalletDescriptor', 'getAddress', 'getUTXOs', 'signPset']
 
 export function humidChainId(network: NetworkName): string {
   const chainId = CHAIN_IDS[network]
