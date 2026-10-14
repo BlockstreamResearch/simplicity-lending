@@ -29,7 +29,14 @@ export interface ChopUtxoResult {
 
 export function useUtxoChopper() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet } = useWallet()
+  const {
+    getReceiveAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    signPset,
+    syncWallet,
+    fundWithWalletCoins,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const chopUtxo = async (params: ChopUtxoParams): Promise<ChopUtxoResult> => {
@@ -86,10 +93,12 @@ export function useUtxoChopper() {
       )
     }
     const walletInputOutpointStrings = [params.fundingOutpoint, ...params.feeOutpoints]
-    let txBuilder = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(walletInputOutpointStrings.map(o => new OutPoint(o)))
-      .setInputOrder(walletInputOutpointStrings.map(o => new OutPoint(o)))
+    let txBuilder = (
+      await fundWithWalletCoins(
+        new TxBuilder(lwkNetwork).feeRate(feeRate),
+        walletInputOutpointStrings.map(o => new OutPoint(o)),
+      )
+    ).setInputOrder(walletInputOutpointStrings.map(o => new OutPoint(o)))
 
     for (let index = 0; index < params.pieceCount; index += 1) {
       txBuilder = fundingIsLbtc

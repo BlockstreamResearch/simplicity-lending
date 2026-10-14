@@ -1,6 +1,6 @@
-import type { Pset, Wollet, WolletDescriptor } from '@lilbonekit/lwk-web'
+import type { OutPoint, Pset, TxBuilder, Wollet, WolletDescriptor } from '@lilbonekit/lwk-web'
 
-import type { ConnectionStatus, WalletType } from '../types'
+import type { ConnectionStatus, WalletCoin, WalletType } from '../types'
 
 // id/appLink/cancel are null/undefined for connectors that resolve immediately (Jade, seed).
 export interface WalletRequest<T> {
@@ -19,4 +19,8 @@ export interface WalletConnector {
   isConnected: boolean
   getConnectionStatus(): Promise<ConnectionStatus>
   getVerifiedReceiveAddress?(variant: WalletType, wollet: Wollet): Promise<string>
+
+  getCoins?(assetIds: string[]): Promise<WalletCoin[]>
+  fundTxBuilder?(txBuilder: TxBuilder, outpoints: OutPoint[]): Promise<TxBuilder>
+  receiveAddress?(): string | null
 }

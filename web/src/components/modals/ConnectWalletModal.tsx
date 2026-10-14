@@ -6,6 +6,7 @@ import CopyButton from '@/components/CopyButton'
 import ChevronLeftIcon from '@/components/icons/ChevronLeftIcon'
 import JadeIcon from '@/components/icons/JadeIcon'
 import SeedIcon from '@/components/icons/SeedIcon'
+import ShieldIcon from '@/components/icons/ShieldIcon'
 import SideSwapIcon from '@/components/icons/SideSwapIcon'
 import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import { MnemonicInput } from '@/components/MnemonicInput'
@@ -70,6 +71,7 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
   const [connecting, setConnecting] = useState(false)
   const [jadeConnecting, setJadeConnecting] = useState(false)
   const [sideswapConnecting, setSideswapConnecting] = useState(false)
+  const [humidConnecting, setHumidConnecting] = useState(false)
   const [wasOpen, setWasOpen] = useState(isOpen)
 
   // Reset to the picker on open, unless a SideSwap login is still pending.
@@ -117,6 +119,17 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
       await connect(DEFAULT_WALLET_TYPE, { sideswap: true })
     } finally {
       setSideswapConnecting(false)
+    }
+  }
+
+  const handleHumidConnect = async () => {
+    if (humidConnecting) return
+
+    setHumidConnecting(true)
+    try {
+      await connect(DEFAULT_WALLET_TYPE, { humid: true })
+    } finally {
+      setHumidConnecting(false)
     }
   }
 
@@ -190,6 +203,19 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
               onPress={() => setMode('seed')}
             />
           )}
+          <ConnectOptionCard
+            icon={<ShieldIcon className='size-5 text-white' />}
+            iconBadgeClassName='bg-accent'
+            title='Humid'
+            subtitle='Sign in the Humid browser extension'
+            badge={
+              <Chip color='warning' variant='soft' size='sm'>
+                Experimental
+              </Chip>
+            }
+            disabled={humidConnecting}
+            onPress={() => void handleHumidConnect()}
+          />
           {env.VITE_SIDESWAP_WS_URL && (
             <ConnectOptionCard
               icon={<SideSwapIcon className='size-5' />}

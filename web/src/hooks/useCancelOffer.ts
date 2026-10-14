@@ -69,7 +69,7 @@ export interface CancelOfferSummary {
 
 export function useCancelOffer() {
   const { lwkNetwork } = useLwk()
-  const { getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { getBlindedWalletUtxos, getWollet, syncWallet, fundWithWalletCoins } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const cancelOffer = async (
@@ -172,9 +172,12 @@ export function useCancelOffer() {
     const borrowerNftVout = borrowerNftOutpoint.vout()
     const firstFeeOutpoint = params.feeOutpoints[0]
     if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
-    const pset = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
+    const pset = (
+      await fundWithWalletCoins(
+        new TxBuilder(lwkNetwork).feeRate(feeRate),
+        params.feeOutpoints.map(o => new OutPoint(o)),
+      )
+    )
       .setInputOrder([
         new OutPoint(params.pendingOfferOutpoint),
         new OutPoint(params.lenderNftOutpoint),

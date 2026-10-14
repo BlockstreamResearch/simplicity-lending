@@ -71,7 +71,8 @@ export interface BorrowerAccountCreationSummary {
 
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, scriptPubkey } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, scriptPubkey, fundWithWalletCoins } =
+    useWallet()
   const { pendingTxs } = usePendingTransactions()
   const queryClient = useQueryClient()
   const factoriesQuery = useFactories(scriptPubkey || '')
@@ -124,9 +125,9 @@ export function useBorrowerAccount() {
     )
     const { contract, issuedAssetId, metadata } = await prepareIssuance(feeUtxo.outpoint())
 
-    const pset = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos([feeUtxo.outpoint()])
+    const pset = (
+      await fundWithWalletCoins(new TxBuilder(lwkNetwork).feeRate(feeRate), [feeUtxo.outpoint()])
+    )
       .issueAssetToRecipients(
         [
           IssuanceRecipient.fromAddress(FACTORY_AUTH_AMOUNT, receiveAddress),

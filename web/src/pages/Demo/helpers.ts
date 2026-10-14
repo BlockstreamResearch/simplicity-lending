@@ -1,11 +1,12 @@
-import type { AssetId, WalletTxOut } from '@lilbonekit/lwk-web'
+import type { AssetId } from '@lilbonekit/lwk-web'
 
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 
 export interface DemoScriptAuthInputSelection {
-  authUtxo: WalletTxOut
-  fundingUtxo: WalletTxOut
+  authUtxo: WalletCoin
+  fundingUtxo: WalletCoin
 }
 
 /**
@@ -16,7 +17,7 @@ export interface DemoScriptAuthInputSelection {
  * explicit auth/funding UTXO selection.
  */
 export function selectDemoScriptAuthInputs(
-  walletUtxos: WalletTxOut[],
+  walletUtxos: WalletCoin[],
   policyAsset: AssetId | string,
   feeReserve: bigint,
 ): DemoScriptAuthInputSelection {
@@ -90,7 +91,7 @@ export function removeScriptAuthState(authOutpoint: string): void {
   localStorage.setItem(SCRIPT_AUTH_STORAGE_KEY, JSON.stringify(filteredStates))
 }
 
-export function formatCollateralUtxoOption(utxo: WalletTxOut): { id: string; label: string } {
+export function formatCollateralUtxoOption(utxo: WalletCoin): { id: string; label: string } {
   const outpoint = utxoToOutpointString(utxo)
   const height = utxo.height()
   const status = height === undefined ? 'mempool' : `height ${height}`
