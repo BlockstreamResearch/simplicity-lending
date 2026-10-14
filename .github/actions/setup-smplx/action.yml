@@ -1,10 +1,11 @@
 name: setup-smplx
+description: "Setup smplx-cli via simplexup"
 
 inputs:
   commit-sha:
     description: "Commit in repository to use"
     required: false
-    default: "master"
+    default: "c9cae5da3ace3e502fc19bda9cf5bd3fb909e49b"
   owner-repo:
     description: "Owner repo on Github to use"
     required: false

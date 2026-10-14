@@ -35,7 +35,7 @@ CREATE TABLE offer_vault_withdrawals (
     amount_withdrawn BIGINT NOT NULL,
     vault_amount_before BIGINT NOT NULL,
     vault_amount_after BIGINT NOT NULL,
-    UNIQUE (txid, vault_type)
+    UNIQUE (offer_id, txid, vault_type)
 );
 
 CREATE INDEX idx_offer_vault_withdrawals_offer_id_height
