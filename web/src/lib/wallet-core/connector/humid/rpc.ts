@@ -32,7 +32,7 @@ export interface HumidAddressResult {
 }
 
 export interface HumidUtxo {
-  /** Confidential when the coin is: carries the wallet's blinding pubkey for that script. */
+  /** Confidential address of the coin's script, explicit coins too (except on change addresses). */
   address: string
   /** Base units, as a decimal string. */
   amount: string
