@@ -267,17 +267,18 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
           <div className='flex flex-col gap-1'>
             <p className='text-foreground text-base font-medium'>Humid isn&apos;t installed</p>
             <p className='text-muted text-sm'>
-              Add the Humid extension to your browser, then reload this page to connect.
+              Download the latest release from GitHub, unzip it and add it with Load unpacked in
+              chrome://extensions (Developer mode on). Then reload this page.
             </p>
           </div>
           <div className='flex w-full flex-col gap-2'>
             <a
               className={buttonVariants({ variant: 'primary', fullWidth: true })}
-              href={ExternalLink.HumidChromeStore}
+              href={ExternalLink.HumidReleases}
               target='_blank'
               rel='noopener noreferrer'
             >
-              Get Humid
+              Download from GitHub
               <ArrowSquareOutIcon className='size-4' />
             </a>
             <UiButton variant='secondary' fullWidth onPress={() => window.location.reload()}>
