@@ -1,18 +1,20 @@
-import { Chip } from '@heroui/react'
+import { buttonVariants } from '@heroui/react'
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 
+import humidIconUrl from '@/assets/wallets/humid.svg'
+import sideswapIconUrl from '@/assets/wallets/sideswap.png'
 import CopyButton from '@/components/CopyButton'
+import ArrowSquareOutIcon from '@/components/icons/ArrowSquareOutIcon'
 import ChevronLeftIcon from '@/components/icons/ChevronLeftIcon'
 import JadeIcon from '@/components/icons/JadeIcon'
 import SeedIcon from '@/components/icons/SeedIcon'
-import ShieldIcon from '@/components/icons/ShieldIcon'
-import SideSwapIcon from '@/components/icons/SideSwapIcon'
 import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import { MnemonicInput } from '@/components/MnemonicInput'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { env } from '@/constants/env'
+import { ExternalLink } from '@/constants/links'
 import { DEFAULT_WALLET_TYPE } from '@/lib/wallet-core/types'
 import { useWallet } from '@/providers/wallet/useWallet'
 
@@ -23,21 +25,25 @@ interface ConnectWalletModalProps {
   onOpenChange: (open: boolean) => void
 }
 
-function ConnectOptionCard({
+type WalletTagTone = 'success' | 'warning' | 'neutral'
+
+const WALLET_TAG_TONE_CLASS: Record<WalletTagTone, string> = {
+  success: 'bg-success-soft text-success-soft-foreground',
+  warning: 'bg-warning-soft text-warning-soft-foreground',
+  neutral: 'bg-default text-muted',
+}
+
+function WalletOption({
   icon,
-  title,
-  subtitle,
-  badge,
+  name,
+  tag,
   disabled = false,
-  iconBadgeClassName,
   onPress,
 }: {
   icon: ReactNode
-  title: string
-  subtitle: string
-  badge?: ReactNode
+  name: string
+  tag?: { label: string; tone: WalletTagTone }
   disabled?: boolean
-  iconBadgeClassName: string
   onPress: () => void
 }) {
   return (
@@ -45,28 +51,54 @@ function ConnectOptionCard({
       type='button'
       disabled={disabled}
       onClick={onPress}
-      className='border-separator bg-surface-secondary hover:border-accent hover:bg-accent-soft/40 group flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition disabled:cursor-default disabled:opacity-60 disabled:hover:border-separator disabled:hover:bg-surface-secondary'
+      className='bg-surface-secondary hover:bg-surface-tertiary flex h-14 w-full items-center gap-3 rounded-2xl p-2 pr-4 text-left transition active:scale-[0.99] disabled:cursor-default disabled:opacity-60 disabled:hover:bg-surface-secondary'
     >
-      <span
-        className={`flex size-11 shrink-0 items-center justify-center rounded-full transition group-disabled:opacity-70 ${iconBadgeClassName}`}
-      >
+      <span className='relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl after:absolute after:inset-0 after:rounded-xl after:ring-1 after:ring-black/10 after:ring-inset'>
         {icon}
       </span>
-      <div className='min-w-0 flex-1'>
-        <div className='flex flex-wrap items-center gap-2'>
-          <span className='text-sm font-semibold'>{title}</span>
-          {badge}
-        </div>
-        <p className='text-muted text-xs'>{subtitle}</p>
-      </div>
+      <span className='text-foreground min-w-0 flex-1 truncate text-base font-medium'>{name}</span>
+      {tag && (
+        <span
+          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] leading-3 font-bold tracking-wide uppercase ${WALLET_TAG_TONE_CLASS[tag.tone]}`}
+        >
+          {tag.label}
+        </span>
+      )}
     </button>
+  )
+}
+
+function ModalTitle({
+  children,
+  onBack,
+  backDisabled,
+}: {
+  children: ReactNode
+  onBack?: () => void
+  backDisabled?: boolean
+}) {
+  return (
+    <span className='relative flex min-h-7 items-center justify-center text-center'>
+      {onBack && (
+        <button
+          type='button'
+          onClick={onBack}
+          disabled={backDisabled}
+          aria-label='Back'
+          className='text-muted hover:text-foreground absolute -left-2 flex size-7 items-center justify-center rounded-full transition disabled:opacity-50'
+        >
+          <ChevronLeftIcon className='size-4' />
+        </button>
+      )}
+      {children}
+    </span>
   )
 }
 
 export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalProps) {
   const { connect, cancelPendingRequest, connectionStatus, pendingRequest, isError, error } =
     useWallet()
-  const [mode, setMode] = useState<'choose' | 'seed' | 'sideswap'>('choose')
+  const [mode, setMode] = useState<'choose' | 'seed' | 'sideswap' | 'humid-install'>('choose')
   const [mnemonic, setMnemonic] = useState('')
   const [connecting, setConnecting] = useState(false)
   const [jadeConnecting, setJadeConnecting] = useState(false)
@@ -142,93 +174,70 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
   const canConnect = wordCount === MNEMONIC_WORD_COUNT
   const visibleError = isError ? error : null
   const loginLink = pendingRequest?.kind === 'login' ? pendingRequest.appLink : null
+  const humidInstalled = Boolean(window.humid)
 
   return (
     <UiModal
       isOpen={isOpen}
       onOpenChange={onOpenChange}
-      dialogClassName='max-w-108'
+      dialogClassName='max-w-90'
       title={
         mode === 'seed' ? (
-          <span className='flex items-center gap-1'>
-            <button
-              type='button'
-              onClick={() => setMode('choose')}
-              disabled={connecting}
-              aria-label='Back'
-              className='text-muted hover:text-foreground -ml-1.5 flex size-7 items-center justify-center rounded-full transition disabled:opacity-50'
-            >
-              <ChevronLeftIcon className='size-4' />
-            </button>
+          <ModalTitle onBack={() => setMode('choose')} backDisabled={connecting}>
             Connect with Seed Phrase
-          </span>
+          </ModalTitle>
         ) : mode === 'sideswap' ? (
-          <span className='flex items-center gap-1'>
-            <button
-              type='button'
-              onClick={() => void handleSideswapCancel()}
-              aria-label='Back'
-              className='text-muted hover:text-foreground -ml-1.5 flex size-7 items-center justify-center rounded-full transition disabled:opacity-50'
-            >
-              <ChevronLeftIcon className='size-4' />
-            </button>
-            Connect with SideSwap
-          </span>
+          <ModalTitle onBack={() => void handleSideswapCancel()}>Connect with SideSwap</ModalTitle>
+        ) : mode === 'humid-install' ? (
+          <ModalTitle onBack={() => setMode('choose')}>Get Humid</ModalTitle>
         ) : (
-          'Connect Wallet'
+          <ModalTitle>Connect Wallet</ModalTitle>
         )
       }
     >
       {mode === 'choose' ? (
-        <div className='flex flex-col gap-3'>
-          <ConnectOptionCard
-            icon={<JadeIcon className='size-6' />}
-            iconBadgeClassName='bg-accent'
-            title='Jade (testnet)'
-            subtitle='Sign with your Jade hardware wallet over USB'
+        <div className='flex flex-col gap-2'>
+          <WalletOption
+            icon={<img src={humidIconUrl} alt='' className='size-full' />}
+            name='Humid'
+            tag={
+              humidInstalled
+                ? { label: 'Installed', tone: 'success' }
+                : { label: 'Experimental', tone: 'warning' }
+            }
+            disabled={humidConnecting}
+            onPress={() => (humidInstalled ? void handleHumidConnect() : setMode('humid-install'))}
+          />
+          <WalletOption
+            icon={
+              <span className='flex size-full items-center justify-center bg-[#00B093]'>
+                <JadeIcon className='size-6' />
+              </span>
+            }
+            name='Jade'
+            tag={{ label: 'Testnet', tone: 'neutral' }}
             disabled={jadeConnecting}
             onPress={() => void handleJadeConnect()}
           />
-          {env.VITE_DEMO_MODE && (
-            <ConnectOptionCard
-              icon={<SeedIcon className='size-5 text-white' />}
-              iconBadgeClassName='bg-accent'
-              title='Seed phrase'
-              subtitle='Paste or generate a 12-word phrase — no hardware needed'
-              badge={
-                <Chip color='warning' variant='soft' size='sm'>
-                  Demo only
-                </Chip>
-              }
-              onPress={() => setMode('seed')}
-            />
-          )}
-          <ConnectOptionCard
-            icon={<ShieldIcon className='size-5 text-white' />}
-            iconBadgeClassName='bg-accent'
-            title='Humid'
-            subtitle='Sign in the Humid browser extension'
-            badge={
-              <Chip color='warning' variant='soft' size='sm'>
-                Experimental
-              </Chip>
-            }
-            disabled={humidConnecting}
-            onPress={() => void handleHumidConnect()}
-          />
           {env.VITE_SIDESWAP_WS_URL && (
-            <ConnectOptionCard
-              icon={<SideSwapIcon className='size-5' />}
-              iconBadgeClassName='bg-accent'
-              title='SideSwap'
-              subtitle='Connect SideSwap desktop app'
-              badge={
-                <Chip color='warning' variant='soft' size='sm'>
-                  Experimental
-                </Chip>
-              }
+            <WalletOption
+              icon={<img src={sideswapIconUrl} alt='' className='size-full' />}
+              name='SideSwap'
+              tag={{ label: 'Experimental', tone: 'warning' }}
               disabled={sideswapConnecting}
               onPress={() => void handleSideswapConnect()}
+            />
+          )}
+          {env.VITE_DEMO_MODE && (
+            <WalletOption
+              icon={
+                <span className='bg-default flex size-full items-center justify-center'>
+                  <SeedIcon className='text-foreground size-5' />
+                </span>
+              }
+              name='Seed phrase'
+              tag={{ label: 'Demo only', tone: 'warning' }}
+              onPress={() => setMode('seed')}
             />
           )}
         </div>
@@ -251,6 +260,30 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
           >
             Connect
           </UiButton>
+        </div>
+      ) : mode === 'humid-install' ? (
+        <div className='flex flex-col items-center gap-4 text-center'>
+          <img src={humidIconUrl} alt='' className='size-16 rounded-2xl' />
+          <div className='flex flex-col gap-1'>
+            <p className='text-foreground text-base font-medium'>Humid isn&apos;t installed</p>
+            <p className='text-muted text-sm'>
+              Add the Humid extension to your browser, then reload this page to connect.
+            </p>
+          </div>
+          <div className='flex w-full flex-col gap-2'>
+            <a
+              className={buttonVariants({ variant: 'primary', fullWidth: true })}
+              href={ExternalLink.HumidChromeStore}
+              target='_blank'
+              rel='noopener noreferrer'
+            >
+              Get Humid
+              <ArrowSquareOutIcon className='size-4' />
+            </a>
+            <UiButton variant='secondary' fullWidth onPress={() => window.location.reload()}>
+              I&apos;ve installed it
+            </UiButton>
+          </div>
         </div>
       ) : (
         <div className='flex flex-col gap-4'>

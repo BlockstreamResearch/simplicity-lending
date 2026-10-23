@@ -1,0 +1,35 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="512" height="512" rx="66" fill="#090F19"/>
+<g transform="translate(-65.03 -64.39) scale(1.28411)">
+<g mask="url(#humid_mark_bowl)">
+<path d="M140.152 227.631C178.652 211.631 219.652 227.131 257.652 247.131C294.113 266.321 341.62 282.287 385.601 251.308C386.621 258.101 387.152 265.054 387.152 272.131C387.152 280.165 386.468 288.039 385.159 295.699C350.666 335.449 309.081 337.648 259.815 304.492C154.316 233.493 109.611 289.078 119 314C119.11 314.331 119.429 315.195 119.5 315.5C115 303.5 113 296 112.5 282.004C113.921 261.295 118.287 236.718 140.152 227.631Z" fill="url(#humid_wave_top)"/>
+<path d="M128.284 201C137.508 223.025 157.826 256.526 186.5 262.82C227.5 271.82 272.5 245.32 279 242.32C283.628 240.184 329.058 217.521 374.153 211.317C382.71 229.355 387.5 249.528 387.5 270.82C387.5 278.636 386.854 286.301 385.614 293.765C351.1 333.637 309.481 336.371 260.164 303.182C154.664 232.182 110.611 289.578 120 314.5C120.055 314.665 120.093 314.843 120.121 315.032C113.5 303 112 286.39 112 271C112 245.549 116.342 221.518 128.284 201Z" fill="url(#humid_wave_mid)"/>
+<path d="M117.664 310.422C108.275 285.5 157 231.5 262.5 302.5C312 335.813 351.664 330.422 386.253 290.124C375.186 355.82 318.036 405.867 249.194 405.867C186.164 404.422 140.664 367.922 120.164 317.422C119.261 315.197 119.164 314.922 117.664 310.422Z" fill="url(#humid_wave_bottom)"/>
+</g>
+<circle cx="269" cy="185" r="17" fill="url(#humid_bubble)"/>
+<circle cx="226.5" cy="144.5" r="12.5" fill="url(#humid_bubble)"/>
+<circle cx="254" cy="104" r="10" fill="url(#humid_bubble)"/>
+</g>
+<defs>
+<mask id="humid_mark_bowl" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="113" y="131" width="274" height="274">
+<circle cx="250" cy="268" r="137" fill="#D9D9D9"/>
+</mask>
+<linearGradient id="humid_wave_top" x1="387.152" y1="274.295" x2="112.5" y2="274.295" gradientUnits="userSpaceOnUse">
+<stop stop-color="#7DFAFC"/>
+<stop offset="1" stop-color="#16FBFE"/>
+</linearGradient>
+<linearGradient id="humid_wave_mid" x1="387.5" y1="263.53" x2="112" y2="263.53" gradientUnits="userSpaceOnUse">
+<stop stop-color="#00EBF2" stop-opacity="0.9"/>
+<stop offset="0.283682" stop-color="#4AF0F4" stop-opacity="0.8"/>
+<stop offset="1" stop-color="#2665B0" stop-opacity="0.7"/>
+</linearGradient>
+<linearGradient id="humid_wave_bottom" x1="338.5" y1="254.5" x2="154.5" y2="386" gradientUnits="userSpaceOnUse">
+<stop stop-color="#00A0D5"/>
+<stop offset="0.836538" stop-color="#002A80"/>
+</linearGradient>
+<radialGradient id="humid_bubble" cx="0" cy="0" r="1" gradientUnits="objectBoundingBox" gradientTransform="translate(0.5 0.5) scale(0.5)">
+<stop stop-color="#4EFFF5"/>
+<stop offset="1" stop-color="#00F3E5"/>
+</radialGradient>
+</defs>
+</svg>
