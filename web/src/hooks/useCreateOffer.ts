@@ -80,7 +80,8 @@ export interface CreateOfferSummary {
 
 export function useCreateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, fundWithWalletCoins } =
+    useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const createOffer = async (
@@ -242,13 +243,16 @@ export function useCreateOffer() {
     const lenderNftScriptAuthAddressString = lenderNftScriptAuthAddress.toString()
     let txBuilder = new TxBuilder(lwkNetwork)
     txBuilder = txBuilder.feeRate(feeRate)
-    txBuilder = txBuilder
-      .setWalletUtxos(params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)))
-      .setInputOrder([
-        new OutPoint(params.factoryAuthOutpoint),
-        new OutPoint(params.issuanceFactoryOutpoint),
-        ...params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)),
-      ])
+    txBuilder = (
+      await fundWithWalletCoins(
+        txBuilder,
+        params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)),
+      )
+    ).setInputOrder([
+      new OutPoint(params.factoryAuthOutpoint),
+      new OutPoint(params.issuanceFactoryOutpoint),
+      ...params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)),
+    ])
 
     const externalUtxos = [factoryAuthExternalUtxo, issuanceFactoryExternalUtxo]
     txBuilder = txBuilder.addExternalUtxos(externalUtxos)

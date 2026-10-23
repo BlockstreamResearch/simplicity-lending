@@ -1,4 +1,3 @@
-import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm, useWatch } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -9,6 +8,7 @@ import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useTxStatus } from '@/hooks/useTxStatus'
 import { type ChopUtxoResult, useUtxoChopper } from '@/hooks/useUtxoChopper'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -123,7 +123,7 @@ export default function UtxoChopperDemo() {
   const watchedPieceAmount = useWatch({ control, name: 'pieceAmount' })
   const watchedPieceCount = useWatch({ control, name: 'pieceCount' })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
-  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
+  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletCoin[]>([])
   const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,
@@ -134,14 +134,14 @@ export default function UtxoChopperDemo() {
   const policyAssetId = useMemo(() => lwkNetwork.policyAsset().toString(), [lwkNetwork])
   const assetOptions = useMemo(() => {
     const seen = new Set<string>()
-    const options = [{ id: 'all', label: 'All assets' }]
+    const options = [{ id: 'all', textValue: 'All assets' }]
     for (const utxo of blindedWalletUtxos.filter(isConfirmedWalletUtxo)) {
       const assetId = utxo.unblinded().asset().toString()
       if (seen.has(assetId)) continue
       seen.add(assetId)
       options.push({
         id: assetId,
-        label: assetId === policyAssetId ? NETWORK_CONFIG.collateralAsset.symbol : assetId,
+        textValue: assetId === policyAssetId ? NETWORK_CONFIG.collateralAsset.symbol : assetId,
       })
     }
     return options
@@ -170,7 +170,7 @@ export default function UtxoChopperDemo() {
             : `${assetId.slice(0, 10)}...`
         return {
           id: outpoint,
-          label: `${outpoint} | ${utxo.unblinded().value().toString()} units | ${assetLabel} | ${status}`,
+          textValue: `${outpoint} | ${utxo.unblinded().value().toString()} units | ${assetLabel} | ${status}`,
         }
       })
   }, [connectionStatus, policyAssetId, assetFilter, blindedWalletUtxos])

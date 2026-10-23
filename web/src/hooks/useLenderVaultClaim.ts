@@ -63,7 +63,8 @@ export interface LenderVaultClaimSummary {
 
 export function useLenderVaultClaim() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, fundWithWalletCoins } =
+    useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const claimLenderVault = async (
@@ -145,9 +146,12 @@ export function useLenderVaultClaim() {
     const firstFeeOutpoint = params.feeOutpoints[0]
     if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
 
-    const pset = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
+    const pset = (
+      await fundWithWalletCoins(
+        new TxBuilder(lwkNetwork).feeRate(feeRate),
+        params.feeOutpoints.map(o => new OutPoint(o)),
+      )
+    )
       .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
       .addExternalUtxos([
         new ExternalUtxo(

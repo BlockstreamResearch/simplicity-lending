@@ -64,7 +64,8 @@ export interface LiquidateOfferSummary {
 
 export function useLiquidateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, fundWithWalletCoins } =
+    useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const liquidateOffer = async (
@@ -150,9 +151,12 @@ export function useLiquidateOffer() {
     const firstFeeOutpoint = params.feeOutpoints[0]
     if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
 
-    const pset = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
+    const pset = (
+      await fundWithWalletCoins(
+        new TxBuilder(lwkNetwork).feeRate(feeRate),
+        params.feeOutpoints.map(o => new OutPoint(o)),
+      )
+    )
       .setInputOrder([
         new OutPoint(params.activeOfferOutpoint),
         new OutPoint(params.lenderNftOutpoint),

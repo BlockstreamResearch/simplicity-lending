@@ -20,7 +20,7 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@heroui/react": "^3.0.4",
     "@hookform/resolvers": "^5.4.0",
-    "@lilbonekit/lwk-web": "0.17.2-31fdeca.1",
+    "@lilbonekit/lwk-web": "0.17.2-22d0c8f.1",
     "@tanstack/react-query": "^5.100.10",
     "axios": "^1.7.0",
     "framer-motion": "^13.4.0",
