@@ -19,6 +19,9 @@ impl IssuanceFactory {
     /// (auth - 0, program - 1, metadata - 2).
     pub const CREATION_METADATA_OUTPUT_INDEX: usize = 2;
 
+    /// Total supply of the factory asset: one unit locked in the program, one held as auth.
+    pub const ASSET_TOTAL_AMOUNT: u64 = 2;
+
     pub fn new(parameters: IssuanceFactoryParameters) -> Self {
         Self {
             program: IssuanceFactoryProgram::new(&parameters.build_arguments()),
