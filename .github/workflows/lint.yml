@@ -11,15 +11,16 @@ on:
       - 'web/**'
   workflow_call:
 
-permissions:
-  contents: read
+env:
+  SQLX_OFFLINE: true
+  SIMPLEX_VERSION: 0.0.10
 
 jobs:
   lint:
     name: Clippy
     runs-on: ubuntu-latest
-    env:
-      SQLX_OFFLINE: true
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -37,7 +38,9 @@ jobs:
           cache-on-failure: true
 
       - name: Install simplex-cli
-        uses: ./.github/actions/setup-smplx
+        uses: BlockstreamResearch/simplicityhl-toolchain@v0.0.2
+        with:
+          components: simplex@${{ env.SIMPLEX_VERSION }}
 
       - name: Generate contract artifacts
         shell: bash

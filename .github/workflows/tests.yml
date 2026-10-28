@@ -16,17 +16,18 @@ env:
   SQLX_VERSION: 0.8.0
   SQLX_FEATURES: "rustls,postgres"
   SQLX_FEATURES_KEY: "rustls-postgres"
+  SIMPLEX_VERSION: 0.0.10
   APP_USER: app
   APP_USER_PWD: secret
   APP_DB_NAME: lending-indexer
-
-permissions:
-  contents: read
 
 jobs:
   test:
     name: Build and test (matrix)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     services:
       postgres:
         image: postgres:14
@@ -76,7 +77,9 @@ jobs:
           echo "$SQLX_CLI_ROOT/bin" >> $GITHUB_PATH
 
       - name: Install simplex-cli
-        uses: ./.github/actions/setup-smplx
+        uses: BlockstreamResearch/simplicityhl-toolchain@v0.0.2
+        with:
+          components: simplex@${{ env.SIMPLEX_VERSION }}
 
       - name: Generate contract artifacts
         shell: bash
