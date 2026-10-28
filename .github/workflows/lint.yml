@@ -11,41 +11,35 @@ on:
       - 'web/**'
   workflow_call:
 
-permissions:
-  contents: read
+env:
+  SQLX_OFFLINE: true
+
+concurrency:
+  group: lint-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     name: Clippy
     runs-on: ubuntu-latest
-    env:
-      SQLX_OFFLINE: true
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Rust (stable)
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: stable
-          components: clippy
+          components: clippy, rustfmt
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
+      - name: Rustfmt
+        run: cargo fmt --all --check
 
-      - name: Install simplex-cli
-        uses: ./.github/actions/setup-smplx
-
-      - name: Generate contract artifacts
-        shell: bash
-        run: |
-          cd crates/contracts
-          simplex install
-          simplex build
-          test -f src/artifacts/mod.rs
+      - name: Build contracts
+        uses: ./.github/actions/build-contracts
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
