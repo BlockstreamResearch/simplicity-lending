@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use lending_indexer::models::OfferStatus;
-use lending_session::Session;
+use lending_session::{Session, SessionError};
 use serial_test::serial;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::hex::ToHex;
@@ -366,6 +366,12 @@ async fn transferred_factory_auth_allows_create_offer_and_remove() -> anyhow::Re
 
     let mut factory = create_active_factory(&factory_owner, &pool).await?;
     transfer_factory_auth_and_index(&factory_owner, &borrower, &pool, &mut factory).await?;
+
+    let create_result = borrower.create_factory().await;
+    assert!(matches!(
+        create_result,
+        Err(SessionError::BorrowerAccountAlreadyExists)
+    ));
 
     let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
     let (offer_id, offer) = setup_pending_offer_with_existing_factory(
