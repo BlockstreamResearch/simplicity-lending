@@ -16,10 +16,13 @@ env:
   SQLX_VERSION: 0.8.0
   SQLX_FEATURES: "rustls,postgres"
   SQLX_FEATURES_KEY: "rustls-postgres"
-  SIMPLEX_VERSION: 0.0.10
   APP_USER: app
   APP_USER_PWD: secret
   APP_DB_NAME: lending-indexer
+
+concurrency:
+  group: tests-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -30,13 +33,18 @@ jobs:
 
     services:
       postgres:
-        image: postgres:14
+        image: postgres:16-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     strategy:
       fail-fast: false
@@ -45,23 +53,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Rust ${{ matrix.toolchain }}
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: ${{ matrix.toolchain }}
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
       - name: Cache sqlx-cli
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/sqlx-cli-cache
-          key: sqlx-cli-${{ runner.os }}-${{ env.SQLX_VERSION }}-${{ env.SQLX_FEATURES_KEY }}-${{ matrix.toolchain }}
+          key: sqlx-cli-${{ runner.os }}-${{ env.SQLX_VERSION }}-${{ env.SQLX_FEATURES_KEY }}
 
       - name: Install sqlx-cli
         run: |
@@ -76,23 +79,11 @@ jobs:
           fi
           echo "$SQLX_CLI_ROOT/bin" >> $GITHUB_PATH
 
-      - name: Install simplex-cli
-        uses: BlockstreamResearch/simplicityhl-toolchain@v0.0.2
-        with:
-          components: simplex@${{ env.SIMPLEX_VERSION }}
-
-      - name: Generate contract artifacts
-        shell: bash
-        run: |
-          cd crates/contracts
-          simplex install
-          simplex build
-          test -f src/artifacts/mod.rs
+      - name: Build contracts
+        uses: ./.github/actions/build-contracts
 
       - name: Create app user in Postgres
         run: |
-          sudo apt-get install postgresql-client
-
           # Create the application user
           CREATE_QUERY="CREATE USER ${APP_USER} WITH PASSWORD '${APP_USER_PWD}';"
           PGPASSWORD="password" psql -U "postgres" -h "localhost" -c "${CREATE_QUERY}"
@@ -101,19 +92,18 @@ jobs:
           GRANT_QUERY="ALTER USER ${APP_USER} CREATEDB;"
           PGPASSWORD="password" psql -U "postgres" -h "localhost" -c "${GRANT_QUERY}"
 
+          # Expose the app connection string to all following steps
+          echo "DATABASE_URL=postgres://${APP_USER}:${APP_USER_PWD}@localhost:5432/${APP_DB_NAME}" >> "$GITHUB_ENV"
+
       - name: Migrate database
         run:  |
           cd crates/indexer
           SKIP_DOCKER=true ./scripts/init_db.sh
 
       - name: Run indexer tests
-        env:
-          DATABASE_URL: postgres://${{ env.APP_USER }}:${{ env.APP_USER_PWD }}@localhost:5432/${{ env.APP_DB_NAME }}
         run: cargo test -p lending-indexer
 
       - name: Run session tests
-        env:
-          DATABASE_URL: postgres://${{ env.APP_USER }}:${{ env.APP_USER_PWD }}@localhost:5432/${{ env.APP_DB_NAME }}
         run: cargo test -p lending-session
 
       - name: Run simplex tests
@@ -122,17 +112,16 @@ jobs:
           set -euo pipefail
           cd crates/contracts
 
-          # `simplex test` wraps `cargo nextest` but currently swallows the
-          # child's non-zero exit code, so a failing test run still exits 0
-          # and CI reports success. Until that is fixed upstream, guard the
-          # step two ways:
+          # `simplex test` wraps `cargo nextest` but always exits 0: it only
+          # prints `Exit Status: <code>` (dropping nextest's output on
+          # failure) or `Process terminated.` when nextest is killed by a
+          # signal. Until that is fixed upstream, guard the step two ways:
           #   1. Capture the real exit code of `simplex test` via
           #      ${PIPESTATUS[0]} — `tee` would otherwise mask it, since a
           #      pipeline's exit status is the last command's.
-          #   2. Grep the captured log for nextest's own failure markers, in
-          #      case the wrapper ever exits 0 while nextest reported FAILs
-          #      (belt-and-braces; becomes redundant once the wrapper is
-          #      fixed, but harmless).
+          #   2. Grep the captured log for the wrapper's own status lines
+          #      (becomes redundant once the wrapper propagates the exit
+          #      code, but harmless).
           # `set +e` around the pipeline is required so the script does not
           # abort before we can read $rc.
 
@@ -146,7 +135,7 @@ jobs:
             local rc=${PIPESTATUS[0]}
             set -e
 
-            if [ "$rc" -ne 0 ] || grep -Eq '^(error: test run failed|Exit Status: [1-9]|[[:space:]]*FAIL[[:space:]]*\[)' "$log"; then
+            if [ "$rc" -ne 0 ] || grep -Eq '^(Exit Status: [1-9]|Process terminated)' "$log"; then
               echo "::error::simplex test (${label}) failed (rc=$rc)"
               exit 1
             fi
@@ -156,4 +145,5 @@ jobs:
           run_simplex_test no-simplex --no-simplex
 
       - name: Check that queries are fresh
+        if: matrix.toolchain == 'stable'
         run: cargo sqlx prepare --workspace --check -- --all-targets

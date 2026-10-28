@@ -5,6 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 license = "MIT OR Apache-2.0"
 edition = "2024"
+rust-version = "1.91"
 
 [workspace.lints.clippy]
 multiple_crate_versions = "allow"

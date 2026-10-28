@@ -1,0 +1,24 @@
+name: build-contracts
+description: "Install simplex-cli and generate contract artifacts"
+
+inputs:
+  simplex-version:
+    description: "Simplex release to install"
+    required: false
+    default: "0.0.10"
+
+runs:
+  using: composite
+  steps:
+    - name: Install simplex-cli
+      uses: BlockstreamResearch/simplicityhl-toolchain@v0.0.2
+      with:
+        components: simplex@${{ inputs.simplex-version }}
+
+    - name: Generate contract artifacts
+      shell: bash
+      working-directory: crates/contracts
+      run: |
+        simplex install
+        simplex build
+        test -f src/artifacts/mod.rs
