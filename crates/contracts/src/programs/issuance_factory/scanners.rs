@@ -1,5 +1,7 @@
 use simplex::provider::SimplicityNetwork;
-use simplex::simplicityhl::elements::{AssetId, Script, Transaction, TxOut, Txid};
+use simplex::simplicityhl::elements::confidential::Value;
+use simplex::simplicityhl::elements::secp256k1_zkp::ZERO_TWEAK;
+use simplex::simplicityhl::elements::{AssetId, Script, Transaction, TxIn, TxOut, Txid};
 
 use crate::programs::issuance_factory::{
     IssuanceFactory, IssuanceFactoryError, IssuanceFactoryParameters,
@@ -53,7 +55,9 @@ impl IssuanceFactory {
     /// Parse an issuance-factory creation transaction.
     ///
     /// Reconstructs [`IssuanceFactory`] from creation metadata and returns the
-    /// program/auth output layout.
+    /// program/auth output layout. The transaction must itself issue the factory
+    /// asset with the fixed total supply and no reissuance tokens, so the program
+    /// and auth outputs are the only units of it that exist.
     pub fn try_from_tx(
         tx: &Transaction,
         network: SimplicityNetwork,
@@ -63,6 +67,14 @@ impl IssuanceFactory {
         let factory_asset_id = factory
             .find_unique_program_asset(tx)
             .ok_or(IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(txid))?;
+
+        if !tx
+            .input
+            .iter()
+            .any(|input| is_factory_asset_issuance(input, factory_asset_id))
+        {
+            return Err(IssuanceFactoryError::NotAnIssuanceFactoryCreationTx(txid));
+        }
 
         let scan = factory
             .scan_creation(tx, factory_asset_id)
@@ -277,6 +289,15 @@ impl IssuanceFactory {
     }
 }
 
+fn is_factory_asset_issuance(input: &TxIn, factory_asset_id: AssetId) -> bool {
+    let issuance = &input.asset_issuance;
+
+    issuance.asset_blinding_nonce == ZERO_TWEAK
+        && issuance.amount == Value::Explicit(IssuanceFactory::ASSET_TOTAL_AMOUNT)
+        && matches!(issuance.inflation_keys, Value::Null | Value::Explicit(0))
+        && input.issuance_ids().0 == factory_asset_id
+}
+
 fn is_factory_asset_utxo(output: &TxOut, factory_asset_id: AssetId) -> bool {
     crate::utils::TxOutFilter::new()
         .asset(factory_asset_id)
@@ -289,11 +310,12 @@ fn is_factory_asset_utxo(output: &TxOut, factory_asset_id: AssetId) -> bool {
 mod tests {
     use super::{IssuanceFactoryTxKind, IssuanceFactoryUtxoKind, is_factory_asset_utxo};
     use crate::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
-    use crate::programs::program::SimplexProgram;
+    use crate::programs::program::{MetadataProgram, SimplexProgram};
     use simplex::{
         provider::SimplicityNetwork,
         simplicityhl::elements::{
-            AssetId, LockTime, Script, Transaction, TxIn, TxOut, confidential,
+            AssetId, AssetIssuance, LockTime, Script, Transaction, TxIn, TxOut, confidential,
+            secp256k1_zkp::ZERO_TWEAK,
         },
     };
 
@@ -455,5 +477,47 @@ mod tests {
             &explicit_output(factory_asset, 2, script(&[0x51])),
             factory_asset
         ));
+    }
+
+    fn creation_tx(factory: &IssuanceFactory, issuance_amount: u64) -> (Transaction, AssetId) {
+        let issuance_input = TxIn {
+            asset_issuance: AssetIssuance {
+                asset_blinding_nonce: ZERO_TWEAK,
+                asset_entropy: [7u8; 32],
+                amount: confidential::Value::Explicit(issuance_amount),
+                inflation_keys: confidential::Value::Null,
+            },
+            ..Default::default()
+        };
+        let factory_asset = issuance_input.issuance_ids().0;
+
+        let mut tx = tx_with_outputs(vec![
+            explicit_output(factory_asset, 1, script(&[0x52])),
+            explicit_output(factory_asset, 1, factory.get_script_pubkey()),
+            TxOut {
+                script_pubkey: Script::new_op_return(&factory.encode_metadata_op_return()),
+                ..Default::default()
+            },
+        ]);
+        tx.input[0] = issuance_input;
+
+        (tx, factory_asset)
+    }
+
+    #[test]
+    fn try_from_tx_requires_factory_asset_issuance_of_total_amount() {
+        let factory = test_factory();
+        let network = SimplicityNetwork::default_regtest();
+
+        let (valid, factory_asset) = creation_tx(&factory, IssuanceFactory::ASSET_TOTAL_AMOUNT);
+        let created = IssuanceFactory::try_from_tx(&valid, network).expect("valid creation");
+        assert_eq!(created.factory_asset_id, factory_asset);
+
+        let (inflated, _) = creation_tx(&factory, 1000);
+        assert!(IssuanceFactory::try_from_tx(&inflated, network).is_err());
+
+        let (mut no_issuance, _) = creation_tx(&factory, IssuanceFactory::ASSET_TOTAL_AMOUNT);
+        no_issuance.input[0].asset_issuance = AssetIssuance::null();
+        assert!(IssuanceFactory::try_from_tx(&no_issuance, network).is_err());
     }
 }
