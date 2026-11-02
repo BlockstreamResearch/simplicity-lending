@@ -23,9 +23,7 @@ services:
     restart: 'no'
     env_file:
       - ./configs/compose.env
-    environment:
-      APP_ENVIRONMENT: production
-      RUN_MODE: migrate
+    command: ['sqlx', 'migrate', 'run', '--source', 'migrations']
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,7 +36,6 @@ services:
     env_file:
       - ./configs/compose.env
     environment:
-      APP_ENVIRONMENT: production
       RUN_MODE: api
     depends_on:
       migrate:
@@ -57,7 +54,6 @@ services:
     env_file:
       - ./configs/compose.env
     environment:
-      APP_ENVIRONMENT: production
       RUN_MODE: indexer
     depends_on:
       migrate:
@@ -77,8 +73,10 @@ services:
         VITE_DEBUG_MNEMONIC: ${VITE_DEBUG_MNEMONIC:-}
         VITE_SIDESWAP_WS_URL: ${VITE_SIDESWAP_WS_URL:-}
     restart: unless-stopped
-    env_file:
-      - ./configs/compose.env
+    # Only the nginx template inputs; the public-facing container gets no backend secrets.
+    environment:
+      WEB_ESPLORA_API_UPSTREAM: ${WEB_ESPLORA_API_UPSTREAM}
+      WEB_PRICES_API_UPSTREAM: ${WEB_PRICES_API_UPSTREAM}
     ports:
       - '${WEB_PORT}:80'
     depends_on:

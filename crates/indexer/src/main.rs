@@ -1,28 +1,29 @@
-use lending_indexer::api;
-use lending_indexer::esplora_client::EsploraClient;
-use lending_indexer::indexer::Worker;
-use lending_indexer::telemetry::{get_subscriber, init_subscriber};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 
-use lending_indexer::configuration::get_configuration;
+use lending_indexer::api;
+use lending_indexer::configuration::Settings;
+use lending_indexer::esplora_client::EsploraClient;
+use lending_indexer::indexer::Worker;
+use lending_indexer::telemetry::{get_subscriber, init_subscriber};
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
+    let _ = dotenvy::dotenv();
+
     let subscriber = get_subscriber("lending-indexer".into(), "info".into(), std::io::stdout);
     init_subscriber(subscriber);
 
-    let configuration = get_configuration().expect("Failed to read configuration");
-    let pool = PgPool::connect_lazy(&configuration.database.connection_string())
-        .expect("Failed to connect to Postgres.");
+    let configuration = Settings::load().expect("Failed to read configuration");
+    let pool =
+        PgPool::connect_lazy(&configuration.database.url).expect("Failed to connect to Postgres.");
 
     let run_mode = std::env::var("RUN_MODE").unwrap_or_else(|_| "api".into());
 
     match run_mode.as_str() {
         "indexer" => {
             let esplora_client = EsploraClient::with_base_url(&configuration.esplora.base_url)
-                .with_network(&configuration.esplora.network)
-                .expect("Invalid network configured");
+                .with_network(configuration.esplora.network);
 
             tracing::info!("Starting indexer service");
 

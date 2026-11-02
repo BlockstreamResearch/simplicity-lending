@@ -24,6 +24,8 @@ services:
     restart: "no"
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     command: ["sqlx", "migrate", "run"]
     depends_on:
       postgres:
@@ -37,13 +39,8 @@ services:
     env_file:
       - .env
     environment:
-      APP_ENVIRONMENT: production
       RUN_MODE: api
-      DATABASE__HOST: postgres
-      DATABASE__PORT: ${POSTGRES_PORT}
-      DATABASE__USERNAME: ${POSTGRES_USER}
-      DATABASE__PASSWORD: ${POSTGRES_PASSWORD}
-      DATABASE__DATABASE_NAME: ${POSTGRES_DB}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -59,13 +56,8 @@ services:
     env_file:
       - .env
     environment:
-      APP_ENVIRONMENT: production
       RUN_MODE: indexer
-      DATABASE__HOST: postgres
-      DATABASE__PORT: ${POSTGRES_PORT}
-      DATABASE__USERNAME: ${POSTGRES_USER}
-      DATABASE__PASSWORD: ${POSTGRES_PASSWORD}
-      DATABASE__DATABASE_NAME: ${POSTGRES_DB}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       migrate:
         condition: service_completed_successfully

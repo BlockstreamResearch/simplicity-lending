@@ -23,6 +23,8 @@ WORKDIR /app
 COPY --from=builder /app/target/release/simplicity-lending-indexer /usr/local/bin/simplicity-lending-indexer
 COPY crates/indexer/configuration/ configuration/
 
+ENV INDEXER_APPLICATION__HOST=0.0.0.0
+
 USER appuser
 CMD ["bash", "-o", "pipefail", "-c", "simplicity-lending-indexer 2>&1 | bunyan"]
 

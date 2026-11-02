@@ -61,37 +61,36 @@ cargo install --version='~0.8' sqlx-cli --no-default-features --features rustls,
 
 ### Configuration
 
-Create a `.env` file in the **indexer crate root** (`crates/indexer`) with your database connection string. This is required for sqlx compile-time validation and runtime connectivity.
+Configuration has two layers:
+
+1. `configuration/base.yaml` holds public defaults (Esplora endpoint, network, start height, asset registry, ...). It is committed and baked into the Docker image.
+2. The environment holds secrets and per-deployment values. It is loaded from the process environment and from a `.env` file (searched in the current directory and its parents).
+
+Create `.env` in the **indexer crate root** (`crates/indexer`) from `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+`DATABASE_URL` is required. It is used for runtime connectivity, sqlx compile-time validation, `sqlx migrate` and the integration tests:
 
 ```bash
 DATABASE_URL=postgres://username:password@localhost:5432/indexer_db
 ```
 
-Application settings are managed via YAML files in the `configuration/` folder: `base.yaml`, `local.yaml`, and `production.yaml` (selected by `APP_ENVIRONMENT`, default is `local`).
+Any key of `base.yaml` can be overridden as `INDEXER_<SECTION>__<KEY>` (nested keys are joined with `__`):
 
-```yaml
-# Example configuration structure
-application:
-  port: 8000
-  host: 127.0.0.1
-database:
-  host: "localhost"
-  port: 5432
-  username: "postgres"
-  password: "password"
-  database_name: "lending-indexer"
-esplora:
-  base_url: "https://blockstream.info/liquidtestnet/api"
-  timeout: 10
-indexer:
-  interval: 10000
-  last_indexed_height: 2309541
-  asset_registry:
-    # Issuer domain served in `.well-known` asset domain proofs (optional).
-    domain: "lending.example.com"
-    # Asset registry to submit verified contracts to (optional).
-    registry_url: "https://assets-testnet.blockstream.info"
+```bash
+INDEXER_APPLICATION__HOST=0.0.0.0
+INDEXER_ESPLORA__NETWORK=liquid
+INDEXER_INDEXER__LAST_INDEXED_HEIGHT=2601330
+# Enables ELIP-0100 asset registration (disabled while unset)
+INDEXER_INDEXER__ASSET_REGISTRY__DOMAIN=lending.example.com
+# An empty value skips registry submission
+INDEXER_INDEXER__ASSET_REGISTRY__REGISTRY_URL=
 ```
+
+`base.yaml` is read from `./configuration`; set `INDEXER_CONFIGURATION_DIR` to use another directory.
 
 > [!TIP]
 > If `sqlx` fails to detect the `DATABASE_URL` environment variable while you are using VS Code with the `rust-analyzer` extension, you may need to restart the extension or the editor itself to refresh the environment context.
@@ -112,7 +111,7 @@ SKIP_DOCKER=true ./scripts/init_db.sh
 
 ### Running the Project
 
-Commands must be executed from the **indexer crate root** (`crates/indexer`) so that the `configuration/` folder is found. The application supports two execution modes via the `RUN_MODE` environment variable:
+Commands must be executed from the **indexer crate root** (`crates/indexer`) so that the `configuration/` folder is found (or set `INDEXER_CONFIGURATION_DIR`). The application supports two execution modes via the `RUN_MODE` environment variable:
 - `indexer`: Starts the blockchain indexing background worker.
 - `api`: Starts the REST API service (Default).
 
