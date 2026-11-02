@@ -69,7 +69,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const registryRef = useRef<{ key: string; registry: Registry } | null>(null)
   // Throttle state shared by the poll, the focus/visibility handlers and manual syncs.
   const lastSyncAtRef = useRef(0)
-  const syncInFlightRef = useRef(false)
+  // Overlapping scans on one EsploraClient hang with a wasm aliasing error, so callers share one.
+  const syncInFlightRef = useRef<Promise<WalletBalances | null> | null>(null)
 
   const [state, setState] = useState<WalletState>(INITIAL_WALLET_STATE)
   const [savedSession, setSavedSession] = useSessionStorage<SavedSession>(SESSION_STORAGE_KEY)
@@ -94,6 +95,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     [],
   )
 
+  const loadBalancesShared = useCallback(
+    (session: WalletSession, attempt: number): Promise<WalletBalances | null> => {
+      if (syncInFlightRef.current) return syncInFlightRef.current
+      const promise = loadBalances(session, attempt).finally(() => {
+        if (syncInFlightRef.current !== promise) return
+        syncInFlightRef.current = null
+        lastSyncAtRef.current = Date.now()
+      })
+      syncInFlightRef.current = promise
+      return promise
+    },
+    [loadBalances],
+  )
+
   const endSession = useCallback(
     async ({
       error,
@@ -103,8 +118,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const session = sessionRef.current
       sessionRef.current = null
       // A scan started by the ended session keeps running, and its own bookkeeping is skipped
-      // as stale, so the flag is cleared here or the next session could never sync.
-      syncInFlightRef.current = false
+      // as stale, so it is dropped here or the next session would join it.
+      syncInFlightRef.current = null
       // Reset UI immediately. Connector teardown runs in background and may hang if the device
       // was unplugged mid-session.
       session?.connector.disconnect().catch(console.warn)
@@ -196,9 +211,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       // activation fires both listeners below, so repeated triggers are collapsed here.
       if (syncInFlightRef.current) return
       if (Date.now() - lastSyncAtRef.current < MIN_SYNC_GAP_MS) return
-      syncInFlightRef.current = true
-      const attempt = connectionChangeCounterRef.current
-      loadBalances(session, attempt)
+      loadBalancesShared(session, connectionChangeCounterRef.current)
         .then(balances => {
           if (!balances) return
           const { total, confirmed, pending } = balances
@@ -211,11 +224,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           }))
         })
         .catch(console.warn)
-        .finally(() => {
-          if (attempt !== connectionChangeCounterRef.current) return
-          syncInFlightRef.current = false
-          lastSyncAtRef.current = Date.now()
-        })
     }
 
     const id = setInterval(refreshBalances, BALANCE_POLL_INTERVAL_MS)
@@ -234,7 +242,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('focus', refreshBalances)
     }
-  }, [state.connectionStatus, loadBalances])
+  }, [state.connectionStatus, loadBalancesShared])
 
   const connect = useCallback(
     async (variant: WalletType, options?: ConnectOptions) => {
@@ -415,29 +423,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!session) throw new Error('WalletProvider: not connected')
 
     setState(s => ({ ...s, syncing: true, error: null }))
-    // A manual sync follows a broadcast, so it runs regardless of the throttle, but still
-    // feeds it so the poll doesn't repeat the same scan seconds later.
-    syncInFlightRef.current = true
+    // A manual sync runs regardless of the throttle, but joins a scan already in flight and
+    // still feeds the throttle so the poll doesn't repeat the same scan seconds later.
     const attempt = connectionChangeCounterRef.current
 
     try {
-      const loaded = await loadBalances(session, attempt)
+      const loaded = await loadBalancesShared(session, attempt)
       if (!loaded) return
       const { total: balances, confirmed: confirmedBalances, pending: pendingBalances } = loaded
 
       setState(s => ({ ...s, syncing: false, balances, confirmedBalances, pendingBalances }))
     } catch (err) {
       if (attempt !== connectionChangeCounterRef.current) return
-      ErrorHandler.process(err)
       const error = err instanceof Error ? err.message : String(err)
       setState(s => ({ ...s, syncing: false, error, isError: true }))
-    } finally {
-      if (attempt === connectionChangeCounterRef.current) {
-        syncInFlightRef.current = false
-        lastSyncAtRef.current = Date.now()
-      }
+      throw err
     }
-  }, [loadBalances])
+  }, [loadBalancesShared])
 
   // Best-effort local UI update — the tx already broadcast successfully regardless of
   // this outcome, so failures here (e.g. a full scan racing this call) must not throw.
