@@ -49,13 +49,11 @@ impl EsploraClient {
         }
     }
 
-    pub fn with_network(self, network: &str) -> Result<Self, String> {
-        let simplicity_network = Network::try_from(network.to_string())?;
-        Ok(Self {
-            base_url: self.base_url,
-            client: self.client,
-            network: simplicity_network.into(),
-        })
+    pub fn with_network(self, network: Network) -> Self {
+        Self {
+            network: network.into(),
+            ..self
+        }
     }
 
     pub fn to_simplex_provider(&self) -> EsploraProvider {
@@ -172,7 +170,7 @@ pub enum EsploraClientError {
 
 #[cfg(test)]
 mod tests {
-    use super::{DEFAULT_BASE_URL, EsploraClient};
+    use super::{DEFAULT_BASE_URL, EsploraClient, Network};
     use simplex::provider::{ProviderTrait, SimplicityNetwork};
 
     #[test]
@@ -197,9 +195,8 @@ mod tests {
 
     #[test]
     fn to_simplex_provider_returns_custom_network() {
-        let client = EsploraClient::with_base_url("https://example.com/api")
-            .with_network("liquid")
-            .unwrap();
+        let client =
+            EsploraClient::with_base_url("https://example.com/api").with_network(Network::Liquid);
         let provider = client.to_simplex_provider();
 
         assert_eq!(*provider.get_network(), SimplicityNetwork::Liquid);

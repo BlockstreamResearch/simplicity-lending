@@ -33,19 +33,19 @@ RUN CARGO_HTTP_MULTIPLEXING=false cargo install --locked sqlx-cli --no-default-f
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gettext-base libssl3 \
+    && apt-get install -y --no-install-recommends ca-certificates curl libssl3 \
     && rm -rf /var/lib/apt/lists/*
+RUN useradd --system --create-home --uid 10001 appuser
 
-WORKDIR /app/crates/indexer
+WORKDIR /app
 
 COPY --from=builder /app/target/release/simplicity-lending-indexer /usr/local/bin/simplicity-lending-indexer
 COPY --from=sqlx-builder /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
-COPY crates/indexer/migrations /app/crates/indexer/migrations
-COPY deployment/configs /deployment/configs
-COPY deployment/scripts/render-backend-config.sh /deployment/render-backend-config.sh
+COPY crates/indexer/migrations migrations
+COPY crates/indexer/configuration configuration
 
-ENV ASSET_REGISTRY_DOMAIN=lending.dev.blockstream.com
-ENV ASSET_REGISTRY_URL=https://v1.assets-testnet.blockstream.info/
+# base.yaml holds public defaults; DATABASE_URL and INDEXER_* overrides come from the environment.
+ENV INDEXER_APPLICATION__HOST=0.0.0.0
 
-ENTRYPOINT ["/deployment/render-backend-config.sh"]
+USER appuser
 CMD ["simplicity-lending-indexer"]

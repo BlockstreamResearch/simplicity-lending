@@ -1,11 +1,13 @@
+use std::path::{Path, PathBuf};
+
 use simplex::{provider::SimplicityNetwork, simplicityhl::elements::AssetId};
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
+    pub application: ApplicationSettings,
     pub database: DatabaseSettings,
     pub esplora: EsploraSettings,
     pub indexer: IndexerSettings,
-    pub application: ApplicationSettings,
 }
 
 #[derive(serde::Deserialize)]
@@ -16,27 +18,15 @@ pub struct ApplicationSettings {
 
 #[derive(serde::Deserialize, Clone)]
 pub struct DatabaseSettings {
-    pub username: String,
-    pub password: String,
-    pub port: u16,
-    pub host: String,
-    pub database_name: String,
-}
-
-impl DatabaseSettings {
-    pub fn connection_string(&self) -> String {
-        format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.username, self.password, self.host, self.port, self.database_name
-        )
-    }
+    /// Postgres connection string, taken from `DATABASE_URL`.
+    pub url: String,
 }
 
 #[derive(serde::Deserialize, Clone)]
 pub struct EsploraSettings {
     pub base_url: String,
     pub timeout: u16,
-    pub network: String,
+    pub network: Network,
 }
 
 /// ELIP-0100 asset metadata registration for factory assets issued by the lending flow.
@@ -61,60 +51,65 @@ pub struct IndexerSettings {
     pub asset_registry: AssetRegistrySettings,
 }
 
-pub fn get_configuration() -> Result<Settings, config::ConfigError> {
-    let base_path = std::env::current_dir().expect("Failed to determine the current directory");
-    let configuration_directory = base_path.join("configuration");
+impl Settings {
+    /// Reads `base.yaml`, then applies `INDEXER_*` overrides and the required `DATABASE_URL`.
+    pub fn load() -> Result<Self, config::ConfigError> {
+        Self::load_from(
+            &Self::configuration_dir(Self::indexer_configuration_dir().as_deref()),
+            Self::environment_source(),
+            Self::database_url(),
+        )
+    }
 
-    let environment: Environment = std::env::var("APP_ENVIRONMENT")
-        .unwrap_or_else(|_| "local".into())
-        .try_into()
-        .expect("Failed to parse APP_ENVIRONMENT.");
-    let environment_filename = format!("{}.yaml", environment.as_str());
+    fn load_from(
+        directory: &Path,
+        environment: config::Environment,
+        database_url: Option<String>,
+    ) -> Result<Self, config::ConfigError> {
+        // `DATABASE_URL` is shared with sqlx-cli and the integration tests, so it is read unprefixed.
+        let database_url = database_url
+            .filter(|url| !url.trim().is_empty())
+            .ok_or_else(|| config::ConfigError::NotFound("DATABASE_URL".into()))?;
 
-    let settings = config::Config::builder()
-        .add_source(config::File::from(
-            configuration_directory.join("base.yaml"),
-        ))
-        .add_source(config::File::from(
-            configuration_directory.join(environment_filename),
-        ))
-        // Environment variables override file-based configuration
-        .add_source(config::Environment::default().separator("__"))
-        .build()?;
+        config::Config::builder()
+            .add_source(config::File::from(directory.join("base.yaml")))
+            .add_source(environment)
+            .set_override("database.url", database_url)?
+            .build()?
+            .try_deserialize()
+    }
 
-    settings.try_deserialize::<Settings>()
-}
+    /// `override_path` (from `INDEXER_CONFIGURATION_DIR`) wins over `./configuration`.
+    fn configuration_dir(override_path: Option<&str>) -> PathBuf {
+        override_path
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .expect("Failed to determine the current directory")
+                    .join("configuration")
+            })
+    }
 
-pub enum Environment {
-    Local,
-    Production,
-}
+    /// `INDEXER_<SECTION>__<KEY>` overrides `base.yaml`, e.g. `INDEXER_ESPLORA__BASE_URL`.
+    fn environment_source() -> config::Environment {
+        config::Environment::with_prefix("INDEXER")
+            .prefix_separator("_")
+            .separator("__")
+    }
 
-impl Environment {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Environment::Local => "local",
-            Environment::Production => "production",
-        }
+    fn indexer_configuration_dir() -> Option<String> {
+        std::env::var("INDEXER_CONFIGURATION_DIR").ok()
+    }
+
+    fn database_url() -> Option<String> {
+        std::env::var("DATABASE_URL").ok()
     }
 }
 
-impl TryFrom<String> for Environment {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "local" => Ok(Self::Local),
-            "production" => Ok(Self::Production),
-            other => Err(format!(
-                "{} is not a supported environment. \
-                Use either `local` or `production`.",
-                other
-            )),
-        }
-    }
-}
-
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(try_from = "String")]
 pub enum Network {
     Liquid,
     LiquidTestnet,
@@ -150,49 +145,115 @@ impl From<Network> for SimplicityNetwork {
 
 #[cfg(test)]
 mod tests {
-    use super::{DatabaseSettings, Environment, Network};
+    use std::collections::HashMap;
+
     use simplex::provider::SimplicityNetwork;
 
-    #[test]
-    fn connection_string_builds_expected_postgres_url() {
-        let settings = DatabaseSettings {
-            username: "postgres".to_string(),
-            password: "password".to_string(),
-            port: 5432,
-            host: "localhost".to_string(),
-            database_name: "lending-indexer".to_string(),
-        };
+    use super::{Network, Settings};
 
+    const DATABASE_URL: &str = "postgres://postgres:password@localhost:5432/lending-indexer";
+
+    fn configuration_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("configuration")
+    }
+
+    fn load_with_env(vars: &[(&str, &str)]) -> Result<Settings, config::ConfigError> {
+        let vars = vars
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect::<HashMap<_, _>>();
+
+        Settings::load_from(
+            &configuration_dir(),
+            Settings::environment_source().source(Some(vars)),
+            Some(DATABASE_URL.to_owned()),
+        )
+    }
+
+    #[test]
+    fn base_yaml_deserializes() {
+        let settings = load_with_env(&[]).expect("load base.yaml");
+
+        assert_eq!(settings.database.url, DATABASE_URL);
+        assert_eq!(settings.application.host, "127.0.0.1");
+        assert_eq!(settings.application.port, 8000);
         assert_eq!(
-            settings.connection_string(),
-            "postgres://postgres:password@localhost:5432/lending-indexer"
+            settings.esplora.base_url,
+            "https://liquid.network/liquidtestnet/api"
+        );
+        assert!(matches!(settings.esplora.network, Network::LiquidTestnet));
+        assert_eq!(settings.indexer.interval, 10000);
+        assert!(settings.indexer.asset_registry.domain.is_none());
+    }
+
+    #[test]
+    fn indexer_environment_overrides_base_yaml() {
+        let settings = load_with_env(&[
+            ("INDEXER_APPLICATION__HOST", "0.0.0.0"),
+            ("INDEXER_ESPLORA__NETWORK", "liquid"),
+            ("INDEXER_INDEXER__INTERVAL", "500"),
+            (
+                "INDEXER_INDEXER__ASSET_REGISTRY__DOMAIN",
+                "lending.example.com",
+            ),
+            ("INDEXER_INDEXER__ASSET_REGISTRY__REGISTRY_URL", ""),
+            ("APPLICATION__PORT", "1"),
+        ])
+        .expect("load configuration");
+
+        assert_eq!(settings.application.host, "0.0.0.0");
+        assert_eq!(settings.application.port, 8000);
+        assert!(matches!(settings.esplora.network, Network::Liquid));
+        assert_eq!(settings.indexer.interval, 500);
+        assert_eq!(
+            settings.indexer.asset_registry.domain.as_deref(),
+            Some("lending.example.com")
+        );
+        assert_eq!(
+            settings.indexer.asset_registry.registry_url.as_deref(),
+            Some("")
         );
     }
 
     #[test]
-    fn environment_try_from_is_case_insensitive() {
-        assert!(matches!(
-            Environment::try_from("LoCaL".to_string()),
-            Ok(Environment::Local)
-        ));
-        assert!(matches!(
-            Environment::try_from("PRODUCTION".to_string()),
-            Ok(Environment::Production)
-        ));
+    fn database_url_is_required() {
+        for database_url in [None, Some("  ".to_owned())] {
+            let error = Settings::load_from(
+                &configuration_dir(),
+                Settings::environment_source().source(Some(HashMap::new())),
+                database_url,
+            )
+            .err()
+            .expect("missing DATABASE_URL");
+
+            assert!(error.to_string().contains("DATABASE_URL"), "{error}");
+        }
     }
 
     #[test]
-    fn environment_try_from_invalid_returns_error() {
-        let result = Environment::try_from("staging".to_string());
-        assert!(result.is_err());
-        let err = result.err().unwrap_or_default();
-        assert!(err.contains("not a supported environment"));
+    fn unknown_network_is_rejected_on_load() {
+        let error = load_with_env(&[("INDEXER_ESPLORA__NETWORK", "mainnet")])
+            .err()
+            .expect("unknown network");
+
+        assert!(
+            error.to_string().contains("not a supported network"),
+            "{error}"
+        );
     }
 
     #[test]
-    fn environment_as_str_returns_expected_values() {
-        assert_eq!(Environment::Local.as_str(), "local");
-        assert_eq!(Environment::Production.as_str(), "production");
+    fn configuration_dir_prefers_the_environment_override() {
+        let default_dir = std::env::current_dir()
+            .expect("current dir")
+            .join("configuration");
+
+        assert_eq!(Settings::configuration_dir(None), default_dir);
+        assert_eq!(Settings::configuration_dir(Some("  ")), default_dir);
+        assert_eq!(
+            Settings::configuration_dir(Some("/etc/indexer")),
+            std::path::PathBuf::from("/etc/indexer")
+        );
     }
 
     #[test]

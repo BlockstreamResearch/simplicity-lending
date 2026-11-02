@@ -12,9 +12,14 @@ This deployment stack runs:
 
 Most deployment knobs live in `deployment/configs`:
 
-- `compose.env.example`: the single env file template for compose, image build args, and runtime rendering
-- `backend/*.template`: rendered into the indexer `configuration/` directory
+- `compose.env.example`: the single env file template for compose, image build args, and runtime configuration
 - `nginx/default.conf.template`: reverse proxy and SPA serving rules
+
+The backend image ships `crates/indexer/configuration/base.yaml` with public defaults. Secrets and
+per-deployment values are passed only through the environment: `DATABASE_URL` plus
+`INDEXER_<SECTION>__<KEY>` overrides of any `base.yaml` key (for example
+`INDEXER_ESPLORA__BASE_URL`). The same image therefore runs in every environment without
+rebuilding or rendering config files.
 
 ## Quick Start
 
@@ -38,7 +43,6 @@ changing any `VITE_*` value.
 
 Set these values in `deployment/configs/compose.env`:
 
-- `PUBLIC_ORIGIN`: the final public HTTPS origin, for example `https://lending.example.com`
 - `WEB_PORT`: host port mapped to the public web server
 - `VITE_API_URL`: indexer API URL baked into `web`, for example `/api` for the same-origin nginx proxy or `https://lending.example.com/api`
 - `VITE_ESPLORA_BASE_URL`: public Esplora/explorer base URL, for example `https://blockstream.info/liquidtestnet`
@@ -47,12 +51,19 @@ Set these values in `deployment/configs/compose.env`:
 - `VITE_WATERFALLS_RECIPIENT`: Waterfalls server recipient
 - `VITE_DEBUG_MNEMONIC`: optional development/testnet software signer mnemonic; leave unset in normal deployments
 - `VITE_SIDESWAP_WS_URL`: optional experimental SideSwap wallet connect server URL; leave unset to disable that connect option
-- `INDEXER_ESPLORA_BASE_URL`: the Esplora API used by the backend indexer
 - `WEB_ESPLORA_API_UPSTREAM`: the Esplora API proxied by nginx, for example `https://blockstream.info/liquidtestnet/api`
-- `INDEXER_POLL_INTERVAL_MS`: background polling interval
-- `PROTOCOL_FEE_KEEPER_ASSET_ID`: protocol-fee keeper asset tracked by the indexer
-- `INDEXER_LAST_INDEXED_HEIGHT`: first height to index from
-- `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: database connection settings
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: credentials of the bundled `postgres` service
+- `DATABASE_URL`: connection string used by `api`, `indexer` and `migrate`; with the bundled database it is `postgres://<user>:<password>@postgres:5432/<db>`
+
+Optional indexer overrides of `base.yaml`:
+
+- `INDEXER_ESPLORA__BASE_URL`: the Esplora API used by the backend indexer
+- `INDEXER_ESPLORA__NETWORK`: `liquid`, `liquidtestnet`, or `regtest`
+- `INDEXER_INDEXER__INTERVAL`: background polling interval in milliseconds
+- `INDEXER_INDEXER__PROTOCOL_FEE_KEEPER_ASSET_ID`: protocol-fee keeper asset tracked by the indexer
+- `INDEXER_INDEXER__LAST_INDEXED_HEIGHT`: first height to index from on an empty database
+- `INDEXER_INDEXER__ASSET_REGISTRY__DOMAIN`: ELIP-0100 issuer domain (the public host, e.g. `lending.example.com`); asset registration is disabled while unset
+- `INDEXER_INDEXER__ASSET_REGISTRY__REGISTRY_URL`: asset registry to submit to; an empty value skips submission
 
 ## GitLab Image Builds
 

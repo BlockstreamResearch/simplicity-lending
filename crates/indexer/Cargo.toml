@@ -32,6 +32,7 @@ uuid = { version= "1", features = ["v4", "serde"] }
 config = { version = "0.15.16", default-features = true }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
 serde = { version= "1", features = ["derive"]}
+dotenvy = "0.15"
 
 hex = { workspace = true }
 smplx-std = { workspace = true }
@@ -61,7 +62,6 @@ features = [
 
 [dev-dependencies]
 anyhow = "1"
-dotenvy = "0.15"
 serial_test = "3"
 serde_urlencoded = "0.7"
 wiremock = "0.6"
