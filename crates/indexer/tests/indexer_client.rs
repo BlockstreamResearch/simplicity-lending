@@ -459,3 +459,24 @@ async fn slow_response_maps_to_timeout_error() {
 
     assert!(matches!(error, IndexerClientError::Timeout));
 }
+
+#[test]
+fn non_loopback_http_base_url_is_rejected() {
+    for base_url in ["http://indexer.example.com", "ftp://localhost", "not a url"] {
+        let error = IndexerClient::new(base_url).expect_err("expected invalid config");
+
+        assert!(matches!(error, IndexerClientError::InvalidConfig(_)));
+    }
+}
+
+#[test]
+fn https_and_loopback_http_base_urls_are_accepted() {
+    for base_url in [
+        "https://indexer.example.com",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://[::1]:8000",
+    ] {
+        IndexerClient::new(base_url).expect("expected valid config");
+    }
+}
