@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LendingOfferParameters {
     pub collateral_asset_id: AssetId,
     pub principal_asset_id: AssetId,

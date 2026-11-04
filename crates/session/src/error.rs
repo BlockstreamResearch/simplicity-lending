@@ -2,6 +2,7 @@ use simplex::provider::ProviderError;
 use simplex::signer::SignerError;
 
 use lending_contracts::programs::issuance_factory::IssuanceFactoryError;
+use lending_contracts::programs::lending::LendingOfferError;
 
 use crate::indexer::IndexerClientError;
 
@@ -67,6 +68,9 @@ pub enum SessionError {
     #[error("Indexer returned invalid `{field}` value for offer: {value}")]
     InvalidOfferData { field: &'static str, value: String },
 
+    #[error("Indexer offer parameters do not match the offer creation transaction")]
+    OfferParametersMismatch,
+
     #[error(transparent)]
     Indexer(#[from] IndexerClientError),
 
@@ -78,4 +82,7 @@ pub enum SessionError {
 
     #[error(transparent)]
     Factory(#[from] IssuanceFactoryError),
+
+    #[error(transparent)]
+    Offer(#[from] LendingOfferError),
 }

@@ -8,7 +8,7 @@ use lending_contracts::programs::script_auth::ScriptAuth;
 use lending_contracts::utils::get_random_seed;
 use simplex::provider::{ProviderTrait, SimplicityNetwork};
 use simplex::simplicityhl::elements::hex::ToHex;
-use simplex::simplicityhl::elements::{AssetId, Script};
+use simplex::simplicityhl::elements::{AssetId, Script, Txid};
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
 
@@ -79,26 +79,52 @@ fn lending_offer_parameters_from_indexer(
     })
 }
 
-fn pending_offer_from_indexer(
-    info: &OfferListItemFull,
-    network: SimplicityNetwork,
-) -> Result<LendingOffer, SessionError> {
-    let parameters = lending_offer_parameters_from_indexer(info, network)?;
-
-    Ok(LendingOffer::new_pending(parameters))
-}
-
-fn active_offer_from_indexer(
-    info: &OfferListItemFull,
-    network: SimplicityNetwork,
-) -> Result<LendingOffer, SessionError> {
-    let parameters = lending_offer_parameters_from_indexer(info, network)?;
-    let current_debt = parameters.offer_parameters.get_total_amount_to_repay();
-
-    Ok(LendingOffer::new_active(parameters, current_debt))
-}
-
 impl Session {
+    fn verified_offer_parameters(
+        &self,
+        info: &OfferListItemFull,
+    ) -> Result<LendingOfferParameters, SessionError> {
+        let parameters = lending_offer_parameters_from_indexer(info, self.network())?;
+
+        let creation_txid = Txid::from_str(&info.base.created_at_txid).map_err(|_| {
+            SessionError::InvalidOfferData {
+                field: "created_at_txid",
+                value: info.base.created_at_txid.clone(),
+            }
+        })?;
+        let creation_tx = self.provider().fetch_transaction(&creation_txid)?;
+        let creation = LendingOffer::try_from_tx(
+            &creation_tx,
+            parameters.protocol_fee_keeper_asset_id,
+            self.network(),
+        )?;
+
+        if *creation.offer.get_parameters() != parameters {
+            return Err(SessionError::OfferParametersMismatch);
+        }
+
+        Ok(parameters)
+    }
+
+    fn verified_pending_offer(
+        &self,
+        info: &OfferListItemFull,
+    ) -> Result<LendingOffer, SessionError> {
+        Ok(LendingOffer::new_pending(
+            self.verified_offer_parameters(info)?,
+        ))
+    }
+
+    fn verified_active_offer(
+        &self,
+        info: &OfferListItemFull,
+    ) -> Result<LendingOffer, SessionError> {
+        let parameters = self.verified_offer_parameters(info)?;
+        let current_debt = parameters.offer_parameters.get_total_amount_to_repay();
+
+        Ok(LendingOffer::new_active(parameters, current_debt))
+    }
+
     pub async fn create_offer(
         &self,
         params: CreateOfferParams,
@@ -240,7 +266,7 @@ impl Session {
             })
             .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
 
-        let pending_offer = pending_offer_from_indexer(&offer_details.info, self.network())?;
+        let pending_offer = self.verified_pending_offer(&offer_details.info)?;
         let parameters = *pending_offer.get_parameters();
 
         let pending_offer_utxo = self
@@ -326,7 +352,7 @@ impl Session {
             })
             .ok_or(SessionError::LenderNftUtxoNotFound)?;
 
-        let mut offer = pending_offer_from_indexer(&offer_details.info, self.network())?;
+        let mut offer = self.verified_pending_offer(&offer_details.info)?;
         let parameters = *offer.get_parameters();
         let principal_amount = parameters.offer_parameters.principal_amount;
 
@@ -416,7 +442,7 @@ impl Session {
             })
             .ok_or(SessionError::LenderNftUtxoNotFound)?;
 
-        let active_offer = active_offer_from_indexer(&offer_details.info, self.network())?;
+        let active_offer = self.verified_active_offer(&offer_details.info)?;
         let parameters = *active_offer.get_parameters();
 
         if self.provider().fetch_tip_height()? < parameters.offer_parameters.loan_expiration_time {
@@ -481,7 +507,7 @@ impl Session {
             })
             .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
 
-        let mut active_offer = active_offer_from_indexer(&offer_details.info, self.network())?;
+        let mut active_offer = self.verified_active_offer(&offer_details.info)?;
         let parameters = *active_offer.get_parameters();
         let total_amount_to_repay = parameters.offer_parameters.get_total_amount_to_repay();
 
@@ -577,7 +603,7 @@ impl Session {
             })
             .ok_or(SessionError::BorrowerNftUtxoNotFound)?;
 
-        let active_offer = active_offer_from_indexer(&offer_details.info, self.network())?;
+        let active_offer = self.verified_active_offer(&offer_details.info)?;
         let parameters = *active_offer.get_parameters();
         let principal_asset_auth = parameters.get_principal_output_asset_auth();
 
@@ -657,8 +683,7 @@ impl Session {
             })
             .ok_or(SessionError::LenderNftUtxoNotFound)?;
 
-        let parameters =
-            lending_offer_parameters_from_indexer(&offer_details.info, self.network())?;
+        let parameters = self.verified_offer_parameters(&offer_details.info)?;
         let finalized_lender_vault = parameters.get_lender_vault(0);
 
         let lender_vault_utxo = self

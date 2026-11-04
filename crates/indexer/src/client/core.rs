@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use reqwest::Client;
 use serde::de::DeserializeOwned;
+use url::{Host, Url};
 use uuid::Uuid;
 
 use super::error::{IndexerClientError, map_api_error};
@@ -33,6 +34,26 @@ impl IndexerClientConfig {
     }
 }
 
+fn ensure_secure_base_url(base_url: &str) -> Result<(), IndexerClientError> {
+    let url = Url::parse(base_url)
+        .map_err(|error| IndexerClientError::InvalidConfig(format!("{base_url}: {error}")))?;
+
+    let is_loopback = match url.host() {
+        Some(Host::Domain(domain)) => domain == "localhost",
+        Some(Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(Host::Ipv6(ip)) => ip.is_loopback(),
+        None => false,
+    };
+
+    if url.scheme() == "https" || (url.scheme() == "http" && is_loopback) {
+        Ok(())
+    } else {
+        Err(IndexerClientError::InvalidConfig(format!(
+            "{base_url}: https is required for non-loopback hosts"
+        )))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct IndexerClient {
     base_url: String,
@@ -45,6 +66,8 @@ impl IndexerClient {
     }
 
     pub fn with_config(config: IndexerClientConfig) -> Result<Self, IndexerClientError> {
+        ensure_secure_base_url(&config.base_url)?;
+
         let http = Client::builder().timeout(config.timeout).build()?;
 
         Ok(Self {
