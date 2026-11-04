@@ -3,9 +3,8 @@ use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::utils::get_random_seed;
 use simplex::provider::ProviderTrait;
 use simplex::simplicityhl::elements::AssetId;
-use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use crate::error::SessionError;
 use crate::session::Session;
@@ -21,7 +20,7 @@ pub struct CreateFactoryTx {
 
 impl Session {
     pub async fn create_factory(&self) -> Result<CreateFactoryTx, SessionError> {
-        let script_hex = self.signer().get_address().script_pubkey().to_hex();
+        let script_hex = self.signer_script_hex();
         let existing = self.indexer().get_factories_by_script(&script_hex).await?;
         if !existing.is_empty() {
             return Err(SessionError::BorrowerAccountAlreadyExists);
@@ -49,7 +48,7 @@ impl Session {
         let issuance_details = ft.add_issuance_input(
             PartialInput::new(policy_utxo),
             IssuanceInput::new_issuance(FACTORY_ASSET_TOTAL_AMOUNT, 0, entropy),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         ft.add_output(PartialOutput::new(
@@ -70,14 +69,14 @@ impl Session {
         &self,
         factory_asset_id: AssetId,
     ) -> Result<FinalTransaction, SessionError> {
-        let script_hex = self.signer().get_address().script_pubkey().to_hex();
+        let script_hex = self.signer_script_hex();
         let existing = self.indexer().get_factories_by_script(&script_hex).await?;
         let factory_info = existing
             .into_iter()
             .find(|factory| {
                 factory
                     .factory_asset_id
-                    .eq_ignore_ascii_case(&factory_asset_id.to_hex())
+                    .eq_ignore_ascii_case(&factory_asset_id.to_string())
             })
             .ok_or(SessionError::FactoryNotFound)?;
 
@@ -120,7 +119,7 @@ impl Session {
         factory.attach_factory_removing(&mut ft, program_utxo);
         ft.add_input(
             PartialInput::new(auth_nft_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         Ok(ft)

@@ -34,6 +34,10 @@ impl Session {
         self.provider.network
     }
 
+    pub fn signer_script_hex(&self) -> String {
+        format!("{:x}", self.signer.get_address().script_pubkey())
+    }
+
     pub fn into_parts(self) -> (EsploraProvider, Signer, IndexerClient) {
         (self.provider, self.signer, self.indexer)
     }

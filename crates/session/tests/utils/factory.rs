@@ -10,7 +10,6 @@ use lending_indexer::indexer::{
 use lending_indexer::models::{FactoryAuthModel, FactoryModel, FactoryStatus, FactoryUtxoModel};
 use lending_session::Session;
 use simplex::provider::{ProviderTrait, SimplicityNetwork};
-use simplex::simplicityhl::elements::hashes::Hash;
 use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
 use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 use sqlx::PgPool;
@@ -253,9 +252,9 @@ fn transfer_factory_auth(
         .signer()
         .get_utxos_asset(policy_asset)?
         .into_iter()
-        .find(|utxo| utxo.amount() >= FEE_RESERVE)
+        .find(|utxo| utxo.amount().unwrap() >= FEE_RESERVE)
         .context("owner policy UTXO too small to fund auth transfer fee")?;
-    let policy_change = policy_utxo.amount() - FEE_RESERVE;
+    let policy_change = policy_utxo.amount().unwrap() - FEE_RESERVE;
     let owner_auth_utxo = factory_owner
         .signer()
         .get_utxos_asset(factory.asset_id)?

@@ -108,7 +108,7 @@ async fn claim_principal_unlocks_principal_and_returns_borrower_nft() -> anyhow:
             .any(|utxo| {
                 utxo.outpoint.txid == claim_txid
                     && utxo.outpoint.vout == 1
-                    && utxo.amount() == TEST_PRINCIPAL_AMOUNT
+                    && utxo.amount().unwrap() == TEST_PRINCIPAL_AMOUNT
             }),
         "unlocked principal must return to the borrower's wallet"
     );

@@ -88,7 +88,7 @@ async fn liquidate_offer_burns_lender_nft_and_returns_collateral_after_expiratio
             .any(|utxo| {
                 utxo.outpoint.txid == liquidation_txid
                     && utxo.outpoint.vout == 1
-                    && utxo.amount() == offer.parameters.offer_parameters.collateral_amount
+                    && utxo.amount().unwrap() == offer.parameters.offer_parameters.collateral_amount
             }),
         "collateral must be returned to the lender's wallet"
     );

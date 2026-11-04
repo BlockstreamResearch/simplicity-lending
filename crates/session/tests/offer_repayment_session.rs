@@ -136,7 +136,7 @@ async fn repay_offer_burns_borrower_nft_and_returns_collateral_to_borrower() -> 
             .any(|utxo| {
                 utxo.outpoint.txid == repay_txid
                     && utxo.outpoint.vout == 3
-                    && utxo.amount() == offer.parameters.offer_parameters.collateral_amount
+                    && utxo.amount().unwrap() == offer.parameters.offer_parameters.collateral_amount
             }),
         "collateral must be returned to the borrower's wallet"
     );
@@ -277,7 +277,7 @@ async fn repay_offer_fails_with_insufficient_principal_plus_interest() -> anyhow
         .signer()
         .get_utxos_asset(principal_asset_id)?
         .iter()
-        .map(|utxo| utxo.amount())
+        .map(|utxo| utxo.amount().unwrap())
         .sum::<u64>();
     let total_amount_to_repay = offer
         .parameters
@@ -388,7 +388,7 @@ async fn repay_offer_fails_when_wallet_has_principal_but_no_interest() -> anyhow
         .signer()
         .get_utxos_asset(principal_asset_id)?
         .iter()
-        .map(|utxo| utxo.amount())
+        .map(|utxo| utxo.amount().unwrap())
         .sum::<u64>();
     let total_amount_to_repay = offer
         .parameters

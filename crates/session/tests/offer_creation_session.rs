@@ -193,14 +193,17 @@ async fn create_offer_fails_with_insufficient_collateral() -> anyhow::Result<()>
     let mut drain_attempts = 0_u8;
     loop {
         let policy_utxos = borrower.signer().get_utxos_asset(policy_asset)?;
-        let total_policy_amount = policy_utxos.iter().map(|utxo| utxo.amount()).sum::<u64>();
+        let total_policy_amount = policy_utxos
+            .iter()
+            .map(|utxo| utxo.amount().unwrap())
+            .sum::<u64>();
         if total_policy_amount < collateral_amount {
             break;
         }
 
         let largest_utxo_amount = policy_utxos
             .iter()
-            .map(|utxo| utxo.amount())
+            .map(|utxo| utxo.amount().unwrap())
             .max()
             .expect("at least one policy UTXO must exist while draining");
         let drain_amount = largest_utxo_amount.saturating_sub(500);

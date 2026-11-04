@@ -7,10 +7,9 @@ use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::programs::script_auth::ScriptAuth;
 use lending_contracts::utils::get_random_seed;
 use simplex::provider::{ProviderTrait, SimplicityNetwork};
-use simplex::simplicityhl::elements::hex::ToHex;
-use simplex::simplicityhl::elements::{AssetId, Script, Txid};
+use simplex::simplicityhl::elements::{Txid, AssetId, Script};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use crate::error::SessionError;
 use crate::indexer::{OfferListItemFull, OfferStatus, ParticipantType, UtxoType, VaultType};
@@ -129,7 +128,7 @@ impl Session {
         &self,
         params: CreateOfferParams,
     ) -> Result<CreateOfferTx, SessionError> {
-        let script_hex = self.signer().get_address().script_pubkey().to_hex();
+        let script_hex = self.signer_script_hex();
         let factory_info = self
             .indexer()
             .get_factories_by_script(&script_hex)
@@ -188,7 +187,7 @@ impl Session {
 
         transaction.add_input(
             PartialInput::new(factory_auth_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         transaction.add_output(PartialOutput::new(
             self.signer().get_address().script_pubkey(),
@@ -204,12 +203,12 @@ impl Session {
         let lender_nft_issuance = transaction.add_issuance_input(
             PartialInput::new(issuance_collateral_utxo),
             IssuanceInput::new_issuance(1, 0, nfts_entropy),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         for collateral_utxo in collateral_utxos {
             transaction.add_input(
                 PartialInput::new(collateral_utxo),
-                RequiredSignature::NativeEcdsa,
+                Some(NativeSignature::Ecdsa),
             );
         }
 
@@ -308,7 +307,7 @@ impl Session {
         pending_offer.attach_cancellation(&mut transaction, pending_offer_utxo, lender_nft_utxo);
         transaction.add_input(
             PartialInput::new(borrower_nft_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         transaction.add_output(
             PartialOutput::new(
@@ -327,7 +326,7 @@ impl Session {
         if offer_details.info.base.status != OfferStatus::Pending {
             return Err(SessionError::OfferNotPending);
         }
-        let signer_script_hex = self.signer().get_address().script_pubkey().to_hex();
+        let signer_script_hex = self.signer_script_hex();
         if offer_details.participants.iter().any(|participant| {
             participant.participant_type == ParticipantType::Borrower
                 && participant.spent_txid.is_none()
@@ -393,7 +392,7 @@ impl Session {
         for principal_utxo in principal_utxos.utxos() {
             transaction.add_input(
                 PartialInput::new(principal_utxo.clone()),
-                RequiredSignature::NativeEcdsa,
+                Some(NativeSignature::Ecdsa),
             );
         }
         transaction.add_output(PartialOutput::new(
@@ -476,7 +475,7 @@ impl Session {
 
         transaction.add_input(
             PartialInput::new(lender_nft_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         transaction.add_output(PartialOutput::new(
             self.signer().get_address().script_pubkey(),
@@ -545,7 +544,7 @@ impl Session {
 
         transaction.add_input(
             PartialInput::new(borrower_nft_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         active_offer.attach_full_repayment(&mut transaction, active_offer_utxo, None, None);
@@ -553,7 +552,7 @@ impl Session {
         for principal_utxo in principal_utxos.utxos() {
             transaction.add_input(
                 PartialInput::new(principal_utxo.clone()),
-                RequiredSignature::NativeEcdsa,
+                Some(NativeSignature::Ecdsa),
             );
         }
 
@@ -641,7 +640,7 @@ impl Session {
         );
         transaction.add_input(
             PartialInput::new(borrower_nft_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         transaction.add_output(PartialOutput::new(
             self.signer().get_address().script_pubkey(),
@@ -716,7 +715,7 @@ impl Session {
         finalized_lender_vault.attach_withdrawing_all(&mut transaction, lender_vault_utxo, 1, 0);
         transaction.add_input(
             PartialInput::new(lender_nft_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         transaction.add_output(PartialOutput::new(
             Script::new_op_return(b"burn"),

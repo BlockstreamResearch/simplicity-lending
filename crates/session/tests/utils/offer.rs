@@ -13,7 +13,6 @@ use lending_indexer::models::{
     ParticipantType, UtxoType, VaultType,
 };
 use lending_session::{AcceptOfferTx, CreateOfferParams, OfferParameters, Session};
-use simplex::simplicityhl::elements::hashes::Hash;
 use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
 use sqlx::PgPool;
 use uuid::Uuid;

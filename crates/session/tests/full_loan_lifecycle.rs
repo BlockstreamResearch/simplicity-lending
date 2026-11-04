@@ -7,7 +7,6 @@ use lending_indexer::models::OfferStatus;
 use lending_session::{Session, SessionError};
 use serial_test::serial;
 use simplex::simplicityhl::elements::AssetId;
-use simplex::simplicityhl::elements::hex::ToHex;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -29,7 +28,7 @@ async fn setup_pending_offer_using_first_active_factory(
     factories: &mut HashMap<Uuid, IndexedFactoryState>,
     principal_asset_id: AssetId,
 ) -> anyhow::Result<(i64, OfferCreation, Uuid)> {
-    let borrower_script_hex = borrower.signer().get_address().script_pubkey().to_hex();
+    let borrower_script_hex = borrower.signer_script_hex();
     let factory_id = borrower
         .indexer()
         .get_factories_by_script(&borrower_script_hex)
@@ -388,7 +387,7 @@ async fn transferred_factory_auth_allows_create_offer_and_remove() -> anyhow::Re
     assert_offer_status(&borrower, offer_id, OfferStatus::Cancelled).await?;
 
     remove_factory_and_index_it(&borrower, &pool, &factory).await?;
-    let borrower_script_hex = borrower.signer().get_address().script_pubkey().to_hex();
+    let borrower_script_hex = borrower.signer_script_hex();
     let factories_after_remove = borrower
         .indexer()
         .get_factories_by_script(&borrower_script_hex)
@@ -426,7 +425,7 @@ async fn remove_factories_interleaved_with_create_offer() -> anyhow::Result<()> 
     let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
 
     for _ in 0..3 {
-        let borrower_script_hex = borrower.signer().get_address().script_pubkey().to_hex();
+        let borrower_script_hex = borrower.signer_script_hex();
         let active_before_remove = borrower
             .indexer()
             .get_factories_by_script(&borrower_script_hex)
@@ -453,7 +452,7 @@ async fn remove_factories_interleaved_with_create_offer() -> anyhow::Result<()> 
         }
     }
 
-    let borrower_script_hex = borrower.signer().get_address().script_pubkey().to_hex();
+    let borrower_script_hex = borrower.signer_script_hex();
     let active_after_all_removes = borrower
         .indexer()
         .get_factories_by_script(&borrower_script_hex)
