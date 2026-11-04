@@ -14,7 +14,7 @@ pub fn issue_asset(session: &Session, asset_amount: u64) -> anyhow::Result<Asset
     let funding_utxo = signer
         .get_utxos_asset(policy_asset)?
         .into_iter()
-        .next()
+        .max_by_key(|utxo| utxo.amount().unwrap())
         .context("expected a policy UTXO to fund asset issuance")?;
 
     let mut tx = FinalTransaction::new();
@@ -65,7 +65,7 @@ pub fn fund_asset_outputs(
     let policy_utxo = from_signer
         .get_utxos_asset(policy_asset)?
         .into_iter()
-        .next()
+        .max_by_key(|utxo| utxo.amount().unwrap())
         .context("expected a policy UTXO for the funding fee")?;
 
     let asset_utxo_amount = asset_utxo.amount().unwrap();
