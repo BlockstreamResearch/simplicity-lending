@@ -10,9 +10,7 @@ use lending_indexer::api::ProtocolFeeVaultDto;
 use simplex::provider::SimplicityNetwork;
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::{Address, AssetId, Script, Sequence, Transaction};
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
-};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput, UTXO};
 
 use crate::AppContext;
 use crate::batch::{self, BuildStep, FeeBatch};
@@ -135,10 +133,8 @@ pub(super) fn prepare_harvest(
                     let keeper_asset_id = keeper_utxo.explicit_asset();
                     let input_keeper_index = transaction.n_inputs() as u32;
                     let output_keeper_index = transaction.n_outputs() as u32;
-                    transaction.add_input(
-                        PartialInput::new(keeper_utxo),
-                        RequiredSignature::NativeEcdsa,
-                    );
+                    transaction
+                        .add_input(PartialInput::new(keeper_utxo), Some(NativeSignature::Ecdsa));
                     transaction.add_output(PartialOutput::new(
                         change_script.clone(),
                         keeper_amount,
@@ -372,8 +368,8 @@ mod tests {
         let first = explicit_keeper(asset, 5, 1);
         let second = explicit_keeper(asset, 7, 2);
         let confidential = confidential_keeper(asset, 9, 3, false, false);
-        assert_eq!(confidential.amount(), 9);
-        assert_eq!(confidential.asset(), asset);
+        assert_eq!(confidential.amount(), Ok(9));
+        assert_eq!(confidential.asset(), Ok(asset));
 
         let mut keepers = super::explicit_keeper_utxos(vec![first, second, confidential]);
 

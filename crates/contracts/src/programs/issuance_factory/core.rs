@@ -1,8 +1,6 @@
 use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{
-    FinalTransaction, IssuanceDetails, PartialOutput, UTXO,
-};
+use simplex::transaction::{FinalTransaction, IssuanceDetails, PartialOutput, UTXO};
 use simplex::{program::Program, provider::SimplicityNetwork};
 
 use crate::artifacts::issuance_factory::IssuanceFactoryProgram;
@@ -24,7 +22,7 @@ impl IssuanceFactory {
 
     pub fn new(parameters: IssuanceFactoryParameters) -> Self {
         Self {
-            program: IssuanceFactoryProgram::new(&parameters.build_arguments()),
+            program: IssuanceFactoryProgram::new(parameters.build_arguments()),
             parameters,
         }
     }

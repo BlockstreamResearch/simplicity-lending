@@ -1,11 +1,9 @@
 use clap::Subcommand;
 
 use simplex::provider::ProviderTrait;
-use simplex::simplicityhl::elements::{OutPoint, Txid, hex::ToHex};
+use simplex::simplicityhl::elements::{OutPoint, Txid};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
-};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput, UTXO};
 
 use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
 use lending_contracts::utils::get_random_seed;
@@ -85,7 +83,7 @@ impl Factory {
         let issuance_details = ft.add_issuance_input(
             PartialInput::new(policy_utxo),
             IssuanceInput::new_issuance(FACTORY_ASSET_TOTAL_AMOUNT, 0, factory_entropy),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         ft.add_output(PartialOutput::new(
@@ -99,10 +97,7 @@ impl Factory {
         let receipt = context.signer.broadcast(&ft)?;
 
         println!("Issuance factory created successfully!");
-        println!(
-            "Factory asset ID:      {}",
-            issuance_details.asset_id.to_hex()
-        );
+        println!("Factory asset ID:      {}", issuance_details.asset_id);
         println!("Creation txid:         {receipt}");
         println!("issuing_utxos_count:   {issuing_utxos_count}");
         println!("reissuance_flags:      {reissuance_flags}");
@@ -150,13 +145,13 @@ impl Factory {
 
         ft.add_input(
             PartialInput::new(auth_nft_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         let receipt = context.signer.broadcast(&ft)?;
 
         println!("Issuance factory removed successfully!");
-        println!("Factory asset ID: {}", factory_asset_id.to_hex());
+        println!("Factory asset ID: {factory_asset_id}");
         println!("Broadcast txid:   {receipt}");
 
         Ok(())

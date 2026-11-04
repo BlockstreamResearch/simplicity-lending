@@ -17,7 +17,7 @@ pub struct FeeCollector {
 impl FeeCollector {
     pub fn new(parameters: FeeCollectorParameters) -> Self {
         Self {
-            program: FeeCollectorProgram::new(&parameters.build_arguments()),
+            program: FeeCollectorProgram::new(parameters.build_arguments()),
             parameters,
         }
     }
