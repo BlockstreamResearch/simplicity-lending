@@ -1,6 +1,6 @@
 use lending_contracts::programs::program::SimplexProgram;
 use simplex::signer::Signer;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use lending_contracts::programs::lending::{
     LendingOffer, LendingOfferParameters, OfferParameters, OfferRepaymentPhase,
@@ -149,7 +149,7 @@ fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_less_than_the_t
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         borrower.get_address().script_pubkey(),
@@ -161,7 +161,7 @@ fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_less_than_the_t
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(
@@ -237,7 +237,7 @@ fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_bigger_than_the
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         borrower.get_address().script_pubkey(),
@@ -249,7 +249,7 @@ fn partial_repayment_succeeds_in_no_repayments_phase_with_amount_bigger_than_the
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(
@@ -333,7 +333,7 @@ fn partial_repayment_succeeds_in_repayment_offer_fee_phase_with_amount_less_than
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         borrower.get_address().script_pubkey(),
@@ -351,7 +351,7 @@ fn partial_repayment_succeeds_in_repayment_offer_fee_phase_with_amount_less_than
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(
@@ -442,7 +442,7 @@ fn partial_repayment_succeeds_in_principal_repayment_phase(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         borrower.get_address().script_pubkey(),
@@ -460,7 +460,7 @@ fn partial_repayment_succeeds_in_principal_repayment_phase(
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(
@@ -546,7 +546,7 @@ fn partial_repayment_succeeds_after_several_repayments(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         borrower.get_address().script_pubkey(),
@@ -564,7 +564,7 @@ fn partial_repayment_succeeds_after_several_repayments(
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(

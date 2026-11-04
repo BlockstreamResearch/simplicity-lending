@@ -2,7 +2,7 @@ use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVau
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::simplicityhl::elements::Script;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use super::setup::{final_supply, issue_auth_assets, prepare_vault_asset, setup_asset_auth_vault};
 
@@ -59,14 +59,14 @@ fn fails_to_supply_to_finalized_vault(context: simplex::TestContext) -> anyhow::
     ));
     ft.add_input(
         PartialInput::new(supplier_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_supplying(&mut ft, asset_auth_vault_utxo, 0, 0, amount_to_supply);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let result = signer.finalize(&ft);
@@ -108,11 +108,11 @@ fn fails_to_supply_when_auth_utxo_is_invalid(context: simplex::TestContext) -> a
         ));
         ft.add_input(
             PartialInput::new(supplier_auth_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         ft.add_input(
             PartialInput::new(utxo_to_supply),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         let mut vault = AssetAuthVault::new_active(vault_parameters, already_supplied);
@@ -161,14 +161,14 @@ fn fails_to_supply_when_auth_utxo_burned_but_burn_flag_was_not_set(
     ));
     ft.add_input(
         PartialInput::new(supplier_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_supplying(&mut ft, asset_auth_vault_utxo, 0, 0, amount_to_supply);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let result = signer.finalize(&ft);

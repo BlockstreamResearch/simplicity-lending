@@ -6,7 +6,7 @@ use lending_session::Session;
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 pub fn issue_asset(session: &Session, asset_amount: u64) -> anyhow::Result<AssetId> {
     let signer = session.signer();
@@ -21,7 +21,7 @@ pub fn issue_asset(session: &Session, asset_amount: u64) -> anyhow::Result<Asset
     let issuance = tx.add_issuance_input(
         PartialInput::new(funding_utxo.clone()),
         IssuanceInput::new_issuance(asset_amount, 0, get_random_seed()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let script = signer.get_address().script_pubkey();
@@ -79,14 +79,8 @@ pub fn fund_asset_outputs(
     let from_script = from_signer.get_address().script_pubkey();
 
     let mut tx = FinalTransaction::new();
-    tx.add_input(
-        PartialInput::new(asset_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
-    tx.add_input(
-        PartialInput::new(policy_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    tx.add_input(PartialInput::new(asset_utxo), Some(NativeSignature::Ecdsa));
+    tx.add_input(PartialInput::new(policy_utxo), Some(NativeSignature::Ecdsa));
 
     for &amount in amounts {
         tx.add_output(PartialOutput::new(to_script.clone(), amount, asset_id));
@@ -118,10 +112,7 @@ pub fn fund_policy_output(from: &Session, to: &Signer, amount: u64) -> anyhow::R
 
     let input_amount = policy_utxo.amount();
     let mut tx = FinalTransaction::new();
-    tx.add_input(
-        PartialInput::new(policy_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    tx.add_input(PartialInput::new(policy_utxo), Some(NativeSignature::Ecdsa));
     tx.add_output(PartialOutput::new(
         to.get_address().script_pubkey(),
         amount,

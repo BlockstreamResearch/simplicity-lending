@@ -2,7 +2,7 @@ use simplex::{
     program::Program,
     provider::SimplicityNetwork,
     simplicityhl::elements::AssetId,
-    transaction::{FinalTransaction, RequiredSignature, UTXO},
+    transaction::{FinalTransaction, ProgramSignature, UTXO},
 };
 
 use crate::artifacts::fee_collector::FeeCollectorProgram;
@@ -57,7 +57,7 @@ impl FeeCollector {
             ft,
             program_utxo,
             FeeCollectorWitnessBranch::Withdrawal.build_witness(),
-            RequiredSignature::witness_with_path("PATH", ["Left"]),
+            Some(ProgramSignature::new("PATH").at_path(["Left"])),
         );
     }
 }

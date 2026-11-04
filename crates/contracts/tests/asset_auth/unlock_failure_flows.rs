@@ -1,7 +1,7 @@
 use lending_contracts::programs::asset_auth::{AssetAuthParameters, AssetAuthWitnessParams};
 use lending_contracts::programs::program::SimplexProgram;
 
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use crate::asset_auth_tests::common::wallet::get_split_utxo_ft;
 
@@ -48,7 +48,7 @@ fn fails_to_unlock_when_auth_input_amount_is_invalid(
 
     ft.add_input(
         PartialInput::new(auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(

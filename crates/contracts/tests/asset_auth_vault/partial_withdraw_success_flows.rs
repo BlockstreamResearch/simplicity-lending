@@ -2,7 +2,7 @@ use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVau
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::signer::Signer;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use super::setup::{
     check_vault_amount, fund_keeper, issue_auth_assets, prepare_vault_asset,
@@ -60,7 +60,7 @@ fn withdraw(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),
@@ -109,7 +109,7 @@ fn partial_withdraw_succeeds_with_one_explicit_output(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),
@@ -164,7 +164,7 @@ fn partial_withdraw_succeeds_with_several_explicit_outputs(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),
@@ -224,7 +224,7 @@ fn partial_withdraw_succeeds_with_several_confidential_outputs(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),

@@ -2,14 +2,14 @@
 
 #![allow(clippy::all)]
 #[rustfmt::skip]
-pub mod fee_collector;
-#[rustfmt::skip]
 pub mod asset_auth;
-#[rustfmt::skip]
-pub mod issuance_factory;
 #[rustfmt::skip]
 pub mod asset_auth_vault;
 #[rustfmt::skip]
-pub mod script_auth;
+pub mod fee_collector;
+#[rustfmt::skip]
+pub mod issuance_factory;
 #[rustfmt::skip]
 pub mod lending;
+#[rustfmt::skip]
+pub mod script_auth;

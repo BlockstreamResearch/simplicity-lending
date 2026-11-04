@@ -81,8 +81,7 @@ pub async fn seed_trackable_active_offer(
 }
 
 pub async fn load_registry(pool: &PgPool) -> anyhow::Result<TrackerRegistry> {
-    let protocol_fee_keeper_asset_id =
-        AssetId::from_slice(&[5_u8; 32]).context("protocol fee keeper asset id")?;
+    let protocol_fee_keeper_asset_id = AssetId::from_byte_array([5_u8; 32]);
     TrackerRegistry::load(
         pool,
         protocol_fee_keeper_asset_id,

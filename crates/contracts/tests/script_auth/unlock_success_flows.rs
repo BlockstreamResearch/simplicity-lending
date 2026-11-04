@@ -4,7 +4,7 @@ use lending_contracts::programs::script_auth::{
 };
 use simplex::transaction::PartialOutput;
 use simplex::{
-    transaction::{FinalTransaction, PartialInput, RequiredSignature},
+    transaction::{FinalTransaction, NativeSignature, PartialInput},
     utils::hash_script,
 };
 
@@ -65,7 +65,7 @@ fn unlocks_with_one_explicit_output(context: simplex::TestContext) -> anyhow::Re
     );
     ft.add_input(
         PartialInput::new(auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -104,7 +104,7 @@ fn unlocks_with_multiple_explicit_outputs(context: simplex::TestContext) -> anyh
     );
     ft.add_input(
         PartialInput::new(auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let first_locked_output_amount = script_auth_utxo.explicit_amount() / 2;
@@ -154,7 +154,7 @@ fn unlocks_with_confidential_output(context: simplex::TestContext) -> anyhow::Re
     );
     ft.add_input(
         PartialInput::new(auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(

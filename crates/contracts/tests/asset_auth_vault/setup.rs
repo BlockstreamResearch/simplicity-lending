@@ -5,9 +5,7 @@ use lending_contracts::utils::get_random_seed;
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
-};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput, UTXO};
 
 use super::common::issuance::issue_asset;
 use super::common::wallet::{get_split_utxo_ft, split_first_signer_utxo};
@@ -33,12 +31,12 @@ pub(super) fn issue_auth_assets(
     let supplier_auth_issuance_details = ft.add_issuance_input(
         PartialInput::new(first_utxo),
         IssuanceInput::new_issuance(supplier_auth_asset_amount, 0, issuance_entropy),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     let keeper_auth_issuance_details = ft.add_issuance_input(
         PartialInput::new(second_utxo),
         IssuanceInput::new_issuance(keeper_auth_asset_amount, 0, issuance_entropy),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -99,10 +97,7 @@ pub(super) fn make_confidential(
         )
         .with_blinding_key(signer.get_blinding_public_key()),
     );
-    ft.add_input(
-        PartialInput::new(asset_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    ft.add_input(PartialInput::new(asset_utxo), Some(NativeSignature::Ecdsa));
 
     signer.broadcast(&ft)?.wait()?;
 
@@ -126,7 +121,7 @@ pub(super) fn setup_asset_auth_vault(
 
     ft.add_input(
         PartialInput::new(vault_asset_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let asset_auth_vault = AssetAuthVault::new_active(vault_parameters, already_supplied);
@@ -171,12 +166,9 @@ pub(super) fn fund_keeper(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
-    ft.add_input(
-        PartialInput::new(policy_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    ft.add_input(PartialInput::new(policy_utxo), Some(NativeSignature::Ecdsa));
 
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),
@@ -223,11 +215,11 @@ pub(super) fn final_supply(
 
     ft.add_input(
         PartialInput::new(supplier_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 1);
@@ -275,11 +267,11 @@ pub(super) fn supply(
 
     ft.add_input(
         PartialInput::new(supplier_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_supplying(&mut ft, asset_auth_vault_utxo, 0, 1, amount_to_supply);

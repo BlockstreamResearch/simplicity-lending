@@ -47,7 +47,9 @@ impl CreationMetadata for LendingOfferCreationMetadata {
         let program_id = Self::decode_program_id(op_return_bytes);
         cursor += PROGRAM_ID_LENGTH;
 
-        let principal_asset_id_raw = &op_return_bytes[cursor..cursor + 32];
+        let principal_asset_id_raw: [u8; 32] = op_return_bytes[cursor..cursor + 32]
+            .try_into()
+            .expect("asset id length is fixed");
         cursor += 32;
 
         let principal_amount = u64::from_le_bytes(
@@ -72,7 +74,7 @@ impl CreationMetadata for LendingOfferCreationMetadata {
 
         Ok(Self {
             program_id,
-            principal_asset_id: AssetId::from_slice(principal_asset_id_raw)?,
+            principal_asset_id: AssetId::from_byte_array(principal_asset_id_raw),
             principal_amount,
             loan_expiration_time,
             principal_interest_rate,
@@ -82,7 +84,7 @@ impl CreationMetadata for LendingOfferCreationMetadata {
     fn encode(&self) -> Vec<u8> {
         let mut op_return_data = Vec::with_capacity(Self::DATA_LENGTH);
         op_return_data.extend_from_slice(&self.program_id);
-        op_return_data.extend_from_slice(&self.principal_asset_id.into_inner().0);
+        op_return_data.extend_from_slice(&self.principal_asset_id.to_byte_array());
         op_return_data.extend_from_slice(&self.principal_amount.to_le_bytes());
         op_return_data.extend_from_slice(&self.loan_expiration_time.to_le_bytes());
         op_return_data.extend_from_slice(&self.principal_interest_rate.to_le_bytes());

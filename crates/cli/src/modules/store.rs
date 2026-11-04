@@ -106,9 +106,12 @@ mod tests {
     }
 
     fn get_mocked_data() -> anyhow::Result<(AssetAuthArguments, TaprootPubkeyGen)> {
-        let auth_asset_id = AssetId::from_slice(&hex::decode(LIQUID_TESTNET_TEST_ASSET_ID_STR)?)?;
+        let auth_asset_id_raw: [u8; 32] = hex::decode(LIQUID_TESTNET_TEST_ASSET_ID_STR)?
+            .as_slice()
+            .try_into()?;
+        let auth_asset_id = AssetId::from_byte_array(auth_asset_id_raw);
 
-        let args = AssetAuthArguments::new(auth_asset_id.into_inner().0, 1, true);
+        let args = AssetAuthArguments::new(auth_asset_id.to_byte_array(), 1, true);
 
         let asset_auth_taproot_pubkey_gen =
             TaprootPubkeyGen::from(&args, NETWORK, &get_asset_auth_address)?;

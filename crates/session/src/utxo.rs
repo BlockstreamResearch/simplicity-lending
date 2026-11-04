@@ -91,11 +91,11 @@ mod tests {
     use super::{SelectedUtxos, select_utxos_for_amount};
 
     fn asset() -> AssetId {
-        AssetId::from_slice(&[0xAAu8; 32]).unwrap()
+        AssetId::from_byte_array([0xAAu8; 32])
     }
 
     fn other_asset() -> AssetId {
-        AssetId::from_slice(&[0xBBu8; 32]).unwrap()
+        AssetId::from_byte_array([0xBBu8; 32])
     }
 
     fn txid(byte: u8) -> Txid {

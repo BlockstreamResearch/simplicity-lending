@@ -789,7 +789,7 @@ mod tests {
     };
 
     fn asset(byte: u8) -> AssetId {
-        AssetId::from_slice(&[byte; 32]).expect("asset")
+        AssetId::from_byte_array([byte; 32])
     }
 
     fn script(bytes: &[u8]) -> Script {

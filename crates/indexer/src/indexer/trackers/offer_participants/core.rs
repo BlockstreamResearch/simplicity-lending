@@ -114,7 +114,7 @@ impl OfferParticipantsTracker {
 
         let found_output = tx.output.iter().enumerate().find_map(|(vout, output)| {
             if let Some(asset) = output.asset.explicit()
-                && asset.into_inner().0.to_vec() == target_asset_id
+                && asset.to_byte_array().to_vec() == target_asset_id
             {
                 return Some((vout as u32, &output.script_pubkey));
             }

@@ -9,12 +9,12 @@ pub enum IssuanceFactoryWitnessBranch {
 }
 
 impl IssuanceFactoryWitnessBranch {
-    pub fn build_witness(&self) -> Box<IssuanceFactoryWitness> {
+    pub fn build_witness(&self) -> IssuanceFactoryWitness {
         let path = match self {
             IssuanceFactoryWitnessBranch::IssueAssets { output_index } => Left(*output_index),
             IssuanceFactoryWitnessBranch::RemoveFactory { output_index } => Right(*output_index),
         };
 
-        Box::new(IssuanceFactoryWitness { path })
+        IssuanceFactoryWitness { path }
     }
 }

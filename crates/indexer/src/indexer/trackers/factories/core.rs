@@ -123,8 +123,12 @@ impl FactoriesTracker {
         self.cache.remove(old_outpoint);
 
         let factory_identity = get_factory_identity(sql_tx, factory_id).await?;
-        let factory_asset_id = AssetId::from_slice(&factory_identity.factory_asset_id)
+        let factory_asset_id_raw: [u8; 32] = factory_identity
+            .factory_asset_id
+            .as_slice()
+            .try_into()
             .map_err(|e| anyhow::anyhow!("invalid factory_asset_id: {e}"))?;
+        let factory_asset_id = AssetId::from_byte_array(factory_asset_id_raw);
 
         let factory = IssuanceFactory::new(IssuanceFactoryParameters {
             issuing_utxos_count: factory_identity.issuing_utxos_count as u8,

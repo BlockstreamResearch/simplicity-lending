@@ -179,7 +179,7 @@ impl FactoryAuthsTracker {
             return false;
         };
 
-        asset_id.into_inner().0.as_slice() == factory_identity.factory_asset_id.as_slice()
+        asset_id.to_byte_array().as_slice() == factory_identity.factory_asset_id.as_slice()
             && amount == 1
     }
 

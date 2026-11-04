@@ -15,7 +15,7 @@ impl AssetAuthParameters {
         AssetAuthArguments {
             with_asset_burn: self.with_asset_burn,
             asset_amount: self.asset_amount,
-            asset_id: self.asset_id.into_inner().0,
+            asset_id: self.asset_id.to_byte_array(),
         }
     }
 }

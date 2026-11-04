@@ -1,9 +1,7 @@
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
-};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput, UTXO};
 
 use lending_contracts::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters, OfferParameters};
@@ -35,7 +33,7 @@ pub(super) fn setup_issuance_factory(
     let issuance_details = ft.add_issuance_input(
         PartialInput::new(signer_policy_utxo),
         IssuanceInput::new_issuance(issuance_factory_asset_amount, 0, issuance_factory_entropy),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -62,19 +60,16 @@ pub(super) fn fund_lender(
     let principal_utxo = signer.get_utxos_asset(principal_asset_id)?[0].clone();
     let policy_utxo = signer.get_utxos_asset(context.get_network().policy_asset())?[0].clone();
 
-    let principal_utxo_amount = principal_utxo.amount();
-    let policy_amount_to_send = policy_utxo.amount() / 2;
+    let principal_utxo_amount = principal_utxo.amount()?;
+    let policy_amount_to_send = policy_utxo.amount()? / 2;
 
     let mut ft = FinalTransaction::new();
 
     ft.add_input(
         PartialInput::new(principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
-    ft.add_input(
-        PartialInput::new(policy_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    ft.add_input(PartialInput::new(policy_utxo), Some(NativeSignature::Ecdsa));
 
     ft.add_output(PartialOutput::new(
         lender.get_address().script_pubkey(),
@@ -106,15 +101,12 @@ pub(super) fn make_confidential(signer: &Signer, asset_utxo: UTXO) -> anyhow::Re
     ft.add_output(
         PartialOutput::new(
             signer.get_confidential_address().script_pubkey(),
-            asset_utxo.amount(),
-            asset_utxo.asset(),
+            asset_utxo.amount()?,
+            asset_utxo.asset()?,
         )
         .with_blinding_key(signer.get_blinding_public_key()),
     );
-    ft.add_input(
-        PartialInput::new(asset_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    ft.add_input(PartialInput::new(asset_utxo), Some(NativeSignature::Ecdsa));
 
     signer.broadcast(&ft)?.wait()?;
 
@@ -157,7 +149,7 @@ pub(super) fn setup_pending_offer(
 
     ft.add_input(
         PartialInput::new(factory_auth_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         signer.get_address().script_pubkey(),
@@ -173,7 +165,7 @@ pub(super) fn setup_pending_offer(
     let lender_nft_issuance_details = ft.add_issuance_input(
         PartialInput::new(collateral_utxo),
         IssuanceInput::new_issuance(1, 0, nfts_entropy),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let lending_offer_parameters = LendingOfferParameters {
@@ -234,7 +226,7 @@ pub(super) fn accept_pending_offer(
 
     ft.add_input(
         PartialInput::new(lender_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -292,7 +284,7 @@ pub(super) fn partial_repay_offer(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         borrower.get_address().script_pubkey(),
@@ -310,7 +302,7 @@ pub(super) fn partial_repay_offer(
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(

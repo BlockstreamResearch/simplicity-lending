@@ -3,7 +3,7 @@ use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::Script;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use super::setup::{
     final_supply, fund_keeper, issue_auth_assets, prepare_vault_asset, setup_asset_auth_vault,
@@ -80,7 +80,7 @@ fn withdraw_all_fails_when_vault_is_not_finalized(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),
@@ -130,7 +130,7 @@ fn withdraw_all_fails_when_auth_utxo_is_invalid(
 
         ft.add_input(
             PartialInput::new(keeper_auth_utxo.clone()),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         ft.add_output(PartialOutput::new(
             keeper.get_address().script_pubkey(),
@@ -183,7 +183,7 @@ fn withdraw_all_fails_when_auth_utxo_burned_but_burn_flag_was_not_set(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
@@ -230,7 +230,7 @@ fn withdraw_all_fails_when_auth_utxo_was_not_burned_but_burn_flag_was_set(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),

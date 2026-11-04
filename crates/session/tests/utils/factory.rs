@@ -12,7 +12,7 @@ use lending_session::Session;
 use simplex::provider::{ProviderTrait, SimplicityNetwork};
 use simplex::simplicityhl::elements::hashes::Hash;
 use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -48,7 +48,7 @@ pub async fn seed_active_factory(
 
     let factory = FactoryModel {
         id: factory_id,
-        factory_asset_id: factory_asset_id.into_inner().0.to_vec(),
+        factory_asset_id: factory_asset_id.to_byte_array().to_vec(),
         program_script_pubkey,
         issuing_utxos_count,
         reissuance_flags,
@@ -267,12 +267,9 @@ fn transfer_factory_auth(
     let mut tx = FinalTransaction::new();
     tx.add_input(
         PartialInput::new(owner_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
-    tx.add_input(
-        PartialInput::new(policy_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    tx.add_input(PartialInput::new(policy_utxo), Some(NativeSignature::Ecdsa));
     tx.add_output(PartialOutput::new(
         recipient_script_pubkey.clone(),
         1,

@@ -14,10 +14,10 @@ impl AssetAuthWitnessParams {
         }
     }
 
-    pub fn build_witness(&self) -> Box<AssetAuthWitness> {
-        Box::new(AssetAuthWitness {
+    pub fn build_witness(&self) -> AssetAuthWitness {
+        AssetAuthWitness {
             input_asset_index: self.input_asset_index,
             output_asset_index: self.output_asset_index,
-        })
+        }
     }
 }

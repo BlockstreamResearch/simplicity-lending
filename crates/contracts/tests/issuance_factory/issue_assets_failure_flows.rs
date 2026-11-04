@@ -4,7 +4,7 @@ use lending_contracts::{
 };
 
 use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
+    FinalTransaction, NativeSignature, PartialInput, PartialOutput, UTXO,
     partial_input::IssuanceInput,
 };
 
@@ -30,7 +30,7 @@ fn setup_default_assets_issuance(
 
     ft.add_input(
         PartialInput::new(auth_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         signer.get_address().script_pubkey(),
@@ -67,7 +67,7 @@ fn fails_to_issue_wrong_assets_number(context: simplex::TestContext) -> anyhow::
     let second_issuance_details = ft.add_issuance_input(
         PartialInput::new(policy_utxo),
         IssuanceInput::new_issuance(second_asset_amount, 0, issuance_entropy),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -118,7 +118,7 @@ fn fails_to_issue_assets_with_reissuance_tokens(
     let second_issuance_details = ft.add_issuance_input(
         PartialInput::new(policy_utxo),
         IssuanceInput::new_issuance(second_asset_amount, 0, issuance_entropy),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -176,7 +176,7 @@ fn fails_to_issue_assets_without_reissuance_tokens(
     let second_issuance_details = ft.add_issuance_input(
         PartialInput::new(policy_utxo),
         IssuanceInput::new_issuance(second_asset_amount, 0, issuance_entropy),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(

@@ -1,6 +1,6 @@
 use lending_contracts::programs::program::SimplexProgram;
 
-use simplex::transaction::{FinalTransaction, PartialInput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput};
 
 use super::setup::setup_issuance_factory;
 
@@ -22,7 +22,7 @@ fn removes_issuance_factory_correctly(context: simplex::TestContext) -> anyhow::
 
     ft.add_input(
         PartialInput::new(auth_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     signer.broadcast(&ft)?.wait()?;

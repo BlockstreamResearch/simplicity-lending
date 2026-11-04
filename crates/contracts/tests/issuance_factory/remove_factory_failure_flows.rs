@@ -1,6 +1,6 @@
 use lending_contracts::programs::program::SimplexProgram;
 
-use simplex::transaction::{FinalTransaction, PartialInput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput};
 
 use super::setup::setup_issuance_factory;
 
@@ -24,7 +24,7 @@ fn fails_to_remove_issuance_factory_with_invalid_inputs_order(
 
     ft.add_input(
         PartialInput::new(auth_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     issuance_factory.attach_factory_removing(&mut ft, issuance_factory_utxo);

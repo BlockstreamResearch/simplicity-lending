@@ -3,7 +3,7 @@ use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::Script;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use super::setup::{
     final_supply, fund_keeper, issue_auth_assets, prepare_vault_asset, setup_asset_auth_vault,
@@ -62,7 +62,7 @@ fn withdraw_all_succeeds_with_one_explicit_output_without_keeper_asset_burn(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),
@@ -104,7 +104,7 @@ fn withdraw_all_succeeds_with_one_explicit_output_with_keeper_asset_burn(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         Script::new_op_return(b"burn"),
@@ -146,7 +146,7 @@ fn withdraw_all_succeeds_with_one_explicit_output(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),
@@ -188,7 +188,7 @@ fn withdraw_all_succeeds_with_several_explicit_outputs(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),
@@ -235,7 +235,7 @@ fn withdraw_all_succeeds_with_confidential_output(
 
     ft.add_input(
         PartialInput::new(keeper_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_output(PartialOutput::new(
         keeper.get_address().script_pubkey(),

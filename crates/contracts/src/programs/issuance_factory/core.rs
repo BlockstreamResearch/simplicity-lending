@@ -1,7 +1,7 @@
 use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{
-    FinalTransaction, IssuanceDetails, PartialOutput, RequiredSignature, UTXO,
+    FinalTransaction, IssuanceDetails, PartialOutput, UTXO,
 };
 use simplex::{program::Program, provider::SimplicityNetwork};
 
@@ -70,7 +70,7 @@ impl IssuanceFactory {
             program_utxo,
             program_issuance_input,
             issuance_factory_witness_branch.build_witness(),
-            RequiredSignature::None,
+            None,
         );
 
         self.add_program_output(ft, issuance_factory_asset, 1);
@@ -91,7 +91,7 @@ impl IssuanceFactory {
             ft,
             program_utxo,
             issuance_factory_witness_branch.build_witness(),
-            RequiredSignature::None,
+            None,
         );
 
         ft.add_output(PartialOutput::new(

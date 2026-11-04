@@ -342,7 +342,7 @@ pub fn explicit_asset_output(asset_byte: u8, script_pubkey: Script) -> TxOut {
         script_pubkey,
         ..Default::default()
     };
-    let asset_id = AssetId::from_slice(&[asset_byte; 32]).expect("valid asset id");
+    let asset_id = AssetId::from_byte_array([asset_byte; 32]);
     output.asset = confidential::Asset::Explicit(asset_id);
     output
 }

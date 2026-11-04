@@ -1,6 +1,6 @@
 use lending_contracts::programs::program::SimplexProgram;
 use simplex::signer::Signer;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters, OfferParameters};
 
@@ -75,7 +75,7 @@ fn offer_liquidation_succeeds_after_expiration_time(
 
     ft.add_input(
         PartialInput::new(lender_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(

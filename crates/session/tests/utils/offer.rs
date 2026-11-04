@@ -26,7 +26,7 @@ pub const TEST_PRINCIPAL_AMOUNT: u64 = 10_000;
 pub const DEFAULT_LOAN_EXPIRATION_OFFSET: u32 = 60;
 
 pub fn dummy_principal_asset_id() -> AssetId {
-    AssetId::from_slice(&[0x31; 32]).expect("valid dummy principal asset id")
+    AssetId::from_byte_array([0x31; 32])
 }
 
 pub fn offer_params(
@@ -38,8 +38,7 @@ pub fn offer_params(
 
     Ok(CreateOfferParams {
         principal_asset_id,
-        protocol_fee_keeper_asset_id: AssetId::from_slice(&[0x41; 32])
-            .expect("valid protocol fee keeper asset id"),
+        protocol_fee_keeper_asset_id: AssetId::from_byte_array([0x41; 32]),
         offer_parameters: OfferParameters {
             collateral_amount: 3_000,
             principal_amount: TEST_PRINCIPAL_AMOUNT,

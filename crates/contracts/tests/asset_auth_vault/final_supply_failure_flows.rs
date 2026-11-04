@@ -1,7 +1,7 @@
 use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
 use lending_contracts::programs::program::SimplexProgram;
 
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use super::setup::{final_supply, issue_auth_assets, prepare_vault_asset, setup_asset_auth_vault};
 
@@ -60,14 +60,14 @@ fn final_supply_fails_when_vault_already_finalized(
     ));
     ft.add_input(
         PartialInput::new(supplier_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let result = signer.finalize(&ft);
@@ -110,11 +110,11 @@ fn final_supply_fails_when_auth_utxo_is_invalid(
         ));
         ft.add_input(
             PartialInput::new(supplier_auth_utxo),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         ft.add_input(
             PartialInput::new(utxo_to_supply),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         asset_auth_vault.attach_final_supplying(
@@ -161,14 +161,14 @@ fn final_supply_fails_when_auth_utxo_was_not_burned_but_burn_flag_was_set(
     ));
     ft.add_input(
         PartialInput::new(supplier_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let result = signer.finalize(&ft);
