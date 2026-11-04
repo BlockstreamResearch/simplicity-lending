@@ -7,7 +7,7 @@ use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::programs::script_auth::ScriptAuth;
 use lending_contracts::utils::get_random_seed;
 use simplex::provider::{ProviderTrait, SimplicityNetwork};
-use simplex::simplicityhl::elements::{Txid, AssetId, Script};
+use simplex::simplicityhl::elements::{AssetId, Script, Txid};
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
