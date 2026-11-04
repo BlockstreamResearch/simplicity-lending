@@ -2,8 +2,6 @@ use std::collections::HashMap;
 
 use sqlx::{PgPool, Postgres, QueryBuilder};
 
-use simplex::simplicityhl::elements::hex::ToHex;
-
 use crate::api::OfferListQuery;
 use crate::api::query::{
     attach_latest_participant_offers_scope, attach_offer_list_filters, attach_offer_list_order_by,
@@ -178,7 +176,7 @@ async fn enrich_offer_list_items(
             .or_default()
             .push(ParticipantShort {
                 participant_type: row.participant_type,
-                script_pubkey: row.script_pubkey.to_hex(),
+                script_pubkey: hex::encode(&row.script_pubkey),
             });
     }
 

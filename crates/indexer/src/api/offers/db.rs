@@ -1,7 +1,5 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::hex::ToHex;
-
 use lending_contracts::programs::lending::OfferParameters;
 
 use crate::api::OfferListQuery;
@@ -308,7 +306,7 @@ pub async fn fetch_details_by_id(
 #[tracing::instrument(
     name = "Fetching offer ids by script from DB",
     skip(db, script_pubkey),
-    fields(script_pubkey = %script_pubkey.to_hex())
+    fields(script_pubkey = %hex::encode(script_pubkey))
 )]
 pub async fn fetch_ids_by_script(
     db: &PgPool,

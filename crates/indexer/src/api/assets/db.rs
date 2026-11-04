@@ -1,12 +1,10 @@
-use simplex::simplicityhl::elements::hex::ToHex;
-
 use sqlx::PgPool;
 
 /// Whether `asset_id` belongs to an indexed protocol asset (a factory asset or an offer NFT).
 #[tracing::instrument(
     name = "Checking protocol asset in DB",
     skip(db, asset_id),
-    fields(asset_id = %asset_id.to_hex())
+    fields(asset_id = %hex::encode(asset_id))
 )]
 pub async fn is_known_protocol_asset(db: &PgPool, asset_id: &[u8]) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar!(

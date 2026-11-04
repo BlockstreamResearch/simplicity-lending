@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, OutPoint, Transaction, Txid, hashes::Hash},
+    simplicityhl::elements::{AssetId, OutPoint, Transaction, Txid},
 };
 
 use lending_contracts::programs::issuance_factory::{

@@ -14,7 +14,7 @@ use common::vault_tracking::{
 };
 use lending_indexer::models::{OfferStatus, UtxoType, VaultType};
 use serial_test::serial;
-use simplex::simplicityhl::elements::{OutPoint, hashes::Hash};
+use simplex::simplicityhl::elements::OutPoint;
 
 #[tokio::test]
 #[serial]

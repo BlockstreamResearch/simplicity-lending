@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use simplex::simplicityhl::elements::hex::ToHex;
-
 use lending_contracts::programs::lending::{OfferParameters, OfferRepaymentPhase};
 
 use crate::api::dto::AssetAmount;
@@ -44,7 +42,7 @@ impl From<&OfferParticipantModel> for ParticipantShort {
     fn from(value: &OfferParticipantModel) -> Self {
         Self {
             participant_type: value.participant_type,
-            script_pubkey: value.script_pubkey.to_hex(),
+            script_pubkey: hex::encode(&value.script_pubkey),
         }
     }
 }
@@ -208,7 +206,7 @@ impl From<OfferParticipantModel> for ParticipantDto {
         Self {
             offer_id: format_offer_id(value.offer_id),
             participant_type: value.participant_type,
-            script_pubkey: value.script_pubkey.to_hex(),
+            script_pubkey: hex::encode(&value.script_pubkey),
             txid: format_hex(value.txid),
             vout: value.vout as u32,
             created_at_height: value.created_at_height as u64,

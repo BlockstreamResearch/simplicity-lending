@@ -2,7 +2,7 @@ use sqlx::PgPool;
 
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, Transaction, hex::ToHex},
+    simplicityhl::elements::{AssetId, Transaction},
 };
 
 use crate::{
@@ -78,7 +78,7 @@ impl TrackerRegistry {
     #[tracing::instrument(
         name = "Processing utxo tracking",
         skip(self, sql_tx, tx, block_height),
-        fields(txid = %tx.txid().to_hex())
+        fields(txid = %tx.txid())
     )]
     pub async fn process_tx(
         &mut self,

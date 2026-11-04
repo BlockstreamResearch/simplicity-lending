@@ -7,7 +7,7 @@ use uuid::Uuid;
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters, OfferParameters};
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, Txid, hashes::Hash},
+    simplicityhl::elements::{AssetId, Txid},
 };
 
 use crate::models::{ParticipantType, UtxoType};
@@ -226,7 +226,7 @@ mod tests {
     use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
     use simplex::{
         provider::SimplicityNetwork,
-        simplicityhl::elements::{AssetId, Txid, hashes::Hash},
+        simplicityhl::elements::{AssetId, Txid},
     };
     use uuid::Uuid;
 
@@ -252,7 +252,7 @@ mod tests {
         let params = make_offer_params();
         let block_height = 777_u64;
         let factory_id = Uuid::new_v4();
-        let txid = Txid::from_slice(&[10_u8; 32]).expect("txid");
+        let txid = Txid::from_byte_array([10_u8; 32]);
 
         let model = OfferModel::new(&params, factory_id, block_height, txid);
 

@@ -1,7 +1,4 @@
-use simplex::{
-    provider::SimplicityNetwork,
-    simplicityhl::elements::{Transaction, hex::ToHex},
-};
+use simplex::{provider::SimplicityNetwork, simplicityhl::elements::Transaction};
 
 use lending_contracts::programs::issuance_factory::{
     IssuanceFactory, IssuanceFactoryCreation, IssuanceFactoryParameters,
@@ -122,7 +119,7 @@ impl FactoryCreationsTracker {
             &IndexerEvent::FactoryCreated {
                 id: factory_id,
                 height: block_height,
-                factory_auth_script_pubkey: auth_script_pubkey.to_hex(),
+                factory_auth_script_pubkey: hex::encode(&auth_script_pubkey),
             },
         )
         .await?;

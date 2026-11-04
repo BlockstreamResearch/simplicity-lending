@@ -1041,18 +1041,6 @@ dependencies = [
 
 [[package]]
 name = "elements"
-version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81b2569d3495bfdfce36c504fd4d78752ff4a7699f8a33e6f3ee523bddf9f6ad"
-dependencies = [
- "bech32",
- "bitcoin",
- "secp256k1-zkp",
- "serde_json",
-]
-
-[[package]]
-name = "elements"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34e00f7ddcd826d2f4c9bd72d79a6b6991a0ac4286e7e2b2ff8eecd130549073"
@@ -1075,7 +1063,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c18e931c81e6e7e58d63b6fea1c57f5534717f0e6721741c4fce72a6c547e19"
 dependencies = [
  "bitcoin",
- "elements 0.27.0",
+ "elements",
  "miniscript",
  "serde",
 ]
@@ -2041,7 +2029,6 @@ dependencies = [
  "axum",
  "config",
  "dotenvy",
- "elements 0.25.2",
  "futures-util",
  "hex",
  "lending-contracts",
@@ -3491,7 +3478,7 @@ dependencies = [
  "bitcoin",
  "bitcoin_hashes 1.2.0",
  "byteorder",
- "elements 0.27.0",
+ "elements",
  "getrandom 0.2.17",
  "ghost-cell",
  "hex-conservative 1.3.0",

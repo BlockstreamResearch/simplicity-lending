@@ -129,11 +129,11 @@ mod tests {
     use super::WatchCache;
 
     use crate::models::{ActiveUtxo, UtxoData, UtxoType};
-    use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash};
+    use simplex::simplicityhl::elements::{OutPoint, Txid};
 
     fn outpoint(txid_byte: u8, vout: u32) -> OutPoint {
         OutPoint {
-            txid: Txid::from_slice(&[txid_byte; 32]).expect("valid txid bytes"),
+            txid: Txid::from_byte_array([txid_byte; 32]),
             vout,
         }
     }

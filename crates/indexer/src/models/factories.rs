@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use simplex::simplicityhl::elements::{AssetId, Txid, hashes::Hash};
+use simplex::simplicityhl::elements::{AssetId, Txid};
 
 use lending_contracts::programs::{issuance_factory::IssuanceFactory, program::SimplexProgram};
 

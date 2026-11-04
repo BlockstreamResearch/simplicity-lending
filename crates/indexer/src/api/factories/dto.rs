@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use simplex::simplicityhl::elements::hex::ToHex;
-
 use crate::api::utils::format_hex;
 use crate::models::FactoryStatus;
 
@@ -60,7 +58,7 @@ impl From<FactoryDetailsRow> for FactoryDetailsResponse {
         Self {
             id: row.id,
             factory_asset_id: format_hex(row.factory_asset_id),
-            program_script_pubkey: row.program_script_pubkey.to_hex(),
+            program_script_pubkey: hex::encode(&row.program_script_pubkey),
             status: row.current_status,
             issuing_utxos_count: row.issuing_utxos_count as u16,
             reissuance_flags: row.reissuance_flags as u64,
@@ -90,7 +88,7 @@ fn map_auth_utxo(
     Some(FactoryAuthUtxoDto {
         txid: format_hex(txid?),
         vout: vout? as u32,
-        script_pubkey: script_pubkey?.to_hex(),
+        script_pubkey: hex::encode(script_pubkey?),
         created_at_height: created_at_height? as u64,
     })
 }

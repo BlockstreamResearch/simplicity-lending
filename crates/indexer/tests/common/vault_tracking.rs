@@ -6,9 +6,7 @@ use lending_indexer::indexer::TrackerRegistry;
 use lending_indexer::models::{OfferModel, OfferStatus, OfferVaultModel, UtxoType, VaultType};
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{
-        AssetId, OutPoint, Script, Transaction, TxOut, Txid, confidential, hashes::Hash,
-    },
+    simplicityhl::elements::{AssetId, OutPoint, Script, Transaction, TxOut, Txid, confidential},
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -591,7 +589,7 @@ pub async fn fetch_offer_vault_withdrawals(
 
 pub fn outpoint_from_txid_byte(txid_byte: u8, vout: u32) -> OutPoint {
     OutPoint {
-        txid: Txid::from_slice(&[txid_byte; 32]).expect("valid txid"),
+        txid: Txid::from_byte_array([txid_byte; 32]),
         vout,
     }
 }

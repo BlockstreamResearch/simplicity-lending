@@ -1,9 +1,13 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
+use simplex::simplicityhl::elements::{OutPoint, Txid};
 
-use crate::{db::DbTx, indexer::WatchCache, models::FactoryAuthModel};
+use crate::{
+    db::{DbTx, txid_from_db_bytes},
+    indexer::WatchCache,
+    models::FactoryAuthModel,
+};
 
 #[tracing::instrument(name = "Loading all active factory auth UTXOs from DB", skip(db))]
 pub async fn load_factory_auth_utxo_cache(db: &PgPool) -> anyhow::Result<WatchCache<Uuid>> {
@@ -35,7 +39,7 @@ pub async fn load_factory_auth_utxo_cache(db: &PgPool) -> anyhow::Result<WatchCa
 
     for rec in factory_auths_rows {
         let outpoint = OutPoint {
-            txid: Txid::from_slice(&rec.txid)?,
+            txid: txid_from_db_bytes(&rec.txid)?,
             vout: rec.vout as u32,
         };
         cache.insert(outpoint, rec.factory_id);
@@ -52,7 +56,7 @@ pub async fn load_factory_auth_utxo_cache(db: &PgPool) -> anyhow::Result<WatchCa
 #[tracing::instrument(
     name = "Inserting factory auth UTXO into DB",
     skip(sql_tx, factory_auth_utxo),
-    fields(factory_id = %factory_auth_utxo.factory_id, txid = %factory_auth_utxo.txid.to_hex(), vout = %factory_auth_utxo.vout)
+    fields(factory_id = %factory_auth_utxo.factory_id, txid = %hex::encode(&factory_auth_utxo.txid), vout = %factory_auth_utxo.vout)
 )]
 pub async fn insert_factory_auth_utxo(
     sql_tx: &mut DbTx<'_>,
@@ -87,8 +91,8 @@ pub async fn insert_factory_auth_utxo(
     name = "Marking factory auth UTXO as spent in DB",
     skip(sql_tx, outpoint, block_height, txid),
     fields(
-        spent_txid = %txid.to_hex(),
-        txid = %outpoint.txid.to_hex(),
+        spent_txid = %txid,
+        txid = %outpoint.txid,
         vout = %outpoint.vout
     )
 )]

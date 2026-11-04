@@ -3,7 +3,6 @@
 
 use std::time::Duration;
 
-use simplex::simplicityhl::elements::secp256k1_zkp::ZERO_TWEAK;
 use simplex::simplicityhl::elements::{AssetId, ContractHash, OutPoint, Transaction};
 
 use serde_json::json;
@@ -112,7 +111,7 @@ impl AssetRegistration {
             .input
             .iter()
             .filter(|input| {
-                input.has_issuance() && input.asset_issuance.asset_blinding_nonce == ZERO_TWEAK
+                input.has_issuance() && input.asset_issuance.asset_blinding_nonce.is_null()
             })
             .find_map(|input| {
                 let prevout = input.previous_output;

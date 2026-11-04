@@ -2,12 +2,12 @@ use sqlx::PgPool;
 
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex},
+    simplicityhl::elements::{OutPoint, Txid},
 };
 
 use crate::{
     api::utils::{format_hex, format_offer_id, format_satoshis},
-    db::DbTx,
+    db::{DbTx, txid_from_db_bytes},
     events::{IndexerEvent, notify_indexer_event},
     indexer::{OffersWatchEntry, WatchCache},
     models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
@@ -44,7 +44,7 @@ pub async fn load_offer_utxos_cache(db: &PgPool) -> anyhow::Result<WatchCache<Of
 
     for rec in offer_rows {
         let outpoint = OutPoint {
-            txid: Txid::from_slice(&rec.txid)?,
+            txid: txid_from_db_bytes(&rec.txid)?,
             vout: rec.vout as u32,
         };
         cache.insert(
@@ -68,8 +68,8 @@ pub async fn load_offer_utxos_cache(db: &PgPool) -> anyhow::Result<WatchCache<Of
     name = "Marking offer UTXO as spent in DB",
     skip(sql_tx, outpoint, block_height, txid),
     fields(
-        spent_txid = %txid.to_hex(),
-        txid = %outpoint.txid.to_hex(),
+        spent_txid = %txid,
+        txid = %outpoint.txid,
         vout = %outpoint.vout
     )
 )]
@@ -292,7 +292,7 @@ pub async fn insert_offer_repayment(
 #[tracing::instrument(
     name = "Inserting offer UTXO into DB",
     skip(sql_tx, offer_utxo),
-    fields(offer_id = %offer_utxo.offer_id, txid = %offer_utxo.txid.to_hex(), vout = %offer_utxo.vout)
+    fields(offer_id = %offer_utxo.offer_id, txid = %hex::encode(&offer_utxo.txid), vout = %offer_utxo.vout)
 )]
 pub async fn insert_offer_utxo(
     sql_tx: &mut DbTx<'_>,
