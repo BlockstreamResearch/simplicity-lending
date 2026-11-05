@@ -6,9 +6,7 @@ use lending_contracts::programs::program::SimplexProgram;
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
-};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput, UTXO};
 
 use super::common::issuance::issue_asset;
 use super::common::wallet::{get_split_utxo_ft, split_first_signer_utxo};
@@ -144,7 +142,7 @@ pub(super) fn find_signer_asset_utxo(
 }
 
 pub(super) fn add_native_input(ft: &mut FinalTransaction, utxo: UTXO) {
-    ft.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
+    ft.add_input(PartialInput::new(utxo), Some(NativeSignature::Ecdsa));
 }
 
 pub(super) fn add_signer_output(

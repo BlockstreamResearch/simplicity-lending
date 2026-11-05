@@ -13,6 +13,7 @@ fn new_context() -> anyhow::Result<simplex::TestContext> {
     let config_path = context_config_path();
     simplex::TestConfig::default().to_file(&config_path)?;
     let context = simplex::TestContext::new(config_path.clone())
+        .and_then(|context| context.regular())
         .map_err(|e| anyhow::anyhow!("failed to initialize simplex test context: {e}"))?;
     let _ = std::fs::remove_file(config_path);
     Ok(context)

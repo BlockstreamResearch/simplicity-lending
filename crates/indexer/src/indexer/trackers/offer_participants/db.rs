@@ -1,9 +1,9 @@
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
+use simplex::simplicityhl::elements::{OutPoint, Txid};
 
 use crate::{
-    db::DbTx,
+    db::{DbTx, txid_from_db_bytes},
     indexer::{ParticipantWatchEntry, WatchCache},
     models::{OfferParticipantModel, ParticipantType},
 };
@@ -41,7 +41,7 @@ pub async fn load_participants_utxo_cache(
 
     for rec in participant_rows {
         let outpoint = OutPoint {
-            txid: Txid::from_slice(&rec.txid)?,
+            txid: txid_from_db_bytes(&rec.txid)?,
             vout: rec.vout as u32,
         };
         cache.insert(
@@ -91,7 +91,7 @@ pub async fn get_offer_participant_asset_id(
 #[tracing::instrument(
     name = "Inserting offer participant UTXO into DB",
     skip(sql_tx, participant_utxo),
-    fields(offer_id = %participant_utxo.offer_id, txid = %participant_utxo.txid.to_hex(), vout = %participant_utxo.vout)
+    fields(offer_id = %participant_utxo.offer_id, txid = %hex::encode(&participant_utxo.txid), vout = %participant_utxo.vout)
 )]
 pub async fn insert_participant_utxo(
     sql_tx: &mut DbTx<'_>,
@@ -127,8 +127,8 @@ pub async fn insert_participant_utxo(
     name = "Marking offer participant UTXO as spent in DB",
     skip(sql_tx, outpoint, block_height, txid),
     fields(
-        spent_txid = %txid.to_hex(),
-        txid = %outpoint.txid.to_hex(),
+        spent_txid = %txid,
+        txid = %outpoint.txid,
         vout = %outpoint.vout
     )
 )]

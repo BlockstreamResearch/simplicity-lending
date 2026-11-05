@@ -10,7 +10,7 @@ use lending_indexer::models::{
     ParticipantType, UtxoType,
 };
 use simplex::simplicityhl::elements::{
-    AssetId, LockTime, OutPoint, Script, Transaction, TxIn, TxOut, Txid, confidential, hashes::Hash,
+    AssetId, LockTime, OutPoint, Script, Transaction, TxIn, TxOut, Txid, confidential,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -263,7 +263,7 @@ pub fn spent_participant(
 
 pub fn outpoint_with_txid_byte(txid_byte: u8, vout: u32) -> OutPoint {
     OutPoint {
-        txid: Txid::from_slice(&[txid_byte; 32]).expect("valid txid bytes"),
+        txid: Txid::from_byte_array([txid_byte; 32]),
         vout,
     }
 }
@@ -276,7 +276,7 @@ pub fn outpoint_from_offer_id(offer_id: i64, vout: u32) -> OutPoint {
     // Perturb first byte so UTXO txid differs from offer's created_at_txid.
     txid_bytes[0] ^= 0x5a;
     OutPoint {
-        txid: Txid::from_slice(&txid_bytes).expect("valid txid bytes"),
+        txid: Txid::from_byte_array(txid_bytes),
         vout,
     }
 }
@@ -342,7 +342,7 @@ pub fn explicit_asset_output(asset_byte: u8, script_pubkey: Script) -> TxOut {
         script_pubkey,
         ..Default::default()
     };
-    let asset_id = AssetId::from_slice(&[asset_byte; 32]).expect("valid asset id");
+    let asset_id = AssetId::from_byte_array([asset_byte; 32]);
     output.asset = confidential::Asset::Explicit(asset_id);
     output
 }

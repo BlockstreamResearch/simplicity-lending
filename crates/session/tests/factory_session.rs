@@ -7,10 +7,9 @@ use lending_session::SessionError;
 use serial_test::serial;
 use simplex::provider::SimplicityNetwork;
 use simplex::signer::Signer;
-use simplex::simplicityhl::elements::hashes::Hash;
 use simplex::simplicityhl::elements::{AssetId, Txid};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use utils::{
     FACTORY_ISSUING_UTXOS_COUNT, FACTORY_REISSUANCE_FLAGS, build_session,
@@ -34,7 +33,7 @@ fn issue_only_program_factory_utxo(
     let issuance = tx.add_issuance_input(
         PartialInput::new(policy_utxo),
         IssuanceInput::new_issuance(1, 0, get_random_seed()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     tx.add_output(PartialOutput::new(
         factory_program_script.clone(),
@@ -136,8 +135,8 @@ async fn create_factory_rejects_when_indexer_reports_existing_factory() -> anyho
 
     let signer = context.create_signer(&context.get_config().mnemonic);
     let signer_script = signer.get_address().script_pubkey().to_bytes();
-    let existing_factory_asset = AssetId::from_slice(&[7_u8; 32]).expect("valid asset id");
-    let fake_txid = Txid::from_slice(&[0x11_u8; 32]).expect("valid txid");
+    let existing_factory_asset = AssetId::from_byte_array([7_u8; 32]);
+    let fake_txid = Txid::from_byte_array([0x11_u8; 32]);
     let program_script = issuance_factory_for_network(*context.get_network())
         .get_script_pubkey()
         .to_bytes();
@@ -288,8 +287,8 @@ async fn remove_factory_returns_invalid_state_for_oversized_issuing_utxos_count(
 
     let signer = context.create_signer(&context.get_config().mnemonic);
     let signer_script = signer.get_address().script_pubkey().to_bytes();
-    let factory_asset_id = AssetId::from_slice(&[0x13_u8; 32]).expect("valid asset id");
-    let fake_txid = Txid::from_slice(&[0x23_u8; 32]).expect("valid txid");
+    let factory_asset_id = AssetId::from_byte_array([0x13_u8; 32]);
+    let fake_txid = Txid::from_byte_array([0x23_u8; 32]);
     let program_script = issuance_factory_for_network(*context.get_network())
         .get_script_pubkey()
         .to_bytes();
@@ -324,7 +323,7 @@ async fn remove_factory_reports_not_found_for_missing_asset() -> anyhow::Result<
     let (indexer_url, server_handle) = start_indexer_api(pool).await?;
 
     let session = build_session(&context, &indexer_url);
-    let unknown_factory_asset = AssetId::from_slice(&[9_u8; 32]).expect("valid asset id");
+    let unknown_factory_asset = AssetId::from_byte_array([9_u8; 32]);
     let result = session.remove_factory(unknown_factory_asset).await;
 
     assert!(matches!(result, Err(SessionError::FactoryNotFound)));

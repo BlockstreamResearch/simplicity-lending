@@ -1,4 +1,3 @@
-use simplex::simplicityhl::elements::hex::ToHex;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -8,7 +7,7 @@ use crate::models::FactoryStatus;
 #[tracing::instrument(
     name = "Fetching factories by script from DB",
     skip(db, script_pubkey),
-    fields(script_pubkey = %script_pubkey.to_hex())
+    fields(script_pubkey = %hex::encode(script_pubkey))
 )]
 pub async fn fetch_by_script(
     db: &PgPool,

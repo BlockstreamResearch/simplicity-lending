@@ -13,7 +13,7 @@ pub enum FeeCollectorWitnessBranch {
 }
 
 impl FeeCollectorWitnessBranch {
-    pub fn build_witness(&self) -> Box<FeeCollectorWitness> {
+    pub fn build_witness(&self) -> FeeCollectorWitness {
         let path = match self {
             FeeCollectorWitnessBranch::Withdrawal => Left(DUMMY_SIGNATURE),
             FeeCollectorWitnessBranch::Deposit {
@@ -22,6 +22,6 @@ impl FeeCollectorWitnessBranch {
             } => Right((*output_index, *additional_amount)),
         };
 
-        Box::new(FeeCollectorWitness { path })
+        FeeCollectorWitness { path }
     }
 }

@@ -10,9 +10,8 @@ use lending_indexer::indexer::{
 use lending_indexer::models::{FactoryAuthModel, FactoryModel, FactoryStatus, FactoryUtxoModel};
 use lending_session::Session;
 use simplex::provider::{ProviderTrait, SimplicityNetwork};
-use simplex::simplicityhl::elements::hashes::Hash;
 use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -48,7 +47,7 @@ pub async fn seed_active_factory(
 
     let factory = FactoryModel {
         id: factory_id,
-        factory_asset_id: factory_asset_id.into_inner().0.to_vec(),
+        factory_asset_id: factory_asset_id.to_byte_array().to_vec(),
         program_script_pubkey,
         issuing_utxos_count,
         reissuance_flags,
@@ -253,9 +252,9 @@ fn transfer_factory_auth(
         .signer()
         .get_utxos_asset(policy_asset)?
         .into_iter()
-        .find(|utxo| utxo.amount() >= FEE_RESERVE)
+        .find(|utxo| utxo.amount().unwrap() >= FEE_RESERVE)
         .context("owner policy UTXO too small to fund auth transfer fee")?;
-    let policy_change = policy_utxo.amount() - FEE_RESERVE;
+    let policy_change = policy_utxo.amount().unwrap() - FEE_RESERVE;
     let owner_auth_utxo = factory_owner
         .signer()
         .get_utxos_asset(factory.asset_id)?
@@ -267,12 +266,9 @@ fn transfer_factory_auth(
     let mut tx = FinalTransaction::new();
     tx.add_input(
         PartialInput::new(owner_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
-    tx.add_input(
-        PartialInput::new(policy_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    tx.add_input(PartialInput::new(policy_utxo), Some(NativeSignature::Ecdsa));
     tx.add_output(PartialOutput::new(
         recipient_script_pubkey.clone(),
         1,

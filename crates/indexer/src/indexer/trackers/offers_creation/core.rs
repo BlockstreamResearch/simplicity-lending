@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, Transaction, hex::ToHex},
+    simplicityhl::elements::{AssetId, Transaction},
 };
 
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters};
@@ -104,7 +104,7 @@ impl OfferCreationsTracker {
                 issuance_factory_id: factory_id,
                 height: block_height,
                 created_at_txid: format_hex(offer_model.created_at_txid),
-                borrower_script_pubkey: creation.outputs.borrower_nft_script_pubkey.to_hex(),
+                borrower_script_pubkey: hex::encode(&creation.outputs.borrower_nft_script_pubkey),
             },
         )
         .await?;

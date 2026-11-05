@@ -31,7 +31,7 @@ pub enum AssetAuthVaultWitnessBranch {
 }
 
 impl AssetAuthVaultWitnessBranch {
-    pub fn build_witness(&self) -> Box<AssetAuthVaultWitness> {
+    pub fn build_witness(&self) -> AssetAuthVaultWitness {
         let path = match self {
             AssetAuthVaultWitnessBranch::WithdrawAll {
                 input_keeper_index,
@@ -76,6 +76,6 @@ impl AssetAuthVaultWitnessBranch {
             ))),
         };
 
-        Box::new(AssetAuthVaultWitness { path })
+        AssetAuthVaultWitness { path }
     }
 }

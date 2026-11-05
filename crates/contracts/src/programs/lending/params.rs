@@ -91,10 +91,10 @@ impl LendingOfferParameters {
 
     pub fn build_arguments(&self) -> LendingArguments {
         LendingArguments {
-            collateral_asset_id: self.collateral_asset_id.into_inner().0,
-            principal_asset_id: self.principal_asset_id.into_inner().0,
-            borrower_nft_asset_id: self.borrower_nft_asset_id.into_inner().0,
-            lender_nft_asset_id: self.lender_nft_asset_id.into_inner().0,
+            collateral_asset_id: self.collateral_asset_id.to_byte_array(),
+            principal_asset_id: self.principal_asset_id.to_byte_array(),
+            borrower_nft_asset_id: self.borrower_nft_asset_id.to_byte_array(),
+            lender_nft_asset_id: self.lender_nft_asset_id.to_byte_array(),
             collateral_amount: self.offer_parameters.collateral_amount,
             principal_amount: self.offer_parameters.principal_amount,
             principal_interest_rate: self.offer_parameters.principal_interest_rate as u64,
@@ -123,7 +123,7 @@ mod tests {
     use super::LendingOfferParameters;
 
     fn asset(byte: u8) -> AssetId {
-        AssetId::from_slice(&[byte; 32]).expect("asset")
+        AssetId::from_byte_array([byte; 32])
     }
 
     fn test_params() -> LendingOfferParameters {

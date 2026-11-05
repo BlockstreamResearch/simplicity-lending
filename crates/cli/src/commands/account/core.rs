@@ -2,9 +2,9 @@ use std::{collections::HashSet, str::FromStr};
 
 use clap::Subcommand;
 use simplex::{
-    simplicityhl::elements::{Address, AssetId, OutPoint, hex::ToHex},
+    simplicityhl::elements::{Address, AssetId, OutPoint},
     simplicityhl::simplicity::bitcoin::PublicKey,
-    transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature},
+    transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput},
 };
 
 use crate::{cli::CliContext, commands::account::AccountCommandError};
@@ -214,8 +214,8 @@ impl Account {
         let mut total_inputs_amount = 0;
 
         for utxo in asset_utxos {
-            total_inputs_amount += utxo.amount();
-            inputs.push((utxo, RequiredSignature::NativeEcdsa));
+            total_inputs_amount += utxo.amount()?;
+            inputs.push(utxo);
 
             if total_inputs_amount >= amount {
                 break;
@@ -224,7 +224,7 @@ impl Account {
 
         if total_inputs_amount < amount {
             return Err(AccountCommandError::NotEnoughAsset {
-                asset_id: asset_id.to_hex(),
+                asset_id: asset_id.to_string(),
                 needed_amount: amount,
                 actual_amount: total_inputs_amount,
             });
@@ -233,7 +233,7 @@ impl Account {
         let mut ft = FinalTransaction::new();
 
         for input in inputs {
-            ft.add_input(PartialInput::new(input.0), input.1);
+            ft.add_input(PartialInput::new(input), Some(NativeSignature::Ecdsa));
         }
 
         let recipient_output = PartialOutput::new(to_address.script_pubkey(), amount, asset_id);
@@ -250,10 +250,7 @@ impl Account {
             ));
         }
 
-        println!(
-            "Sending {amount} of the {} asset to the {to_address}",
-            asset_id.to_hex()
-        );
+        println!("Sending {amount} of the {asset_id} asset to the {to_address}");
 
         let receipt = context.signer.broadcast(&ft)?;
 
@@ -280,14 +277,14 @@ impl Account {
 
         let utxo_to_split = found_utxos.first().unwrap();
 
-        let utxo_asset_id = utxo_to_split.asset();
-        let utxo_amount = utxo_to_split.amount();
+        let utxo_asset_id = utxo_to_split.asset()?;
+        let utxo_amount = utxo_to_split.amount()?;
 
         let mut ft = FinalTransaction::new();
 
         ft.add_input(
             PartialInput::new(utxo_to_split.clone()),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         let signer_script_pubkey = context.signer.get_address().script_pubkey();
@@ -360,22 +357,22 @@ impl Account {
         }
 
         let first_utxo = &found_utxos[0];
-        let merged_asset_id = first_utxo.asset();
+        let merged_asset_id = first_utxo.asset()?;
         let mut total_amount = 0;
         let mut ft = FinalTransaction::new();
 
         for utxo in found_utxos {
-            let utxo_asset_id = utxo.asset();
+            let utxo_asset_id = utxo.asset()?;
             if utxo_asset_id != merged_asset_id {
                 return Err(AccountCommandError::UTXOsAssetMismatch {
-                    expected_asset_id: merged_asset_id.to_hex(),
-                    actual_asset_id: utxo_asset_id.to_hex(),
+                    expected_asset_id: merged_asset_id.to_string(),
+                    actual_asset_id: utxo_asset_id.to_string(),
                     outpoint: utxo.outpoint,
                 });
             }
 
-            total_amount += utxo.amount();
-            ft.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
+            total_amount += utxo.amount()?;
+            ft.add_input(PartialInput::new(utxo), Some(NativeSignature::Ecdsa));
         }
 
         let merged_output = PartialOutput::new(
@@ -397,7 +394,7 @@ impl Account {
             } else {
                 "explicit"
             },
-            merged_asset_id.to_hex(),
+            merged_asset_id,
             total_amount,
         );
 
@@ -422,11 +419,11 @@ impl Account {
         );
         println!(
             "User WPKH script pubkey: {:?}",
-            signer_wpkh_address.script_pubkey().to_hex()
+            hex::encode(signer_wpkh_address.script_pubkey().as_bytes())
         );
         println!(
             "User Schnorr public key: {:?}",
-            signer_schnorr_pubkey.to_hex()
+            signer_schnorr_pubkey.to_string()
         );
         println!("User blinding public key: {signer_blinding_pubkey}");
 
@@ -440,7 +437,7 @@ impl Account {
 
         for (index, utxo) in account_utxos.into_iter().enumerate() {
             let asset_id_str = match utxo.txout.asset.explicit() {
-                Some(asset_id) => asset_id.to_hex(),
+                Some(asset_id) => asset_id.to_string(),
                 None => "Confidential asset".into(),
             };
             let asset_amount_str = match utxo.txout.value.explicit() {

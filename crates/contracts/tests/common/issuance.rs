@@ -3,7 +3,7 @@ use lending_contracts::utils::get_random_seed;
 
 use simplex::simplicityhl::elements::AssetId;
 use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, partial_input::IssuanceInput,
+    FinalTransaction, NativeSignature, PartialInput, PartialOutput, partial_input::IssuanceInput,
 };
 
 pub const PREPARATION_UTXO_ASSET_AMOUNT: u64 = 10;
@@ -20,7 +20,7 @@ pub fn issue_asset(context: &simplex::TestContext, asset_amount: u64) -> anyhow:
     let issuance_details = ft.add_issuance_input(
         PartialInput::new(first_utxo.clone()),
         IssuanceInput::new_issuance(asset_amount, 0, asset_entropy),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let signer_script_pubkey = signer.get_address().script_pubkey();

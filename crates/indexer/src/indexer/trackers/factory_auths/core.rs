@@ -1,9 +1,9 @@
-use simplex::simplicityhl::elements::{OutPoint, Transaction, TxOut, Txid, hashes::Hash};
+use simplex::simplicityhl::elements::{OutPoint, Transaction, TxOut, Txid};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    db::DbTx,
+    db::{DbTx, txid_from_db_bytes},
     indexer::{
         cache::WatchCache, get_factory_identity, insert_factory_auth_utxo,
         load_factory_auth_utxo_cache, spend_factory_auth_utxo,
@@ -179,7 +179,7 @@ impl FactoryAuthsTracker {
             return false;
         };
 
-        asset_id.into_inner().0.as_slice() == factory_identity.factory_asset_id.as_slice()
+        asset_id.to_byte_array().as_slice() == factory_identity.factory_asset_id.as_slice()
             && amount == 1
     }
 
@@ -190,7 +190,7 @@ impl FactoryAuthsTracker {
         log_message: &'static str,
     ) -> anyhow::Result<()> {
         let new_outpoint = OutPoint {
-            txid: Txid::from_slice(&factory_auth.txid)?,
+            txid: txid_from_db_bytes(&factory_auth.txid)?,
             vout: factory_auth.vout as u32,
         };
 

@@ -7,7 +7,7 @@ use uuid::Uuid;
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters, OfferParameters};
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{AssetId, Txid, hashes::Hash},
+    simplicityhl::elements::{AssetId, Txid},
 };
 
 use crate::models::{ParticipantType, UtxoType};
@@ -112,18 +112,22 @@ impl OfferModel {
         Self {
             id: 0,
             issuance_factory_id: factory_id,
-            collateral_asset_id: offer_parameters.collateral_asset_id.into_inner().0.to_vec(),
-            principal_asset_id: offer_parameters.principal_asset_id.into_inner().0.to_vec(),
+            collateral_asset_id: offer_parameters
+                .collateral_asset_id
+                .to_byte_array()
+                .to_vec(),
+            principal_asset_id: offer_parameters.principal_asset_id.to_byte_array().to_vec(),
             borrower_nft_asset_id: offer_parameters
                 .borrower_nft_asset_id
-                .into_inner()
-                .0
+                .to_byte_array()
                 .to_vec(),
-            lender_nft_asset_id: offer_parameters.lender_nft_asset_id.into_inner().0.to_vec(),
+            lender_nft_asset_id: offer_parameters
+                .lender_nft_asset_id
+                .to_byte_array()
+                .to_vec(),
             protocol_fee_keeper_asset_id: offer_parameters
                 .protocol_fee_keeper_asset_id
-                .into_inner()
-                .0
+                .to_byte_array()
                 .to_vec(),
             collateral_amount,
             principal_amount: offer_parameters.offer_parameters.principal_amount as i64,
@@ -143,7 +147,11 @@ impl OfferModel {
         network: SimplicityNetwork,
     ) -> anyhow::Result<LendingOfferParameters> {
         let asset = |bytes: &[u8], field: &str| -> anyhow::Result<AssetId> {
-            AssetId::from_slice(bytes).map_err(|e| anyhow::anyhow!("invalid {field}: {e}"))
+            let raw: [u8; 32] = bytes
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("invalid {field}: {e}"))?;
+
+            Ok(AssetId::from_byte_array(raw))
         };
 
         let interest_rate = u16::try_from(self.interest_rate)
@@ -218,17 +226,17 @@ mod tests {
     use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
     use simplex::{
         provider::SimplicityNetwork,
-        simplicityhl::elements::{AssetId, Txid, hashes::Hash},
+        simplicityhl::elements::{AssetId, Txid},
     };
     use uuid::Uuid;
 
     fn make_offer_params() -> LendingOfferParameters {
         LendingOfferParameters {
-            collateral_asset_id: AssetId::from_slice(&[1_u8; 32]).expect("asset"),
-            principal_asset_id: AssetId::from_slice(&[2_u8; 32]).expect("asset"),
-            borrower_nft_asset_id: AssetId::from_slice(&[3_u8; 32]).expect("asset"),
-            lender_nft_asset_id: AssetId::from_slice(&[4_u8; 32]).expect("asset"),
-            protocol_fee_keeper_asset_id: AssetId::from_slice(&[5_u8; 32]).expect("asset"),
+            collateral_asset_id: AssetId::from_byte_array([1_u8; 32]),
+            principal_asset_id: AssetId::from_byte_array([2_u8; 32]),
+            borrower_nft_asset_id: AssetId::from_byte_array([3_u8; 32]),
+            lender_nft_asset_id: AssetId::from_byte_array([4_u8; 32]),
+            protocol_fee_keeper_asset_id: AssetId::from_byte_array([5_u8; 32]),
             offer_parameters: OfferParameters {
                 collateral_amount: 1_000,
                 principal_amount: 500,
@@ -244,30 +252,30 @@ mod tests {
         let params = make_offer_params();
         let block_height = 777_u64;
         let factory_id = Uuid::new_v4();
-        let txid = Txid::from_slice(&[10_u8; 32]).expect("txid");
+        let txid = Txid::from_byte_array([10_u8; 32]);
 
         let model = OfferModel::new(&params, factory_id, block_height, txid);
 
         assert_eq!(model.issuance_factory_id, factory_id);
         assert_eq!(
             model.collateral_asset_id,
-            params.collateral_asset_id.into_inner().0.to_vec()
+            params.collateral_asset_id.to_byte_array().to_vec()
         );
         assert_eq!(
             model.principal_asset_id,
-            params.principal_asset_id.into_inner().0.to_vec()
+            params.principal_asset_id.to_byte_array().to_vec()
         );
         assert_eq!(
             model.borrower_nft_asset_id,
-            params.borrower_nft_asset_id.into_inner().0.to_vec()
+            params.borrower_nft_asset_id.to_byte_array().to_vec()
         );
         assert_eq!(
             model.lender_nft_asset_id,
-            params.lender_nft_asset_id.into_inner().0.to_vec()
+            params.lender_nft_asset_id.to_byte_array().to_vec()
         );
         assert_eq!(
             model.protocol_fee_keeper_asset_id,
-            params.protocol_fee_keeper_asset_id.into_inner().0.to_vec()
+            params.protocol_fee_keeper_asset_id.to_byte_array().to_vec()
         );
         assert_eq!(model.collateral_amount, 1_000);
         assert_eq!(model.principal_amount, 500);

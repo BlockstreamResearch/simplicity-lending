@@ -1,8 +1,8 @@
-use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash};
+use simplex::simplicityhl::elements::{OutPoint, Transaction, Txid};
 use sqlx::PgPool;
 
 use crate::{
-    db::DbTx,
+    db::{DbTx, txid_from_db_bytes},
     indexer::cache::WatchCache,
     indexer::trackers::offer_participants::{
         get_offer_participant_asset_id, insert_participant_utxo, load_participants_utxo_cache,
@@ -114,7 +114,7 @@ impl OfferParticipantsTracker {
 
         let found_output = tx.output.iter().enumerate().find_map(|(vout, output)| {
             if let Some(asset) = output.asset.explicit()
-                && asset.into_inner().0.to_vec() == target_asset_id
+                && asset.to_byte_array().to_vec() == target_asset_id
             {
                 return Some((vout as u32, &output.script_pubkey));
             }
@@ -181,7 +181,7 @@ impl OfferParticipantsTracker {
         log_message: &'static str,
     ) -> anyhow::Result<()> {
         let outpoint = OutPoint {
-            txid: Txid::from_slice(&participant.txid)?,
+            txid: txid_from_db_bytes(&participant.txid)?,
             vout: participant.vout as u32,
         };
 

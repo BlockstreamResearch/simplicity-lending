@@ -1,10 +1,11 @@
 use ring::digest::{SHA256, digest};
-use simplex::program::{Program, WitnessTrait};
+use simplex::program::Program;
 use simplex::provider::SimplicityNetwork;
+use simplex::simplicityhl::WitnessValues;
 use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{
-    FinalTransaction, IssuanceDetails, PartialInput, PartialOutput, ProgramInput,
-    RequiredSignature, UTXO,
+    FinalTransaction, IssuanceDetails, PartialInput, PartialOutput, ProgramInput, ProgramSignature,
+    UTXO,
 };
 
 use simplex::simplicityhl::elements::{AssetId, Script};
@@ -45,12 +46,12 @@ pub trait SimplexProgram {
         &self,
         ft: &'a mut FinalTransaction,
         program_utxo: UTXO,
-        witness: Box<dyn WitnessTrait>,
+        witness: impl Into<WitnessValues>,
     ) -> &'a mut FinalTransaction {
         ft.add_program_input(
             PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
-            RequiredSignature::None,
+            None,
         );
 
         ft
@@ -60,12 +61,12 @@ pub trait SimplexProgram {
         &self,
         ft: &'a mut FinalTransaction,
         partial_input: PartialInput,
-        witness: Box<dyn WitnessTrait>,
+        witness: impl Into<WitnessValues>,
     ) -> &'a mut FinalTransaction {
         ft.add_program_input(
             partial_input,
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
-            RequiredSignature::None,
+            None,
         );
 
         ft
@@ -75,13 +76,13 @@ pub trait SimplexProgram {
         &self,
         ft: &'a mut FinalTransaction,
         program_utxo: UTXO,
-        witness: Box<dyn WitnessTrait>,
-        required_signature: RequiredSignature,
+        witness: impl Into<WitnessValues>,
+        program_signature: Option<ProgramSignature>,
     ) -> &'a mut FinalTransaction {
         ft.add_program_input(
             PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
-            required_signature,
+            program_signature,
         );
 
         ft
@@ -92,14 +93,14 @@ pub trait SimplexProgram {
         ft: &mut FinalTransaction,
         program_utxo: UTXO,
         issuance_input: IssuanceInput,
-        witness: Box<dyn WitnessTrait>,
-        required_signature: RequiredSignature,
+        witness: impl Into<WitnessValues>,
+        program_signature: Option<ProgramSignature>,
     ) -> IssuanceDetails {
         ft.add_program_issuance_input(
             PartialInput::new(program_utxo),
             ProgramInput::new(Box::new(self.get_program().clone()), witness),
             issuance_input,
-            required_signature,
+            program_signature,
         )
     }
 

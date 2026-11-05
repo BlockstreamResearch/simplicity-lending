@@ -16,9 +16,9 @@ pub struct AssetAuthVaultParameters {
 impl AssetAuthVaultParameters {
     pub fn build_arguments(&self) -> AssetAuthVaultArguments {
         AssetAuthVaultArguments {
-            vault_asset_id: self.vault_asset_id.into_inner().0,
-            keeper_auth_asset_id: self.keeper_asset_id.into_inner().0,
-            supplier_auth_asset_id: self.supplier_asset_id.into_inner().0,
+            vault_asset_id: self.vault_asset_id.to_byte_array(),
+            keeper_auth_asset_id: self.keeper_asset_id.to_byte_array(),
+            supplier_auth_asset_id: self.supplier_asset_id.to_byte_array(),
             supply_goal: self.supply_goal,
             with_keeper_asset_burn: self.with_keeper_asset_burn,
             with_supplier_asset_burn: self.with_supplier_asset_burn,

@@ -79,7 +79,7 @@ async fn cancel_offer_burns_nfts_and_returns_collateral_to_borrower() -> anyhow:
             .any(|utxo| {
                 utxo.outpoint.txid == cancel_txid
                     && utxo.outpoint.vout == 2
-                    && utxo.amount() == offer.parameters.offer_parameters.collateral_amount
+                    && utxo.amount().unwrap() == offer.parameters.offer_parameters.collateral_amount
             }),
         "collateral must be returned to the borrower's wallet"
     );

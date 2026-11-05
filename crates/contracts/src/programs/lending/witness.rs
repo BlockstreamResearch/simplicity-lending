@@ -19,7 +19,7 @@ pub enum LendingOfferWitnessBranch {
 }
 
 impl LendingOfferWitnessBranch {
-    pub fn build_witness(&self) -> Box<LendingWitness> {
+    pub fn build_witness(&self) -> LendingWitness {
         let path = match self {
             LendingOfferWitnessBranch::OfferAcceptance => Left(Left(())),
             LendingOfferWitnessBranch::OfferCancellation => Left(Right(())),
@@ -33,6 +33,6 @@ impl LendingOfferWitnessBranch {
             LendingOfferWitnessBranch::Liquidation { current_debt } => Right(Right(*current_debt)),
         };
 
-        Box::new(LendingWitness { path })
+        LendingWitness { path }
     }
 }

@@ -1,5 +1,5 @@
 use simplex::signer::Signer;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters, OfferParameters};
 
@@ -76,7 +76,7 @@ fn accepts_pending_offer_with_one_explicit_principal_input(
 
     ft.add_input(
         PartialInput::new(lender_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -125,7 +125,7 @@ fn accepts_pending_offer_with_one_confidential_principal_input(
 
     ft.add_input(
         PartialInput::new(conf_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(

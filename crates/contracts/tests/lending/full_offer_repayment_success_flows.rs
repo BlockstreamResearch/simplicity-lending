@@ -1,6 +1,6 @@
 use lending_contracts::programs::program::SimplexProgram;
 use simplex::signer::Signer;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use lending_contracts::programs::lending::{
     LendingOffer, LendingOfferParameters, OfferParameters, OfferRepaymentPhase,
@@ -111,14 +111,14 @@ fn full_repayment_succeeds_in_no_repayments_phase(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     offer.attach_full_repayment(&mut ft, active_offer_utxo, None, None);
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -191,7 +191,7 @@ fn full_repayment_succeeds_in_repaying_offer_fees_phase(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     offer.attach_full_repayment(
@@ -203,7 +203,7 @@ fn full_repayment_succeeds_in_repaying_offer_fees_phase(
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -274,7 +274,7 @@ fn full_repayment_succeeds_in_repaying_principal_phase(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     offer.attach_full_repayment(
@@ -286,7 +286,7 @@ fn full_repayment_succeeds_in_repaying_principal_phase(
 
     ft.add_input(
         PartialInput::new(borrower_principal_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(

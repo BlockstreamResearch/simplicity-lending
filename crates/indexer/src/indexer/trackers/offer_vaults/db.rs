@@ -1,8 +1,8 @@
-use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
+use simplex::simplicityhl::elements::{OutPoint, Txid};
 
 use crate::{
     api::utils::{format_hex, format_offer_id, format_satoshis},
-    db::DbTx,
+    db::{DbTx, txid_from_db_bytes},
     events::{IndexerEvent, notify_indexer_event},
     indexer::{VaultWatchEntry, WatchCache},
     models::{OfferVaultModel, OfferVaultWithdrawalModel, VaultType},
@@ -57,8 +57,8 @@ pub async fn insert_offer_vault(
     name = "Marking offer vault as spent in DB",
     skip(sql_tx, outpoint, block_height, txid),
     fields(
-        spent_txid = %txid.to_hex(),
-        txid = %outpoint.txid.to_hex(),
+        spent_txid = %txid,
+        txid = %outpoint.txid,
         vout = %outpoint.vout
     )
 )]
@@ -125,7 +125,7 @@ pub async fn load_offer_vaults_cache(
 
     for row in rows {
         let outpoint = OutPoint {
-            txid: Txid::from_slice(&row.txid)?,
+            txid: txid_from_db_bytes(&row.txid)?,
             vout: row.vout as u32,
         };
         cache.insert(

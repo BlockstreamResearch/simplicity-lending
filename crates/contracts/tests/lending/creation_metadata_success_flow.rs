@@ -57,8 +57,7 @@ fn creates_pending_offer_with_creation_metadata(
         &op_return_data[4..36],
         lending_offer_parameters
             .principal_asset_id
-            .into_inner()
-            .0
+            .to_byte_array()
             .as_slice()
     );
     assert_eq!(

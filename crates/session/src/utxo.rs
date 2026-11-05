@@ -61,11 +61,15 @@ pub fn select_utxos_for_amount(
     let mut total_amount = 0u64;
 
     for utxo in utxos {
-        if utxo.asset() != asset_id {
+        // An output we cannot read cannot fund the transaction, and must not block usable funds.
+        let (Ok(asset), Ok(amount)) = (utxo.asset(), utxo.amount()) else {
+            continue;
+        };
+        if asset != asset_id {
             continue;
         }
 
-        total_amount = total_amount.saturating_add(utxo.amount());
+        total_amount = total_amount.saturating_add(amount);
         selected.push(utxo);
 
         if total_amount >= needed_amount {
@@ -84,22 +88,21 @@ pub fn select_utxos_for_amount(
 #[cfg(test)]
 mod tests {
     use simplex::simplicityhl::elements::confidential::{AssetBlindingFactor, ValueBlindingFactor};
-    use simplex::simplicityhl::elements::hashes::Hash;
     use simplex::simplicityhl::elements::{AssetId, OutPoint, TxOut, TxOutSecrets, Txid};
     use simplex::transaction::UTXO;
 
     use super::{SelectedUtxos, select_utxos_for_amount};
 
     fn asset() -> AssetId {
-        AssetId::from_slice(&[0xAAu8; 32]).unwrap()
+        AssetId::from_byte_array([0xAAu8; 32])
     }
 
     fn other_asset() -> AssetId {
-        AssetId::from_slice(&[0xBBu8; 32]).unwrap()
+        AssetId::from_byte_array([0xBBu8; 32])
     }
 
     fn txid(byte: u8) -> Txid {
-        Txid::from_slice(&[byte; 32]).unwrap()
+        Txid::from_byte_array([byte; 32])
     }
 
     fn explicit_utxo(vout: u32, amount: u64, asset_id: AssetId) -> UTXO {
@@ -175,7 +178,12 @@ mod tests {
 
         assert_eq!(selected.utxos().len(), 2);
         assert_eq!(selected.total_amount(), 11_000);
-        assert!(selected.utxos().iter().all(|utxo| utxo.asset() == asset()));
+        assert!(
+            selected
+                .utxos()
+                .iter()
+                .all(|utxo| utxo.asset() == Ok(asset()))
+        );
     }
 
     #[test]
@@ -227,6 +235,26 @@ mod tests {
     }
 
     #[test]
+    fn skips_utxos_with_unreadable_asset_or_amount() {
+        let unreadable = UTXO {
+            outpoint: OutPoint::new(txid(0x40), 0),
+            txout: TxOut::default(),
+            secrets: None,
+        };
+
+        let selected = select_utxos_for_amount(
+            [unreadable, explicit_utxo(1, 10_000, asset())],
+            asset(),
+            10_000,
+        )
+        .expect("the readable utxo should fund the selection");
+
+        assert_eq!(selected.utxos().len(), 1);
+        assert_eq!(selected.utxos()[0].outpoint.vout, 1);
+        assert_eq!(selected.total_amount(), 10_000);
+    }
+
+    #[test]
     fn zero_needed_returns_empty_selection() {
         let selected = select_utxos_for_amount([explicit_utxo(0, 1_000, asset())], asset(), 0)
             .expect("zero needed");
@@ -243,6 +271,6 @@ mod tests {
             select_utxos_for_amount([explicit_utxo(0, 10_000, asset())], asset(), 10_000).unwrap();
         let utxos = selected.into_utxos();
         assert_eq!(utxos.len(), 1);
-        assert_eq!(utxos[0].amount(), 10_000);
+        assert_eq!(utxos[0].amount(), Ok(10_000));
     }
 }

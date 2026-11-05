@@ -1,6 +1,5 @@
 use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::confidential::Value;
-use simplex::simplicityhl::elements::secp256k1_zkp::ZERO_TWEAK;
 use simplex::simplicityhl::elements::{AssetId, Script, Transaction, TxIn, TxOut, Txid};
 
 use crate::programs::issuance_factory::{
@@ -292,7 +291,7 @@ impl IssuanceFactory {
 fn is_factory_asset_issuance(input: &TxIn, factory_asset_id: AssetId) -> bool {
     let issuance = &input.asset_issuance;
 
-    issuance.asset_blinding_nonce == ZERO_TWEAK
+    issuance.asset_blinding_nonce.is_null()
         && issuance.amount == Value::Explicit(IssuanceFactory::ASSET_TOTAL_AMOUNT)
         && matches!(issuance.inflation_keys, Value::Null | Value::Explicit(0))
         && input.issuance_ids().0 == factory_asset_id
@@ -311,16 +310,16 @@ mod tests {
     use super::{IssuanceFactoryTxKind, IssuanceFactoryUtxoKind, is_factory_asset_utxo};
     use crate::programs::issuance_factory::{IssuanceFactory, IssuanceFactoryParameters};
     use crate::programs::program::{MetadataProgram, SimplexProgram};
+    use simplex::simplicityhl::elements::{AssetBlindingNonce, AssetEntropy};
     use simplex::{
         provider::SimplicityNetwork,
         simplicityhl::elements::{
             AssetId, AssetIssuance, LockTime, Script, Transaction, TxIn, TxOut, confidential,
-            secp256k1_zkp::ZERO_TWEAK,
         },
     };
 
     fn asset(byte: u8) -> AssetId {
-        AssetId::from_slice(&[byte; 32]).expect("asset")
+        AssetId::from_byte_array([byte; 32])
     }
 
     fn script(bytes: &[u8]) -> Script {
@@ -482,8 +481,8 @@ mod tests {
     fn creation_tx(factory: &IssuanceFactory, issuance_amount: u64) -> (Transaction, AssetId) {
         let issuance_input = TxIn {
             asset_issuance: AssetIssuance {
-                asset_blinding_nonce: ZERO_TWEAK,
-                asset_entropy: [7u8; 32],
+                asset_blinding_nonce: AssetBlindingNonce::NEW_ISSUANCE,
+                asset_entropy: AssetEntropy::from_byte_array([7u8; 32]),
                 amount: confidential::Value::Explicit(issuance_amount),
                 inflation_keys: confidential::Value::Null,
             },

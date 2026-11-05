@@ -1,6 +1,6 @@
 use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters};
 use simplex::simplicityhl::elements::Txid;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use lending_contracts::programs::lending::OfferParameters;
 
@@ -72,7 +72,7 @@ fn offer_cancellation_fails_when_offer_is_not_pending(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -110,7 +110,7 @@ fn offer_cancellation_fails_when_pending_offer_utxo_is_not_0_input_index(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     pending_offer.attach_cancellation(&mut ft, pending_offer_utxo, lender_nft_utxo);
@@ -158,7 +158,7 @@ fn offer_cancellation_fails_when_collateral_utxo_is_on_0_output_index(
 
     ft.add_input(
         PartialInput::new(borrower_nft_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let result = borrower.finalize(&ft);

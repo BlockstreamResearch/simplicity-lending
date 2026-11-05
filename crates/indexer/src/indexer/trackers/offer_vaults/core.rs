@@ -1,6 +1,6 @@
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{OutPoint, Transaction, hashes::Hash},
+    simplicityhl::elements::{OutPoint, Transaction},
 };
 use sqlx::PgPool;
 use std::collections::HashMap;

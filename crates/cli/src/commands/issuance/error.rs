@@ -1,5 +1,5 @@
 use simplex::simplicityhl::elements::OutPoint;
-use simplex::{provider::ProviderError, signer::SignerError};
+use simplex::{provider::ProviderError, signer::SignerError, transaction::UtxoError};
 
 #[derive(thiserror::Error, Debug)]
 pub enum IssuanceCommandError {
@@ -23,6 +23,9 @@ pub enum IssuanceCommandError {
 
     #[error("Simplex Provider error: {0}")]
     Provider(#[from] ProviderError),
+
+    #[error("Simplex UTXO error: {0}")]
+    Utxo(#[from] UtxoError),
 
     #[error("Invalid entropy hex `{entropy}`: {source}")]
     InvalidEntropyHex {

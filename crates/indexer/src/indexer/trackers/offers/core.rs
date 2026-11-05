@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use lending_contracts::programs::lending::LendingOfferRepaymentScan;
 use simplex::{
     provider::SimplicityNetwork,
-    simplicityhl::elements::{OutPoint, Transaction, Txid, hashes::Hash},
+    simplicityhl::elements::{OutPoint, Transaction, Txid},
 };
 
 use crate::{

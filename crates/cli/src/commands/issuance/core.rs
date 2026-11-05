@@ -1,9 +1,8 @@
 use clap::Subcommand;
 
-use simplex::simplicityhl::elements::hex::ToHex;
 use simplex::simplicityhl::elements::{AssetId, OutPoint};
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 use simplex::utils;
 
 use lending_contracts::utils::get_random_seed;
@@ -91,7 +90,7 @@ impl Issuance {
         let issuance_details = ft.add_issuance_input(
             PartialInput::new(first_utxo.clone()),
             IssuanceInput::new_issuance(asset_amount, inflation_amount.unwrap_or(0), asset_entropy),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
 
         let signer_script_pubkey = context.signer.get_address().script_pubkey();
@@ -115,8 +114,7 @@ impl Issuance {
 
         println!(
             "Issuing new asset with id - {}, amount - {}",
-            issuance_details.asset_id.to_hex(),
-            asset_amount,
+            issuance_details.asset_id, asset_amount,
         );
         println!("Issuance outpoint: {}", first_utxo.outpoint);
         println!(
@@ -145,10 +143,10 @@ impl Issuance {
         println!("Calculated issuance asset ID:");
         println!("Issuance outpoint: {outpoint}");
         println!("Input entropy: {}", hex::encode(entropy_bytes));
-        println!("Asset ID: {}", asset_id.to_hex());
+        println!("Asset ID: {asset_id}");
         if show_reissuance_id {
             let reissuance_token_id = AssetId::reissuance_token_from_entropy(asset_entropy, false);
-            println!("Reissuance token ID: {}", reissuance_token_id.to_hex());
+            println!("Reissuance token ID: {reissuance_token_id}");
         }
 
         Ok(())
@@ -176,22 +174,22 @@ impl Issuance {
             ));
         }
 
-        let reissuance_utxo_asset_id = reissuance_utxo.asset();
+        let reissuance_utxo_asset_id = reissuance_utxo.asset()?;
 
-        let reissuance_token_amount = reissuance_utxo.amount();
+        let reissuance_token_amount = reissuance_utxo.amount()?;
         let mut ft = FinalTransaction::new();
         let issuance_details = ft.add_issuance_input(
             PartialInput::new(reissuance_utxo.clone()),
             IssuanceInput::new_reissuance(asset_amount, asset_entropy_bytes),
-            RequiredSignature::NativeEcdsa,
+            Some(NativeSignature::Ecdsa),
         );
         let expected_reissuance_token_id = issuance_details.inflation_asset_id;
 
         if reissuance_utxo_asset_id != expected_reissuance_token_id {
             return Err(IssuanceCommandError::InvalidReissuanceTokenAsset {
                 outpoint: reissuance_outpoint,
-                expected_asset_id: expected_reissuance_token_id.to_hex(),
-                actual_asset_id: reissuance_utxo_asset_id.to_hex(),
+                expected_asset_id: expected_reissuance_token_id.to_string(),
+                actual_asset_id: reissuance_utxo_asset_id.to_string(),
             });
         }
 
@@ -213,14 +211,10 @@ impl Issuance {
 
         println!(
             "Reissuing asset with id - {}, amount - {}",
-            issuance_details.asset_id.to_hex(),
-            asset_amount,
+            issuance_details.asset_id, asset_amount,
         );
         println!("Reissuance outpoint: {reissuance_outpoint}");
-        println!(
-            "Reissuance token asset id: {}",
-            expected_reissuance_token_id.to_hex()
-        );
+        println!("Reissuance token asset id: {expected_reissuance_token_id}");
         println!(
             "Asset entropy bytes (hex, 32 bytes): {}",
             hex::encode(asset_entropy_bytes)

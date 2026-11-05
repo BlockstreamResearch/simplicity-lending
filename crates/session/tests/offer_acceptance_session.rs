@@ -91,13 +91,13 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
     assert!(
         lender_principal_before
             .iter()
-            .all(|utxo| utxo.amount() < TEST_PRINCIPAL_AMOUNT),
+            .all(|utxo| utxo.amount().unwrap() < TEST_PRINCIPAL_AMOUNT),
         "no single UTXO should cover the principal alone"
     );
     assert_eq!(
         lender_principal_before
             .iter()
-            .map(|utxo| utxo.amount())
+            .map(|utxo| utxo.amount().unwrap())
             .sum::<u64>(),
         PRINCIPAL_PARTS.iter().sum::<u64>()
     );
@@ -140,8 +140,8 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
             .iter()
             .any(|utxo| {
                 utxo.outpoint.txid == accept_txid
-                    && utxo.amount() == TEST_PRINCIPAL_AMOUNT
-                    && utxo.asset() == principal_asset_id
+                    && utxo.amount().unwrap() == TEST_PRINCIPAL_AMOUNT
+                    && utxo.asset().unwrap() == principal_asset_id
             }),
         "borrower principal must be locked under AssetAuth"
     );
@@ -158,7 +158,9 @@ async fn accept_offer_selects_multiple_principal_utxos_and_activates_offer() -> 
             .signer()
             .get_utxos_asset(principal_asset_id)?
             .iter()
-            .any(|utxo| { utxo.outpoint.txid == accept_txid && utxo.amount() == expected_change }),
+            .any(|utxo| {
+                utxo.outpoint.txid == accept_txid && utxo.amount().unwrap() == expected_change
+            }),
         "principal change must return to the lender wallet"
     );
 
@@ -258,7 +260,7 @@ async fn accept_offer_fails_with_insufficient_principal() -> anyhow::Result<()> 
         .signer()
         .get_utxos_asset(principal_asset_id)?
         .iter()
-        .map(|utxo| utxo.amount())
+        .map(|utxo| utxo.amount().unwrap())
         .sum::<u64>();
     assert_eq!(lender_principal_balance, partial_principal_amount);
 

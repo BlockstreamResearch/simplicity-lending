@@ -170,7 +170,7 @@ async fn claim_lender_vault_burns_nft_and_unlocks_principal() -> anyhow::Result<
             .any(|utxo| {
                 utxo.outpoint.txid == claim_txid
                     && utxo.outpoint.vout == 1
-                    && utxo.amount() == expected_principal
+                    && utxo.amount().unwrap() == expected_principal
             }),
         "unlocked principal must return to the lender's wallet"
     );

@@ -2,7 +2,7 @@ use lending_contracts::programs::asset_auth::AssetAuthWitnessParams;
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::simplicityhl::elements::Script;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use super::setup::setup_asset_auth;
 
@@ -25,7 +25,7 @@ fn unlocks_without_burn_with_one_explicit_output(
 
     asset_auth.attach_unlocking(&mut ft, asset_auth_utxo.clone(), asset_auth_witness_params);
 
-    ft.add_input(PartialInput::new(auth_utxo), RequiredSignature::NativeEcdsa);
+    ft.add_input(PartialInput::new(auth_utxo), Some(NativeSignature::Ecdsa));
 
     ft.add_output(PartialOutput::new(
         signer.get_address().script_pubkey(),
@@ -62,7 +62,7 @@ fn unlocks_without_burn_with_multiple_explicit_outputs(
 
     asset_auth.attach_unlocking(&mut ft, asset_auth_utxo.clone(), asset_auth_witness_params);
 
-    ft.add_input(PartialInput::new(auth_utxo), RequiredSignature::NativeEcdsa);
+    ft.add_input(PartialInput::new(auth_utxo), Some(NativeSignature::Ecdsa));
 
     ft.add_output(PartialOutput::new(
         signer.get_address().script_pubkey(),
@@ -109,7 +109,7 @@ fn unlocks_without_burn_with_confidential_output(
 
     asset_auth.attach_unlocking(&mut ft, asset_auth_utxo.clone(), asset_auth_witness_params);
 
-    ft.add_input(PartialInput::new(auth_utxo), RequiredSignature::NativeEcdsa);
+    ft.add_input(PartialInput::new(auth_utxo), Some(NativeSignature::Ecdsa));
 
     ft.add_output(
         PartialOutput::new(
@@ -147,7 +147,7 @@ fn unlocks_with_burn_with_one_explicit_output(context: simplex::TestContext) -> 
 
     asset_auth.attach_unlocking(&mut ft, asset_auth_utxo.clone(), asset_auth_witness_params);
 
-    ft.add_input(PartialInput::new(auth_utxo), RequiredSignature::NativeEcdsa);
+    ft.add_input(PartialInput::new(auth_utxo), Some(NativeSignature::Ecdsa));
 
     ft.add_output(PartialOutput::new(
         signer.get_address().script_pubkey(),
@@ -184,7 +184,7 @@ fn unlocks_with_burn_with_multiple_explicit_outputs(
 
     asset_auth.attach_unlocking(&mut ft, asset_auth_utxo.clone(), asset_auth_witness_params);
 
-    ft.add_input(PartialInput::new(auth_utxo), RequiredSignature::NativeEcdsa);
+    ft.add_input(PartialInput::new(auth_utxo), Some(NativeSignature::Ecdsa));
 
     let first_locked_output_amount = asset_auth_utxo.explicit_amount() / 2;
     let second_locked_output_amount =

@@ -68,7 +68,7 @@ impl AssetAuthVault {
 
     fn new(parameters: AssetAuthVaultParameters, storage: AssetAuthVaultStorage) -> Self {
         let mut asset_auth_vault_program =
-            AssetAuthVaultProgram::new(&parameters.build_arguments()).with_storage_capacity(2);
+            AssetAuthVaultProgram::new(parameters.build_arguments()).with_storage_capacity(2);
 
         storage.set_storage_slots(&mut asset_auth_vault_program);
 

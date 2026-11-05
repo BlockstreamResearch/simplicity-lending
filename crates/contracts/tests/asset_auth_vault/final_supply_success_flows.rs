@@ -2,7 +2,7 @@ use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVau
 use lending_contracts::programs::program::SimplexProgram;
 
 use simplex::simplicityhl::elements::Script;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use super::setup::{
     check_vault_amount, issue_auth_assets, make_confidential, prepare_vault_asset,
@@ -68,14 +68,14 @@ fn final_supply_succeeds_with_explicit_input_without_auth_burn(
     ));
     ft.add_input(
         PartialInput::new(supplier_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     if amount_to_supply > amount_to_goal {
@@ -127,14 +127,14 @@ fn final_supply_succeeds_with_explicit_input_and_auth_burn(
     ));
     ft.add_input(
         PartialInput::new(supplier_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 0, 0);
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     if amount_to_supply > amount_to_goal {
@@ -177,7 +177,7 @@ fn final_supply_succeeds_with_confidential_input(
     make_confidential(&context, utxo_to_supply)?;
 
     let conf_utxo_to_supply = signer.get_utxos_asset(vault_parameters.vault_asset_id)?[0].clone();
-    let amount_to_supply = conf_utxo_to_supply.amount();
+    let amount_to_supply = conf_utxo_to_supply.unblinded_amount();
 
     let supplier_auth_utxo = signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
 
@@ -185,11 +185,11 @@ fn final_supply_succeeds_with_confidential_input(
 
     ft.add_input(
         PartialInput::new(conf_utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_input(
         PartialInput::new(supplier_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     asset_auth_vault.attach_final_supplying(&mut ft, asset_auth_vault_utxo, 1, 1);

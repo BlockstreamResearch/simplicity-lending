@@ -1,4 +1,4 @@
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use lending_contracts::programs::lending::{LendingOfferParameters, OfferParameters};
 
@@ -42,7 +42,7 @@ fn default_offer_cancellation_setup(
 
     ft.add_input(
         PartialInput::new(borrower_nft),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     Ok((ft, offer_parameters))

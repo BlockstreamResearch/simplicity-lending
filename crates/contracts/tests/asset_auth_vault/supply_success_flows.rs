@@ -1,7 +1,7 @@
 use lending_contracts::programs::asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters};
 use lending_contracts::programs::program::SimplexProgram;
 
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use super::setup::{
     check_vault_amount, issue_auth_assets, make_confidential, prepare_vault_asset,
@@ -58,7 +58,7 @@ fn supplies_to_vault_with_explicit_input(context: simplex::TestContext) -> anyho
     ));
     ft.add_input(
         PartialInput::new(supplier_auth_utxo),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let expected_vault_balance = asset_auth_vault_utxo.explicit_amount() + amount_to_supply;
@@ -67,7 +67,7 @@ fn supplies_to_vault_with_explicit_input(context: simplex::TestContext) -> anyho
 
     ft.add_input(
         PartialInput::new(utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     signer.broadcast(&ft)?.wait()?;
@@ -105,15 +105,15 @@ fn supplies_to_vault_with_several_explicit_inputs(
 
     ft.add_input(
         PartialInput::new(supplier_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_input(
         PartialInput::new(first_utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_input(
         PartialInput::new(second_utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     ft.add_output(PartialOutput::new(
@@ -162,7 +162,7 @@ fn supplies_to_vault_with_confidential_input(context: simplex::TestContext) -> a
     let conf_utxo_to_supply = signer
         .get_utxos_asset(vault_parameters.vault_asset_id)?
         .into_iter()
-        .find(|utxo| utxo.amount() == amount_to_supply)
+        .find(|utxo| utxo.unblinded_amount() == amount_to_supply)
         .expect("confidentialized vault asset utxo");
     let supplier_auth_utxo = signer.get_utxos_asset(vault_parameters.supplier_asset_id)?[0].clone();
 
@@ -177,11 +177,11 @@ fn supplies_to_vault_with_confidential_input(context: simplex::TestContext) -> a
 
     ft.add_input(
         PartialInput::new(conf_utxo_to_supply),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
     ft.add_input(
         PartialInput::new(supplier_auth_utxo.clone()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let expected_vault_balance = asset_auth_vault_utxo.explicit_amount() + amount_to_supply;

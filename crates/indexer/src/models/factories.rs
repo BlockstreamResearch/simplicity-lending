@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use simplex::simplicityhl::elements::{AssetId, Txid, hashes::Hash};
+use simplex::simplicityhl::elements::{AssetId, Txid};
 
 use lending_contracts::programs::{issuance_factory::IssuanceFactory, program::SimplexProgram};
 
@@ -57,7 +57,7 @@ impl FactoryModel {
 
         Self {
             id: Uuid::new_v4(),
-            factory_asset_id: factory_asset_id.into_inner().0.to_vec(),
+            factory_asset_id: factory_asset_id.to_byte_array().to_vec(),
             program_script_pubkey: issuance_factory.get_script_pubkey().to_bytes(),
             issuing_utxos_count: factory_parameters.issuing_utxos_count as i16,
             reissuance_flags: factory_parameters.reissuance_flags as i64,

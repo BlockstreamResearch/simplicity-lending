@@ -1,9 +1,6 @@
 use std::num::TryFromIntError;
 
-use simplex::{
-    provider::ProviderError,
-    simplicityhl::elements::{Txid, hashes::FromSliceError},
-};
+use simplex::{provider::ProviderError, simplicityhl::elements::Txid};
 
 #[derive(thiserror::Error, Debug)]
 pub enum LendingOfferError {
@@ -15,9 +12,6 @@ pub enum LendingOfferError {
 
     #[error("Invalid OP_RETURN borrower pubkey bytes: {0}")]
     InvalidMetadataBytes(String),
-
-    #[error("Failed to convert OP_RETURN asset id bytes to valid asset id: {0}")]
-    FromSlice(#[from] FromSliceError),
 
     #[error(transparent)]
     SimplexProvider(#[from] ProviderError),

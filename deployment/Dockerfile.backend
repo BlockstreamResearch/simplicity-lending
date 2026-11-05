@@ -4,12 +4,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
-# simplex-cli is required to generate crates/contracts/src/artifacts (gitignored, codegen
-# from simf/*.simf). Install the `simplex` binary (package smplx-cli) straight from the smplx
-# repo, pinned to the same commit as CI (.github/workflows/tests.yml SIMPLEX_COMMIT). cargo
-# resolves the commit itself, avoiding simplexup's `git clone --revision` (needs git >=2.49) + jq.
-ENV SIMPLEX_COMMIT=1945d11b47fff8838c3e99c210133519a9522324
-RUN cargo install --locked --git https://github.com/BlockstreamResearch/smplx --rev "${SIMPLEX_COMMIT}" smplx-cli
+# simplex-cli is required to generate crates/contracts/src/artifacts (codegen from simf/*.simf).
+# Install the `simplex` binary (package smplx-cli) straight from the smplx repo, at the same
+# version as CI (.github/actions/build-contracts) and the smplx-std dependency. cargo resolves
+# the tag itself, avoiding simplexup's `git clone --revision` (needs git >=2.49) + jq.
+ENV SIMPLEX_VERSION=0.2.0
+RUN cargo install --locked --git https://github.com/BlockstreamResearch/smplx --tag "v${SIMPLEX_VERSION}" smplx-cli
 
 WORKDIR /app
 
@@ -19,6 +19,7 @@ COPY crates ./crates
 
 # Generate Simplicity contract artifacts before building (see CI "Generate contract artifacts").
 RUN cd crates/contracts \
+    && simplex install \
     && simplex build \
     && test -f src/artifacts/mod.rs
 

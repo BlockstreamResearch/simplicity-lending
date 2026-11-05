@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 use simplex::provider::SimplicityNetwork;
 use simplex::signer::Signer;
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, RequiredSignature, UTXO,
-};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput, UTXO};
 
 pub fn get_split_utxo_ft(
     utxo: UTXO,
@@ -11,12 +9,12 @@ pub fn get_split_utxo_ft(
     signer: &Signer,
     network: SimplicityNetwork,
 ) -> FinalTransaction {
-    let utxo_asset_id = utxo.asset();
-    let utxo_amount = utxo.amount();
+    let utxo_asset_id = utxo.asset().expect("Unknown asset");
+    let utxo_amount = utxo.amount().expect("Unknown amount");
 
     let mut ft = FinalTransaction::new();
 
-    ft.add_input(PartialInput::new(utxo), RequiredSignature::NativeEcdsa);
+    ft.add_input(PartialInput::new(utxo), Some(NativeSignature::Ecdsa));
 
     let signer_script_pubkey = signer.get_address().script_pubkey();
     let mut total_amount = 0;

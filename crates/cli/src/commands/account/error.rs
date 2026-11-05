@@ -2,9 +2,10 @@ use simplex::{
     provider::ProviderError,
     signer::SignerError,
     simplicityhl::{
-        elements::OutPoint,
-        simplicity::{bitcoin::key::ParsePublicKeyError, hex::HexToArrayError},
+        elements::{OutPoint, hex::DecodeFixedLengthBytesError},
+        simplicity::bitcoin::key::ParsePublicKeyError,
     },
+    transaction::UtxoError,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -54,7 +55,10 @@ pub enum AccountCommandError {
     Provider(#[from] ProviderError),
 
     #[error("Hex to array error: {0}")]
-    HexToArray(#[from] HexToArrayError),
+    HexToArray(#[from] DecodeFixedLengthBytesError),
+
+    #[error("Simplex UTXO error: {0}")]
+    Utxo(#[from] UtxoError),
 
     #[error("Invalid recipient blinding public key `{key}`: {source}")]
     InvalidRecipientBlindingPublicKey {

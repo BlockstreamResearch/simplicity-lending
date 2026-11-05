@@ -6,7 +6,7 @@ use lending_session::Session;
 use simplex::signer::Signer;
 use simplex::simplicityhl::elements::AssetId;
 use simplex::transaction::partial_input::IssuanceInput;
-use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, RequiredSignature};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 pub fn issue_asset(session: &Session, asset_amount: u64) -> anyhow::Result<AssetId> {
     let signer = session.signer();
@@ -14,14 +14,14 @@ pub fn issue_asset(session: &Session, asset_amount: u64) -> anyhow::Result<Asset
     let funding_utxo = signer
         .get_utxos_asset(policy_asset)?
         .into_iter()
-        .next()
+        .max_by_key(|utxo| utxo.amount().unwrap())
         .context("expected a policy UTXO to fund asset issuance")?;
 
     let mut tx = FinalTransaction::new();
     let issuance = tx.add_issuance_input(
         PartialInput::new(funding_utxo.clone()),
         IssuanceInput::new_issuance(asset_amount, 0, get_random_seed()),
-        RequiredSignature::NativeEcdsa,
+        Some(NativeSignature::Ecdsa),
     );
 
     let script = signer.get_address().script_pubkey();
@@ -32,6 +32,7 @@ pub fn issue_asset(session: &Session, asset_amount: u64) -> anyhow::Result<Asset
     ));
     let policy_change = funding_utxo
         .amount()
+        .unwrap()
         .checked_sub(500)
         .context("policy UTXO too small to cover issuance fee")?;
     tx.add_output(PartialOutput::new(script, policy_change, policy_asset));
@@ -59,16 +60,16 @@ pub fn fund_asset_outputs(
     let asset_utxo = from_signer
         .get_utxos_asset(asset_id)?
         .into_iter()
-        .find(|utxo| utxo.amount() >= total_amount)
+        .find(|utxo| utxo.amount().unwrap() >= total_amount)
         .context("sender does not have enough of the funded asset")?;
     let policy_utxo = from_signer
         .get_utxos_asset(policy_asset)?
         .into_iter()
-        .next()
+        .max_by_key(|utxo| utxo.amount().unwrap())
         .context("expected a policy UTXO for the funding fee")?;
 
-    let asset_utxo_amount = asset_utxo.amount();
-    let policy_utxo_amount = policy_utxo.amount();
+    let asset_utxo_amount = asset_utxo.amount().unwrap();
+    let policy_utxo_amount = policy_utxo.amount().unwrap();
     let policy_to_send = policy_utxo_amount / 2;
     anyhow::ensure!(
         policy_to_send > 0,
@@ -79,14 +80,8 @@ pub fn fund_asset_outputs(
     let from_script = from_signer.get_address().script_pubkey();
 
     let mut tx = FinalTransaction::new();
-    tx.add_input(
-        PartialInput::new(asset_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
-    tx.add_input(
-        PartialInput::new(policy_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    tx.add_input(PartialInput::new(asset_utxo), Some(NativeSignature::Ecdsa));
+    tx.add_input(PartialInput::new(policy_utxo), Some(NativeSignature::Ecdsa));
 
     for &amount in amounts {
         tx.add_output(PartialOutput::new(to_script.clone(), amount, asset_id));
@@ -113,15 +108,12 @@ pub fn fund_policy_output(from: &Session, to: &Signer, amount: u64) -> anyhow::R
     let policy_utxo = from_signer
         .get_utxos_asset(policy_asset)?
         .into_iter()
-        .find(|utxo| utxo.amount() >= amount + FEE_RESERVE)
+        .find(|utxo| utxo.amount().unwrap() >= amount + FEE_RESERVE)
         .context("sender does not have enough policy asset to fund recipient")?;
 
-    let input_amount = policy_utxo.amount();
+    let input_amount = policy_utxo.amount().unwrap();
     let mut tx = FinalTransaction::new();
-    tx.add_input(
-        PartialInput::new(policy_utxo),
-        RequiredSignature::NativeEcdsa,
-    );
+    tx.add_input(PartialInput::new(policy_utxo), Some(NativeSignature::Ecdsa));
     tx.add_output(PartialOutput::new(
         to.get_address().script_pubkey(),
         amount,

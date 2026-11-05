@@ -1,9 +1,12 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use simplex::simplicityhl::elements::{OutPoint, Txid, hashes::Hash, hex::ToHex};
+use simplex::simplicityhl::elements::{OutPoint, Txid};
 
-use crate::{db::DbTx, models::FactoryIdentity};
+use crate::{
+    db::{DbTx, txid_from_db_bytes},
+    models::FactoryIdentity,
+};
 
 use crate::{
     indexer::WatchCache,
@@ -39,7 +42,7 @@ pub async fn load_factory_utxos_cache(db: &PgPool) -> anyhow::Result<WatchCache<
 
     for rec in factory_rows {
         let outpoint = OutPoint {
-            txid: Txid::from_slice(&rec.txid)?,
+            txid: txid_from_db_bytes(&rec.txid)?,
             vout: rec.vout as u32,
         };
         cache.insert(outpoint, rec.factory_id);
@@ -57,8 +60,8 @@ pub async fn load_factory_utxos_cache(db: &PgPool) -> anyhow::Result<WatchCache<
     name = "Marking factory UTXO as spent in DB",
     skip(sql_tx, outpoint, block_height, txid),
     fields(
-        spent_txid = %txid.to_hex(),
-        txid = %outpoint.txid.to_hex(),
+        spent_txid = %txid,
+        txid = %outpoint.txid,
         vout = %outpoint.vout
     )
 )]
@@ -117,7 +120,7 @@ pub async fn update_factory_status(
 #[tracing::instrument(
     name = "Inserting factory UTXO into DB",
     skip(sql_tx, factory_utxo),
-    fields(factory_id = %factory_utxo.factory_id, txid = %factory_utxo.txid.to_hex(), vout = %factory_utxo.vout)
+    fields(factory_id = %factory_utxo.factory_id, txid = %hex::encode(&factory_utxo.txid), vout = %factory_utxo.vout)
 )]
 pub async fn insert_factory_utxo(
     sql_tx: &mut DbTx<'_>,

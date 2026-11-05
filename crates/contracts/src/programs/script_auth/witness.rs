@@ -10,9 +10,9 @@ impl ScriptAuthWitnessParams {
         Self { input_script_index }
     }
 
-    pub fn build_witness(&self) -> Box<ScriptAuthWitness> {
-        Box::new(ScriptAuthWitness {
+    pub fn build_witness(&self) -> ScriptAuthWitness {
+        ScriptAuthWitness {
             input_script_index: self.input_script_index,
-        })
+        }
     }
 }

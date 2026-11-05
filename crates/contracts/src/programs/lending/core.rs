@@ -82,7 +82,7 @@ impl LendingOffer {
 
     fn new(parameters: LendingOfferParameters, storage: LendingOfferStorage) -> Self {
         let mut lending_offer_program =
-            LendingProgram::new(&parameters.build_arguments()).with_storage_capacity(2);
+            LendingProgram::new(parameters.build_arguments()).with_storage_capacity(2);
 
         storage.set_storage_slots(&mut lending_offer_program);
 
@@ -255,7 +255,7 @@ impl LendingOffer {
                 .expect("Unable to find borrower nft output index")
         };
 
-        let current_collateral_amount = active_offer_utxo.amount();
+        let current_collateral_amount = active_offer_utxo.amount().expect("Unknown amount");
 
         self.add_program_input(ft, active_offer_utxo, witness_branch.build_witness());
 
