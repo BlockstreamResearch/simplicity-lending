@@ -26,6 +26,7 @@ fn default_vault_withdrawing_all_setup(
         keeper_asset_id,
         supplier_asset_id,
         supply_goal: amount_to_supply,
+        liquidation_height: 0,
         with_keeper_asset_burn,
         with_supplier_asset_burn: false,
         network: *context.get_network(),

@@ -149,6 +149,36 @@ pub(super) fn setup_asset_auth_vault(
     Ok(asset_auth_vault)
 }
 
+pub(super) fn setup_withdrawable_on_liquidation_vault(
+    context: &simplex::TestContext,
+    keeper: &Signer,
+    liquidation_height: u32,
+    with_keeper_asset_burn: bool,
+) -> anyhow::Result<(AssetAuthVault, AssetAuthVaultParameters)> {
+    let (supplier_asset_id, keeper_asset_id) = issue_auth_assets(context, 1, 1)?;
+
+    let vault_asset_id = prepare_vault_asset(context, 1_000_000, vec![5000])?;
+
+    let supply_goal = 1000;
+
+    let vault_parameters = AssetAuthVaultParameters {
+        vault_asset_id,
+        keeper_asset_id,
+        supplier_asset_id,
+        supply_goal,
+        liquidation_height,
+        with_keeper_asset_burn,
+        with_supplier_asset_burn: false,
+        network: *context.get_network(),
+    };
+
+    let asset_auth_vault = setup_asset_auth_vault(context, vault_parameters, supply_goal / 2)?;
+
+    fund_keeper(context, keeper, keeper_asset_id)?;
+
+    Ok((asset_auth_vault, vault_parameters))
+}
+
 pub(super) fn fund_keeper(
     context: &simplex::TestContext,
     keeper: &Signer,

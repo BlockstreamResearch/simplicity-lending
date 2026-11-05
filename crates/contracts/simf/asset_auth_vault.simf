@@ -121,6 +121,29 @@ fn withdraw_part(
     check_asset_amounts_eq(output_vault_amount, vault_change);
 }
 
+fn withdraw_on_liquidation(
+    input_keeper_index: u32,
+    output_keeper_index: u32,
+    already_supplied: u64
+) {
+    assert!(param::WITH_KEEPER_ASSET_BURN);
+
+    jet::check_lock_height(param::LIQUIDATION_HEIGHT);
+
+    let current_script_hash: u256 = get_script_hash_for_storage(true, already_supplied);
+
+    ensure_input_script_hash(jet::current_index(), current_script_hash);
+
+    auth_with_burn_check(
+        input_keeper_index,
+        output_keeper_index,
+        param::KEEPER_AUTH_ASSET_ID,
+        param::WITH_KEEPER_ASSET_BURN
+    );
+
+    let _: u64 = ensure_input_vault_asset(jet::current_index());
+}
+
 fn supply(
     input_supplier_index: u32,
     output_supplier_index: u32,
@@ -188,29 +211,46 @@ fn final_supply(
 
 fn main() {
     match witness::PATH {
-        Left(withdraw_params: Either<(u32, u32), (u32, u32, u32, u64, u64)>) => {
+        Left(withdraw_params: Either<(u32, u32), Either<(u32, u32, u32, u64, u64), (u32, u32, u64)>>) => {
             match withdraw_params {
                 Left(withdraw_all_params: (u32, u32)) => {
                     let (input_keeper_index, output_keeper_index): (u32, u32) = withdraw_all_params;
 
                     withdraw_all(input_keeper_index, output_keeper_index);
                 },
-                Right(withdraw_part_params: (u32, u32, u32, u64, u64)) => {
-                    let (
-                        input_keeper_index,
-                        output_keeper_index,
-                        vault_output_index,
-                        already_supplied,
-                        amount_to_withdraw
-                    ): (u32, u32, u32, u64, u64) = withdraw_part_params;
+                Right(active_withdraw_params: Either<(u32, u32, u32, u64, u64), (u32, u32, u64)>) => {
+                    match active_withdraw_params {
+                        Left(withdraw_part_params: (u32, u32, u32, u64, u64)) => {
+                            let (
+                                input_keeper_index,
+                                output_keeper_index,
+                                vault_output_index,
+                                already_supplied,
+                                amount_to_withdraw
+                            ): (u32, u32, u32, u64, u64) = withdraw_part_params;
 
-                    withdraw_part(
-                        input_keeper_index,
-                        output_keeper_index,
-                        vault_output_index,
-                        already_supplied,
-                        amount_to_withdraw
-                    );
+                            withdraw_part(
+                                input_keeper_index,
+                                output_keeper_index,
+                                vault_output_index,
+                                already_supplied,
+                                amount_to_withdraw
+                            );
+                        },
+                        Right(withdraw_on_liquidation_params: (u32, u32, u64)) => {
+                            let (
+                                input_keeper_index,
+                                output_keeper_index,
+                                already_supplied
+                            ): (u32, u32, u64) = withdraw_on_liquidation_params;
+
+                            withdraw_on_liquidation(
+                                input_keeper_index,
+                                output_keeper_index,
+                                already_supplied
+                            );
+                        }
+                    }
                 }
             }
         },

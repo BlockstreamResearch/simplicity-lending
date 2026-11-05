@@ -213,6 +213,7 @@ fn finalized_vault(
             &vault.borrower_nft_asset,
         )?,
         supply_goal: parse_vault_u64(&vault.offer_id, "supply_goal", &vault.supply_goal)?,
+        liquidation_height: 0,
         with_keeper_asset_burn: false,
         with_supplier_asset_burn: false,
         network,
