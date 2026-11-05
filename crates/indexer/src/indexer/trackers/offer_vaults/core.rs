@@ -203,7 +203,10 @@ impl VaultsTracker {
         self.cache.remove(old_outpoint);
 
         match kind {
-            Some(AssetAuthVaultTxKind::WithdrawAll) => {
+            Some(
+                kind @ (AssetAuthVaultTxKind::WithdrawAll
+                | AssetAuthVaultTxKind::WithdrawOnLiquidation),
+            ) => {
                 tracing::info!(
                     offer_id = %entry.offer_id,
                     vault_type = ?entry.vault_type,
@@ -227,7 +230,10 @@ impl VaultsTracker {
                 )
                 .await?;
 
-                if entry.vault_type == VaultType::Lender {
+                // A liquidation stays `Liquidated`: only a repaid offer can become `Claimed`.
+                if kind == AssetAuthVaultTxKind::WithdrawAll
+                    && entry.vault_type == VaultType::Lender
+                {
                     update_offer_status(sql_tx, entry.offer_id, OfferStatus::Claimed, block_height)
                         .await?;
                 }

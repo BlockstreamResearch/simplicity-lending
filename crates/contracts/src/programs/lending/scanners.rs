@@ -10,7 +10,9 @@ use crate::programs::lending::{
 };
 use crate::programs::program::{MetadataProgram, SimplexProgram};
 use crate::programs::script_auth::ScriptAuth;
-use crate::utils::{TxOutFilter, find_unique_vout, op_return_payload};
+use crate::utils::{
+    TxOutFilter, find_unique_op_return_asset_vout, find_unique_vout, op_return_payload,
+};
 
 /// Offer UTXO roles relative to a known [`LendingOffer`] instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -758,17 +760,6 @@ fn match_vault_outs(
         }
         _ => None,
     }
-}
-
-fn find_unique_op_return_asset_vout(tx: &Transaction, asset_id: AssetId) -> Option<u32> {
-    find_unique_vout(
-        tx,
-        TxOutFilter::new()
-            .asset(asset_id)
-            .amount(1)
-            .require_op_return(true),
-    )
-    .map(|(vout, _)| vout)
 }
 
 fn explicit_output_amount(tx: &Transaction, vout: u32) -> Option<u64> {

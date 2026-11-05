@@ -89,9 +89,17 @@ impl TxOutFilter<'_> {
     }
 }
 
-/// Find the unique explicit output matching `filter`.
-///
-/// Returns `(vout, amount)` only when exactly one output matches.
+pub fn find_unique_op_return_asset_vout(tx: &Transaction, asset_id: AssetId) -> Option<u32> {
+    find_unique_vout(
+        tx,
+        TxOutFilter::new()
+            .asset(asset_id)
+            .amount(1)
+            .require_op_return(true),
+    )
+    .map(|(vout, _)| vout)
+}
+
 pub fn find_unique_vout(tx: &Transaction, filter: TxOutFilter<'_>) -> Option<(u32, u64)> {
     let matches: Vec<(u32, u64)> = tx
         .output

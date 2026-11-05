@@ -21,6 +21,7 @@ fn default_final_vault_supplying_setup(
         keeper_asset_id,
         supplier_asset_id,
         supply_goal: 4000,
+        liquidation_height: 0,
         with_keeper_asset_burn: false,
         with_supplier_asset_burn,
         network: *context.get_network(),
