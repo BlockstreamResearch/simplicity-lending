@@ -12,7 +12,9 @@ use simplex::transaction::partial_input::IssuanceInput;
 use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 
 use crate::error::SessionError;
-use crate::indexer::{OfferListItemFull, OfferStatus, ParticipantType, UtxoType, VaultType};
+use crate::indexer::{
+    OfferDetailsResponse, OfferListItemFull, OfferStatus, ParticipantType, UtxoType, VaultType,
+};
 use crate::session::Session;
 use crate::utxo::select_utxos_for_amount;
 
@@ -122,6 +124,94 @@ impl Session {
         let current_debt = parameters.offer_parameters.get_total_amount_to_repay();
 
         Ok(LendingOffer::new_active(parameters, current_debt))
+    }
+
+    /// Active offer at the indexer's `current_debt`. The value doesn't have to be trusted: the
+    /// offer script commits to the debt, so a wrong one won't match any on-chain UTXO.
+    fn verified_active_offer_at_current_debt(
+        &self,
+        info: &OfferListItemFull,
+    ) -> Result<LendingOffer, SessionError> {
+        let parameters = self.verified_offer_parameters(info)?;
+        let current_debt = parse_amount("current_debt", &info.base.current_debt)?;
+
+        if current_debt == 0
+            || current_debt > parameters.offer_parameters.get_total_amount_to_repay()
+        {
+            return Err(SessionError::InvalidOfferData {
+                field: "current_debt",
+                value: info.base.current_debt.clone(),
+            });
+        }
+
+        Ok(LendingOffer::new_active(parameters, current_debt))
+    }
+
+    /// Spends `active_offer` and the Lender NFT, burning the NFT at output 0 and sending the
+    /// remaining collateral to the signer at output 1.
+    fn build_liquidation(
+        &self,
+        offer_details: &OfferDetailsResponse,
+        active_offer: &LendingOffer,
+    ) -> Result<FinalTransaction, SessionError> {
+        let active_offer_outpoint = offer_details
+            .utxos
+            .iter()
+            .find(|utxo| utxo.utxo_type == UtxoType::ActiveOffer && utxo.spent_txid.is_none())
+            .ok_or(SessionError::ActiveOfferUtxoNotFound)?;
+        let lender_nft_outpoint = offer_details
+            .participants
+            .iter()
+            .find(|participant| {
+                participant.participant_type == ParticipantType::Lender
+                    && participant.spent_txid.is_none()
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let parameters = *active_offer.get_parameters();
+
+        if self.provider().fetch_tip_height()? < parameters.offer_parameters.loan_expiration_time {
+            return Err(SessionError::LoanNotExpired);
+        }
+
+        let active_offer_utxo = self
+            .provider()
+            .fetch_scripthash_utxos(&active_offer.get_script_pubkey())?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == active_offer_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == active_offer_outpoint.txid
+            })
+            .ok_or(SessionError::ActiveOfferUtxoNotFound)?;
+
+        let lender_nft_utxo = self
+            .signer()
+            .get_utxos_asset(parameters.lender_nft_asset_id)?
+            .into_iter()
+            .find(|utxo| {
+                utxo.outpoint.vout == lender_nft_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == lender_nft_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.lender_nft_asset_id)
+                    && utxo.txout.value.explicit() == Some(1)
+            })
+            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+
+        let collateral_amount = active_offer_utxo.explicit_amount();
+
+        let mut transaction = FinalTransaction::new();
+        active_offer.attach_liquidation(&mut transaction, active_offer_utxo);
+
+        transaction.add_input(
+            PartialInput::new(lender_nft_utxo),
+            Some(NativeSignature::Ecdsa),
+        );
+        transaction.add_output(PartialOutput::new(
+            self.signer().get_address().script_pubkey(),
+            collateral_amount,
+            parameters.collateral_asset_id,
+        ));
+
+        Ok(transaction)
     }
 
     pub async fn create_offer(
@@ -421,67 +511,75 @@ impl Session {
         })
     }
 
+    /// Liquidates an offer without repayments. A partially repaid offer is refused with
+    /// [`SessionError::ActiveOfferUtxoNotFound`], because burning the Lender NFT without emptying
+    /// the active lender vault would lock its funds: use
+    /// [`Session::liquidate_offer_and_claim_lender_vault`] for it.
     pub async fn liquidate_offer(&self, offer_id: &str) -> Result<FinalTransaction, SessionError> {
         let offer_details = self.indexer().get_offer(offer_id).await?;
         if offer_details.info.base.status != OfferStatus::Active {
             return Err(SessionError::OfferNotActive);
         }
 
-        let active_offer_outpoint = offer_details
-            .utxos
-            .iter()
-            .find(|utxo| utxo.utxo_type == UtxoType::ActiveOffer)
-            .ok_or(SessionError::ActiveOfferUtxoNotFound)?;
-        let lender_nft_outpoint = offer_details
-            .participants
-            .iter()
-            .find(|participant| {
-                participant.participant_type == ParticipantType::Lender
-                    && participant.spent_txid.is_none()
-            })
-            .ok_or(SessionError::LenderNftUtxoNotFound)?;
-
         let active_offer = self.verified_active_offer(&offer_details.info)?;
-        let parameters = *active_offer.get_parameters();
 
-        if self.provider().fetch_tip_height()? < parameters.offer_parameters.loan_expiration_time {
-            return Err(SessionError::LoanNotExpired);
+        self.build_liquidation(&offer_details, &active_offer)
+    }
+
+    /// Liquidates a partially repaid offer and empties its active lender vault in the same
+    /// transaction: this is the only moment it's possible, as the liquidation burns the Lender NFT.
+    pub async fn liquidate_offer_and_claim_lender_vault(
+        &self,
+        offer_id: &str,
+    ) -> Result<FinalTransaction, SessionError> {
+        const LENDER_NFT_INPUT_INDEX: u32 = 1;
+        const LENDER_NFT_BURN_OUTPUT_INDEX: u32 = 0;
+
+        let offer_details = self.indexer().get_offer(offer_id).await?;
+        if offer_details.info.base.status != OfferStatus::Active {
+            return Err(SessionError::OfferNotActive);
         }
 
-        let active_offer_utxo = self
+        let lender_vault_outpoint = offer_details
+            .vaults
+            .iter()
+            .find(|vault| vault.vault_type == VaultType::Lender && !vault.is_finalized)
+            .ok_or(SessionError::LenderVaultNotFound)?;
+
+        let active_offer = self.verified_active_offer_at_current_debt(&offer_details.info)?;
+        let parameters = *active_offer.get_parameters();
+
+        let mut transaction = self.build_liquidation(&offer_details, &active_offer)?;
+
+        let active_lender_vault = active_offer.get_lender_vault();
+
+        let lender_vault_utxo = self
             .provider()
-            .fetch_scripthash_utxos(&active_offer.get_script_pubkey())?
+            .fetch_scripthash_utxos(&active_lender_vault.get_script_pubkey())?
             .into_iter()
             .find(|utxo| {
-                utxo.outpoint.vout == active_offer_outpoint.vout
-                    && utxo.outpoint.txid.to_string() == active_offer_outpoint.txid
+                utxo.outpoint.vout == lender_vault_outpoint.vout
+                    && utxo.outpoint.txid.to_string() == lender_vault_outpoint.txid
+                    && utxo.txout.asset.explicit() == Some(parameters.principal_asset_id)
             })
-            .ok_or(SessionError::ActiveOfferUtxoNotFound)?;
+            .ok_or(SessionError::LenderVaultNotFound)?;
 
-        let lender_nft_utxo = self
-            .signer()
-            .get_utxos_asset(parameters.lender_nft_asset_id)?
-            .into_iter()
-            .find(|utxo| {
-                utxo.outpoint.vout == lender_nft_outpoint.vout
-                    && utxo.outpoint.txid.to_string() == lender_nft_outpoint.txid
-                    && utxo.txout.asset.explicit() == Some(parameters.lender_nft_asset_id)
-                    && utxo.txout.value.explicit() == Some(1)
-            })
-            .ok_or(SessionError::LenderNftUtxoNotFound)?;
+        let principal_amount = lender_vault_utxo.explicit_amount();
 
-        let mut transaction = FinalTransaction::new();
-        active_offer.attach_liquidation(&mut transaction, active_offer_utxo);
-
-        transaction.add_input(
-            PartialInput::new(lender_nft_utxo),
-            Some(NativeSignature::Ecdsa),
+        active_lender_vault.attach_withdrawing_on_liquidation(
+            &mut transaction,
+            lender_vault_utxo,
+            LENDER_NFT_INPUT_INDEX,
+            LENDER_NFT_BURN_OUTPUT_INDEX,
         );
-        transaction.add_output(PartialOutput::new(
-            self.signer().get_address().script_pubkey(),
-            parameters.offer_parameters.collateral_amount,
-            parameters.collateral_asset_id,
-        ));
+        transaction.add_output(
+            PartialOutput::new(
+                self.signer().get_confidential_address().script_pubkey(),
+                principal_amount,
+                parameters.principal_asset_id,
+            )
+            .with_blinding_key(self.signer().get_blinding_public_key()),
+        );
 
         Ok(transaction)
     }

@@ -1,7 +1,8 @@
 use simplex::{
     program::Program,
     provider::SimplicityNetwork,
-    transaction::{FinalTransaction, UTXO},
+    simplicityhl::elements::{LockTime, Sequence},
+    transaction::{FinalTransaction, PartialInput, UTXO},
 };
 
 use crate::artifacts::asset_auth_vault::AssetAuthVaultProgram;
@@ -157,6 +158,33 @@ impl AssetAuthVault {
             ft,
             self.parameters.vault_asset_id,
             current_vault_amount - amount_to_withdraw,
+        );
+    }
+
+    pub fn attach_withdrawing_on_liquidation(
+        &self,
+        ft: &mut FinalTransaction,
+        program_utxo: UTXO,
+        input_keeper_index: u32,
+        output_keeper_index: u32,
+    ) {
+        let locktime = LockTime::from_height(self.parameters.liquidation_height).unwrap();
+
+        let vault_input = PartialInput::new(program_utxo)
+            .with_sequence(Sequence::ENABLE_LOCKTIME_NO_RBF)
+            .with_locktime(locktime);
+
+        let withdraw_on_liquidation_witness_branch =
+            AssetAuthVaultWitnessBranch::WithdrawOnLiquidation {
+                input_keeper_index,
+                output_keeper_index,
+                already_supplied: self.get_already_supplied_amount(),
+            };
+
+        self.add_program_input_from_partial_input(
+            ft,
+            vault_input,
+            withdraw_on_liquidation_witness_branch.build_witness(),
         );
     }
 

@@ -14,6 +14,8 @@ At any point in time before the lending contract expiry, the Borrower can repay 
 
 In case the Borrower fails to pay interest before the lending contract expiry, the Lender can liquidate the position and claim collateral for themselves.
 
+Repayments can also be partial: they unlock a proportional part of the collateral and are held in a lender vault until the Lender withdraws them. Liquidation burns the Lender NFT that controls this vault, so when a partially repaid loan is liquidated, the Lender has to empty the vault in the same transaction, otherwise the repaid funds stay locked forever.
+
 ## Repository structure
 
 - **crates/** — Rust workspace with three components:

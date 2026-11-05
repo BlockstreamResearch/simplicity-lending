@@ -71,6 +71,7 @@ impl LendingOfferParameters {
             supplier_asset_id: self.borrower_nft_asset_id,
             supply_goal: self.offer_parameters.get_total_amount_to_repay()
                 - self.offer_parameters.get_total_protocol_fee(),
+            liquidation_height: self.offer_parameters.loan_expiration_time,
             with_keeper_asset_burn: true,
             with_supplier_asset_burn: true,
             network: self.network,
@@ -83,6 +84,7 @@ impl LendingOfferParameters {
             keeper_asset_id: self.protocol_fee_keeper_asset_id,
             supplier_asset_id: self.borrower_nft_asset_id,
             supply_goal: self.offer_parameters.get_total_protocol_fee(),
+            liquidation_height: 0,
             with_keeper_asset_burn: false,
             with_supplier_asset_burn: false,
             network: self.network,

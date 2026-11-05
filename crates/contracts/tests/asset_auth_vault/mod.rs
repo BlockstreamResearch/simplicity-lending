@@ -10,3 +10,5 @@ mod supply_failure_flows;
 mod supply_success_flows;
 mod withdraw_all_failure_flows;
 mod withdraw_all_success_flows;
+mod withdraw_on_liquidation_failure_flows;
+mod withdraw_on_liquidation_success_flows;
