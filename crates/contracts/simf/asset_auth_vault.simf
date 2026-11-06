@@ -1,5 +1,5 @@
 use std::lib::op_return::is_output_op_return;
-use std::lib::u64::math::{safe_add_64, safe_sub_64};
+use std::lib::u64::math::{add_64, sub_64};
 
 use crate::helper::{
     get_explicit_asset_and_amount,
@@ -73,7 +73,7 @@ fn auth_with_burn_check(
 // Main paths logic
 
 fn get_amount_to_goal(already_supplied: u64) -> u64 {
-    safe_sub_64(param::SUPPLY_GOAL, already_supplied)
+    sub_64(param::SUPPLY_GOAL, already_supplied)
 }
 
 fn withdraw_all(input_keeper_index: u32, output_keeper_index: u32) {
@@ -116,7 +116,7 @@ fn withdraw_part(
 
     assert!(jet::lt_64(amount_to_withdraw, vault_amount));
 
-    let vault_change: u64 = safe_sub_64(vault_amount, amount_to_withdraw);
+    let vault_change: u64 = sub_64(vault_amount, amount_to_withdraw);
 
     check_asset_amounts_eq(output_vault_amount, vault_change);
 }
@@ -144,7 +144,7 @@ fn supply(
     assert!(jet::some_64(amount_to_supply));
     assert!(jet::lt_64(amount_to_supply, amount_to_goal));
 
-    let new_supplied_amount: u64 = safe_add_64(already_supplied, amount_to_supply);
+    let new_supplied_amount: u64 = add_64(already_supplied, amount_to_supply);
     let new_script_hash: u256 = get_script_hash_for_storage(true, new_supplied_amount);
 
     ensure_output_script_hash(vault_output_index, new_script_hash);

@@ -1,5 +1,5 @@
 use std::lib::op_return::assert_output_is_op_return;
-use std::lib::u64::math::{ge_64, safe_add_64};
+use std::lib::u64::math::{ge_64, add_64};
 
 use crate::helper::{
     get_input_explicit_asset_and_amount,
@@ -155,7 +155,7 @@ pub fn ensure_asset_transition_with_additional_amount(
         output_amount
     ): (u64, u64) = ensure_io_asset_eq(input_index, output_index, expected_asset_bits);
 
-    let new_asset_amount: u64 = safe_add_64(input_amount, additional_amount);
+    let new_asset_amount: u64 = add_64(input_amount, additional_amount);
 
     check_asset_amounts_eq(output_amount, new_asset_amount);
 }
