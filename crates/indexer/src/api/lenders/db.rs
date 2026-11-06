@@ -49,7 +49,7 @@ pub async fn fetch_overview(
         r#"
         SELECT
             principal_asset_id AS asset_id,
-            SUM((principal_amount * interest_rate / 10000))::BIGINT AS amount
+            SUM(DIV(principal_amount::NUMERIC * interest_rate, 10000))::BIGINT AS amount
         FROM offers
         WHERE current_status = "#,
     );
