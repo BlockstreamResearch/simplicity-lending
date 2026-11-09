@@ -267,18 +267,21 @@ pub(super) fn partial_repay_offer(
     let (lender_vault_utxo, protocol_fee_vault_utxo) =
         get_active_offer_vaults_utxos(context, active_offer)?;
 
-    let borrower_principal_utxo =
-        borrower.get_utxos_asset(active_offer_parameters.principal_asset_id)?[0].clone();
+    let borrower_principal_utxo = borrower
+        .get_utxos_asset(active_offer_parameters.principal_asset_id)?
+        .into_iter()
+        .max_by_key(|utxo| utxo.explicit_amount())
+        .expect("Borrower has no principal UTXOs");
 
     let principal_utxo_amount = borrower_principal_utxo.explicit_amount();
 
     assert!(principal_utxo_amount >= amount_to_repay);
 
-    let collateral_to_unlock = amount_to_repay
-        * active_offer_parameters.offer_parameters.collateral_amount
-        / active_offer_parameters
-            .offer_parameters
-            .get_total_amount_to_repay();
+    let terms = active_offer_parameters.offer_parameters;
+    let current_debt = active_offer.get_current_debt();
+    let collateral_to_unlock = terms
+        .get_already_unlocked_collateral(current_debt - amount_to_repay)
+        - terms.get_already_unlocked_collateral(current_debt);
 
     let mut ft = FinalTransaction::new();
 

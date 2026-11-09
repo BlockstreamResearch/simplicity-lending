@@ -1,6 +1,6 @@
 use std::cmp::min;
 
-use crate::utils::apply_basis_points;
+use crate::utils::{apply_basis_points, mul_div};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OfferParameters {
@@ -79,7 +79,12 @@ impl OfferParameters {
     }
 
     pub fn get_collateral_for_principal(&self, principal_amount: u64) -> u64 {
-        principal_amount * self.collateral_amount / self.get_total_amount_to_repay()
+        mul_div(
+            principal_amount,
+            self.collateral_amount,
+            self.get_total_amount_to_repay(),
+        )
+        .unwrap()
     }
 
     pub fn get_repayment_phase(&self, offer_debt: u64) -> OfferRepaymentPhase {

@@ -1,5 +1,5 @@
 use std::lib::asserts::assert_eq_32;
-use std::lib::u32::math::safe_add_32;
+use std::lib::u32::math::add_32;
 
 use crate::helper::check_asset_amounts_eq;
 
@@ -61,8 +61,8 @@ fn verify_issuance_step(acc: (), start_output_index: u32, i: u8) -> Either<(), (
         false => {
             let step_index: u32 = <(u16, u16)>::into((0, <(u8, u8)>::into((0, i))));
 
-            let input_index: u32 = safe_add_32(jet::current_index(), step_index);
-            let output_index: u32 = safe_add_32(start_output_index, step_index);
+            let input_index: u32 = add_32(jet::current_index(), step_index);
+            let output_index: u32 = add_32(start_output_index, step_index);
 
             verify_issuance(input_index, output_index, get_reissuance_flag(i));
 
@@ -77,11 +77,11 @@ fn get_asset_issuance_issuance_factory_indexes(
     start_input_index: u32,
     start_output_index: u32
 ) -> (u32, u32) {
-    (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 1))
+    (add_32(start_input_index, 1), add_32(start_output_index, 1))
 }
 
 fn get_asset_issuance_start_issued_output_index(start_output_index: u32) -> u32 {
-    safe_add_32(start_output_index, 2)
+    add_32(start_output_index, 2)
 }
 
 fn issue_new_assets(output_index: u32) {
@@ -126,7 +126,7 @@ fn get_removing_auth_nft_indexes(
     start_input_index: u32,
     start_output_index: u32
 ) -> (u32, u32) {
-    (safe_add_32(start_input_index, 1), safe_add_32(start_output_index, 1))
+    (add_32(start_input_index, 1), add_32(start_output_index, 1))
 }
 
 fn remove_factory(output_index: u32) {
