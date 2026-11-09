@@ -53,7 +53,7 @@ export function useUtxoChopper() {
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
     const recipientAddressString = params.recipientAddress?.trim() || receiveAddressString
     const recipient = Address.parse(recipientAddressString, lwkNetwork)
-    const lbtcChangeRecipient = Address.parse(recipientAddressString, lwkNetwork)
+    const changeAddress = Address.parse(receiveAddressString, lwkNetwork)
     const recipientSummary = recipient.toString()
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
@@ -115,15 +115,15 @@ export function useUtxoChopper() {
         ...(assetChangeAmount > 0n
           ? [
               {
-                script: lbtcChangeRecipient.scriptPubkey(),
+                script: changeAddress.scriptPubkey(),
                 amount: assetChangeAmount,
                 asset: fundingAsset,
-                blindingPubkey: lbtcChangeRecipient.blindingPubkey(),
+                blindingPubkey: changeAddress.blindingPubkey(),
               },
             ]
           : []),
       ],
-      changeAddress: lbtcChangeRecipient,
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       blinding,
     })
