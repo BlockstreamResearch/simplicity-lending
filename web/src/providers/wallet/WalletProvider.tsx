@@ -1,11 +1,4 @@
-import {
-  type OutPoint,
-  type Pset,
-  Registry,
-  type Transaction,
-  type TxBuilder,
-  type Wollet,
-} from '@lilbonekit/lwk-web'
+import { type Pset, Registry, type Transaction, type Wollet } from 'lwk_wasm'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -546,19 +539,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return session.wollet.utxos()
   }, [])
 
-  const fundWithWalletCoins = useCallback(
-    async (txBuilder: TxBuilder, outpoints: OutPoint[]): Promise<TxBuilder> => {
-      const session = sessionRef.current
-      if (!session) throw new Error('WalletProvider: not connected')
-
-      if (session.connector.fundTxBuilder) {
-        return session.connector.fundTxBuilder(txBuilder, outpoints)
-      }
-      return txBuilder.setWalletUtxos(outpoints)
-    },
-    [],
-  )
-
   const getWollet = useCallback(async (): Promise<Wollet> => {
     const session = sessionRef.current
     if (!session) throw new Error('WalletProvider: not connected')
@@ -581,7 +561,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         verifyReceiveAddress,
         getWollet,
         getBlindedWalletUtxos,
-        fundWithWalletCoins,
       }}
     >
       {children}

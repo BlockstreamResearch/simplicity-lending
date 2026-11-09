@@ -7,7 +7,7 @@ import {
   StateTaprootBuilder,
   type StateTaprootSpendInfo,
   XOnlyPublicKey,
-} from '@lilbonekit/lwk-web'
+} from 'lwk_wasm'
 import { sources } from 'virtual:simplicity-sources'
 
 import { loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
@@ -92,7 +92,11 @@ export const LENDING_MAX_WEIGHT_TO_SATISFY: Record<LendingBranch, number> = {
 }
 
 export function loadLendingProgram(params: LendingOfferProgramParams): SimplicityProgram {
-  return SimplicityProgram.load(sources.lending, buildLendingArguments(params))
+  return SimplicityProgram.loadWithDebugSymbols(
+    sources.lending,
+    buildLendingArguments(params),
+    true,
+  )
 }
 
 export function buildLendingArguments(params: LendingOfferProgramParams): SimplicityArguments {

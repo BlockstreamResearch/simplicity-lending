@@ -1,12 +1,4 @@
-import type {
-  EsploraClient,
-  OutPoint,
-  Pset,
-  Transaction,
-  TxBuilder,
-  Wollet,
-  WolletDescriptor,
-} from '@lilbonekit/lwk-web'
+import type { EsploraClient, Pset, Transaction, Wollet, WolletDescriptor } from 'lwk_wasm'
 
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import type { WalletCache } from '@/lib/wallet-core/store/walletCache'
@@ -35,7 +27,6 @@ export interface WalletContextValue extends WalletState {
   applyBroadcastTransaction(tx: Transaction): void
   signPset(pset: Pset): Promise<Pset>
   getBlindedWalletUtxos(): Promise<WalletCoin[]>
-  fundWithWalletCoins(txBuilder: TxBuilder, outpoints: OutPoint[]): Promise<TxBuilder>
   getWollet(): Promise<Wollet>
   getReceiveAddress(): Promise<string | null>
   verifyReceiveAddress(): Promise<string>

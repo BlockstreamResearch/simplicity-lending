@@ -1,17 +1,6 @@
-import {
-  Address,
-  AssetId,
-  ExternalUtxo,
-  OutPoint,
-  Pset,
-  type TxBuilder,
-  TxOutSecrets,
-  WolletDescriptor,
-} from '@lilbonekit/lwk-web'
+import { Address, AssetId, OutPoint, Pset, WolletDescriptor } from 'lwk_wasm'
 
 import type { NetworkName } from '@/constants/env'
-import { fetchTransaction } from '@/lwk/transaction'
-import { EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY } from '@/lwk/utxo'
 import { bytesToHex } from '@/utils/hex'
 
 import type { ConnectionStatus, WalletCoin } from '../types'
@@ -63,8 +52,7 @@ function toWalletCoin(utxo: HumidUtxo): WalletCoin {
  * public `elwpkh(xpub)` descriptor and reports coins through `getUTXOs` (asset and amount,
  * no blinding factors). So the app can't see the user's coins through its own Wollet:
  * - coins come from `getUTXOs` (see getCoins);
- * - they enter TxBuilder as external UTXOs with `skipBlinding()`, and change goes to Humid's
- *   first address (see fundTxBuilder);
+ * - the app builds an unblinded PSET with them (see lwk/psetBuilder);
  * - Humid blinds the outputs with its own secrets and signs its inputs (see signPset).
  */
 export class HumidConnector implements WalletConnector {
@@ -138,39 +126,6 @@ export class HumidConnector implements WalletConnector {
     const utxos = results.flatMap(result => result.utxos)
     this.coins = new Map(utxos.map(utxo => [outpointKey(utxo.txid, utxo.vout), utxo]))
     return utxos.map(toWalletCoin)
-  }
-
-  /**
-   * Adds the user's coins to `txBuilder` the way Humid can sign them: as external UTXOs
-   * with only their asset and amount, an unblinded PSET, and change to a Humid address.
-   */
-  async fundTxBuilder(txBuilder: TxBuilder, outpoints: OutPoint[]): Promise<TxBuilder> {
-    const coins = outpoints.map(outpoint => {
-      const key = outpointKey(outpoint.txid().toString(), outpoint.vout())
-      const coin = this.coins.get(key)
-      if (!coin) throw new Error(`${key} is not a Humid wallet coin`)
-      return coin
-    })
-    const externalUtxos = await Promise.all(
-      coins.map(async coin => {
-        const tx = await fetchTransaction(new OutPoint(outpointKey(coin.txid, coin.vout)))
-        const secrets = TxOutSecrets.fromExplicit(
-          AssetId.fromString(rawAssetId(coin)),
-          BigInt(coin.amount),
-        )
-        return new ExternalUtxo(
-          coin.vout,
-          tx,
-          secrets,
-          EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-          true,
-        )
-      }),
-    )
-    return txBuilder
-      .addExternalUtxos(externalUtxos)
-      .skipBlinding()
-      .setChangeAddress(new Address(this.requireFirstAddress().address))
   }
 
   async signPset(pset: Pset): Promise<WalletRequest<Pset>> {

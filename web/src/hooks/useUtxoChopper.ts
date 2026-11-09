@@ -1,9 +1,10 @@
-import { Address, OutPoint, TxBuilder } from '@lilbonekit/lwk-web'
+import { Address, OutPoint, type TxOutSecrets } from 'lwk_wasm'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { broadcastTx } from '@/api/esplora/methods'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { assertDistinctOutpoints } from '@/lwk/transaction'
+import { buildPset, type PsetBlinding } from '@/lwk/psetBuilder'
+import { assertDistinctOutpoints, fetchTransaction, requireTxOut } from '@/lwk/transaction'
 import { isPolicyAssetUtxo, requireWalletUtxo, WALLET_INPUT_RBF_SEQUENCE } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
@@ -29,14 +30,8 @@ export interface ChopUtxoResult {
 
 export function useUtxoChopper() {
   const { lwkNetwork } = useLwk()
-  const {
-    getReceiveAddress,
-    getBlindedWalletUtxos,
-    getWollet,
-    signPset,
-    syncWallet,
-    fundWithWalletCoins,
-  } = useWallet()
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet, signerType } =
+    useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const chopUtxo = async (params: ChopUtxoParams): Promise<ChopUtxoResult> => {
@@ -92,27 +87,47 @@ export function useUtxoChopper() {
           : `Requested ${totalOutputAmount.toString()} units, but funding asset UTXO only has ${fundingAmount.toString()} units.`,
       )
     }
-    const walletInputOutpointStrings = [params.fundingOutpoint, ...params.feeOutpoints]
-    let txBuilder = (
-      await fundWithWalletCoins(
-        new TxBuilder(lwkNetwork).feeRate(feeRate),
-        walletInputOutpointStrings.map(o => new OutPoint(o)),
-      )
-    ).setInputOrder(walletInputOutpointStrings.map(o => new OutPoint(o)))
+    const walletUtxos = [fundingUtxo, ...feeUtxos]
+    const walletOutpoints = [fundingOutpoint, ...feeOutpoints]
+    const walletTxs = await Promise.all(walletOutpoints.map(o => fetchTransaction(o)))
+    const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
+    const assetChangeAmount = fundingIsLbtc ? 0n : fundingAmount - totalOutputAmount
 
-    for (let index = 0; index < params.pieceCount; index += 1) {
-      txBuilder = fundingIsLbtc
-        ? txBuilder.addLbtcRecipient(recipient, params.pieceAmount)
-        : txBuilder.addRecipient(recipient, params.pieceAmount, fundingAsset)
-    }
-
-    txBuilder = txBuilder.drainLbtcTo(lbtcChangeRecipient)
-
-    txBuilder = txBuilder.setInputSequence(
-      new OutPoint(params.fundingOutpoint),
-      WALLET_INPUT_RBF_SEQUENCE,
-    )
-    const pset = txBuilder.finish(wollet)
+    const { pset } = buildPset({
+      network: lwkNetwork,
+      inputs: walletUtxos.map((utxo, index) => ({
+        outpoint: walletOutpoints[index],
+        prevout: requireTxOut(walletTxs[index], walletOutpoints[index].vout(), 'Wallet input'),
+        asset: utxo.unblinded().asset(),
+        amount: utxo.unblinded().value(),
+        secrets: blinding === 'local' ? (utxo.unblinded() as TxOutSecrets) : undefined,
+        walletCoin: true,
+        sequence: index === 0 ? WALLET_INPUT_RBF_SEQUENCE : undefined,
+        maxWeightToSatisfy: wollet.maxWeightToSatisfy(),
+      })),
+      outputs: [
+        ...Array.from({ length: params.pieceCount }, () => ({
+          script: recipient.scriptPubkey(),
+          amount: params.pieceAmount,
+          asset: fundingAsset,
+          blindingPubkey: recipient.blindingPubkey(),
+        })),
+        ...(assetChangeAmount > 0n
+          ? [
+              {
+                script: lbtcChangeRecipient.scriptPubkey(),
+                amount: assetChangeAmount,
+                asset: fundingAsset,
+                blindingPubkey: lbtcChangeRecipient.blindingPubkey(),
+              },
+            ]
+          : []),
+      ],
+      changeAddress: lbtcChangeRecipient,
+      feeRateSatPerKvb: feeRate,
+      blinding,
+    })
+    pset.addDetails(wollet)
     const finalizedTx = wollet.finalize(await signPset(pset)).extractTx()
     const txid = await broadcastTx(finalizedTx.toString())
 

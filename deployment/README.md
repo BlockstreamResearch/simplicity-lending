@@ -21,6 +21,7 @@ Most deployment knobs live in `deployment/configs`:
 From `deployment/`:
 
 ```bash
+git submodule update --init ../lwk
 cp ./configs/compose.env.example ./configs/compose.env
 docker compose --env-file ./configs/compose.env -f docker-compose.yml up --build -d
 ```

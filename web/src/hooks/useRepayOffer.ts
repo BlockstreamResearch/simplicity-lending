@@ -1,18 +1,17 @@
 import {
   Address,
   AssetId,
-  ExternalUtxo,
   OutPoint,
   type Pset,
   Script,
   SimplicityLogLevel,
-  TxBuilder,
-  TxOutSecrets,
-} from '@lilbonekit/lwk-web'
+  type TxOutSecrets,
+} from 'lwk_wasm'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { BPS_DIVISOR } from '@/constants/offers'
+import { buildPset, type PsetBlinding } from '@/lwk/psetBuilder'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -75,7 +74,7 @@ export interface RepayOfferSummary {
 
 export function useRepayOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, fundWithWalletCoins } =
+  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, signerType } =
     useWallet()
   const { pendingTxs } = usePendingTransactions()
 
@@ -204,64 +203,85 @@ export function useRepayOffer() {
     const totalProtocolFee = getTotalProtocolFee(totalFee)
     const lenderVaultAmount = totalAmountToRepay - totalProtocolFee
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
-    const walletInputOutpointStrings = [...params.principalOutpoints, ...params.feeOutpoints]
-    const inputOrderStrings = [
-      params.borrowerNftOutpoint,
-      params.activeOfferOutpoint,
-      ...walletInputOutpointStrings,
-    ]
-    const firstWalletOutpoint = walletInputOutpointStrings[0]
-    if (!firstWalletOutpoint) throw new Error('At least one wallet UTXO is required')
-
-    let txBuilder = (
-      await fundWithWalletCoins(
-        new TxBuilder(lwkNetwork).feeRate(feeRate),
-        walletInputOutpointStrings.map(o => new OutPoint(o)),
-      )
-    )
-      .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
-      .addExternalUtxos([
-        new ExternalUtxo(
-          borrowerNftOutpoint.vout(),
-          borrowerNftTx,
-          TxOutSecrets.fromExplicit(borrowerNftAsset, NFT_AMOUNT),
-          EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-          true,
-        ),
-        new ExternalUtxo(
-          activeOfferOutpoint.vout(),
-          activeOfferTx,
-          TxOutSecrets.fromExplicit(collateralAsset, collateralAmount),
-          LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment,
-          true,
-        ),
-      ])
-      .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
-      .addPostIssuanceScriptOutput(
-        finalizedLenderVaultSpendInfo.scriptPubkey,
-        lenderVaultAmount,
-        principalAsset,
-      )
-      .addPostIssuanceScriptOutput(
-        finalizedProtocolFeeVaultSpendInfo.scriptPubkey,
-        totalProtocolFee,
-        principalAsset,
-      )
-      .addPostIssuanceRecipient(collateralRecipient, collateralAmount, collateralAsset)
-
-    if (principalChangeAmount > 0n) {
-      txBuilder = txBuilder.addPostIssuanceRecipient(
-        walletReceiveAddress,
-        principalChangeAmount,
-        principalAsset,
-      )
+    if (principalWalletUtxos.length + feeUtxos.length === 0) {
+      throw new Error('At least one wallet UTXO is required')
     }
+    const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
+    const walletInputs = [
+      ...principalWalletUtxos.map((utxo, index) => ({
+        utxo,
+        outpoint: principalOutpoints[index],
+        prevout: principalTxOuts[index],
+      })),
+      ...feeUtxos.map((utxo, index) => ({
+        utxo,
+        outpoint: feeOutpoints[index],
+        prevout: feeTxOuts[index],
+      })),
+    ]
 
-    txBuilder = txBuilder.setInputSequence(
-      new OutPoint(firstWalletOutpoint),
-      WALLET_INPUT_RBF_SEQUENCE,
-    )
-    const pset = txBuilder.finish(wollet)
+    const { pset } = buildPset({
+      network: lwkNetwork,
+      inputs: [
+        {
+          outpoint: borrowerNftOutpoint,
+          prevout: borrowerNftTxOut,
+          asset: borrowerNftAsset,
+          amount: NFT_AMOUNT,
+          maxWeightToSatisfy: EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+        },
+        {
+          outpoint: activeOfferOutpoint,
+          prevout: activeOfferTxOut,
+          asset: collateralAsset,
+          amount: collateralAmount,
+          maxWeightToSatisfy: LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment,
+        },
+        ...walletInputs.map(({ utxo, outpoint, prevout }, index) => ({
+          outpoint,
+          prevout,
+          asset: utxo.unblinded().asset(),
+          amount: utxo.unblinded().value(),
+          secrets: blinding === 'local' ? (utxo.unblinded() as TxOutSecrets) : undefined,
+          walletCoin: true,
+          sequence: index === 0 ? WALLET_INPUT_RBF_SEQUENCE : undefined,
+          maxWeightToSatisfy: wollet.maxWeightToSatisfy(),
+        })),
+      ],
+      outputs: [
+        { script: burnScript, amount: NFT_AMOUNT, asset: borrowerNftAsset },
+        {
+          script: finalizedLenderVaultSpendInfo.scriptPubkey,
+          amount: lenderVaultAmount,
+          asset: principalAsset,
+        },
+        {
+          script: finalizedProtocolFeeVaultSpendInfo.scriptPubkey,
+          amount: totalProtocolFee,
+          asset: principalAsset,
+        },
+        {
+          script: collateralRecipient.scriptPubkey(),
+          amount: collateralAmount,
+          asset: collateralAsset,
+          blindingPubkey: collateralRecipient.blindingPubkey(),
+        },
+        ...(principalChangeAmount > 0n
+          ? [
+              {
+                script: walletReceiveAddress.scriptPubkey(),
+                amount: principalChangeAmount,
+                asset: principalAsset,
+                blindingPubkey: walletReceiveAddress.blindingPubkey(),
+              },
+            ]
+          : []),
+      ],
+      changeAddress: walletReceiveAddress,
+      feeRateSatPerKvb: feeRate,
+      blinding,
+    })
+    pset.addDetails(wollet)
 
     return {
       pset,
@@ -269,9 +289,9 @@ export function useRepayOffer() {
         const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
 
         const prevouts = [borrowerNftTxOut, activeOfferTxOut, ...principalTxOuts, ...feeTxOuts]
-        const finalizedTx = lendingProgram.finalizeTransactionWithSpendInfo(
+        const finalizedTx = lendingProgram.finalizeTransaction(
           txWithWalletWitnesses,
-          activeLendingSpendInfo,
+          activeLendingSpendInfo.controlBlock(lendingProgram.cmr),
           prevouts,
           1, // Lending covenant is at input index 1
           buildLendingWitness({ branch: 'FullRepayment', currentDebt: totalAmountToRepay }),

@@ -1,4 +1,4 @@
-import type { AssetId, OutPoint } from '@lilbonekit/lwk-web'
+import type { AssetId, OutPoint } from 'lwk_wasm'
 
 export type WalletType = 'Wpkh' | 'ShWpkh'
 

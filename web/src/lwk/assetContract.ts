@@ -1,4 +1,4 @@
-import { Contract, ContractHash, type OutPoint } from '@lilbonekit/lwk-web'
+import { Contract, ContractHash, type OutPoint } from 'lwk_wasm'
 
 import { UNSPENDABLE_TAPROOT_PUBKEY } from '@/simplicity/taproot'
 import { sha256 } from '@/utils/sha256'

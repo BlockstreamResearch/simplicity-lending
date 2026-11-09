@@ -180,7 +180,7 @@ export function ConnectWalletModal({ isOpen, onOpenChange }: ConnectWalletModalP
     <UiModal
       isOpen={isOpen}
       onOpenChange={onOpenChange}
-      dialogClassName='max-w-90'
+      dialogClassName={mode === 'seed' ? 'max-w-120' : 'max-w-90'}
       title={
         mode === 'seed' ? (
           <ModalTitle onBack={() => setMode('choose')} backDisabled={connecting}>

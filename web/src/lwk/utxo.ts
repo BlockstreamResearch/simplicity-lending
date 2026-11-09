@@ -1,4 +1,4 @@
-import type { AssetId } from '@lilbonekit/lwk-web'
+import type { AssetId } from 'lwk_wasm'
 
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import type { WalletCoin } from '@/lib/wallet-core/types'

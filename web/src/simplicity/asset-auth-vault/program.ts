@@ -4,7 +4,7 @@ import {
   SimplicityType,
   SimplicityTypedValue,
   SimplicityWitnessValues,
-} from '@lilbonekit/lwk-web'
+} from 'lwk_wasm'
 import { sources } from 'virtual:simplicity-sources'
 
 import { bytes32ToHex } from '@/utils/hex'
@@ -80,7 +80,11 @@ export const ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY: Record<AssetAuthVaultBranch
 }
 
 export function loadAssetAuthVaultProgram(params: AssetAuthVaultProgramParams): SimplicityProgram {
-  return SimplicityProgram.load(sources.asset_auth_vault, buildAssetAuthVaultArguments(params))
+  return SimplicityProgram.loadWithDebugSymbols(
+    sources.asset_auth_vault,
+    buildAssetAuthVaultArguments(params),
+    true,
+  )
 }
 
 export function buildAssetAuthVaultArguments(
