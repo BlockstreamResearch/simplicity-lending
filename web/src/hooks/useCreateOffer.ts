@@ -78,8 +78,14 @@ export interface CreateOfferSummary {
 
 export function useCreateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, signerType } =
-    useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const createOffer = async (
@@ -234,6 +240,7 @@ export function useCreateOffer() {
     const receiveExplicitScript = new Address(receiveAddressExplicitString).scriptPubkey()
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: [
@@ -287,7 +294,7 @@ export function useCreateOffer() {
         { script: pendingOfferMetadataScript, amount: 0n, asset: policyAsset },
         { script: lendingScript, amount: offerParameters.collateralAmount, asset: policyAsset },
       ],
-      changeAddress: Address.parse(receiveAddressString, lwkNetwork),
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       blinding,
     })

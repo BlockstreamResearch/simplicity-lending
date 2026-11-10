@@ -30,8 +30,15 @@ export interface ChopUtxoResult {
 
 export function useUtxoChopper() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, signPset, syncWallet, signerType } =
-    useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    signPset,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const chopUtxo = async (params: ChopUtxoParams): Promise<ChopUtxoResult> => {
@@ -53,7 +60,6 @@ export function useUtxoChopper() {
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
     const recipientAddressString = params.recipientAddress?.trim() || receiveAddressString
     const recipient = Address.parse(recipientAddressString, lwkNetwork)
-    const changeAddress = Address.parse(receiveAddressString, lwkNetwork)
     const recipientSummary = recipient.toString()
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
@@ -93,6 +99,7 @@ export function useUtxoChopper() {
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
     const assetChangeAmount = fundingIsLbtc ? 0n : fundingAmount - totalOutputAmount
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: walletUtxos.map((utxo, index) => ({

@@ -62,8 +62,14 @@ export interface LenderVaultClaimSummary {
 
 export function useLenderVaultClaim() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, signerType } =
-    useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const claimLenderVault = async (
@@ -139,6 +145,7 @@ export function useLenderVaultClaim() {
     if (feeUtxos.length === 0) throw new Error('At least one fee UTXO is required')
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: [
@@ -176,7 +183,7 @@ export function useLenderVaultClaim() {
           blindingPubkey: principalRecipient.blindingPubkey(),
         },
       ],
-      changeAddress: Address.parse(receiveAddressString, lwkNetwork),
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       blinding,
     })

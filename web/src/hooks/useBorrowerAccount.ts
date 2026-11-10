@@ -71,8 +71,14 @@ export interface BorrowerAccountCreationSummary {
 
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, scriptPubkey, signerType } =
-    useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    scriptPubkey,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
   const queryClient = useQueryClient()
   const factoriesQuery = useFactories(scriptPubkey || '')
@@ -130,6 +136,7 @@ export function useBorrowerAccount() {
     const { contractHash, issuedAssetId, metadata } = await prepareIssuance(feeUtxo.outpoint())
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: [
@@ -162,7 +169,7 @@ export function useBorrowerAccount() {
         },
         { script: Script.newOpReturn(metadata), amount: 0n, asset: policyAsset },
       ],
-      changeAddress: Address.parse(receiveAddressString, lwkNetwork),
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       blinding,
     })

@@ -63,8 +63,14 @@ export interface LiquidateOfferSummary {
 
 export function useLiquidateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, signerType } =
-    useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const liquidateOffer = async (
@@ -152,6 +158,7 @@ export function useLiquidateOffer() {
 
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: [
@@ -192,7 +199,7 @@ export function useLiquidateOffer() {
           blindingPubkey: collateralRecipient.blindingPubkey(),
         },
       ],
-      changeAddress: collateralRecipient,
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       fallbackLocktime: metadata.loanExpirationTime,
       blinding,

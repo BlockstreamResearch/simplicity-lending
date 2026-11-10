@@ -65,8 +65,14 @@ export interface AcceptOfferSummary {
 
 export function useAcceptOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, signerType } =
-    useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const acceptOffer = async (
@@ -89,7 +95,6 @@ export function useAcceptOffer() {
     )
     const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
     if (!receiveAddressString) throw new Error('Missing receive address')
-    const walletReceiveAddress = Address.parse(receiveAddressString, lwkNetwork)
     const lenderNftRecipient = Address.parse(
       params.lenderNftRecipientAddress?.trim() || receiveAddressString,
       lwkNetwork,
@@ -222,6 +227,7 @@ export function useAcceptOffer() {
       })),
     ]
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: [
@@ -265,15 +271,15 @@ export function useAcceptOffer() {
         ...(principalChangeAmount > 0n
           ? [
               {
-                script: walletReceiveAddress.scriptPubkey(),
+                script: changeAddress.scriptPubkey(),
                 amount: principalChangeAmount,
                 asset: principalAsset,
-                blindingPubkey: walletReceiveAddress.blindingPubkey(),
+                blindingPubkey: changeAddress.blindingPubkey(),
               },
             ]
           : []),
       ],
-      changeAddress: walletReceiveAddress,
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       blinding,
     })
@@ -339,7 +345,7 @@ export function useAcceptOffer() {
               '2 Lender NFT recipient': lenderNftRecipient.toString(),
               'Principal change':
                 principalChangeAmount > 0n
-                  ? `${principalChangeAmount.toString()} to ${walletReceiveAddress.toString()}`
+                  ? `${principalChangeAmount.toString()} to ${changeAddress.toString()}`
                   : 'None',
               [`${NETWORK_CONFIG.collateralAsset.symbol} change`]:
                 'Managed by LWK after covenant outputs',

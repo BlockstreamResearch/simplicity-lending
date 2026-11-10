@@ -68,8 +68,7 @@ export interface CancelOfferSummary {
 
 export function useCancelOffer() {
   const { lwkNetwork } = useLwk()
-  const { getBlindedWalletUtxos, getReceiveAddress, getWollet, syncWallet, signerType } =
-    useWallet()
+  const { getBlindedWalletUtxos, getChangeAddress, getWollet, syncWallet, signerType } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const cancelOffer = async (
@@ -92,16 +91,13 @@ export function useCancelOffer() {
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
       throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
-    const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTxs, feeRate, receiveAddressString] =
-      await Promise.all([
-        fetchTransaction(pendingOfferOutpoint),
-        fetchTransaction(lenderNftOutpoint),
-        fetchTransaction(borrowerNftOutpoint),
-        Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
-        fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
-        getReceiveAddress(),
-      ])
-    if (!receiveAddressString) throw new Error('Missing wallet receive address')
+    const [pendingOfferTx, lenderNftTx, borrowerNftTx, feeTxs, feeRate] = await Promise.all([
+      fetchTransaction(pendingOfferOutpoint),
+      fetchTransaction(lenderNftOutpoint),
+      fetchTransaction(borrowerNftOutpoint),
+      Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
+    ])
     const pendingOfferTxOut = requireTxOut(
       pendingOfferTx,
       pendingOfferOutpoint.vout(),
@@ -173,6 +169,7 @@ export function useCancelOffer() {
     if (feeUtxos.length === 0) throw new Error('At least one fee UTXO is required')
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: [
@@ -218,7 +215,7 @@ export function useCancelOffer() {
           blindingPubkey: collateralRecipient.blindingPubkey(),
         },
       ],
-      changeAddress: Address.parse(receiveAddressString, lwkNetwork),
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       blinding,
     })

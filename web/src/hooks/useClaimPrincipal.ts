@@ -55,8 +55,14 @@ export interface ClaimPrincipalSummary {
 
 export function useClaimPrincipal() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, signerType } =
-    useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const claimPrincipal = async (
@@ -119,6 +125,7 @@ export function useClaimPrincipal() {
     if (feeUtxos.length === 0) throw new Error('At least one fee UTXO is required')
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: [
@@ -160,7 +167,7 @@ export function useClaimPrincipal() {
           blindingPubkey: principalRecipient.blindingPubkey(),
         },
       ],
-      changeAddress: Address.parse(receiveAddressString, lwkNetwork),
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       blinding,
     })

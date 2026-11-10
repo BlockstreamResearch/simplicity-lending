@@ -74,8 +74,14 @@ export interface RepayOfferSummary {
 
 export function useRepayOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet, signerType } =
-    useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const repayOffer = async (params: RepayOfferParams): Promise<UpdatedPset<RepayOfferSummary>> => {
@@ -89,7 +95,6 @@ export function useRepayOffer() {
     )
     const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
-    const walletReceiveAddress = Address.parse(receiveAddressString, lwkNetwork)
     const collateralRecipient = Address.parse(
       params.collateralRecipientAddress?.trim() || receiveAddressString,
       lwkNetwork,
@@ -220,6 +225,7 @@ export function useRepayOffer() {
       })),
     ]
 
+    const changeAddress = await getChangeAddress()
     const { pset } = buildPset({
       network: lwkNetwork,
       inputs: [
@@ -269,15 +275,15 @@ export function useRepayOffer() {
         ...(principalChangeAmount > 0n
           ? [
               {
-                script: walletReceiveAddress.scriptPubkey(),
+                script: changeAddress.scriptPubkey(),
                 amount: principalChangeAmount,
                 asset: principalAsset,
-                blindingPubkey: walletReceiveAddress.blindingPubkey(),
+                blindingPubkey: changeAddress.blindingPubkey(),
               },
             ]
           : []),
       ],
-      changeAddress: walletReceiveAddress,
+      changeAddress,
       feeRateSatPerKvb: feeRate,
       blinding,
     })
@@ -321,7 +327,7 @@ export function useRepayOffer() {
               '3 Unlocked collateral': collateralRecipient.toString(),
               'Principal change':
                 principalChangeAmount > 0n
-                  ? `${principalChangeAmount.toString()} to ${walletReceiveAddress.toString()}`
+                  ? `${principalChangeAmount.toString()} to ${changeAddress.toString()}`
                   : 'None',
               [`${NETWORK_CONFIG.collateralAsset.symbol} change`]:
                 'Managed by LWK after covenant outputs',

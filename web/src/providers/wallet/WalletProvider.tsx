@@ -1,4 +1,4 @@
-import { type Pset, Registry, type Transaction, type Wollet } from 'lwk_wasm'
+import { Address, type Pset, Registry, type Transaction, type Wollet } from 'lwk_wasm'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { env } from '@/constants/env'
@@ -513,6 +513,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     [state.receiveAddress],
   )
 
+  const getChangeAddress = useCallback(async (): Promise<Address> => {
+    const session = sessionRef.current
+    if (!session) throw new Error('WalletProvider: not connected')
+    const walletAddress = session.connector.receiveAddress?.()
+    return walletAddress ? new Address(walletAddress) : session.wollet.change().address()
+  }, [])
+
   const verifyReceiveAddress = useCallback(async (): Promise<string> => {
     const session = sessionRef.current
     if (!session) throw new Error('WalletProvider: not connected')
@@ -558,6 +565,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         applyBroadcastTransaction: applyBroadcastTx,
         signPset,
         getReceiveAddress,
+        getChangeAddress,
         verifyReceiveAddress,
         getWollet,
         getBlindedWalletUtxos,

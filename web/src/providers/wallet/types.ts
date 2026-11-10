@@ -1,4 +1,4 @@
-import type { EsploraClient, Pset, Transaction, Wollet, WolletDescriptor } from 'lwk_wasm'
+import type { Address, EsploraClient, Pset, Transaction, Wollet, WolletDescriptor } from 'lwk_wasm'
 
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
 import type { WalletCache } from '@/lib/wallet-core/store/walletCache'
@@ -29,6 +29,7 @@ export interface WalletContextValue extends WalletState {
   getBlindedWalletUtxos(): Promise<WalletCoin[]>
   getWollet(): Promise<Wollet>
   getReceiveAddress(): Promise<string | null>
+  getChangeAddress(): Promise<Address>
   verifyReceiveAddress(): Promise<string>
 }
 
