@@ -2,15 +2,17 @@ mod utils;
 
 use lending_contracts::programs::program::SimplexProgram;
 use lending_indexer::models::OfferStatus;
-use lending_session::SessionError;
+use lending_session::{Session, SessionError};
 use serial_test::serial;
+use simplex::simplicityhl::elements::AssetId;
+use sqlx::PgPool;
 
 use utils::{
-    DEFAULT_LOAN_EXPIRATION_OFFSET, TEST_PRINCIPAL_AMOUNT, accept_pending_offer,
-    assert_offer_status, build_session, build_session_with_signer, claim_lender_vault,
-    dummy_principal_asset_id, fund_asset_outputs, issue_asset, liquidate_active_offer,
-    offer_params, partially_repay_active_offer, repay_active_offer, setup_it_context_pool,
-    setup_pending_offer, start_indexer_api,
+    DEFAULT_LOAN_EXPIRATION_OFFSET, OfferCreation, PartialRepayment, TEST_PRINCIPAL_AMOUNT,
+    accept_pending_offer, assert_offer_status, build_session, build_session_with_signer,
+    claim_lender_vault, dummy_principal_asset_id, fund_asset_outputs, issue_asset,
+    liquidate_active_offer, offer_params, partially_repay_active_offer, repay_active_offer,
+    setup_it_context_pool, setup_pending_offer, start_indexer_api,
 };
 
 const BORROWER_PRINCIPAL_ASSET_SUPPLY: u64 = 30_000;
@@ -417,43 +419,16 @@ async fn liquidate_offer_and_claim_lender_vault_empties_vault_in_one_transaction
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
-    let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
-    let (offer_id, offer) = setup_pending_offer(
-        &borrower,
-        &pool,
-        offer_params(
-            &borrower,
-            principal_asset_id,
-            LIQUIDATION_LOAN_EXPIRATION_OFFSET,
-        )?,
-    )
-    .await?;
-
-    fund_asset_outputs(
-        &borrower,
-        lender.signer(),
-        principal_asset_id,
-        &[TEST_PRINCIPAL_AMOUNT],
-    )?;
-    let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
-
-    let repayment = partially_repay_active_offer(
-        &borrower,
-        &pool,
+    let PartiallyRepaidOffer {
         offer_id,
-        accept_txid,
-        &offer.parameters,
-        PARTIAL_REPAYMENT_AMOUNT,
-    )
-    .await?;
-    assert!(repayment.lender_vault_amount > 0);
-    assert!(repayment.remaining_collateral < offer.parameters.offer_parameters.collateral_amount);
+        offer,
+        principal_asset_id,
+        repayment,
+    } = setup_partially_repaid_offer(&borrower, &lender, &pool).await?;
 
     fund_asset_outputs(&borrower, lender.signer(), principal_asset_id, &[1])?;
 
-    context
-        .get_network_utils()
-        .mine_until_height((offer.parameters.offer_parameters.loan_expiration_time + 1) as u64)?;
+    mine_past_loan_expiration(&context, &offer)?;
 
     let liquidation_tx = lender
         .liquidate_offer_and_claim_lender_vault(&offer_id.to_string())
@@ -542,34 +517,8 @@ async fn liquidate_offer_and_claim_lender_vault_returns_loan_not_expired_before_
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
-    let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
-    let (offer_id, offer) = setup_pending_offer(
-        &borrower,
-        &pool,
-        offer_params(
-            &borrower,
-            principal_asset_id,
-            LIQUIDATION_LOAN_EXPIRATION_OFFSET,
-        )?,
-    )
-    .await?;
-
-    fund_asset_outputs(
-        &borrower,
-        lender.signer(),
-        principal_asset_id,
-        &[TEST_PRINCIPAL_AMOUNT],
-    )?;
-    let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
-    partially_repay_active_offer(
-        &borrower,
-        &pool,
-        offer_id,
-        accept_txid,
-        &offer.parameters,
-        PARTIAL_REPAYMENT_AMOUNT,
-    )
-    .await?;
+    let PartiallyRepaidOffer { offer_id, .. } =
+        setup_partially_repaid_offer(&borrower, &lender, &pool).await?;
 
     let result = lender
         .liquidate_offer_and_claim_lender_vault(&offer_id.to_string())
@@ -610,9 +559,7 @@ async fn liquidate_offer_and_claim_lender_vault_returns_lender_vault_not_found_w
     )?;
     accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
 
-    context
-        .get_network_utils()
-        .mine_until_height((offer.parameters.offer_parameters.loan_expiration_time + 1) as u64)?;
+    mine_past_loan_expiration(&context, &offer)?;
 
     let result = lender
         .liquidate_offer_and_claim_lender_vault(&offer_id.to_string())
@@ -663,38 +610,11 @@ async fn liquidate_offer_refuses_partially_repaid_offer() -> anyhow::Result<()> 
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
-    let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
-    let (offer_id, offer) = setup_pending_offer(
-        &borrower,
-        &pool,
-        offer_params(
-            &borrower,
-            principal_asset_id,
-            LIQUIDATION_LOAN_EXPIRATION_OFFSET,
-        )?,
-    )
-    .await?;
+    let PartiallyRepaidOffer {
+        offer_id, offer, ..
+    } = setup_partially_repaid_offer(&borrower, &lender, &pool).await?;
 
-    fund_asset_outputs(
-        &borrower,
-        lender.signer(),
-        principal_asset_id,
-        &[TEST_PRINCIPAL_AMOUNT],
-    )?;
-    let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
-    partially_repay_active_offer(
-        &borrower,
-        &pool,
-        offer_id,
-        accept_txid,
-        &offer.parameters,
-        PARTIAL_REPAYMENT_AMOUNT,
-    )
-    .await?;
-
-    context
-        .get_network_utils()
-        .mine_until_height((offer.parameters.offer_parameters.loan_expiration_time + 1) as u64)?;
+    mine_past_loan_expiration(&context, &offer)?;
 
     let result = lender.liquidate_offer(&offer_id.to_string()).await;
 
@@ -712,38 +632,11 @@ async fn borrower_cannot_liquidate_offer_and_claim_lender_vault() -> anyhow::Res
     let borrower = build_session(&context, &indexer_url);
     let lender = build_session_with_signer(&context, context.random_signer(), &indexer_url);
 
-    let principal_asset_id = issue_asset(&borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
-    let (offer_id, offer) = setup_pending_offer(
-        &borrower,
-        &pool,
-        offer_params(
-            &borrower,
-            principal_asset_id,
-            LIQUIDATION_LOAN_EXPIRATION_OFFSET,
-        )?,
-    )
-    .await?;
+    let PartiallyRepaidOffer {
+        offer_id, offer, ..
+    } = setup_partially_repaid_offer(&borrower, &lender, &pool).await?;
 
-    fund_asset_outputs(
-        &borrower,
-        lender.signer(),
-        principal_asset_id,
-        &[TEST_PRINCIPAL_AMOUNT],
-    )?;
-    let (_, accept_txid) = accept_pending_offer(&lender, &pool, offer_id, &offer).await?;
-    partially_repay_active_offer(
-        &borrower,
-        &pool,
-        offer_id,
-        accept_txid,
-        &offer.parameters,
-        PARTIAL_REPAYMENT_AMOUNT,
-    )
-    .await?;
-
-    context
-        .get_network_utils()
-        .mine_until_height((offer.parameters.offer_parameters.loan_expiration_time + 1) as u64)?;
+    mine_past_loan_expiration(&context, &offer)?;
 
     let result = borrower
         .liquidate_offer_and_claim_lender_vault(&offer_id.to_string())
@@ -752,5 +645,69 @@ async fn borrower_cannot_liquidate_offer_and_claim_lender_vault() -> anyhow::Res
     assert!(matches!(result, Err(SessionError::LenderNftUtxoNotFound)));
 
     server_handle.abort();
+    Ok(())
+}
+
+struct PartiallyRepaidOffer {
+    offer_id: i64,
+    offer: OfferCreation,
+    principal_asset_id: AssetId,
+    repayment: PartialRepayment,
+}
+
+/// Creates an offer, has `lender` accept it and `borrower` repay `PARTIAL_REPAYMENT_AMOUNT` of it,
+/// which leaves an active lender vault behind.
+async fn setup_partially_repaid_offer(
+    borrower: &Session,
+    lender: &Session,
+    pool: &PgPool,
+) -> anyhow::Result<PartiallyRepaidOffer> {
+    let principal_asset_id = issue_asset(borrower, BORROWER_PRINCIPAL_ASSET_SUPPLY)?;
+    let (offer_id, offer) = setup_pending_offer(
+        borrower,
+        pool,
+        offer_params(
+            borrower,
+            principal_asset_id,
+            LIQUIDATION_LOAN_EXPIRATION_OFFSET,
+        )?,
+    )
+    .await?;
+
+    fund_asset_outputs(
+        borrower,
+        lender.signer(),
+        principal_asset_id,
+        &[TEST_PRINCIPAL_AMOUNT],
+    )?;
+    let (_, accept_txid) = accept_pending_offer(lender, pool, offer_id, &offer).await?;
+
+    let repayment = partially_repay_active_offer(
+        borrower,
+        pool,
+        offer_id,
+        accept_txid,
+        &offer.parameters,
+        PARTIAL_REPAYMENT_AMOUNT,
+    )
+    .await?;
+    assert!(repayment.lender_vault_amount > 0);
+    assert!(repayment.remaining_collateral < offer.parameters.offer_parameters.collateral_amount);
+
+    Ok(PartiallyRepaidOffer {
+        offer_id,
+        offer,
+        principal_asset_id,
+        repayment,
+    })
+}
+
+fn mine_past_loan_expiration(
+    context: &simplex::TestContext,
+    offer: &OfferCreation,
+) -> anyhow::Result<()> {
+    context
+        .get_network_utils()
+        .mine_until_height((offer.parameters.offer_parameters.loan_expiration_time + 1) as u64)?;
     Ok(())
 }

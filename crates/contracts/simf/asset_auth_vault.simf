@@ -130,18 +130,19 @@ fn withdraw_on_liquidation(
 
     jet::check_lock_height(param::LIQUIDATION_HEIGHT);
 
+    let current_index: u32 = jet::current_index();
     let current_script_hash: u256 = get_script_hash_for_storage(true, already_supplied);
 
-    ensure_input_script_hash(jet::current_index(), current_script_hash);
+    ensure_input_script_hash(current_index, current_script_hash);
 
     auth_with_burn_check(
         input_keeper_index,
         output_keeper_index,
         param::KEEPER_AUTH_ASSET_ID,
-        param::WITH_KEEPER_ASSET_BURN
+        true
     );
 
-    let _: u64 = ensure_input_vault_asset(jet::current_index());
+    let _: u64 = ensure_input_vault_asset(current_index);
 }
 
 fn supply(

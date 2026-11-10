@@ -483,15 +483,14 @@ pub fn build_lender_vault_withdraw_all_tx(
     ))
 }
 
-pub fn build_liquidation_with_lender_vault_withdrawal_tx(
-    active_input: OutPoint,
-    lender_vault_input: OutPoint,
+pub fn build_lender_vault_withdraw_on_liquidation_tx(
+    inputs: Vec<OutPoint>,
     offer: &OfferModel,
     vault_amount: u64,
 ) -> anyhow::Result<Transaction> {
     let params = offer_lending_params(offer)?;
     Ok(tx_with_inputs(
-        vec![active_input, lender_vault_input],
+        inputs,
         vec![
             op_return_asset(params.lender_nft_asset_id),
             explicit_output(params.principal_asset_id, vault_amount, script(&[0x99])),
