@@ -26,6 +26,7 @@ fn setup_non_finalized_vault(
         keeper_asset_id,
         supplier_asset_id,
         supply_goal,
+        liquidation_height: 0,
         with_keeper_asset_burn,
         with_supplier_asset_burn: false,
         network: *context.get_network(),

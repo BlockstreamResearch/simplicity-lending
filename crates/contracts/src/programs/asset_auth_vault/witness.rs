@@ -15,6 +15,11 @@ pub enum AssetAuthVaultWitnessBranch {
         already_supplied: u64,
         amount_to_withdraw: u64,
     },
+    WithdrawOnLiquidation {
+        input_keeper_index: u32,
+        output_keeper_index: u32,
+        already_supplied: u64,
+    },
     Supply {
         input_supplier_index: u32,
         output_supplier_index: u32,
@@ -43,13 +48,22 @@ impl AssetAuthVaultWitnessBranch {
                 vault_output_index,
                 already_supplied,
                 amount_to_withdraw,
-            } => Left(Right((
+            } => Left(Right(Left((
                 *input_keeper_index,
                 *output_keeper_index,
                 *vault_output_index,
                 *already_supplied,
                 *amount_to_withdraw,
-            ))),
+            )))),
+            AssetAuthVaultWitnessBranch::WithdrawOnLiquidation {
+                input_keeper_index,
+                output_keeper_index,
+                already_supplied,
+            } => Left(Right(Right((
+                *input_keeper_index,
+                *output_keeper_index,
+                *already_supplied,
+            )))),
             AssetAuthVaultWitnessBranch::Supply {
                 input_supplier_index,
                 output_supplier_index,

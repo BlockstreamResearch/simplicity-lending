@@ -8,6 +8,7 @@ pub struct AssetAuthVaultParameters {
     pub keeper_asset_id: AssetId,
     pub supplier_asset_id: AssetId,
     pub supply_goal: u64,
+    pub liquidation_height: u32,
     pub with_keeper_asset_burn: bool,
     pub with_supplier_asset_burn: bool,
     pub network: SimplicityNetwork,
@@ -20,6 +21,7 @@ impl AssetAuthVaultParameters {
             keeper_auth_asset_id: self.keeper_asset_id.to_byte_array(),
             supplier_auth_asset_id: self.supplier_asset_id.to_byte_array(),
             supply_goal: self.supply_goal,
+            liquidation_height: self.liquidation_height,
             with_keeper_asset_burn: self.with_keeper_asset_burn,
             with_supplier_asset_burn: self.with_supplier_asset_burn,
         }

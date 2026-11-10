@@ -2,7 +2,9 @@ use simplex::simplicityhl::elements::{AssetId, Transaction, TxOut};
 
 use crate::programs::asset_auth_vault::AssetAuthVault;
 use crate::programs::program::SimplexProgram;
-use crate::utils::{TxOutFilter, find_unique_vout, has_matching_vout};
+use crate::utils::{
+    TxOutFilter, find_unique_op_return_asset_vout, find_unique_vout, has_matching_vout,
+};
 
 /// Vault covenant UTXO roles relative to a known vault instance / params.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +22,7 @@ pub enum AssetAuthVaultTxKind {
     FinalSupply,
     WithdrawPart,
     WithdrawAll,
+    WithdrawOnLiquidation,
 }
 
 /// Layout of a partial supply that keeps the vault active.
@@ -167,6 +170,15 @@ impl AssetAuthVault {
             )
     }
 
+    /// Active vault emptied in the transaction that burns its keeper asset.
+    pub fn is_withdraw_on_liquidation(&self, tx: &Transaction) -> bool {
+        let params = self.get_parameters();
+
+        self.is_active_offer()
+            && params.with_keeper_asset_burn
+            && find_unique_op_return_asset_vout(tx, params.keeper_asset_id).is_some()
+    }
+
     /// Classify a spend of `self` without a known supply amount.
     ///
     /// `Supply` cannot be detected here (needs `amount_to_supply`); use
@@ -188,7 +200,8 @@ impl AssetAuthVault {
             return Some(AssetAuthVaultTxKind::WithdrawPart);
         }
 
-        None
+        self.is_withdraw_on_liquidation(tx)
+            .then_some(AssetAuthVaultTxKind::WithdrawOnLiquidation)
     }
 
     /// Classify a supply spend of active `self` for a known `amount_to_supply`.
@@ -309,6 +322,7 @@ mod tests {
             keeper_asset_id: asset(2),
             supplier_asset_id: asset(3),
             supply_goal,
+            liquidation_height: 0,
             with_keeper_asset_burn: true,
             with_supplier_asset_burn: true,
             network: SimplicityNetwork::default_regtest(),
@@ -441,6 +455,52 @@ mod tests {
             vault.classify_tx(&tx),
             Some(AssetAuthVaultTxKind::WithdrawAll)
         );
+    }
+
+    fn burn_output(asset_id: AssetId) -> TxOut {
+        explicit_output(asset_id, 1, Script::new_op_return(b"burn"))
+    }
+
+    #[test]
+    fn classify_tx_detects_withdraw_on_liquidation() {
+        let params = test_params(1_000);
+        let vault = AssetAuthVault::new_active(params, 100);
+        let tx = tx_with_outputs(vec![
+            burn_output(params.keeper_asset_id),
+            explicit_output(params.vault_asset_id, 100, script(&[0x99])),
+        ]);
+
+        assert_eq!(
+            vault.classify_tx(&tx),
+            Some(AssetAuthVaultTxKind::WithdrawOnLiquidation)
+        );
+    }
+
+    #[test]
+    fn withdraw_on_liquidation_needs_keeper_asset_burn() {
+        let params = test_params(1_000);
+        let vault = AssetAuthVault::new_active(params, 100);
+        let tx = tx_with_outputs(vec![
+            burn_output(asset(9)),
+            explicit_output(params.vault_asset_id, 100, script(&[0x99])),
+        ]);
+
+        assert_eq!(vault.classify_tx(&tx), None);
+    }
+
+    #[test]
+    fn withdraw_on_liquidation_needs_burnable_keeper() {
+        let params = AssetAuthVaultParameters {
+            with_keeper_asset_burn: false,
+            ..test_params(1_000)
+        };
+        let vault = AssetAuthVault::new_active(params, 100);
+        let tx = tx_with_outputs(vec![
+            burn_output(params.keeper_asset_id),
+            explicit_output(params.vault_asset_id, 100, script(&[0x99])),
+        ]);
+
+        assert_eq!(vault.classify_tx(&tx), None);
     }
 
     #[test]

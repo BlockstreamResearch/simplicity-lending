@@ -1,19 +1,23 @@
 #![allow(dead_code)]
 
 use anyhow::Context;
-use lending_contracts::programs::lending::LendingOfferParameters;
+use lending_contracts::programs::lending::{LendingOffer, LendingOfferParameters};
 use lending_contracts::programs::program::SimplexProgram;
 use lending_contracts::programs::script_auth::ScriptAuth;
 use lending_indexer::indexer::{
     insert_offer, insert_offer_utxo, insert_offer_vault, insert_participant_utxo, spend_offer_utxo,
-    spend_offer_vault, spend_participant_utxo, update_offer_status,
+    spend_offer_vault, spend_participant_utxo, update_offer_debt_and_collateral,
+    update_offer_status,
 };
 use lending_indexer::models::{
     OfferModel, OfferParticipantModel, OfferStatus, OfferUtxoModel, OfferVaultModel,
     ParticipantType, UtxoType, VaultType,
 };
-use lending_session::{AcceptOfferTx, CreateOfferParams, OfferParameters, Session};
+use lending_session::{
+    AcceptOfferTx, CreateOfferParams, OfferParameters, Session, select_utxos_for_amount,
+};
 use simplex::simplicityhl::elements::{AssetId, OutPoint, Txid};
+use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -287,6 +291,108 @@ pub async fn accept_pending_offer(
     Ok((accept, accept_txid))
 }
 
+/// Height the test helpers index repayments at.
+const REPAYMENT_INDEX_HEIGHT: u64 = 300;
+
+/// What a repayment left of the offer.
+enum RepaymentOutcome {
+    Full,
+    Partial {
+        continuing_offer_vout: i32,
+        current_debt: u64,
+        remaining_collateral: u64,
+    },
+}
+
+struct RepaymentVault {
+    vault_type: VaultType,
+    vout: i32,
+    amount: u64,
+    already_supplied: u64,
+    is_finalized: bool,
+}
+
+/// Indexes a broadcast repayment of the active offer created by `accept_txid`.
+async fn index_repayment(
+    pool: &PgPool,
+    offer_id: i64,
+    accept_txid: Txid,
+    repay_txid: Txid,
+    outcome: RepaymentOutcome,
+    vaults: &[RepaymentVault],
+) -> anyhow::Result<()> {
+    let block_height = REPAYMENT_INDEX_HEIGHT;
+    let repay_txid_bytes = repay_txid.as_byte_array().to_vec();
+
+    let mut sql_tx = pool.begin().await?;
+
+    spend_offer_utxo(
+        &mut sql_tx,
+        &OutPoint::new(accept_txid, 0),
+        block_height,
+        repay_txid,
+    )
+    .await?;
+
+    match outcome {
+        RepaymentOutcome::Full => {
+            update_offer_status(&mut sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
+        }
+        RepaymentOutcome::Partial {
+            continuing_offer_vout,
+            current_debt,
+            remaining_collateral,
+        } => {
+            update_offer_debt_and_collateral(
+                &mut sql_tx,
+                offer_id,
+                current_debt as i64,
+                remaining_collateral as i64,
+                block_height,
+            )
+            .await?;
+            insert_offer_utxo(
+                &mut sql_tx,
+                &OfferUtxoModel {
+                    offer_id,
+                    txid: repay_txid_bytes.clone(),
+                    vout: continuing_offer_vout,
+                    utxo_type: UtxoType::ActiveOffer,
+                    created_at_height: block_height as i64,
+                    spent_txid: None,
+                    spent_at_height: None,
+                },
+            )
+            .await?;
+        }
+    }
+
+    for vault in vaults {
+        insert_offer_vault(
+            &mut sql_tx,
+            &OfferVaultModel {
+                id: 0,
+                offer_id,
+                vault_type: vault.vault_type,
+                txid: repay_txid_bytes.clone(),
+                vout: vault.vout,
+                amount: vault.amount as i64,
+                already_supplied: vault.already_supplied as i64,
+                is_finalized: vault.is_finalized,
+                created_at_height: block_height as i64,
+                updated_at_height: block_height as i64,
+                spent_txid: None,
+                spent_at_height: None,
+            },
+        )
+        .await?;
+    }
+
+    sql_tx.commit().await?;
+
+    Ok(())
+}
+
 pub async fn repay_active_offer(
     borrower: &Session,
     pool: &PgPool,
@@ -300,72 +406,184 @@ pub async fn repay_active_offer(
     let repay_txid = receipt.txid();
     receipt.wait()?;
 
-    let block_height = 300_u64;
-    let active_offer_outpoint = OutPoint::new(accept_txid, 0);
     let total_to_repay = offer_parameters
         .offer_parameters
         .get_total_amount_to_repay();
     let protocol_fee = offer_parameters.offer_parameters.get_total_protocol_fee();
-    let lender_vault_amount = total_to_repay - protocol_fee;
 
     // First full repayment: borrower NFT burn @0, lender vault @1, protocol vault @2.
-    const LENDER_VAULT_VOUT: i32 = 1;
-    const PROTOCOL_FEE_VAULT_VOUT: i32 = 2;
-
-    let mut sql_tx = pool.begin().await?;
-
-    spend_offer_utxo(
-        &mut sql_tx,
-        &active_offer_outpoint,
-        block_height,
-        repay_txid,
-    )
-    .await?;
-    update_offer_status(&mut sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
-
-    insert_offer_vault(
-        &mut sql_tx,
-        &OfferVaultModel {
-            id: 0,
-            offer_id,
-            vault_type: VaultType::Lender,
-            txid: repay_txid.as_byte_array().to_vec(),
-            vout: LENDER_VAULT_VOUT,
-            amount: lender_vault_amount as i64,
-            already_supplied: 0,
-            is_finalized: true,
-            created_at_height: block_height as i64,
-            updated_at_height: block_height as i64,
-            spent_txid: None,
-            spent_at_height: None,
-        },
-    )
-    .await?;
-
+    let finalized_vault = |vault_type, vout, amount| RepaymentVault {
+        vault_type,
+        vout,
+        amount,
+        already_supplied: 0,
+        is_finalized: true,
+    };
+    let mut vaults = vec![finalized_vault(
+        VaultType::Lender,
+        1,
+        total_to_repay - protocol_fee,
+    )];
     if protocol_fee > 0 {
-        insert_offer_vault(
-            &mut sql_tx,
-            &OfferVaultModel {
-                id: 0,
-                offer_id,
-                vault_type: VaultType::ProtocolFee,
-                txid: repay_txid.as_byte_array().to_vec(),
-                vout: PROTOCOL_FEE_VAULT_VOUT,
-                amount: protocol_fee as i64,
-                already_supplied: 0,
-                is_finalized: true,
-                created_at_height: block_height as i64,
-                updated_at_height: block_height as i64,
-                spent_txid: None,
-                spent_at_height: None,
-            },
-        )
-        .await?;
+        vaults.push(finalized_vault(VaultType::ProtocolFee, 2, protocol_fee));
     }
 
-    sql_tx.commit().await?;
+    index_repayment(
+        pool,
+        offer_id,
+        accept_txid,
+        repay_txid,
+        RepaymentOutcome::Full,
+        &vaults,
+    )
+    .await?;
 
     Ok(repay_txid)
+}
+
+pub struct PartialRepayment {
+    pub remaining_collateral: u64,
+    pub lender_vault_amount: u64,
+}
+
+/// Repays `amount_to_repay` of a never repaid offer. The session only builds full repayments, so
+/// the transaction is assembled here.
+pub async fn partially_repay_active_offer(
+    borrower: &Session,
+    pool: &PgPool,
+    offer_id: i64,
+    accept_txid: Txid,
+    parameters: &LendingOfferParameters,
+    amount_to_repay: u64,
+) -> anyhow::Result<PartialRepayment> {
+    // Partial repayment layout: borrower NFT @0, continuing offer @1.
+    const CONTINUING_OFFER_VOUT: i32 = 1;
+
+    let signer = borrower.signer();
+    let provider = signer.get_provider()?;
+    let terms = parameters.offer_parameters;
+
+    let mut active_offer = LendingOffer::new_active(*parameters, terms.get_total_amount_to_repay());
+
+    let active_offer_utxo = provider
+        .fetch_scripthash_utxos(&active_offer.get_script_pubkey())?
+        .into_iter()
+        .next()
+        .context("active offer UTXO not found")?;
+    let borrower_nft_utxo = signer
+        .get_utxos_asset(parameters.borrower_nft_asset_id)?
+        .into_iter()
+        .next()
+        .context("borrower NFT UTXO not found")?;
+    let principal_utxos = select_utxos_for_amount(
+        signer.get_utxos_asset(parameters.principal_asset_id)?,
+        parameters.principal_asset_id,
+        amount_to_repay,
+    )
+    .context("not enough principal to repay")?;
+
+    let mut transaction = FinalTransaction::new();
+
+    transaction.add_input(
+        PartialInput::new(borrower_nft_utxo),
+        Some(NativeSignature::Ecdsa),
+    );
+    transaction.add_output(PartialOutput::new(
+        signer.get_address().script_pubkey(),
+        1,
+        parameters.borrower_nft_asset_id,
+    ));
+
+    active_offer.attach_partial_repayment(
+        &mut transaction,
+        active_offer_utxo,
+        None,
+        None,
+        amount_to_repay,
+    );
+
+    for principal_utxo in principal_utxos.utxos() {
+        transaction.add_input(
+            PartialInput::new(principal_utxo.clone()),
+            Some(NativeSignature::Ecdsa),
+        );
+    }
+
+    let debt_after = active_offer.get_current_debt();
+    let unlocked_collateral = terms.get_already_unlocked_collateral(debt_after);
+
+    transaction.add_output(PartialOutput::new(
+        signer.get_address().script_pubkey(),
+        unlocked_collateral,
+        parameters.collateral_asset_id,
+    ));
+
+    if principal_utxos.has_change() {
+        let change_output = PartialOutput::new(
+            signer.get_address().script_pubkey(),
+            principal_utxos.change_amount(),
+            parameters.principal_asset_id,
+        );
+
+        let change_output = if principal_utxos.any_confidential() {
+            change_output.with_blinding_key(signer.get_blinding_public_key())
+        } else {
+            change_output
+        };
+
+        transaction.add_output(change_output);
+    }
+
+    let vaults = [
+        (VaultType::Lender, parameters.get_lender_vault(debt_after)),
+        (
+            VaultType::ProtocolFee,
+            parameters.get_protocol_fee_vault(debt_after),
+        ),
+    ]
+    .into_iter()
+    .map(|(vault_type, vault)| {
+        let script_pubkey = vault.get_script_pubkey();
+        let vout = transaction
+            .outputs()
+            .iter()
+            .position(|output| output.script_pubkey == script_pubkey)
+            .context("vault output not found")?;
+
+        Ok(RepaymentVault {
+            vault_type,
+            vout: vout as i32,
+            amount: transaction.outputs()[vout].amount,
+            already_supplied: vault.get_already_supplied_amount(),
+            is_finalized: false,
+        })
+    })
+    .collect::<anyhow::Result<Vec<_>>>()?;
+
+    let receipt = signer.broadcast(&transaction)?;
+    let repay_txid = receipt.txid();
+    receipt.wait()?;
+
+    let remaining_collateral = terms.collateral_amount - unlocked_collateral;
+
+    index_repayment(
+        pool,
+        offer_id,
+        accept_txid,
+        repay_txid,
+        RepaymentOutcome::Partial {
+            continuing_offer_vout: CONTINUING_OFFER_VOUT,
+            current_debt: debt_after,
+            remaining_collateral,
+        },
+        &vaults,
+    )
+    .await?;
+
+    Ok(PartialRepayment {
+        remaining_collateral,
+        lender_vault_amount: vaults[0].amount,
+    })
 }
 
 pub async fn assert_offer_status(
