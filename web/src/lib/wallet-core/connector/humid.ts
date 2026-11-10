@@ -27,10 +27,6 @@ function outpointKey(txid: string, vout: number): string {
   return `${txid}:${vout}`
 }
 
-function rawAssetId(utxo: HumidUtxo): string {
-  return utxo.assetId.slice(utxo.assetId.lastIndexOf(':') + 1)
-}
-
 // getUTXOs doesn't report heights, only whether a coin is spendable (confirmed); the app
 // reads height() solely as a confirmed/unconfirmed flag.
 function toWalletCoin(utxo: HumidUtxo): WalletCoin {
@@ -38,7 +34,7 @@ function toWalletCoin(utxo: HumidUtxo): WalletCoin {
     outpoint: () => new OutPoint(outpointKey(utxo.txid, utxo.vout)),
     height: () => (utxo.spendable ? 1 : undefined),
     unblinded: () => ({
-      asset: () => AssetId.fromString(rawAssetId(utxo)),
+      asset: () => AssetId.fromString(utxo.assetId.slice(utxo.assetId.lastIndexOf(':') + 1)),
       value: () => BigInt(utxo.amount),
     }),
   }
@@ -130,7 +126,8 @@ export class HumidConnector implements WalletConnector {
 
   async signPset(pset: Pset): Promise<WalletRequest<Pset>> {
     const provider = this.requireProvider()
-    const firstAddress = new Address(this.requireFirstAddress().address).toUnconfidential()
+    if (!this.firstAddress) throw new Error('Humid wallet address is not loaded')
+    const firstAddress = new Address(this.firstAddress.address).toUnconfidential()
     const firstScriptHex = bytesToHex(firstAddress.scriptPubkey().bytes())
 
     const signInputs = pset.inputs().flatMap((input, index) => {
@@ -168,10 +165,5 @@ export class HumidConnector implements WalletConnector {
   private requireProvider(): HumidProvider {
     if (!this.provider) throw new Error('Humid is not connected')
     return this.provider
-  }
-
-  private requireFirstAddress(): HumidAddressResult {
-    if (!this.firstAddress) throw new Error('Humid wallet address is not loaded')
-    return this.firstAddress
   }
 }

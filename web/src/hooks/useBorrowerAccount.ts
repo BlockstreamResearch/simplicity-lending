@@ -114,10 +114,6 @@ export function useBorrowerAccount() {
       )
     }
 
-    if (FACTORY_AUTH_AMOUNT + ISSUANCE_FACTORY_AMOUNT !== ISSUANCE_AMOUNT) {
-      throw new Error('Invalid issuance split')
-    }
-
     const fundingOutpoint = utxoToOutpointString(feeUtxo)
     const [feeRate, feeTx] = await Promise.all([
       fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),

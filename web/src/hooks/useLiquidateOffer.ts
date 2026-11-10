@@ -153,8 +153,7 @@ export function useLiquidateOffer() {
 
     const currentDebt = getTotalAmountToRepay(offerParameters)
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
-    const firstFeeOutpoint = params.feeOutpoints[0]
-    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
+    if (params.feeOutpoints.length === 0) throw new Error('At least one fee UTXO is required')
 
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 

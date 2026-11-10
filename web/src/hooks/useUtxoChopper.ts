@@ -58,8 +58,10 @@ export function useUtxoChopper() {
       fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
     ])
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
-    const recipientAddressString = params.recipientAddress?.trim() || receiveAddressString
-    const recipient = Address.parse(recipientAddressString, lwkNetwork)
+    const recipient = Address.parse(
+      params.recipientAddress?.trim() || receiveAddressString,
+      lwkNetwork,
+    )
     const recipientSummary = recipient.toString()
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()

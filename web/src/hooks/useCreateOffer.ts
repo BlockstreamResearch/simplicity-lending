@@ -153,9 +153,10 @@ export function useCreateOffer() {
       throw new Error('FactoryAuth UTXO has unexpected asset')
     }
     assertExplicitAmount(factoryAuthTxOut, NFT_AMOUNT, 'FactoryAuth')
-    const receiveAddressExplicitString = Address.parse(receiveAddressString, lwkNetwork)
-      .toUnconfidential()
-      .toString()
+    const receiveExplicitAddress = Address.parse(
+      receiveAddressString,
+      lwkNetwork,
+    ).toUnconfidential()
     const issuanceFactoryProgram = loadIssuanceFactoryProgram({
       issuingUtxosCount: toUint8(ISSUING_UTXOS_COUNT, 'issuingUtxosCount'),
       reissuanceFlags: toUint64(REISSUANCE_FLAGS, 'reissuanceFlags'),
@@ -164,7 +165,6 @@ export function useCreateOffer() {
       XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
       lwkNetwork,
     )
-    const issuanceFactoryAddressString = issuanceFactoryAddress.toString()
 
     const borrowerNftContract = buildAssetContract(issuanceFactoryOutpoint, AssetKind.BorrowerNft)
     const lenderNftContract = buildAssetContract(lenderNftIssuanceOutpoint, AssetKind.LenderNft)
@@ -226,7 +226,6 @@ export function useCreateOffer() {
       XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
       lwkNetwork,
     )
-    const lenderNftScriptAuthAddressString = lenderNftScriptAuthAddress.toString()
     const pendingOfferMetadataPayload = await encodePendingOfferMetadata({
       principalAssetId,
       principalAmount: offerParameters.principalAmount,
@@ -236,8 +235,8 @@ export function useCreateOffer() {
     const pendingOfferMetadataScript = Script.newOpReturn(pendingOfferMetadataPayload)
 
     const factoryAsset = AssetId.fromString(factoryAssetString)
-    const policyAsset = AssetId.fromString(policyAssetString)
-    const receiveExplicitScript = new Address(receiveAddressExplicitString).scriptPubkey()
+    const policyAsset = lwkNetwork.policyAsset()
+    const receiveExplicitScript = receiveExplicitAddress.scriptPubkey()
     const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
     const changeAddress = await getChangeAddress()
@@ -330,10 +329,10 @@ export function useCreateOffer() {
               lenderNftIssuanceOutpoint: lenderNftIssuanceOutpointString,
             },
             outputs: {
-              '0 FactoryAuth back to user': receiveAddressExplicitString,
-              '1 IssuanceFactory back to covenant': issuanceFactoryAddressString,
-              '2 Borrower NFT to user': receiveAddressExplicitString,
-              '3 Lender NFT to ScriptAuth': lenderNftScriptAuthAddressString,
+              '0 FactoryAuth back to user': receiveExplicitAddress.toString(),
+              '1 IssuanceFactory back to covenant': issuanceFactoryAddress.toString(),
+              '2 Borrower NFT to user': receiveExplicitAddress.toString(),
+              '3 Lender NFT to ScriptAuth': lenderNftScriptAuthAddress.toString(),
               '4 Metadata OP_RETURN': bytesToHex(pendingOfferMetadataScript.bytes()),
               '5 Lending covenant': lendingScriptPubkeyHex,
             },

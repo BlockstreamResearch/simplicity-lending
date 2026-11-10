@@ -23,7 +23,7 @@ import {
 // order. This module only appends the L-BTC change and the fee outputs, computes the fee
 // and blinds.
 
-export interface PsetInputSpec {
+interface PsetInputSpec {
   outpoint: OutPoint
   /** The previous output as found on chain. */
   prevout: TxOut
@@ -39,14 +39,14 @@ export interface PsetInputSpec {
   walletCoin?: boolean
 }
 
-export interface PsetIssuanceSpec {
+interface PsetIssuanceSpec {
   assetAmount: bigint
   tokenAmount: bigint
   /** Zero hash when the asset has no contract. */
   contractHash: ContractHash
 }
 
-export interface PsetOutputSpec {
+interface PsetOutputSpec {
   script: Script
   amount: bigint
   asset: AssetId
@@ -57,9 +57,11 @@ export interface PsetOutputSpec {
 // `local`: blind here with the inputs' secrets (seed, Jade).
 // `wallet`: leave blinding to the wallet that owns the `walletCoin` inputs (e.g. Humid, which
 // does not share its blinding secrets).
+const MAX_FEE_RATE_SAT_PER_KVB = 1_000_000
+
 export type PsetBlinding = 'local' | 'wallet'
 
-export interface BuildPsetParams {
+interface BuildPsetParams {
   network: Network
   inputs: PsetInputSpec[]
   outputs: PsetOutputSpec[]
@@ -70,13 +72,18 @@ export interface BuildPsetParams {
   blinding: PsetBlinding
 }
 
-export interface BuiltPset {
+interface BuiltPset {
   pset: Pset
   fee: bigint
 }
 
 // Note: blinding consumes the `secrets` of the inputs, so build once per set of specs.
 export function buildPset(params: BuildPsetParams): BuiltPset {
+  if (params.feeRateSatPerKvb > MAX_FEE_RATE_SAT_PER_KVB) {
+    throw new Error(
+      `Fee rate ${params.feeRateSatPerKvb} sat/kvb is above ${MAX_FEE_RATE_SAT_PER_KVB}`,
+    )
+  }
   const policyAsset = params.network.policyAsset().toString()
   assertNonPolicyAssetsBalance(params, policyAsset)
 
