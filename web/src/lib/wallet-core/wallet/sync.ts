@@ -1,4 +1,4 @@
-import { type EsploraClient, type Transaction, TxOpt, type Wollet } from '@lilbonekit/lwk-web'
+import { type EsploraClient, type Transaction, TxOpt, type Wollet } from 'lwk_wasm'
 
 import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo } from '@/lwk/utxo'

@@ -20,8 +20,7 @@ import { TxResult } from './TxResult'
 const integerStringSchema = (label: string) =>
   zod.string().trim().regex(/^\d+$/, `${label} must be an integer`)
 
-const bigintStringSchema = (label: string) =>
-  integerStringSchema(label).transform(value => BigInt(value))
+const bigintStringSchema = (label: string) => integerStringSchema(label).transform(BigInt)
 
 const numberStringSchema = (label: string) =>
   integerStringSchema(label).transform(value => Number.parseInt(value, 10))

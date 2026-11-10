@@ -1,10 +1,23 @@
+FROM rust:1.91-bookworm AS lwk
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends clang llvm && \
+    rm -rf /var/lib/apt/lists/*
+RUN cargo install wasm-pack --locked
+
+WORKDIR /app
+COPY lwk ./lwk
+COPY web/scripts/build-lwk.sh ./web/scripts/build-lwk.sh
+RUN web/scripts/build-lwk.sh
+
 FROM node:22-bookworm AS builder
 
 WORKDIR /app/web
 RUN corepack enable && \
     corepack prepare pnpm@10.33.0 --activate
 
-COPY web/package.json web/pnpm-lock.yaml ./
+COPY --from=lwk /app/lwk/lwk_wasm/pkg /app/lwk/lwk_wasm/pkg
+COPY web/package.json web/pnpm-lock.yaml web/.pnpmfile.cjs ./
 
 RUN pnpm install --frozen-lockfile
 

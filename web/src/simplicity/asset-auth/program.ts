@@ -3,7 +3,7 @@ import {
   SimplicityProgram,
   SimplicityTypedValue,
   SimplicityWitnessValues,
-} from '@lilbonekit/lwk-web'
+} from 'lwk_wasm'
 import { sources } from 'virtual:simplicity-sources'
 
 import { bytes32ToHex } from '@/utils/hex'
@@ -36,7 +36,11 @@ export interface AssetAuthWitnessParams {
 }
 
 export function loadAssetAuthProgram(params: AssetAuthProgramParams): SimplicityProgram {
-  return SimplicityProgram.load(sources.asset_auth, buildAssetAuthArguments(params))
+  return SimplicityProgram.loadWithDebugSymbols(
+    sources.asset_auth,
+    buildAssetAuthArguments(params),
+    true,
+  )
 }
 
 export function buildAssetAuthArguments(params: AssetAuthProgramParams): SimplicityArguments {

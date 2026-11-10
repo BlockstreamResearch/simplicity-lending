@@ -1,9 +1,4 @@
-import {
-  type Network,
-  type Wollet,
-  WolletBuilder,
-  type WolletDescriptor,
-} from '@lilbonekit/lwk-web'
+import { type Network, type Wollet, WolletBuilder, type WolletDescriptor } from 'lwk_wasm'
 
 import type { NetworkName } from '@/constants/env'
 import { type KvBackend, openIdbBackend } from '@/lib/sync-kv/idbBackend'

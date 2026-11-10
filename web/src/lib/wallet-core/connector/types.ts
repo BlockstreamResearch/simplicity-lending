@@ -1,4 +1,4 @@
-import type { OutPoint, Pset, TxBuilder, Wollet, WolletDescriptor } from '@lilbonekit/lwk-web'
+import type { Pset, Wollet, WolletDescriptor } from 'lwk_wasm'
 
 import type { ConnectionStatus, WalletCoin, WalletType } from '../types'
 
@@ -21,6 +21,5 @@ export interface WalletConnector {
   getVerifiedReceiveAddress?(variant: WalletType, wollet: Wollet): Promise<string>
 
   getCoins?(assetIds: string[]): Promise<WalletCoin[]>
-  fundTxBuilder?(txBuilder: TxBuilder, outpoints: OutPoint[]): Promise<TxBuilder>
   receiveAddress?(): string | null
 }

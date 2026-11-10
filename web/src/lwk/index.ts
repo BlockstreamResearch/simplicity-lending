@@ -1,14 +1,14 @@
-import { EsploraClient, Network } from '@lilbonekit/lwk-web'
+import { EsploraClient, Network } from 'lwk_wasm'
 
 import { env, type NetworkName } from '@/constants/env'
 
-export type Lwk = typeof import('@lilbonekit/lwk-web')
+export type Lwk = typeof import('lwk_wasm')
 
 let lwk: Lwk | null = null
 
 export async function getLwk(): Promise<Lwk> {
   if (!lwk) {
-    lwk = await import('@lilbonekit/lwk-web')
+    lwk = await import('lwk_wasm')
     if (typeof lwk.default === 'function') await lwk.default()
   }
   return lwk

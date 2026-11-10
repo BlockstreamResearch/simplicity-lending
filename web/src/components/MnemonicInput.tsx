@@ -1,4 +1,4 @@
-import { Mnemonic } from '@lilbonekit/lwk-web'
+import { Mnemonic } from 'lwk_wasm'
 import { useState } from 'react'
 
 import ArrowsRotateIcon from '@/components/icons/ArrowsRotateIcon'
@@ -48,6 +48,7 @@ export function MnemonicInput({ onChange }: MnemonicInputProps) {
           <UiTextField
             key={index}
             aria-label={`Word ${index + 1}`}
+            className='min-w-0'
             value={word}
             onChange={value => handleWordChange(index, value)}
             startContent={

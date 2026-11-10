@@ -19,6 +19,7 @@ build_web:
     - job: create_timestamp
       artifacts: true
   variables:
+    GIT_SUBMODULE_STRATEGY: normal
     ARCH: amd64
     IMAGE: ${WEB_IMAGE}
     DOCKERFILE: deployment/Dockerfile.web

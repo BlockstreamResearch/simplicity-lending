@@ -52,7 +52,9 @@ To run the **demo frontend** (web app for borrowers and lenders), you need the *
 
 2. **Web** — install deps and start the dev server (see [web/README.md](web/README.md)):
    ```bash
-   cd web && npm install && npm run dev
+   git submodule update --init lwk && git config submodule.recurse true
+   web/scripts/build-lwk.sh
+   cd web && pnpm install && pnpm dev
    ```
    Open the URL shown (e.g. http://localhost:5173). Set `VITE_API_URL` in `web/.env` if the API is not at `http://localhost:8000`.
 
