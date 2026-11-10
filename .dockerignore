@@ -5,3 +5,6 @@ target
 web/node_modules
 web/dist
 web/.env
+lwk/.git
+lwk/target
+lwk/lwk_wasm/pkg

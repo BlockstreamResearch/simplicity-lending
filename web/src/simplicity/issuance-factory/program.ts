@@ -4,7 +4,7 @@ import {
   SimplicityType,
   SimplicityTypedValue,
   SimplicityWitnessValues,
-} from '@lilbonekit/lwk-web'
+} from 'lwk_wasm'
 import { sources } from 'virtual:simplicity-sources'
 
 import type { Uint8, Uint32, Uint64 } from '@/utils/uint'
@@ -44,7 +44,11 @@ export const ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY: Record<IssuanceFactoryBranc
 export function loadIssuanceFactoryProgram(
   params: IssuanceFactoryProgramParams,
 ): SimplicityProgram {
-  return SimplicityProgram.load(sources.issuance_factory, buildIssuanceFactoryArguments(params))
+  return SimplicityProgram.loadWithDebugSymbols(
+    sources.issuance_factory,
+    buildIssuanceFactoryArguments(params),
+    true,
+  )
 }
 
 export function buildIssuanceFactoryArguments(

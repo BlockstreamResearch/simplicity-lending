@@ -2,20 +2,19 @@ import {
   Address,
   AssetId,
   assetIdFromIssuance,
-  ExternalUtxo,
-  IssuanceRecipient,
   OutPoint,
   type Pset,
   Script,
   SimplicityLogLevel,
-  TxBuilder,
-  TxOutSecrets,
+  type TxOutSecrets,
   XOnlyPublicKey,
-} from '@lilbonekit/lwk-web'
+} from 'lwk_wasm'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { fetchLatestBlockHeight } from '@/api/esplora/methods'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { AssetKind, buildAssetContract, contractHashOrEmpty } from '@/lwk/assetContract'
+import { buildPset, type PsetBlinding } from '@/lwk/psetBuilder'
 import {
   assertExplicitAmount,
   fetchTransaction,
@@ -79,7 +78,14 @@ export interface CreateOfferSummary {
 
 export function useCreateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const createOffer = async (
@@ -147,9 +153,10 @@ export function useCreateOffer() {
       throw new Error('FactoryAuth UTXO has unexpected asset')
     }
     assertExplicitAmount(factoryAuthTxOut, NFT_AMOUNT, 'FactoryAuth')
-    const receiveAddressExplicitString = Address.parse(receiveAddressString, lwkNetwork)
-      .toUnconfidential()
-      .toString()
+    const receiveExplicitAddress = Address.parse(
+      receiveAddressString,
+      lwkNetwork,
+    ).toUnconfidential()
     const issuanceFactoryProgram = loadIssuanceFactoryProgram({
       issuingUtxosCount: toUint8(ISSUING_UTXOS_COUNT, 'issuingUtxosCount'),
       reissuanceFlags: toUint64(REISSUANCE_FLAGS, 'reissuanceFlags'),
@@ -158,32 +165,13 @@ export function useCreateOffer() {
       XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
       lwkNetwork,
     )
-    const issuanceFactoryAddressString = issuanceFactoryAddress.toString()
 
-    const issuanceFactoryExternalUtxo = new ExternalUtxo(
-      issuanceFactoryOutpoint.vout(),
-      issuanceFactoryTx,
-      TxOutSecrets.fromExplicit(AssetId.fromString(factoryAssetString), NFT_AMOUNT),
-      ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY.IssueAssets,
-      true,
-    )
-    const factoryAuthExternalUtxo = new ExternalUtxo(
-      factoryAuthOutpoint.vout(),
-      factoryAuthTx,
-      TxOutSecrets.fromExplicit(AssetId.fromString(factoryAssetString), NFT_AMOUNT),
-      EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-      true,
-    )
     const borrowerNftContract = buildAssetContract(issuanceFactoryOutpoint, AssetKind.BorrowerNft)
     const lenderNftContract = buildAssetContract(lenderNftIssuanceOutpoint, AssetKind.LenderNft)
-    const borrowerNftAsset = assetIdFromIssuance(
-      issuanceFactoryOutpoint,
-      await contractHashOrEmpty(borrowerNftContract),
-    )
-    const lenderNftAsset = assetIdFromIssuance(
-      lenderNftIssuanceOutpoint,
-      await contractHashOrEmpty(lenderNftContract),
-    )
+    const borrowerNftContractHash = await contractHashOrEmpty(borrowerNftContract)
+    const lenderNftContractHash = await contractHashOrEmpty(lenderNftContract)
+    const borrowerNftAsset = assetIdFromIssuance(issuanceFactoryOutpoint, borrowerNftContractHash)
+    const lenderNftAsset = assetIdFromIssuance(lenderNftIssuanceOutpoint, lenderNftContractHash)
     const borrowerNftAssetString = borrowerNftAsset.toString()
     const lenderNftAssetString = lenderNftAsset.toString()
     const loanDurationBlocks = params.loanDurationBlocks
@@ -238,43 +226,6 @@ export function useCreateOffer() {
       XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
       lwkNetwork,
     )
-    const lenderNftScriptAuthAddressString = lenderNftScriptAuthAddress.toString()
-    let txBuilder = new TxBuilder(lwkNetwork)
-    txBuilder = txBuilder.feeRate(feeRate)
-    txBuilder = txBuilder
-      .setWalletUtxos(params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)))
-      .setInputOrder([
-        new OutPoint(params.factoryAuthOutpoint),
-        new OutPoint(params.issuanceFactoryOutpoint),
-        ...params.collateralOutpoints.map(outpoint => new OutPoint(outpoint)),
-      ])
-
-    const externalUtxos = [factoryAuthExternalUtxo, issuanceFactoryExternalUtxo]
-    txBuilder = txBuilder.addExternalUtxos(externalUtxos)
-    txBuilder = txBuilder.addExplicitRecipient(
-      new Address(receiveAddressExplicitString),
-      NFT_AMOUNT,
-      AssetId.fromString(factoryAssetString),
-    )
-    txBuilder = txBuilder.addExplicitRecipient(
-      new Address(issuanceFactoryAddressString),
-      NFT_AMOUNT,
-      AssetId.fromString(factoryAssetString),
-    )
-    txBuilder = txBuilder.issueAssetToRecipients(
-      [IssuanceRecipient.fromAddress(NFT_AMOUNT, new Address(receiveAddressExplicitString))],
-      REISSUANCE_TOKEN_AMOUNT,
-      null,
-      borrowerNftContract,
-      new OutPoint(params.issuanceFactoryOutpoint),
-    )
-    txBuilder = txBuilder.issueAssetToRecipients(
-      [IssuanceRecipient.fromAddress(NFT_AMOUNT, new Address(lenderNftScriptAuthAddressString))],
-      REISSUANCE_TOKEN_AMOUNT,
-      null,
-      lenderNftContract,
-      new OutPoint(lenderNftIssuanceOutpointString),
-    )
     const pendingOfferMetadataPayload = await encodePendingOfferMetadata({
       principalAssetId,
       principalAmount: offerParameters.principalAmount,
@@ -283,30 +234,79 @@ export function useCreateOffer() {
     })
     const pendingOfferMetadataScript = Script.newOpReturn(pendingOfferMetadataPayload)
 
-    txBuilder = txBuilder.addPostIssuanceScriptOutput(
-      pendingOfferMetadataScript,
-      0n,
-      AssetId.fromString(policyAssetString),
-    )
-    txBuilder = txBuilder.addPostIssuanceScriptOutput(
-      lendingScript,
-      offerParameters.collateralAmount,
-      AssetId.fromString(policyAssetString),
-    )
-    txBuilder = txBuilder.setInputSequence(
-      new OutPoint(lenderNftIssuanceOutpointString),
-      WALLET_INPUT_RBF_SEQUENCE,
-    )
-    const pset = txBuilder.finish(wollet)
+    const factoryAsset = AssetId.fromString(factoryAssetString)
+    const policyAsset = lwkNetwork.policyAsset()
+    const receiveExplicitScript = receiveExplicitAddress.scriptPubkey()
+    const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
+
+    const changeAddress = await getChangeAddress()
+    const { pset } = buildPset({
+      network: lwkNetwork,
+      inputs: [
+        {
+          outpoint: factoryAuthOutpoint,
+          prevout: factoryAuthTxOut,
+          asset: factoryAsset,
+          amount: NFT_AMOUNT,
+          maxWeightToSatisfy: EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+        },
+        {
+          outpoint: issuanceFactoryOutpoint,
+          prevout: issuanceFactoryTxOut,
+          asset: factoryAsset,
+          amount: NFT_AMOUNT,
+          maxWeightToSatisfy: ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY.IssueAssets,
+          issuance: {
+            assetAmount: NFT_AMOUNT,
+            tokenAmount: REISSUANCE_TOKEN_AMOUNT,
+            contractHash: borrowerNftContractHash,
+          },
+        },
+        ...collateralUtxos.map((utxo, index) => ({
+          outpoint: collateralOutpoints[index],
+          prevout: collateralTxOuts[index],
+          asset: utxo.unblinded().asset(),
+          amount: utxo.unblinded().value(),
+          secrets: blinding === 'local' ? (utxo.unblinded() as TxOutSecrets) : undefined,
+          walletCoin: true,
+          sequence: index === 0 ? WALLET_INPUT_RBF_SEQUENCE : undefined,
+          maxWeightToSatisfy: wollet.maxWeightToSatisfy(),
+          issuance:
+            index === 0
+              ? {
+                  assetAmount: NFT_AMOUNT,
+                  tokenAmount: REISSUANCE_TOKEN_AMOUNT,
+                  contractHash: lenderNftContractHash,
+                }
+              : undefined,
+        })),
+      ],
+      outputs: [
+        { script: receiveExplicitScript, amount: NFT_AMOUNT, asset: factoryAsset },
+        { script: issuanceFactoryAddress.scriptPubkey(), amount: NFT_AMOUNT, asset: factoryAsset },
+        { script: receiveExplicitScript, amount: NFT_AMOUNT, asset: borrowerNftAsset },
+        {
+          script: lenderNftScriptAuthAddress.scriptPubkey(),
+          amount: NFT_AMOUNT,
+          asset: lenderNftAsset,
+        },
+        { script: pendingOfferMetadataScript, amount: 0n, asset: policyAsset },
+        { script: lendingScript, amount: offerParameters.collateralAmount, asset: policyAsset },
+      ],
+      changeAddress,
+      feeRateSatPerKvb: feeRate,
+      blinding,
+    })
+    pset.addDetails(wollet)
 
     return {
       pset,
       finalize: (signedPset: Pset) => {
         const finalizedWalletPset = wollet.finalize(signedPset)
         const txWithWalletWitnesses = finalizedWalletPset.extractTx()
-        const finalizedTx = issuanceFactoryProgram.finalizeTransactionWithSpendInfo(
+        const finalizedTx = issuanceFactoryProgram.finalizeTransaction(
           txWithWalletWitnesses,
-          buildCovenantSpendInfo(issuanceFactoryProgram),
+          buildCovenantSpendInfo(issuanceFactoryProgram).controlBlock(issuanceFactoryProgram.cmr),
           [factoryAuthTxOut, issuanceFactoryTxOut, ...collateralTxOuts],
           1,
           buildIssuanceFactoryWitness({
@@ -324,14 +324,15 @@ export function useCreateOffer() {
             inputs: {
               '0 FactoryAuth': params.factoryAuthOutpoint,
               '1 IssuanceFactory covenant': params.issuanceFactoryOutpoint,
-              '2+ Collateral LBTC': params.collateralOutpoints.join(', '),
+              [`2+ Collateral ${NETWORK_CONFIG.collateralAsset.symbol}`]:
+                params.collateralOutpoints.join(', '),
               lenderNftIssuanceOutpoint: lenderNftIssuanceOutpointString,
             },
             outputs: {
-              '0 FactoryAuth back to user': receiveAddressExplicitString,
-              '1 IssuanceFactory back to covenant': issuanceFactoryAddressString,
-              '2 Borrower NFT to user': receiveAddressExplicitString,
-              '3 Lender NFT to ScriptAuth': lenderNftScriptAuthAddressString,
+              '0 FactoryAuth back to user': receiveExplicitAddress.toString(),
+              '1 IssuanceFactory back to covenant': issuanceFactoryAddress.toString(),
+              '2 Borrower NFT to user': receiveExplicitAddress.toString(),
+              '3 Lender NFT to ScriptAuth': lenderNftScriptAuthAddress.toString(),
               '4 Metadata OP_RETURN': bytesToHex(pendingOfferMetadataScript.bytes()),
               '5 Lending covenant': lendingScriptPubkeyHex,
             },

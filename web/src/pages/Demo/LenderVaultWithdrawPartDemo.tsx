@@ -1,4 +1,3 @@
-import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -12,6 +11,7 @@ import {
 } from '@/hooks/useLenderVaultWithdrawPart'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -125,7 +125,7 @@ export default function LenderVaultWithdrawPartDemo() {
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
   const [foundVault, setFoundVault] = useState<string | null>(null)
-  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
+  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletCoin[]>([])
   const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,

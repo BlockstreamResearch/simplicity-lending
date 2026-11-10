@@ -5,7 +5,7 @@ import {
   type Script,
   Transaction,
   type TxOut,
-} from '@lilbonekit/lwk-web'
+} from 'lwk_wasm'
 
 import { fetchTxRaw } from '@/api/esplora/methods'
 

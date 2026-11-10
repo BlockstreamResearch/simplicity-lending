@@ -1,4 +1,3 @@
-import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -9,6 +8,7 @@ import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type CreateOfferSummary, useCreateOffer } from '@/hooks/useCreateOffer'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -20,8 +20,7 @@ import { TxResult } from './TxResult'
 const integerStringSchema = (label: string) =>
   zod.string().trim().regex(/^\d+$/, `${label} must be an integer`)
 
-const bigintStringSchema = (label: string) =>
-  integerStringSchema(label).transform(value => BigInt(value))
+const bigintStringSchema = (label: string) => integerStringSchema(label).transform(BigInt)
 
 const numberStringSchema = (label: string) =>
   integerStringSchema(label).transform(value => Number.parseInt(value, 10))
@@ -143,7 +142,7 @@ export default function CreateOfferDemo() {
     resolver: createOfferFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
-  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
+  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletCoin[]>([])
   const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,
@@ -235,7 +234,8 @@ export default function CreateOfferDemo() {
       <div className='font-bold'>Create Offer Demo</div>
       <p className='mt-2 max-w-3xl text-sm text-gray-600'>
         Builds one offer creation transaction: FactoryAuth input, IssuanceFactory covenant input,
-        and one or more LBTC collateral inputs. Borrower account UTXOs are entered manually.
+        and one or more {NETWORK_CONFIG.collateralAsset.symbol} collateral inputs. Borrower account
+        UTXOs are entered manually.
       </p>
 
       <div className='mt-4 flex flex-col gap-3'>
@@ -257,11 +257,11 @@ export default function CreateOfferDemo() {
         })}
         {renderTextField({
           name: 'collateralOutpoints',
-          label: 'Collateral LBTC outpoint(s)',
+          label: `Collateral ${NETWORK_CONFIG.collateralAsset.symbol} outpoint(s)`,
           placeholder: 'txid:vout, txid:vout, ...',
           description: collateralUtxoOptions.length
             ? `Available: ${collateralUtxoOptions.map(option => option.label).join(' | ')}`
-            : 'No wallet LBTC UTXOs loaded',
+            : `No wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs loaded`,
         })}
 
         {renderTextField({
@@ -305,7 +305,7 @@ export default function CreateOfferDemo() {
           loadingText='Refreshing...'
           onPress={refreshWalletUtxos}
         >
-          Refresh LBTC UTXOs
+          Refresh {NETWORK_CONFIG.collateralAsset.symbol} UTXOs
         </UiButton>
         <UiButton
           isDisabled={connectionStatus !== 'ready'}

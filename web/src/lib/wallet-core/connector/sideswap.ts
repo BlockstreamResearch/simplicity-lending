@@ -1,4 +1,4 @@
-import { Pset, WolletDescriptor } from '@lilbonekit/lwk-web'
+import { Pset, WolletDescriptor } from 'lwk_wasm'
 
 import { type Deferred, withTimeout } from '@/utils/async'
 

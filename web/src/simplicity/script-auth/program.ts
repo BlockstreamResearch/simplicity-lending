@@ -3,7 +3,7 @@ import {
   SimplicityProgram,
   SimplicityTypedValue,
   SimplicityWitnessValues,
-} from '@lilbonekit/lwk-web'
+} from 'lwk_wasm'
 import { sources } from 'virtual:simplicity-sources'
 
 import { bytes32ToHex } from '@/utils/hex'
@@ -22,7 +22,11 @@ const WITNESS = {
 export const SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY = 400
 
 export function loadScriptAuthProgram(scriptHash: Bytes32): SimplicityProgram {
-  return SimplicityProgram.load(sources.script_auth, buildScriptAuthArguments(scriptHash))
+  return SimplicityProgram.loadWithDebugSymbols(
+    sources.script_auth,
+    buildScriptAuthArguments(scriptHash),
+    true,
+  )
 }
 
 export function buildScriptAuthArguments(scriptHash: Bytes32): SimplicityArguments {

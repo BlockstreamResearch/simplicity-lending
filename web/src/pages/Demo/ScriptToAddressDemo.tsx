@@ -1,4 +1,4 @@
-import { Address } from '@lilbonekit/lwk-web'
+import { Address } from 'lwk_wasm'
 import { useState } from 'react'
 
 import { UiButton } from '@/components/ui/UiButton'

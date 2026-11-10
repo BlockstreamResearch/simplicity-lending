@@ -1,17 +1,16 @@
 import {
   Address,
   AssetId,
-  ExternalUtxo,
   OutPoint,
   type Pset,
   Script,
   SimplicityLogLevel,
-  TxBuilder,
-  TxOutSecrets,
-} from '@lilbonekit/lwk-web'
+  type TxOutSecrets,
+} from 'lwk_wasm'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { buildPset, type PsetBlinding } from '@/lwk/psetBuilder'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -65,7 +64,14 @@ export interface LiquidateOfferSummary {
 
 export function useLiquidateOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const liquidateOffer = async (
@@ -88,10 +94,10 @@ export function useLiquidateOffer() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     // TODO: Handle with indexer
     const [activeOfferTx, createOfferTx, lenderNftTx, feeTxs] = await Promise.all([
@@ -111,7 +117,7 @@ export function useLiquidateOffer() {
     const pendingOfferTxOut = requireTxOut(createOfferTx, 5, 'Pending offer Lending')
     const lenderNftTxOut = requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
 
     const collateralAsset = requireExplicitAsset(activeOfferTxOut, 'Active offer')
@@ -159,41 +165,57 @@ export function useLiquidateOffer() {
     )
 
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
-    const firstFeeOutpoint = params.feeOutpoints[0]
-    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
+    if (params.feeOutpoints.length === 0) throw new Error('At least one fee UTXO is required')
 
-    const pset = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
-      .setInputOrder([
-        new OutPoint(params.activeOfferOutpoint),
-        new OutPoint(params.lenderNftOutpoint),
-        ...params.feeOutpoints.map(o => new OutPoint(o)),
-      ])
-      .addExternalUtxos([
-        new ExternalUtxo(
-          activeOfferOutpoint.vout(),
-          activeOfferTx,
-          TxOutSecrets.fromExplicit(collateralAsset, currentCollateralAmount),
-          LENDING_MAX_WEIGHT_TO_SATISFY.Liquidation,
-          true,
-        ),
-        new ExternalUtxo(
-          lenderNftOutpoint.vout(),
-          lenderNftTx,
-          TxOutSecrets.fromExplicit(lenderNftAsset, NFT_AMOUNT),
-          EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-          true,
-        ),
-      ])
-      .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, lenderNftAsset)
-      .addPostIssuanceRecipient(collateralRecipient, currentCollateralAmount, collateralAsset)
-      .setFallbackLocktimeHeight(metadata.loanExpirationTime)
-      .setInputSequence(new OutPoint(params.activeOfferOutpoint), MAX_SEQUENCE_NON_RBF)
-      // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1) —
-      // set on a fee UTXO, not the covenant input above, which must keep locktime enforced.
-      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
-      .finish(wollet)
+    const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
+
+    const changeAddress = await getChangeAddress()
+    const { pset } = buildPset({
+      network: lwkNetwork,
+      inputs: [
+        {
+          outpoint: activeOfferOutpoint,
+          prevout: activeOfferTxOut,
+          asset: collateralAsset,
+          amount: currentCollateralAmount,
+          // Non-final, so the covenant's locktime is enforced.
+          sequence: MAX_SEQUENCE_NON_RBF,
+          maxWeightToSatisfy: LENDING_MAX_WEIGHT_TO_SATISFY.Liquidation,
+        },
+        {
+          outpoint: lenderNftOutpoint,
+          prevout: lenderNftTxOut,
+          asset: lenderNftAsset,
+          amount: NFT_AMOUNT,
+          maxWeightToSatisfy: EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+        },
+        ...feeUtxos.map((utxo, index) => ({
+          outpoint: feeOutpoints[index],
+          prevout: feeTxOuts[index],
+          asset: utxo.unblinded().asset(),
+          amount: utxo.unblinded().value(),
+          secrets: blinding === 'local' ? (utxo.unblinded() as TxOutSecrets) : undefined,
+          walletCoin: true,
+          // One RBF-signaling input is enough to make the whole tx replaceable (BIP-125 rule 1).
+          sequence: index === 0 ? WALLET_INPUT_RBF_SEQUENCE : undefined,
+          maxWeightToSatisfy: wollet.maxWeightToSatisfy(),
+        })),
+      ],
+      outputs: [
+        { script: burnScript, amount: NFT_AMOUNT, asset: lenderNftAsset },
+        {
+          script: collateralRecipient.scriptPubkey(),
+          amount: currentCollateralAmount,
+          asset: collateralAsset,
+          blindingPubkey: collateralRecipient.blindingPubkey(),
+        },
+      ],
+      changeAddress,
+      feeRateSatPerKvb: feeRate,
+      fallbackLocktime: metadata.loanExpirationTime,
+      blinding,
+    })
+    pset.addDetails(wollet)
 
     return {
       pset,
@@ -201,9 +223,9 @@ export function useLiquidateOffer() {
         const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
 
         const prevouts = [activeOfferTxOut, lenderNftTxOut, ...feeTxOuts]
-        const finalizedTx = lendingProgram.finalizeTransactionWithSpendInfo(
+        const finalizedTx = lendingProgram.finalizeTransaction(
           txWithWalletWitnesses,
-          activeLendingSpendInfo,
+          activeLendingSpendInfo.controlBlock(lendingProgram.cmr),
           prevouts,
           0,
           buildLendingWitness({ branch: 'Liquidation', currentDebt }),
@@ -218,13 +240,14 @@ export function useLiquidateOffer() {
             inputs: {
               '0 Active offer Lending': params.activeOfferOutpoint,
               '1 Lender NFT (wallet)': params.lenderNftOutpoint,
-              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`2+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
               'Create-offer tx (metadata)': params.createOfferTxid,
             },
             outputs: {
               '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
               '1 Unlocked collateral': collateralRecipient.toString(),
-              'L-BTC change': 'Managed by LWK',
+              [`${NETWORK_CONFIG.collateralAsset.symbol} change`]: changeAddress.toString(),
             },
             assetIds: {
               collateralAssetId: collateralAsset.toString(),
