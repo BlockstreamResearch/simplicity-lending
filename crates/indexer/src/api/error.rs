@@ -15,6 +15,9 @@ pub enum ApiError {
 
     #[error("Validation error: {0}")]
     BadRequest(String),
+
+    #[error("Service unavailable: {0}")]
+    ServiceUnavailable(String),
 }
 
 impl IntoResponse for ApiError {
@@ -34,6 +37,11 @@ impl IntoResponse for ApiError {
                 format!("Resource not found: {}", id),
             ),
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "bad_request", msg.clone()),
+            ApiError::ServiceUnavailable(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
+                msg.clone(),
+            ),
         };
 
         let body = Json(json!({
@@ -93,5 +101,19 @@ mod tests {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(json["error"]["code"], "internal_error");
         assert_eq!(json["error"]["message"], "An unexpected error occurred");
+    }
+
+    #[tokio::test]
+    async fn service_unavailable_maps_to_503_with_message() {
+        let response = ApiError::ServiceUnavailable("busy".to_string()).into_response();
+        let status = response.status();
+        let body_bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let json: Value = serde_json::from_slice(&body_bytes).expect("valid json");
+
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(json["error"]["code"], "service_unavailable");
+        assert_eq!(json["error"]["message"], "busy");
     }
 }

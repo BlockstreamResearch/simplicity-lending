@@ -231,6 +231,8 @@ data: {"type":"offer_vault_withdrawal_indexed","id":"42","txid":"ccdd…","heigh
 
 Clients should treat events as signals to refetch REST resources rather than as full state snapshots. Keep-alive comments are sent periodically so proxies do not close idle connections. If an nginx (or similar) reverse proxy sits in front of the API, disable response buffering for this path.
 
+Concurrent subscriptions are capped. The bundled nginx configs allow 256 streams in total, answering `429` beyond that; the API itself answers `503` once 512 streams are open. Browsers' `EventSource` does not retry after a non-`200` response, so clients should reconnect themselves with backoff.
+
 API and indexer may run as separate processes (`RUN_MODE=api` / `RUN_MODE=indexer`); events cross the process boundary via Postgres LISTEN/NOTIFY.
 
 ### Identifiers
