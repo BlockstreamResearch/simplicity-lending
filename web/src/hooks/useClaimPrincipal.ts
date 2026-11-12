@@ -1,14 +1,8 @@
-import {
-  Address,
-  ExternalUtxo,
-  OutPoint,
-  type Pset,
-  SimplicityLogLevel,
-  TxBuilder,
-  TxOutSecrets,
-} from '@lilbonekit/lwk-web'
+import { Address, OutPoint, type Pset, SimplicityLogLevel, type TxOutSecrets } from 'lwk_wasm'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
+import { NETWORK_CONFIG } from '@/constants/network-config'
+import { buildPset, type PsetBlinding } from '@/lwk/psetBuilder'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -61,7 +55,14 @@ export interface ClaimPrincipalSummary {
 
 export function useClaimPrincipal() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const claimPrincipal = async (
@@ -87,10 +88,10 @@ export function useClaimPrincipal() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     const [principalTx, borrowerNftTx, feeTxs, feeRate] = await Promise.all([
       fetchTransaction(principalOutpoint),
@@ -102,7 +103,7 @@ export function useClaimPrincipal() {
     const principalTxOut = requireTxOut(principalTx, principalOutpoint.vout(), 'Principal')
     const borrowerNftTxOut = requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT')
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
 
     const principalAsset = requireExplicitAsset(principalTxOut, 'Principal')
@@ -121,43 +122,56 @@ export function useClaimPrincipal() {
       assetAuthSpendInfo.scriptPubkey,
       'Principal UTXO does not match the reconstructed borrower AssetAuth covenant',
     )
-    const inputOrderStrings = [
-      params.principalOutpoint,
-      params.borrowerNftOutpoint,
-      ...params.feeOutpoints,
-    ]
+    if (feeUtxos.length === 0) throw new Error('At least one fee UTXO is required')
+    const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
-    const firstFeeOutpoint = params.feeOutpoints[0]
-    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
-
-    const pset = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
-      .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
-      .addExternalUtxos([
-        new ExternalUtxo(
-          principalOutpoint.vout(),
-          principalTx,
-          TxOutSecrets.fromExplicit(principalAsset, principalAmount),
-          ASSET_AUTH_MAX_WEIGHT_TO_SATISFY,
-          true,
-        ),
-        new ExternalUtxo(
-          borrowerNftOutpoint.vout(),
-          borrowerNftTx,
-          TxOutSecrets.fromExplicit(borrowerNftAsset, NFT_AMOUNT),
-          EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-          true,
-        ),
-      ])
-      .addPostIssuanceScriptOutput(
-        borrowerNftRecipient.scriptPubkey(),
-        NFT_AMOUNT,
-        borrowerNftAsset,
-      )
-      .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
-      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
-      .finish(wollet)
+    const changeAddress = await getChangeAddress()
+    const { pset } = buildPset({
+      network: lwkNetwork,
+      inputs: [
+        {
+          outpoint: principalOutpoint,
+          prevout: principalTxOut,
+          asset: principalAsset,
+          amount: principalAmount,
+          maxWeightToSatisfy: ASSET_AUTH_MAX_WEIGHT_TO_SATISFY,
+        },
+        {
+          outpoint: borrowerNftOutpoint,
+          prevout: borrowerNftTxOut,
+          asset: borrowerNftAsset,
+          amount: NFT_AMOUNT,
+          maxWeightToSatisfy: EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+        },
+        ...feeUtxos.map((utxo, index) => ({
+          outpoint: feeOutpoints[index],
+          prevout: feeTxOuts[index],
+          asset: utxo.unblinded().asset(),
+          amount: utxo.unblinded().value(),
+          secrets: blinding === 'local' ? (utxo.unblinded() as TxOutSecrets) : undefined,
+          walletCoin: true,
+          sequence: index === 0 ? WALLET_INPUT_RBF_SEQUENCE : undefined,
+          maxWeightToSatisfy: wollet.maxWeightToSatisfy(),
+        })),
+      ],
+      outputs: [
+        {
+          script: borrowerNftRecipient.scriptPubkey(),
+          amount: NFT_AMOUNT,
+          asset: borrowerNftAsset,
+        },
+        {
+          script: principalRecipient.scriptPubkey(),
+          amount: principalAmount,
+          asset: principalAsset,
+          blindingPubkey: principalRecipient.blindingPubkey(),
+        },
+      ],
+      changeAddress,
+      feeRateSatPerKvb: feeRate,
+      blinding,
+    })
+    pset.addDetails(wollet)
 
     return {
       pset,
@@ -165,9 +179,9 @@ export function useClaimPrincipal() {
         const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
 
         const prevouts = [principalTxOut, borrowerNftTxOut, ...feeTxOuts]
-        const finalizedTx = assetAuthProgram.finalizeTransactionWithSpendInfo(
+        const finalizedTx = assetAuthProgram.finalizeTransaction(
           txWithWalletWitnesses,
-          assetAuthSpendInfo,
+          assetAuthSpendInfo.controlBlock(assetAuthProgram.cmr),
           prevouts,
           0,
           buildAssetAuthWitness({
@@ -185,12 +199,13 @@ export function useClaimPrincipal() {
             inputs: {
               '0 Principal AssetAuth': params.principalOutpoint,
               '1 Borrower NFT (wallet)': params.borrowerNftOutpoint,
-              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`2+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
             },
             outputs: {
               '0 Borrower NFT to recipient': borrowerNftRecipient.toString(),
               '1 Unlocked principal to recipient': principalRecipient.toString(),
-              'L-BTC change': 'Managed by LWK',
+              [`${NETWORK_CONFIG.collateralAsset.symbol} change`]: 'Managed by LWK',
             },
             assetIds: {
               principalAssetId: principalAsset.toString(),

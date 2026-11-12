@@ -1,4 +1,3 @@
-import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -6,9 +5,11 @@ import { z as zod } from 'zod'
 import { resolveLenderNftOutpoint, resolveLenderVaultOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type LenderVaultClaimSummary, useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -42,7 +43,7 @@ const lenderVaultClaimFormSchema = zod.object({
   lenderVaultOutpoint: outpointSchema('Lender vault outpoint'),
   lenderNftOutpoint: outpointSchema('Lender NFT outpoint'),
   createOfferTxid: txidSchema('Create-offer txid'),
-  feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
+  feeOutpoints: outpointListSchema(`Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint`),
   principalRecipientAddress: zod.string().trim().optional(),
 })
 
@@ -111,7 +112,7 @@ export default function LenderVaultClaimDemo() {
     resolver: lenderVaultClaimFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
-  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
+  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletCoin[]>([])
   const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,
@@ -251,11 +252,11 @@ export default function LenderVaultClaimDemo() {
         })}
         {renderTextField({
           name: 'feeOutpoints',
-          label: 'Fee L-BTC outpoint(s)',
+          label: `Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint(s)`,
           placeholder: 'txid:vout, txid:vout, ...',
           description: feeUtxoOptions.length
             ? `Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
-            : 'No wallet L-BTC UTXOs loaded',
+            : `No wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs loaded`,
         })}
       </div>
 
@@ -271,7 +272,7 @@ export default function LenderVaultClaimDemo() {
           loadingText='Refreshing...'
           onPress={refreshWalletUtxos}
         >
-          Refresh L-BTC UTXOs
+          Refresh {NETWORK_CONFIG.collateralAsset.symbol} UTXOs
         </UiButton>
         <UiButton
           isDisabled={connectionStatus !== 'ready'}

@@ -1,36 +1,35 @@
-import type {
-  EsploraClient,
-  Pset,
-  Transaction,
-  WalletTxOut,
-  Wollet,
-  WolletDescriptor,
-} from '@lilbonekit/lwk-web'
+import type { Address, EsploraClient, Pset, Transaction, Wollet, WolletDescriptor } from 'lwk_wasm'
 
 import type { WalletConnector } from '@/lib/wallet-core/connector/types'
-import type { ConnectionStatus, WalletType } from '@/lib/wallet-core/types'
+import type { WalletCache } from '@/lib/wallet-core/store/walletCache'
+import type { ConnectionStatus, WalletCoin, WalletType } from '@/lib/wallet-core/types'
 
 export interface ConnectOptions {
   seedMnemonic?: string
   /** Connect via the experimental SideSwap wallet connect flow instead of Jade/seed. */
   sideswap?: boolean
+  /** Connect the Humid browser extension (signPset flow, not the tx manifest). */
+  humid?: boolean
   /** Only reattach to a still-live SideSwap session; never start a fresh login request. */
   resumeOnly?: boolean
 }
+
+export type CachePolicy = 'preserve' | 'clear'
 
 export interface WalletContextValue extends WalletState {
   isReady: boolean
   connect(variant: WalletType, options?: ConnectOptions): Promise<void>
   /** Cancels an in-flight SideSwap login/sign request and resets the connection. */
   cancelPendingRequest(): Promise<void>
-  disconnect(): Promise<void>
+  disconnect(options?: { cachePolicy?: CachePolicy }): Promise<void>
   syncWallet(): Promise<void>
   /** Applies a just-broadcast tx to local wallet state instantly, without a network scan. */
   applyBroadcastTransaction(tx: Transaction): void
   signPset(pset: Pset): Promise<Pset>
-  getBlindedWalletUtxos(): Promise<WalletTxOut[]>
+  getBlindedWalletUtxos(): Promise<WalletCoin[]>
   getWollet(): Promise<Wollet>
   getReceiveAddress(): Promise<string | null>
+  getChangeAddress(): Promise<Address>
   verifyReceiveAddress(): Promise<string>
 }
 
@@ -39,6 +38,7 @@ export interface WalletSession {
   descriptor: WolletDescriptor
   wollet: Wollet
   esploraClient: EsploraClient
+  cache: WalletCache
 }
 
 export interface SavedSession {
@@ -48,9 +48,10 @@ export interface SavedSession {
   /** Set only for seed-signer sessions — needed to silently reconnect the software signer on reload. */
   seedMnemonic?: string
   sideswap?: boolean
+  humid?: boolean
 }
 
-export type WalletSignerType = 'jade' | 'seed' | 'sideswap'
+export type WalletSignerType = 'jade' | 'seed' | 'sideswap' | 'humid'
 
 // appLink is null for sign requests — the deep-link format for those isn't confirmed yet.
 export interface PendingWalletRequest {

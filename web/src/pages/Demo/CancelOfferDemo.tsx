@@ -1,4 +1,3 @@
-import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -6,9 +5,11 @@ import { z as zod } from 'zod'
 import { resolveNftOutpoints, resolvePendingOutpoint } from '@/api/indexer/utils'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiTextField } from '@/components/ui/UiTextField'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type CancelOfferSummary, useCancelOffer } from '@/hooks/useCancelOffer'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -39,7 +40,7 @@ const cancelOfferFormSchema = zod.object({
     .string()
     .trim()
     .min(1, 'Collateral recipient address is required'),
-  feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
+  feeOutpoints: outpointListSchema(`Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint`),
 })
 
 type CancelOfferForm = zod.input<typeof cancelOfferFormSchema>
@@ -110,7 +111,7 @@ export default function CancelOfferDemo() {
     resolver: cancelOfferFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
-  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletTxOut[]>([])
+  const [blindedWalletUtxos, setBlindedWalletUtxos] = useState<WalletCoin[]>([])
   const [blindedWalletUtxosState, setBlindedWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,
@@ -249,11 +250,11 @@ export default function CancelOfferDemo() {
         })}
         {renderTextField({
           name: 'feeOutpoints',
-          label: 'Fee L-BTC outpoint(s)',
+          label: `Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint(s)`,
           placeholder: 'txid:vout, txid:vout, ...',
           description: feeUtxoOptions.length
             ? `Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
-            : 'No wallet L-BTC UTXOs loaded',
+            : `No wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs loaded`,
         })}
       </div>
 
@@ -269,7 +270,7 @@ export default function CancelOfferDemo() {
           loadingText='Refreshing...'
           onPress={refreshWalletUtxos}
         >
-          Refresh L-BTC UTXOs
+          Refresh {NETWORK_CONFIG.collateralAsset.symbol} UTXOs
         </UiButton>
         <UiButton
           isDisabled={connectionStatus !== 'ready'}

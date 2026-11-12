@@ -1,4 +1,3 @@
-import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -15,6 +14,7 @@ import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type PartialRepayOfferSummary, usePartialRepayOffer } from '@/hooks/usePartialRepayOffer'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -65,7 +65,7 @@ const repayOfferFormSchema = zod.object({
     .optional(),
   collateralRecipientAddress: zod.string().trim().optional(),
   principalOutpoints: outpointListSchema('Principal outpoint'),
-  feeOutpoints: outpointListSchema('Fee L-BTC outpoint'),
+  feeOutpoints: outpointListSchema(`Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint`),
 })
 
 type RepayOfferForm = zod.input<typeof repayOfferFormSchema>
@@ -137,7 +137,7 @@ export default function RepayOfferDemo() {
     resolver: repayOfferFormResolver,
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
-  const [walletUtxos, setWalletUtxos] = useState<WalletTxOut[]>([])
+  const [walletUtxos, setWalletUtxos] = useState<WalletCoin[]>([])
   const [walletUtxosState, setWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,
@@ -332,11 +332,11 @@ export default function RepayOfferDemo() {
         })}
         {renderTextField({
           name: 'feeOutpoints',
-          label: 'Fee L-BTC outpoint(s)',
+          label: `Fee ${NETWORK_CONFIG.collateralAsset.symbol} outpoint(s)`,
           placeholder: 'txid:vout, txid:vout, ...',
           description: feeUtxoOptions.length
             ? `Available: ${feeUtxoOptions.map(o => o.label).join(' | ')}`
-            : 'No wallet L-BTC UTXOs loaded',
+            : `No wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs loaded`,
         })}
       </div>
 

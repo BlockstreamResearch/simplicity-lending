@@ -1,10 +1,12 @@
-import type { AssetId, WalletTxOut } from '@lilbonekit/lwk-web'
+import type { AssetId } from 'lwk_wasm'
 
+import { NETWORK_CONFIG } from '@/constants/network-config'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 
 export interface DemoScriptAuthInputSelection {
-  authUtxo: WalletTxOut
-  fundingUtxo: WalletTxOut
+  authUtxo: WalletCoin
+  fundingUtxo: WalletCoin
 }
 
 /**
@@ -15,7 +17,7 @@ export interface DemoScriptAuthInputSelection {
  * explicit auth/funding UTXO selection.
  */
 export function selectDemoScriptAuthInputs(
-  walletUtxos: WalletTxOut[],
+  walletUtxos: WalletCoin[],
   policyAsset: AssetId | string,
   feeReserve: bigint,
 ): DemoScriptAuthInputSelection {
@@ -34,7 +36,7 @@ export function selectDemoScriptAuthInputs(
 
   if (!fundingUtxo) {
     throw new Error(
-      'Need a confirmed wallet L-BTC UTXO larger than the fee reserve to fund ScriptAuth',
+      `Need a confirmed wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXO larger than the fee reserve to fund ScriptAuth`,
     )
   }
 
@@ -42,7 +44,9 @@ export function selectDemoScriptAuthInputs(
   const authUtxo = lbtcUtxos.find(utxo => utxoToOutpointString(utxo) !== fundingOutpoint)
 
   if (!authUtxo) {
-    throw new Error('Need a second confirmed wallet L-BTC UTXO to use as the ScriptAuth auth input')
+    throw new Error(
+      `Need a second confirmed wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXO to use as the ScriptAuth auth input`,
+    )
   }
 
   return { authUtxo, fundingUtxo }
@@ -87,7 +91,7 @@ export function removeScriptAuthState(authOutpoint: string): void {
   localStorage.setItem(SCRIPT_AUTH_STORAGE_KEY, JSON.stringify(filteredStates))
 }
 
-export function formatCollateralUtxoOption(utxo: WalletTxOut): { id: string; label: string } {
+export function formatCollateralUtxoOption(utxo: WalletCoin): { id: string; label: string } {
   const outpoint = utxoToOutpointString(utxo)
   const height = utxo.height()
   const status = height === undefined ? 'mempool' : `height ${height}`

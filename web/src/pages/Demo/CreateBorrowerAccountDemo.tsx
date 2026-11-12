@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { type BorrowerAccountCreationSummary, useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
@@ -66,7 +67,8 @@ export default function CreateBorrowerAccountDemo() {
       <div className='rounded border border-gray-300 bg-white p-4'>
         <div className='font-bold'>Borrower Account IssuanceFactory Demo</div>
         <p className='mt-2 max-w-3xl text-sm text-gray-600'>
-          Creates a borrower account by issuing two units of a new auth asset from one wallet L-BTC
+          Creates a borrower account by issuing two units of a new auth asset from one wallet{' '}
+          {NETWORK_CONFIG.collateralAsset.symbol}
           input. One unit returns to the user as FactoryAuth, and one unit funds the IssuanceFactory
           covenant. Reissuance token amount is zero.
         </p>

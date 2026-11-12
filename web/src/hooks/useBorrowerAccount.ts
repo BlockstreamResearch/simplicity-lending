@@ -1,24 +1,25 @@
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Address,
   type AssetId,
   assetIdFromIssuance,
-  type Contract,
-  IssuanceRecipient,
+  type ContractHash,
   type OutPoint,
   type Pset,
   Script,
-  TxBuilder,
+  type TxOutSecrets,
   XOnlyPublicKey,
-} from '@lilbonekit/lwk-web'
-import { useQueryClient } from '@tanstack/react-query'
+} from 'lwk_wasm'
 import { useCallback, useMemo } from 'react'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { useFactories } from '@/api/indexer/hooks'
 import { factoryQueryKeys } from '@/api/indexer/queryKeys'
 import type { FactoryDetails } from '@/api/indexer/schemas'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { AssetKind, buildAssetContract, contractHashOrEmpty } from '@/lwk/assetContract'
-import type { UpdatedPset } from '@/lwk/transaction'
+import { buildPset, type PsetBlinding } from '@/lwk/psetBuilder'
+import { fetchTransaction, requireTxOut, type UpdatedPset } from '@/lwk/transaction'
 import {
   isConfirmedWalletUtxo,
   isPolicyAssetUtxo,
@@ -70,7 +71,14 @@ export interface BorrowerAccountCreationSummary {
 
 export function useBorrowerAccount() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, scriptPubkey } = useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    scriptPubkey,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
   const queryClient = useQueryClient()
   const factoriesQuery = useFactories(scriptPubkey || '')
@@ -102,16 +110,16 @@ export function useBorrowerAccount() {
 
     if (!feeUtxo) {
       throw new Error(
-        `Need a confirmed wallet L-BTC UTXO larger than ${formatFeeReserve(BORROWER_ACCOUNT_FEE_RESERVE_SATS)} to cover the borrower account fee reserve.`,
+        `Need a confirmed wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXO larger than ${formatFeeReserve(BORROWER_ACCOUNT_FEE_RESERVE_SATS)} to cover the borrower account fee reserve.`,
       )
     }
 
-    if (FACTORY_AUTH_AMOUNT + ISSUANCE_FACTORY_AMOUNT !== ISSUANCE_AMOUNT) {
-      throw new Error('Invalid issuance split')
-    }
-
     const fundingOutpoint = utxoToOutpointString(feeUtxo)
-    const feeRate = await fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs))
+    const [feeRate, feeTx] = await Promise.all([
+      fetchFeeRateSatPerKvbAbovePending(getProcessingTxids(pendingTxs)),
+      fetchTransaction(feeUtxo.outpoint()),
+    ])
+    const feeTxOut = requireTxOut(feeTx, feeUtxo.outpoint().vout(), 'Funding')
     const receiveAddress = Address.parse(receiveAddressString, lwkNetwork).toUnconfidential()
     const issuanceFactoryProgram = loadIssuanceFactoryProgram({
       issuingUtxosCount: toUint8(ISSUING_UTXOS_COUNT, 'issuingUtxosCount'),
@@ -121,23 +129,47 @@ export function useBorrowerAccount() {
       XOnlyPublicKey.fromString(UNSPENDABLE_TAPROOT_PUBKEY),
       lwkNetwork,
     )
-    const { contract, issuedAssetId, metadata } = await prepareIssuance(feeUtxo.outpoint())
+    const { contractHash, issuedAssetId, metadata } = await prepareIssuance(feeUtxo.outpoint())
+    const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
-    const pset = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos([feeUtxo.outpoint()])
-      .issueAssetToRecipients(
-        [
-          IssuanceRecipient.fromAddress(FACTORY_AUTH_AMOUNT, receiveAddress),
-          IssuanceRecipient.fromAddress(ISSUANCE_FACTORY_AMOUNT, factoryAddress),
-        ],
-        REISSUANCE_TOKEN_AMOUNT,
-        null,
-        contract,
-      )
-      .addPostIssuanceScriptOutput(Script.newOpReturn(metadata), 0n, policyAsset)
-      .setInputSequence(feeUtxo.outpoint(), WALLET_INPUT_RBF_SEQUENCE)
-      .finish(wollet)
+    const changeAddress = await getChangeAddress()
+    const { pset } = buildPset({
+      network: lwkNetwork,
+      inputs: [
+        {
+          outpoint: feeUtxo.outpoint(),
+          prevout: feeTxOut,
+          asset: feeUtxo.unblinded().asset(),
+          amount: feeUtxo.unblinded().value(),
+          secrets: blinding === 'local' ? (feeUtxo.unblinded() as TxOutSecrets) : undefined,
+          walletCoin: true,
+          sequence: WALLET_INPUT_RBF_SEQUENCE,
+          maxWeightToSatisfy: wollet.maxWeightToSatisfy(),
+          issuance: {
+            assetAmount: ISSUANCE_AMOUNT,
+            tokenAmount: REISSUANCE_TOKEN_AMOUNT,
+            contractHash,
+          },
+        },
+      ],
+      outputs: [
+        {
+          script: receiveAddress.scriptPubkey(),
+          amount: FACTORY_AUTH_AMOUNT,
+          asset: issuedAssetId,
+        },
+        {
+          script: factoryAddress.scriptPubkey(),
+          amount: ISSUANCE_FACTORY_AMOUNT,
+          asset: issuedAssetId,
+        },
+        { script: Script.newOpReturn(metadata), amount: 0n, asset: policyAsset },
+      ],
+      changeAddress,
+      feeRateSatPerKvb: feeRate,
+      blinding,
+    })
+    pset.addDetails(wollet)
 
     return {
       pset,
@@ -177,14 +209,15 @@ export function useBorrowerAccount() {
 }
 
 async function prepareIssuance(fundingOutpoint: OutPoint): Promise<{
-  contract: Contract | null
+  contractHash: ContractHash
   issuedAssetId: AssetId
   metadata: Uint8Array
 }> {
   const contract = buildAssetContract(fundingOutpoint, AssetKind.Factory)
+  const contractHash = await contractHashOrEmpty(contract)
   return {
-    contract,
-    issuedAssetId: assetIdFromIssuance(fundingOutpoint, await contractHashOrEmpty(contract)),
+    contractHash,
+    issuedAssetId: assetIdFromIssuance(fundingOutpoint, contractHash),
     metadata: await buildMetadata(),
   }
 }

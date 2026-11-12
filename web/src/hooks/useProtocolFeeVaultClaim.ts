@@ -1,14 +1,8 @@
-import {
-  Address,
-  ExternalUtxo,
-  OutPoint,
-  type Pset,
-  SimplicityLogLevel,
-  TxBuilder,
-  TxOutSecrets,
-} from '@lilbonekit/lwk-web'
+import { Address, OutPoint, type Pset, SimplicityLogLevel, type TxOutSecrets } from 'lwk_wasm'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
+import { NETWORK_CONFIG } from '@/constants/network-config'
+import { buildPset, type PsetBlinding } from '@/lwk/psetBuilder'
 import {
   assertDistinctOutpoints,
   assertScriptMatches,
@@ -59,7 +53,14 @@ export interface ProtocolFeeVaultClaimSummary {
 
 export function useProtocolFeeVaultClaim() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const claimProtocolFeeVault = async (
@@ -85,10 +86,10 @@ export function useProtocolFeeVaultClaim() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
 
     const [protocolFeeVaultTx, keeperTx, createOfferTx, feeTxs, feeRate] = await Promise.all([
@@ -106,7 +107,7 @@ export function useProtocolFeeVaultClaim() {
     )
     const keeperTxOut = requireTxOut(keeperTx, keeperOutpoint.vout(), 'Protocol fee keeper')
     const feeTxOuts = feeTxs.map((tx, index) =>
-      requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC'),
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     // create-offer tx vout 2 = Borrower NFT (asset id needed for program reconstruction). Reading
     // it from the creation tx works regardless of how many prior supply/withdraw transactions
@@ -140,6 +141,7 @@ export function useProtocolFeeVaultClaim() {
       supplyGoal: protocolFeeVaultSupplyGoal,
       withKeeperAssetBurn: false,
       withSupplierAssetBurn: false,
+      liquidationHeight: toUint32(0, 'liquidationHeight'),
     })
     const protocolFeeVaultSpendInfo = buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, {
       isActive: false,
@@ -151,38 +153,52 @@ export function useProtocolFeeVaultClaim() {
       'Protocol fee vault UTXO does not match the reconstructed finalized AssetAuthVault covenant',
     )
 
-    const inputOrderStrings = [
-      params.protocolFeeVaultOutpoint,
-      params.keeperOutpoint,
-      ...params.feeOutpoints,
-    ]
-    const firstFeeOutpoint = params.feeOutpoints[0]
-    if (!firstFeeOutpoint) throw new Error('At least one fee UTXO is required')
+    if (feeUtxos.length === 0) throw new Error('At least one fee UTXO is required')
+    const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
-    const pset = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(params.feeOutpoints.map(o => new OutPoint(o)))
-      .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
-      .addExternalUtxos([
-        new ExternalUtxo(
-          protocolFeeVaultOutpoint.vout(),
-          protocolFeeVaultTx,
-          TxOutSecrets.fromExplicit(principalAsset, principalAmount),
-          ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawAll,
-          true,
-        ),
-        new ExternalUtxo(
-          keeperOutpoint.vout(),
-          keeperTx,
-          TxOutSecrets.fromExplicit(keeperAsset, keeperAmount),
-          EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-          true,
-        ),
-      ])
-      .addPostIssuanceScriptOutput(keeperRecipient.scriptPubkey(), keeperAmount, keeperAsset)
-      .addPostIssuanceRecipient(principalRecipient, principalAmount, principalAsset)
-      .setInputSequence(new OutPoint(firstFeeOutpoint), WALLET_INPUT_RBF_SEQUENCE)
-      .finish(wollet)
+    const changeAddress = await getChangeAddress()
+    const { pset } = buildPset({
+      network: lwkNetwork,
+      inputs: [
+        {
+          outpoint: protocolFeeVaultOutpoint,
+          prevout: protocolFeeVaultTxOut,
+          asset: principalAsset,
+          amount: principalAmount,
+          maxWeightToSatisfy: ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawAll,
+        },
+        {
+          outpoint: keeperOutpoint,
+          prevout: keeperTxOut,
+          asset: keeperAsset,
+          amount: keeperAmount,
+          maxWeightToSatisfy: EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+        },
+        ...feeUtxos.map((utxo, index) => ({
+          outpoint: feeOutpoints[index],
+          prevout: feeTxOuts[index],
+          asset: utxo.unblinded().asset(),
+          amount: utxo.unblinded().value(),
+          secrets: blinding === 'local' ? (utxo.unblinded() as TxOutSecrets) : undefined,
+          walletCoin: true,
+          sequence: index === 0 ? WALLET_INPUT_RBF_SEQUENCE : undefined,
+          maxWeightToSatisfy: wollet.maxWeightToSatisfy(),
+        })),
+      ],
+      outputs: [
+        { script: keeperRecipient.scriptPubkey(), amount: keeperAmount, asset: keeperAsset },
+        {
+          script: principalRecipient.scriptPubkey(),
+          amount: principalAmount,
+          asset: principalAsset,
+          blindingPubkey: principalRecipient.blindingPubkey(),
+        },
+      ],
+      changeAddress,
+      feeRateSatPerKvb: feeRate,
+      blinding,
+    })
+    pset.addDetails(wollet)
 
     return {
       pset,
@@ -190,9 +206,9 @@ export function useProtocolFeeVaultClaim() {
         const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
 
         const prevouts = [protocolFeeVaultTxOut, keeperTxOut, ...feeTxOuts]
-        const finalizedTx = protocolFeeVaultProgram.finalizeTransactionWithSpendInfo(
+        const finalizedTx = protocolFeeVaultProgram.finalizeTransaction(
           txWithWalletWitnesses,
-          protocolFeeVaultSpendInfo,
+          protocolFeeVaultSpendInfo.controlBlock(protocolFeeVaultProgram.cmr),
           prevouts,
           0,
           buildAssetAuthVaultWitness({
@@ -210,11 +226,13 @@ export function useProtocolFeeVaultClaim() {
             inputs: {
               '0 Finalized protocol-fee vault AssetAuthVault': params.protocolFeeVaultOutpoint,
               '1 Protocol fee keeper (wallet)': params.keeperOutpoint,
-              '2+ Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`2+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
             },
             outputs: {
               '0 Protocol fee keeper (passed through)': keeperRecipient.toString(),
               '1 Unlocked principal fee': principalRecipient.toString(),
+              [`${NETWORK_CONFIG.collateralAsset.symbol} change`]: changeAddress.toString(),
             },
             assetIds: {
               principalAssetId: principalAsset.toString(),

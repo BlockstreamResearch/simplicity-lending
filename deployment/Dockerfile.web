@@ -1,10 +1,23 @@
+FROM rust:1.91-bookworm AS lwk
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends clang llvm && \
+    rm -rf /var/lib/apt/lists/*
+RUN cargo install wasm-pack --locked
+
+WORKDIR /app
+COPY lwk ./lwk
+COPY web/scripts/build-lwk.sh ./web/scripts/build-lwk.sh
+RUN web/scripts/build-lwk.sh
+
 FROM node:22-bookworm AS builder
 
 WORKDIR /app/web
 RUN corepack enable && \
     corepack prepare pnpm@10.33.0 --activate
 
-COPY web/package.json web/pnpm-lock.yaml ./
+COPY --from=lwk /app/lwk/lwk_wasm/pkg /app/lwk/lwk_wasm/pkg
+COPY web/package.json web/pnpm-lock.yaml web/.pnpmfile.cjs ./
 
 RUN pnpm install --frozen-lockfile
 
@@ -16,9 +29,11 @@ ARG VITE_ESPLORA_BASE_URL
 ARG VITE_NETWORK
 ARG VITE_WATERFALLS_URL
 ARG VITE_WATERFALLS_RECIPIENT=age1ajng86w5g0qleku0k7eqjre5l7e6qaynjrnlyuc08w3ddu0etdcs379rr3
-ARG VITE_DEMO_MODE=true
+ARG VITE_DEMO_MODE
 ARG VITE_DEBUG_MNEMONIC
 ARG VITE_SIDESWAP_WS_URL
+ARG VITE_GA_MEASUREMENT_ID
+ARG VITE_PUBLIC_URL
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_ESPLORA_BASE_URL=$VITE_ESPLORA_BASE_URL
 ENV VITE_NETWORK=$VITE_NETWORK
@@ -27,6 +42,8 @@ ENV VITE_WATERFALLS_RECIPIENT=$VITE_WATERFALLS_RECIPIENT
 ENV VITE_DEMO_MODE=$VITE_DEMO_MODE
 ENV VITE_DEBUG_MNEMONIC=$VITE_DEBUG_MNEMONIC
 ENV VITE_SIDESWAP_WS_URL=$VITE_SIDESWAP_WS_URL
+ENV VITE_GA_MEASUREMENT_ID=$VITE_GA_MEASUREMENT_ID
+ENV VITE_PUBLIC_URL=$VITE_PUBLIC_URL
 
 RUN pnpm build
 

@@ -1,4 +1,3 @@
-import type { WalletTxOut } from '@lilbonekit/lwk-web'
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react'
 import { Controller, type Resolver, useForm } from 'react-hook-form'
 import { z as zod } from 'zod'
@@ -13,6 +12,7 @@ import {
 } from '@/hooks/useProtocolFeeVaultClaim'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import { useTxStatus } from '@/hooks/useTxStatus'
+import type { WalletCoin } from '@/lib/wallet-core/types'
 import { isConfirmedWalletUtxo, isPolicyAssetUtxo, utxoToOutpointString } from '@/lwk/utxo'
 import { useLwk } from '@/providers/lwk/useLwk'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -118,7 +118,7 @@ export default function ProtocolFeeVaultClaimDemo() {
   })
   const [state, setState] = useState<BroadcastState>({ ...INITIAL_STATE })
   const [foundVault, setFoundVault] = useState<string | null>(null)
-  const [walletUtxos, setWalletUtxos] = useState<WalletTxOut[]>([])
+  const [walletUtxos, setWalletUtxos] = useState<WalletCoin[]>([])
   const [walletUtxosState, setWalletUtxosState] = useState<WalletUtxosState>({
     busy: false,
     error: null,
@@ -141,10 +141,9 @@ export default function ProtocolFeeVaultClaimDemo() {
       .map(utxo => {
         const outpoint = utxoToOutpointString(utxo)
         const unblinded = utxo.unblinded()
-        const blindedTag = unblinded.isExplicit() ? 'explicit' : 'blinded'
         return {
           id: outpoint,
-          label: `${outpoint} | ${unblinded.value().toString()} units | ${blindedTag}`,
+          label: `${outpoint} | ${unblinded.value().toString()} units`,
         }
       })
   }, [connectionStatus, keeperAsset.id, walletUtxos])

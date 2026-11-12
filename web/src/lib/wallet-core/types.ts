@@ -1,3 +1,5 @@
+import type { AssetId, OutPoint } from 'lwk_wasm'
+
 export type WalletType = 'Wpkh' | 'ShWpkh'
 
 /** Default wallet type used when kicking off the connect flow. */
@@ -14,3 +16,9 @@ export interface JadeVersionInfo {
 }
 
 export type ConnectionStatus = 'disconnected' | 'locked' | 'ready'
+
+export interface WalletCoin {
+  outpoint(): OutPoint
+  height(): number | undefined
+  unblinded(): { asset(): AssetId; value(): bigint }
+}

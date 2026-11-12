@@ -1,19 +1,18 @@
 import {
   Address,
   AssetId,
-  ExternalUtxo,
   OutPoint,
   type Pset,
   Script,
   SimplicityLogLevel,
   type Transaction,
-  TxBuilder,
   type TxOut,
-  TxOutSecrets,
-} from '@lilbonekit/lwk-web'
+  type TxOutSecrets,
+} from 'lwk_wasm'
 
 import { fetchFeeRateSatPerKvbAbovePending } from '@/api/esplora/fee'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { buildPset, type PsetBlinding } from '@/lwk/psetBuilder'
 import {
   assertDistinctOutpoints,
   assertExplicitAmount,
@@ -87,7 +86,14 @@ export interface PartialRepayOfferSummary {
 
 export function usePartialRepayOffer() {
   const { lwkNetwork } = useLwk()
-  const { getReceiveAddress, getBlindedWalletUtxos, getWollet, syncWallet } = useWallet()
+  const {
+    getReceiveAddress,
+    getChangeAddress,
+    getBlindedWalletUtxos,
+    getWollet,
+    syncWallet,
+    signerType,
+  } = useWallet()
   const { pendingTxs } = usePendingTransactions()
 
   const partialRepayOffer = async (
@@ -116,7 +122,6 @@ export function usePartialRepayOffer() {
     )
     const [receiveAddressString, wollet] = await Promise.all([getReceiveAddress(), getWollet()])
     if (!receiveAddressString) throw new Error('Missing wallet receive address')
-    const walletReceiveAddress = Address.parse(receiveAddressString, lwkNetwork)
     const collateralRecipient = Address.parse(
       params.collateralRecipientAddress?.trim() || receiveAddressString,
       lwkNetwork,
@@ -128,10 +133,10 @@ export function usePartialRepayOffer() {
     await syncWallet()
     const blindedWalletUtxos = await getBlindedWalletUtxos()
     const feeUtxos = params.feeOutpoints.map(o =>
-      requireWalletUtxo(blindedWalletUtxos, o, 'Fee L-BTC'),
+      requireWalletUtxo(blindedWalletUtxos, o, `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
     )
     if (feeUtxos.some(utxo => !isPolicyAssetUtxo(utxo, lwkNetwork.policyAsset()))) {
-      throw new Error('Fee outpoints must be wallet L-BTC UTXOs')
+      throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     const principalWalletUtxos = params.principalOutpoints.map(o =>
       requireWalletUtxo(blindedWalletUtxos, o, 'Principal'),
@@ -366,95 +371,92 @@ export function usePartialRepayOffer() {
       : null
 
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
-    const walletInputOutpointStrings = [...params.principalOutpoints, ...params.feeOutpoints]
-    const inputOrderStrings = [
-      params.borrowerNftOutpoint,
-      params.activeOfferOutpoint,
-      ...(lenderVaultOutpointStr ? [lenderVaultOutpointStr] : []),
-      ...(protocolFeeVaultOutpointStr ? [protocolFeeVaultOutpointStr] : []),
-      ...walletInputOutpointStrings,
-    ]
     const lenderVaultInputIndex = 2
     const protocolFeeVaultInputIndex = 3
-    const firstWalletOutpoint = walletInputOutpointStrings[0]
-    if (!firstWalletOutpoint) throw new Error('At least one wallet UTXO is required')
-
-    const externalUtxos = [
-      new ExternalUtxo(
-        borrowerNftOutpoint.vout(),
-        borrowerNftTx,
-        TxOutSecrets.fromExplicit(borrowerNftAsset, NFT_AMOUNT),
-        EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
-        true,
-      ),
-      new ExternalUtxo(
-        activeOfferOutpoint.vout(),
-        activeOfferTx,
-        TxOutSecrets.fromExplicit(collateralAsset, currentCollateralAmount),
-        isFinalRepayment
-          ? LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment
-          : LENDING_MAX_WEIGHT_TO_SATISFY.PartialRepayment,
-        true,
-      ),
+    const principalTxOuts = principalTxs.map((tx, index) =>
+      requireTxOut(tx, principalOutpoints[index].vout(), 'Principal'),
+    )
+    const feeTxOuts = feeTxs.map((tx, index) =>
+      requireTxOut(tx, feeOutpoints[index].vout(), `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`),
+    )
+    const walletInputs = [
+      ...principalWalletUtxos.map((utxo, index) => ({
+        utxo,
+        outpoint: principalOutpoints[index],
+        prevout: principalTxOuts[index],
+      })),
+      ...feeUtxos.map((utxo, index) => ({
+        utxo,
+        outpoint: feeOutpoints[index],
+        prevout: feeTxOuts[index],
+      })),
     ]
-    if (needsLenderVaultInput && lenderVaultOutpoint && lenderVaultTx) {
-      externalUtxos.push(
-        new ExternalUtxo(
-          lenderVaultOutpoint.vout(),
-          lenderVaultTx,
-          TxOutSecrets.fromExplicit(principalAsset, lenderVaultInputAmount),
-          isFinalRepayment
-            ? ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.FinalSupply
-            : ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.Supply,
-          true,
-        ),
-      )
-    }
-    if (needsProtocolFeeVaultInput && protocolFeeVaultOutpoint && protocolFeeVaultTx) {
-      externalUtxos.push(
-        new ExternalUtxo(
-          protocolFeeVaultOutpoint.vout(),
-          protocolFeeVaultTx,
-          TxOutSecrets.fromExplicit(principalAsset, protocolFeeVaultInputAmount),
-          isProtocolFeeVaultFinalized
-            ? ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.FinalSupply
-            : ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.Supply,
-          true,
-        ),
-      )
-    }
+    if (walletInputs.length === 0) throw new Error('At least one wallet UTXO is required')
+    const blinding: PsetBlinding = signerType === 'humid' ? 'wallet' : 'local'
 
-    let txBuilder = new TxBuilder(lwkNetwork)
-      .feeRate(feeRate)
-      .setWalletUtxos(walletInputOutpointStrings.map(o => new OutPoint(o)))
-      .setInputOrder(inputOrderStrings.map(o => new OutPoint(o)))
-      .addExternalUtxos(externalUtxos)
+    const vaultInputs = [
+      ...(needsLenderVaultInput && lenderVaultOutpoint && lenderVaultTxOut
+        ? [
+            {
+              outpoint: lenderVaultOutpoint,
+              prevout: lenderVaultTxOut,
+              asset: principalAsset,
+              amount: lenderVaultInputAmount,
+              maxWeightToSatisfy: isFinalRepayment
+                ? ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.FinalSupply
+                : ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.Supply,
+            },
+          ]
+        : []),
+      ...(needsProtocolFeeVaultInput && protocolFeeVaultOutpoint && protocolFeeVaultTxOut
+        ? [
+            {
+              outpoint: protocolFeeVaultOutpoint,
+              prevout: protocolFeeVaultTxOut,
+              asset: principalAsset,
+              amount: protocolFeeVaultInputAmount,
+              maxWeightToSatisfy: isProtocolFeeVaultFinalized
+                ? ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.FinalSupply
+                : ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.Supply,
+            },
+          ]
+        : []),
+    ]
+
+    const lenderVaultOutput = {
+      script: lenderVaultOutputSpendInfo.scriptPubkey,
+      amount: lenderVaultOutputAmount,
+      asset: principalAsset,
+    }
+    const protocolFeeVaultOutputs = protocolFeeVaultOutputSpendInfo
+      ? [
+          {
+            script: protocolFeeVaultOutputSpendInfo.scriptPubkey,
+            amount: protocolFeeVaultOutputAmount,
+            asset: principalAsset,
+          },
+        ]
+      : []
+    const collateralOutput = (amount: bigint) => ({
+      script: collateralRecipient.scriptPubkey(),
+      amount,
+      asset: collateralAsset,
+      blindingPubkey: collateralRecipient.blindingPubkey(),
+    })
 
     let newActiveOfferScriptHex = ''
     let lenderVaultOutputIndex: number
     let protocolFeeVaultOutputIndex: number
+    let covenantOutputs
     if (isFinalRepayment) {
       lenderVaultOutputIndex = 1
       protocolFeeVaultOutputIndex = 2
-      txBuilder = txBuilder
-        .addPostIssuanceScriptOutput(burnScript, NFT_AMOUNT, borrowerNftAsset)
-        .addPostIssuanceScriptOutput(
-          lenderVaultOutputSpendInfo.scriptPubkey,
-          lenderVaultOutputAmount,
-          principalAsset,
-        )
-      if (protocolFeeVaultOutputSpendInfo) {
-        txBuilder = txBuilder.addPostIssuanceScriptOutput(
-          protocolFeeVaultOutputSpendInfo.scriptPubkey,
-          protocolFeeVaultOutputAmount,
-          principalAsset,
-        )
-      }
-      txBuilder = txBuilder.addPostIssuanceRecipient(
-        collateralRecipient,
-        currentCollateralAmount,
-        collateralAsset,
-      )
+      covenantOutputs = [
+        { script: burnScript, amount: NFT_AMOUNT, asset: borrowerNftAsset },
+        lenderVaultOutput,
+        ...protocolFeeVaultOutputs,
+        collateralOutput(currentCollateralAmount),
+      ]
     } else {
       lenderVaultOutputIndex = 2
       protocolFeeVaultOutputIndex = 3
@@ -471,50 +473,73 @@ export function usePartialRepayOffer() {
         newDebt,
       )
       newActiveOfferScriptHex = bytesToHex(newActiveOfferSpendInfo.scriptPubkey.bytes())
-
-      txBuilder = txBuilder
-        .addPostIssuanceScriptOutput(
-          borrowerNftRecipient.scriptPubkey(),
-          NFT_AMOUNT,
-          borrowerNftAsset,
-        )
-        .addPostIssuanceScriptOutput(
-          newActiveOfferSpendInfo.scriptPubkey,
-          newCollateralAmount,
-          collateralAsset,
-        )
-        .addPostIssuanceScriptOutput(
-          lenderVaultOutputSpendInfo.scriptPubkey,
-          lenderVaultOutputAmount,
-          principalAsset,
-        )
-      if (protocolFeeVaultOutputSpendInfo) {
-        txBuilder = txBuilder.addPostIssuanceScriptOutput(
-          protocolFeeVaultOutputSpendInfo.scriptPubkey,
-          protocolFeeVaultOutputAmount,
-          principalAsset,
-        )
-      }
-      txBuilder = txBuilder.addPostIssuanceRecipient(
-        collateralRecipient,
-        collateralToUnlock,
-        collateralAsset,
-      )
+      covenantOutputs = [
+        {
+          script: borrowerNftRecipient.scriptPubkey(),
+          amount: NFT_AMOUNT,
+          asset: borrowerNftAsset,
+        },
+        {
+          script: newActiveOfferSpendInfo.scriptPubkey,
+          amount: newCollateralAmount,
+          asset: collateralAsset,
+        },
+        lenderVaultOutput,
+        ...protocolFeeVaultOutputs,
+        collateralOutput(collateralToUnlock),
+      ]
     }
 
-    if (principalChangeAmount > 0n) {
-      txBuilder = txBuilder.addPostIssuanceRecipient(
-        walletReceiveAddress,
-        principalChangeAmount,
-        principalAsset,
-      )
-    }
-
-    txBuilder = txBuilder.setInputSequence(
-      new OutPoint(firstWalletOutpoint),
-      WALLET_INPUT_RBF_SEQUENCE,
-    )
-    const pset = txBuilder.finish(wollet)
+    const changeAddress = await getChangeAddress()
+    const { pset } = buildPset({
+      network: lwkNetwork,
+      inputs: [
+        {
+          outpoint: borrowerNftOutpoint,
+          prevout: borrowerNftTxOut,
+          asset: borrowerNftAsset,
+          amount: NFT_AMOUNT,
+          maxWeightToSatisfy: EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
+        },
+        {
+          outpoint: activeOfferOutpoint,
+          prevout: activeOfferTxOut,
+          asset: collateralAsset,
+          amount: currentCollateralAmount,
+          maxWeightToSatisfy: isFinalRepayment
+            ? LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment
+            : LENDING_MAX_WEIGHT_TO_SATISFY.PartialRepayment,
+        },
+        ...vaultInputs,
+        ...walletInputs.map(({ utxo, outpoint, prevout }, index) => ({
+          outpoint,
+          prevout,
+          asset: utxo.unblinded().asset(),
+          amount: utxo.unblinded().value(),
+          secrets: blinding === 'local' ? (utxo.unblinded() as TxOutSecrets) : undefined,
+          walletCoin: true,
+          sequence: index === 0 ? WALLET_INPUT_RBF_SEQUENCE : undefined,
+          maxWeightToSatisfy: wollet.maxWeightToSatisfy(),
+        })),
+      ],
+      outputs: [
+        ...covenantOutputs,
+        ...(principalChangeAmount > 0n
+          ? [
+              {
+                script: changeAddress.scriptPubkey(),
+                amount: principalChangeAmount,
+                asset: principalAsset,
+                blindingPubkey: changeAddress.blindingPubkey(),
+              },
+            ]
+          : []),
+      ],
+      changeAddress,
+      feeRateSatPerKvb: feeRate,
+      blinding,
+    })
+    pset.addDetails(wollet)
 
     return {
       pset,
@@ -539,12 +564,12 @@ export function usePartialRepayOffer() {
           ...principalTxs.map((tx, index) =>
             requireTxOut(tx, principalOutpoints[index].vout(), 'Principal'),
           ),
-          ...feeTxs.map((tx, index) => requireTxOut(tx, feeOutpoints[index].vout(), 'Fee L-BTC')),
+          ...feeTxs.map((tx, index) => requireTxOut(tx, feeOutpoints[index].vout(), 'Fee')),
         ]
 
-        let finalizedTx = lendingProgram.finalizeTransactionWithSpendInfo(
+        let finalizedTx = lendingProgram.finalizeTransaction(
           txWithWalletWitnesses,
-          activeLendingSpendInfo,
+          activeLendingSpendInfo.controlBlock(lendingProgram.cmr),
           buildPrevouts(),
           1, // Lending covenant is at input index 1
           isFinalRepayment
@@ -575,9 +600,9 @@ export function usePartialRepayOffer() {
                 amountToSupply: additionalLenderVaultAmount,
               })
 
-          finalizedTx = lenderVaultProgram.finalizeTransactionWithSpendInfo(
+          finalizedTx = lenderVaultProgram.finalizeTransaction(
             finalizedTx,
-            lenderVaultInputSpendInfo,
+            lenderVaultInputSpendInfo.controlBlock(lenderVaultProgram.cmr),
             buildPrevouts(),
             lenderVaultInputIndex,
             lenderVaultWitness,
@@ -610,9 +635,9 @@ export function usePartialRepayOffer() {
                 amountToSupply: protocolFeeRepaidNow,
               })
 
-          finalizedTx = protocolFeeVaultProgram.finalizeTransactionWithSpendInfo(
+          finalizedTx = protocolFeeVaultProgram.finalizeTransaction(
             finalizedTx,
-            protocolFeeVaultInputSpendInfo,
+            protocolFeeVaultInputSpendInfo.controlBlock(protocolFeeVaultProgram.cmr),
             buildPrevouts(),
             protocolFeeVaultInputIndex,
             protocolFeeVaultWitness,
@@ -623,7 +648,7 @@ export function usePartialRepayOffer() {
 
         const principalChangeSummary =
           principalChangeAmount > 0n
-            ? `${principalChangeAmount.toString()} to ${walletReceiveAddress.toString()}`
+            ? `${principalChangeAmount.toString()} to ${changeAddress.toString()}`
             : 'None'
 
         const outputs: Record<string, string> = {}
@@ -652,6 +677,7 @@ export function usePartialRepayOffer() {
           outputs['Unlocked collateral (partial)'] = collateralRecipient.toString()
         }
         outputs['Principal change'] = principalChangeSummary
+        outputs[`${NETWORK_CONFIG.collateralAsset.symbol} change`] = changeAddress.toString()
 
         return {
           finalizedTx,
@@ -665,7 +691,8 @@ export function usePartialRepayOffer() {
                 ? { '3 Protocol fee vault': protocolFeeVaultOutpointStr }
                 : {}),
               'Principal wallet UTXO(s)': params.principalOutpoints.join(', '),
-              'Fee L-BTC (wallet)': params.feeOutpoints.join(', '),
+              [`Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+                params.feeOutpoints.join(', '),
             },
             outputs,
             assetIds: {

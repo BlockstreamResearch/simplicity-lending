@@ -7,7 +7,7 @@ import {
   StateTaprootBuilder,
   type StateTaprootSpendInfo,
   XOnlyPublicKey,
-} from '@lilbonekit/lwk-web'
+} from 'lwk_wasm'
 import { sources } from 'virtual:simplicity-sources'
 
 import { loadAssetAuthProgram } from '@/simplicity/asset-auth/program'
@@ -22,6 +22,7 @@ import { bytes32ToHex, hexToBytes } from '@/utils/hex'
 import {
   type Bytes32,
   toBytes32,
+  toUint32,
   toUint64,
   type Uint16,
   type Uint32,
@@ -91,7 +92,11 @@ export const LENDING_MAX_WEIGHT_TO_SATISFY: Record<LendingBranch, number> = {
 }
 
 export function loadLendingProgram(params: LendingOfferProgramParams): SimplicityProgram {
-  return SimplicityProgram.load(sources.lending, buildLendingArguments(params))
+  return SimplicityProgram.loadWithDebugSymbols(
+    sources.lending,
+    buildLendingArguments(params),
+    true,
+  )
 }
 
 export function buildLendingArguments(params: LendingOfferProgramParams): SimplicityArguments {
@@ -145,7 +150,7 @@ export function buildLendingArguments(params: LendingOfferProgramParams): Simpli
 function buildLenderVaultParams(
   params: Pick<
     LendingOfferProgramParams,
-    'principalAssetId' | 'lenderNftAssetId' | 'borrowerNftAssetId'
+    'principalAssetId' | 'lenderNftAssetId' | 'borrowerNftAssetId' | 'offerParameters'
   >,
   supplyGoal: Uint64,
 ): AssetAuthVaultProgramParams {
@@ -156,6 +161,7 @@ function buildLenderVaultParams(
     supplyGoal,
     withKeeperAssetBurn: true,
     withSupplierAssetBurn: true,
+    liquidationHeight: params.offerParameters.loanExpirationTime,
   }
 }
 
@@ -173,6 +179,7 @@ function buildProtocolFeeVaultParams(
     supplyGoal,
     withKeeperAssetBurn: false,
     withSupplierAssetBurn: false,
+    liquidationHeight: toUint32(0, 'liquidationHeight'),
   }
 }
 

@@ -41,7 +41,7 @@ export function UiTextField({
       {hasGroup ? (
         <InputGroup>
           {startContent && <InputGroup.Prefix>{startContent}</InputGroup.Prefix>}
-          <InputGroup.Input placeholder={placeholder} />
+          <InputGroup.Input placeholder={placeholder} className='min-w-0' />
           {onMax && (
             <button
               type='button'
