@@ -3,7 +3,6 @@ use tokio::net::TcpListener;
 
 use lending_indexer::api;
 use lending_indexer::configuration::Settings;
-use lending_indexer::esplora_client::EsploraClient;
 use lending_indexer::indexer::Worker;
 use lending_indexer::telemetry::{get_subscriber, init_subscriber};
 
@@ -22,12 +21,11 @@ async fn main() -> Result<(), std::io::Error> {
 
     match run_mode.as_str() {
         "indexer" => {
-            let esplora_client = EsploraClient::with_base_url(&configuration.esplora.base_url)
-                .with_network(configuration.esplora.network);
+            let provider = configuration.esplora.provider();
 
             tracing::info!("Starting indexer service");
 
-            let mut worker = Worker::new(configuration.indexer, pool, esplora_client)
+            let mut worker = Worker::new(configuration.indexer, pool, provider)
                 .await
                 .expect("Failed to start indexer service");
 

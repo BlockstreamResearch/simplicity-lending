@@ -2,6 +2,7 @@ pub mod asset_registration;
 mod block_processor;
 mod cache;
 mod db;
+mod provider;
 mod trackers;
 pub mod worker;
 

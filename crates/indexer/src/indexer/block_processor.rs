@@ -1,26 +1,31 @@
+use std::sync::Arc;
+
 use sqlx::PgPool;
 
-use simplex::simplicityhl::elements::Transaction;
+use simplex::provider::{EsploraProvider, ProviderTrait};
 
 use uuid::Uuid;
 
 use crate::{
-    esplora_client::EsploraClient,
     events::{IndexerEvent, notify_indexer_event},
-    indexer::{db, trackers::TrackerRegistry},
+    indexer::{db, provider::call_provider, trackers::TrackerRegistry},
 };
 
 pub struct BlockProcessor {
     db_pool: PgPool,
-    client: EsploraClient,
+    provider: Arc<EsploraProvider>,
     tracker_registry: TrackerRegistry,
 }
 
 impl BlockProcessor {
-    pub fn new(db_pool: PgPool, client: EsploraClient, tracker_registry: TrackerRegistry) -> Self {
+    pub fn new(
+        db_pool: PgPool,
+        provider: Arc<EsploraProvider>,
+        tracker_registry: TrackerRegistry,
+    ) -> Self {
         Self {
             db_pool,
-            client,
+            provider,
             tracker_registry,
         }
     }
@@ -35,15 +40,20 @@ impl BlockProcessor {
         fields(block_run_id = %Uuid::new_v4(), height = %block_height)
     )]
     pub async fn process_block(&mut self, block_height: u64) -> anyhow::Result<()> {
-        let block_hash = self.client.get_block_hash_at_height(block_height).await?;
-        let txids = self.client.get_block_txids(&block_hash).await?;
-        let tx_count = txids.len();
+        let height = u32::try_from(block_height)?;
 
-        let mut txs: Vec<Transaction> = Vec::with_capacity(txids.len());
+        let (block_hash, txs) = call_provider(&self.provider, move |provider| {
+            let block_hash = provider.fetch_block_hash_at_height(height)?;
+            let txs = provider
+                .fetch_block_txids(&block_hash)?
+                .iter()
+                .map(|txid| provider.fetch_transaction(txid))
+                .collect::<Result<Vec<_>, _>>()?;
 
-        for txid in txids {
-            txs.push(self.client.get_tx_by_id(txid).await?);
-        }
+            Ok((block_hash, txs))
+        })
+        .await?;
+        let tx_count = txs.len();
 
         let mut sql_tx = self.db_pool.begin().await?;
         self.tracker_registry.begin_block();

@@ -1,6 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
-use simplex::{provider::SimplicityNetwork, simplicityhl::elements::AssetId};
+use simplex::{
+    provider::{EsploraProvider, SimplicityNetwork},
+    simplicityhl::elements::AssetId,
+};
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
@@ -27,6 +33,20 @@ pub struct EsploraSettings {
     pub base_url: String,
     pub timeout: u16,
     pub network: Network,
+}
+
+impl EsploraSettings {
+    /// Builds the Simplex Esplora provider for these settings.
+    #[must_use]
+    pub fn provider(&self) -> EsploraProvider {
+        let mut provider = EsploraProvider::new(
+            self.base_url.trim_end_matches('/').to_owned(),
+            self.network.into(),
+        );
+        provider.timeout = Duration::from_secs(self.timeout.into());
+
+        provider
+    }
 }
 
 /// ELIP-0100 asset metadata registration for factory assets issued by the lending flow.
@@ -147,9 +167,11 @@ impl From<Network> for SimplicityNetwork {
 mod tests {
     use std::collections::HashMap;
 
-    use simplex::provider::SimplicityNetwork;
+    use std::time::Duration;
 
-    use super::{Network, Settings};
+    use simplex::provider::{ProviderTrait, SimplicityNetwork};
+
+    use super::{EsploraSettings, Network, Settings};
 
     const DATABASE_URL: &str = "postgres://postgres:password@localhost:5432/lending-indexer";
 
@@ -254,6 +276,20 @@ mod tests {
             Settings::configuration_dir(Some("/etc/indexer")),
             std::path::PathBuf::from("/etc/indexer")
         );
+    }
+
+    #[test]
+    fn esplora_provider_uses_settings() {
+        let settings = EsploraSettings {
+            base_url: "https://example.com/api///".to_owned(),
+            timeout: 3,
+            network: Network::Liquid,
+        };
+        let provider = settings.provider();
+
+        assert_eq!(provider.esplora_url, "https://example.com/api");
+        assert_eq!(provider.timeout, Duration::from_secs(3));
+        assert_eq!(*provider.get_network(), SimplicityNetwork::Liquid);
     }
 
     #[test]
