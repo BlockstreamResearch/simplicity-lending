@@ -547,11 +547,24 @@ export function usePartialRepayOffer() {
         const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
 
         const buildPrevouts = () => [
-          borrowerNftTxOut,
-          activeOfferTxOut,
-          ...vaultInputs.map(input => input.prevout),
-          ...principalTxOuts,
-          ...feeTxOuts,
+          requireTxOut(borrowerNftTx, borrowerNftOutpoint.vout(), 'Borrower NFT'),
+          requireTxOut(activeOfferTx, activeOfferOutpoint.vout(), 'Active offer'),
+          ...(needsLenderVaultInput && lenderVaultTx && lenderVaultOutpoint
+            ? [requireTxOut(lenderVaultTx, lenderVaultOutpoint.vout(), 'Lender vault')]
+            : []),
+          ...(needsProtocolFeeVaultInput && protocolFeeVaultTx && protocolFeeVaultOutpoint
+            ? [
+                requireTxOut(
+                  protocolFeeVaultTx,
+                  protocolFeeVaultOutpoint.vout(),
+                  'Protocol fee vault',
+                ),
+              ]
+            : []),
+          ...principalTxs.map((tx, index) =>
+            requireTxOut(tx, principalOutpoints[index].vout(), 'Principal'),
+          ),
+          ...feeTxs.map((tx, index) => requireTxOut(tx, feeOutpoints[index].vout(), 'Fee')),
         ]
 
         let finalizedTx = lendingProgram.finalizeTransaction(

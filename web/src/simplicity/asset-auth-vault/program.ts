@@ -21,6 +21,7 @@ const ARGUMENTS = {
   SUPPLY_GOAL: 'SUPPLY_GOAL',
   WITH_KEEPER_ASSET_BURN: 'WITH_KEEPER_ASSET_BURN',
   WITH_SUPPLIER_ASSET_BURN: 'WITH_SUPPLIER_ASSET_BURN',
+  LIQUIDATION_HEIGHT: 'LIQUIDATION_HEIGHT',
 } as const
 
 const WITNESS = {
@@ -34,6 +35,7 @@ export interface AssetAuthVaultProgramParams {
   supplyGoal: Uint64
   withKeeperAssetBurn: boolean
   withSupplierAssetBurn: boolean
+  liquidationHeight: Uint32
 }
 
 export type AssetAuthVaultWitnessParams =
@@ -49,6 +51,12 @@ export type AssetAuthVaultWitnessParams =
       vaultOutputIndex: Uint32
       alreadySupplied: Uint64
       amountToWithdraw: Uint64
+    }
+  | {
+      branch: 'WithdrawOnLiquidation'
+      inputKeeperIndex: Uint32
+      outputKeeperIndex: Uint32
+      alreadySupplied: Uint64
     }
   | {
       branch: 'Supply'
@@ -76,9 +84,10 @@ export const ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY: Record<AssetAuthVaultBranch
   WithdrawAll: 1500,
 
   // Not tested
-  WithdrawPart: 30_000,
-  Supply: 30_000,
-  FinalSupply: 30_000,
+  WithdrawPart: 4000,
+  WithdrawOnLiquidation: 4000,
+  Supply: 4000,
+  FinalSupply: 4000,
 }
 
 export function loadAssetAuthVaultProgram(params: AssetAuthVaultProgramParams): SimplicityProgram {
@@ -99,6 +108,7 @@ export function buildAssetAuthVaultArguments(
     vaultAssetId,
     withKeeperAssetBurn,
     withSupplierAssetBurn,
+    liquidationHeight,
   } = params
 
   return new SimplicityArguments()
@@ -123,6 +133,7 @@ export function buildAssetAuthVaultArguments(
       ARGUMENTS.WITH_SUPPLIER_ASSET_BURN,
       SimplicityTypedValue.fromBoolean(withSupplierAssetBurn),
     )
+    .addValue(ARGUMENTS.LIQUIDATION_HEIGHT, SimplicityTypedValue.fromU32(liquidationHeight))
 }
 
 export interface AssetAuthVaultSpendInfoParams {
@@ -162,7 +173,7 @@ export function buildAssetAuthVaultWitness(
   params: AssetAuthVaultWitnessParams,
 ): SimplicityWitnessValues {
   const pathType = SimplicityType.fromString(
-    'Either<Either<(u32, u32), (u32, u32, u32, u64, u64)>, Either<(u32, u32, u32, u64, u64), (u32, u32, u32, u64)>>',
+    'Either<Either<(u32, u32), Either<(u32, u32, u32, u64, u64), (u32, u32, u64)>>, Either<(u32, u32, u32, u64, u64), (u32, u32, u32, u64)>>',
   )
 
   return new SimplicityWitnessValues().addValue(
@@ -176,7 +187,9 @@ function buildAssetAuthVaultPathExpression(params: AssetAuthVaultWitnessParams):
     case 'WithdrawAll':
       return `Left(Left((${params.inputKeeperIndex}, ${params.outputKeeperIndex})))`
     case 'WithdrawPart':
-      return `Left(Right((${params.inputKeeperIndex}, ${params.outputKeeperIndex}, ${params.vaultOutputIndex}, ${params.alreadySupplied}, ${params.amountToWithdraw})))`
+      return `Left(Right(Left((${params.inputKeeperIndex}, ${params.outputKeeperIndex}, ${params.vaultOutputIndex}, ${params.alreadySupplied}, ${params.amountToWithdraw}))))`
+    case 'WithdrawOnLiquidation':
+      return `Left(Right(Right((${params.inputKeeperIndex}, ${params.outputKeeperIndex}, ${params.alreadySupplied}))))`
     case 'Supply':
       return `Right(Left((${params.inputSupplierIndex}, ${params.outputSupplierIndex}, ${params.vaultOutputIndex}, ${params.alreadySupplied}, ${params.amountToSupply})))`
     case 'FinalSupply':

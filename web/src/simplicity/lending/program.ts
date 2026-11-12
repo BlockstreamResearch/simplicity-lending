@@ -22,6 +22,7 @@ import { bytes32ToHex, hexToBytes } from '@/utils/hex'
 import {
   type Bytes32,
   toBytes32,
+  toUint32,
   toUint64,
   type Uint16,
   type Uint32,
@@ -149,7 +150,7 @@ export function buildLendingArguments(params: LendingOfferProgramParams): Simpli
 function buildLenderVaultParams(
   params: Pick<
     LendingOfferProgramParams,
-    'principalAssetId' | 'lenderNftAssetId' | 'borrowerNftAssetId'
+    'principalAssetId' | 'lenderNftAssetId' | 'borrowerNftAssetId' | 'offerParameters'
   >,
   supplyGoal: Uint64,
 ): AssetAuthVaultProgramParams {
@@ -160,6 +161,7 @@ function buildLenderVaultParams(
     supplyGoal,
     withKeeperAssetBurn: true,
     withSupplierAssetBurn: true,
+    liquidationHeight: params.offerParameters.loanExpirationTime,
   }
 }
 
@@ -177,6 +179,7 @@ function buildProtocolFeeVaultParams(
     supplyGoal,
     withKeeperAssetBurn: false,
     withSupplierAssetBurn: false,
+    liquidationHeight: toUint32(0, 'liquidationHeight'),
   }
 }
 

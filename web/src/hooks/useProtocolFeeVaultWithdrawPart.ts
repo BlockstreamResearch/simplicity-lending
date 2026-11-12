@@ -155,6 +155,7 @@ export function useProtocolFeeVaultWithdrawPart() {
       supplyGoal: protocolFeeVaultSupplyGoal,
       withKeeperAssetBurn: false,
       withSupplierAssetBurn: false,
+      liquidationHeight: toUint32(0, 'liquidationHeight'),
     })
     const protocolFeeVaultInputSpendInfo = buildAssetAuthVaultSpendInfo(protocolFeeVaultProgram, {
       isActive: true,

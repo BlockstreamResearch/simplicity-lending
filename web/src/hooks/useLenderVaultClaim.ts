@@ -145,6 +145,7 @@ export function useLenderVaultClaim() {
       supplyGoal: lenderVaultSupplyGoal,
       withKeeperAssetBurn: true,
       withSupplierAssetBurn: true,
+      liquidationHeight: metadata.loanExpirationTime,
     })
     const lenderVaultSpendInfo = buildAssetAuthVaultSpendInfo(lenderVaultProgram, {
       isActive: false,

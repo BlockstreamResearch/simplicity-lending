@@ -154,6 +154,7 @@ export function useLenderVaultWithdrawPart() {
       supplyGoal: lenderVaultSupplyGoal,
       withKeeperAssetBurn: true,
       withSupplierAssetBurn: true,
+      liquidationHeight: metadata.loanExpirationTime,
     })
     // WithdrawPart only changes the coin's output value — is_active and already_supplied stay
     // the same, so the input and output covenant spend info are byte-identical here.
