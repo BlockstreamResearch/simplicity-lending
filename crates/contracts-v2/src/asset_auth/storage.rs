@@ -8,8 +8,16 @@ pub struct AssetAuthStorage {
 }
 
 impl AssetAuthStorage {
-    #[allow(unused_must_use)]
+    pub const SLOTS: usize = 1;
+
+    #[must_use]
+    pub fn slots(&self) -> [[u8; 32]; Self::SLOTS] {
+        [self.auth_asset_id.to_byte_array()]
+    }
+
     pub(crate) fn apply(&self, program: &mut AssetAuthProgram) {
-        program.set_storage_at(0, self.auth_asset_id.to_byte_array());
+        for (index, slot) in self.slots().into_iter().enumerate() {
+            program.set_storage_at(index, slot);
+        }
     }
 }

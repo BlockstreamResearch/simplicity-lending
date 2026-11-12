@@ -21,6 +21,9 @@ std = { git = "https://github.com/BlockstreamResearch/simplicityhl-std.git", tag
 # bitcoins = 10_000_000
 # verbosity = 0 # 0 - none, 1 - debug, 2 - trace
 
+[test.fuzz]
+cases = 300
+
 # [test.esplora]
 # url = "<esplora url>"
 # network = "<Liquid, LiquidTestnet, ElementsRegtest>"

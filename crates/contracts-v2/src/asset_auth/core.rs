@@ -1,8 +1,6 @@
 use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::{AssetId, Script};
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, ProgramInput, UTXO,
-};
+use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, ProgramInput, UTXO};
 
 use crate::artifacts::asset_auth::AssetAuthProgram;
 use crate::artifacts::asset_auth::derived_asset_auth::{AssetAuthArguments, AssetAuthWitness};
@@ -18,8 +16,8 @@ pub struct AssetAuth {
 impl AssetAuth {
     #[must_use]
     pub fn new(storage: AssetAuthStorage, network: SimplicityNetwork) -> Self {
-        let mut program =
-            AssetAuthProgram::new(&AssetAuthArguments::default()).with_storage_capacity(1);
+        let mut program = AssetAuthProgram::new(&AssetAuthArguments::default())
+            .with_storage_capacity(AssetAuthStorage::SLOTS);
 
         storage.apply(&mut program);
 
@@ -66,10 +64,7 @@ impl AssetAuth {
 
         ft.add_program_input(
             PartialInput::new(program_utxo),
-            ProgramInput::new(
-                Box::new(self.program.as_ref().clone()),
-                program_witness,
-            ),
+            ProgramInput::new(Box::new(self.program.as_ref().clone()), program_witness),
             None,
         );
     }
