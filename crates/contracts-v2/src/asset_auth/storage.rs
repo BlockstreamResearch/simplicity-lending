@@ -10,6 +10,6 @@ pub struct AssetAuthStorage {
 impl AssetAuthStorage {
     #[allow(unused_must_use)]
     pub(crate) fn apply(&self, program: &mut AssetAuthProgram) {
-        program.set_storage_at(0, self.auth_asset_id.into_inner().0);
+        program.set_storage_at(0, self.auth_asset_id.to_byte_array());
     }
 }

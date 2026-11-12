@@ -304,8 +304,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90dbd31c98227229239363921e60fcf5e558e43ec69094d46fc4996f08d1d5bc"
 dependencies = [
  "bitcoin_hashes 0.14.101",
- "rand 0.8.8",
- "rand_core 0.6.4",
  "serde",
  "unicode-normalization",
 ]
@@ -700,8 +698,8 @@ dependencies = [
  "serde-untagged",
  "serde_core",
  "serde_json",
- "toml 1.2.1+spec-1.1.0",
- "winnow 1.0.5",
+ "toml",
+ "winnow",
  "yaml-rust2",
 ]
 
@@ -1032,19 +1030,6 @@ dependencies = [
 
 [[package]]
 name = "elements"
-version = "0.25.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83c63a04238f4b7f3564fe9705921452c2900efd00982545e5c634fac9024fe2"
-dependencies = [
- "bech32",
- "bitcoin",
- "secp256k1-zkp",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "elements"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34e00f7ddcd826d2f4c9bd72d79a6b6991a0ac4286e7e2b2ff8eecd130549073"
@@ -1062,24 +1047,12 @@ dependencies = [
 
 [[package]]
 name = "elements-miniscript"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "571fa105690f83c7833df2109eb2e14ca0e62d633d2624ffcb166ff18a3da870"
-dependencies = [
- "bitcoin",
- "elements 0.25.3",
- "miniscript",
- "serde",
-]
-
-[[package]]
-name = "elements-miniscript"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c18e931c81e6e7e58d63b6fea1c57f5534717f0e6721741c4fce72a6c547e19"
 dependencies = [
  "bitcoin",
- "elements 0.27.0",
+ "elements",
  "miniscript",
  "serde",
 ]
@@ -1374,12 +1347,6 @@ name = "ghost-cell"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8449d342b1c67f49169e92e71deb7b9b27f30062301a16dbc27a4cc8d2351b7"
-
-[[package]]
-name = "glob"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "globset"
@@ -1965,7 +1932,7 @@ dependencies = [
  "lending-contracts",
  "minreq 2.14.1",
  "serde",
- "smplx-std 0.2.0",
+ "smplx-std",
  "thiserror",
  "tokio",
 ]
@@ -1977,7 +1944,7 @@ dependencies = [
  "anyhow",
  "hex",
  "ring",
- "smplx-std 0.2.0",
+ "smplx-std",
  "thiserror",
 ]
 
@@ -1988,7 +1955,7 @@ dependencies = [
  "anyhow",
  "hex",
  "ring",
- "smplx-std 0.0.12",
+ "smplx-std",
  "thiserror",
 ]
 
@@ -2008,7 +1975,7 @@ dependencies = [
  "rustls 0.23.46",
  "serde",
  "serde_json",
- "smplx-std 0.2.0",
+ "smplx-std",
  "thiserror",
  "tokio",
  "tracing",
@@ -2031,7 +1998,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serial_test",
- "smplx-std 0.2.0",
+ "smplx-std",
  "sqlx",
  "thiserror",
  "tokio",
@@ -2057,7 +2024,7 @@ dependencies = [
  "lending-indexer",
  "serde",
  "serial_test",
- "smplx-std 0.2.0",
+ "smplx-std",
  "sqlx",
  "thiserror",
  "tokio",
@@ -2484,16 +2451,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
-]
-
-[[package]]
-name = "prettyplease"
-version = "0.2.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
-dependencies = [
- "proc-macro2",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -3364,23 +3321,6 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "simplicity-lang"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13ed081e3046d66c146d7201bcbf3b655ca3436cb83f6efc26d7895bd2b79d06"
-dependencies = [
- "bitcoin",
- "bitcoin_hashes 0.14.101",
- "byteorder",
- "elements 0.25.3",
- "getrandom 0.2.17",
- "ghost-cell",
- "hex-conservative 0.2.3",
- "miniscript",
- "simplicity-sys 0.7.0",
-]
-
-[[package]]
-name = "simplicity-lang"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cff7b10251528d46d9cf60238267911984fedbb0948cccea98dd74fc6bf9f729"
@@ -3388,22 +3328,12 @@ dependencies = [
  "bitcoin",
  "bitcoin_hashes 1.2.0",
  "byteorder",
- "elements 0.27.0",
+ "elements",
  "getrandom 0.2.17",
  "ghost-cell",
  "hex-conservative 1.3.0",
  "miniscript",
- "simplicity-sys 0.8.0",
-]
-
-[[package]]
-name = "simplicity-sys"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96d1ec5477c7650b8ef511aa56dccb28f2e8cdb6e87f260ecffdaf0ebfef2d3b"
-dependencies = [
- "bitcoin_hashes 0.14.101",
- "cc",
+ "simplicity-sys",
 ]
 
 [[package]]
@@ -3414,26 +3344,6 @@ checksum = "955935733b2735665b4735d9b1361eade6be4c7aea6bca2640345e4c81756f58"
 dependencies = [
  "bitcoin_hashes 1.2.0",
  "cc",
-]
-
-[[package]]
-name = "simplicityhl"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae77168fa3367d234b11bb3999cbd6e04d7180db0b9e11f83de259528e3b23d1"
-dependencies = [
- "ariadne",
- "base64 0.21.7",
- "chumsky",
- "clap",
- "either",
- "getrandom 0.2.17",
- "itertools",
- "miniscript",
- "semver",
- "serde",
- "serde_json",
- "simplicity-lang 0.8.0",
 ]
 
 [[package]]
@@ -3453,7 +3363,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "simplicity-lang 0.9.0",
+ "simplicity-lang",
 ]
 
 [[package]]
@@ -3473,54 +3383,22 @@ dependencies = [
 
 [[package]]
 name = "smplx-build"
-version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4e9561b9da1d788d3e777f8a59b085dd13a6fbace5b109f2b0576069f9f36ff"
-dependencies = [
- "glob",
- "globwalk",
- "pathdiff",
- "prettyplease 0.2.37",
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "simplicityhl 0.7.2",
- "syn 2.0.119",
- "thiserror",
- "toml 0.9.12+spec-1.1.0",
- "toml_edit",
-]
-
-[[package]]
-name = "smplx-build"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c9a9658644c4f02ccbc3b937abe5b4d705bf966a8e3e53bc1cd8e667c388d04"
 dependencies = [
  "globwalk",
  "pathdiff",
- "prettyplease 0.3.0",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "serde",
  "serde_json",
- "simplicityhl 0.8.0",
+ "simplicityhl",
  "syn 3.0.10",
  "thiserror",
- "toml 1.2.1+spec-1.1.0",
+ "toml",
  "toml_edit",
-]
-
-[[package]]
-name = "smplx-macros"
-version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f802ff11501371c4c822f0ecdbf7e9e65180ccbbb43b55f252c9a00cb849d24"
-dependencies = [
- "smplx-build 0.0.12",
- "smplx-test 0.0.12",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -3529,25 +3407,9 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a18f860c7887452be1ef87ef7d4d5a902f36a4e06e24eceddce9d93c4ddf7c5"
 dependencies = [
- "smplx-build 0.2.0",
- "smplx-test 0.2.0",
+ "smplx-build",
+ "smplx-test",
  "syn 3.0.10",
-]
-
-[[package]]
-name = "smplx-regtest"
-version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "881db46f30a472018c26c5f245637a722ccba36a873b845d5e6376e7bd5e1106"
-dependencies = [
- "electrsd",
- "hex",
- "hmac 0.12.1",
- "serde",
- "sha2 0.10.9",
- "smplx-sdk 0.0.12",
- "thiserror",
- "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
@@ -3561,29 +3423,9 @@ dependencies = [
  "hmac 0.13.0",
  "serde",
  "sha2 0.11.1",
- "smplx-sdk 0.2.0",
+ "smplx-sdk",
  "thiserror",
- "toml 1.2.1+spec-1.1.0",
-]
-
-[[package]]
-name = "smplx-sdk"
-version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98b85112288eccd99ba34bd852681d78c3581a52709eab0ce52a073b9d961d8e"
-dependencies = [
- "bip39 2.2.2",
- "bitcoin_hashes 0.14.101",
- "bitcoincore-rpc",
- "dyn-clone",
- "elements-miniscript 0.4.0",
- "hex",
- "minreq 3.0.0",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "simplicityhl 0.7.2",
- "thiserror",
+ "toml",
 ]
 
 [[package]]
@@ -3595,27 +3437,13 @@ dependencies = [
  "bip39 3.0.0",
  "bitcoincore-rpc",
  "dyn-clone",
- "elements-miniscript 0.5.0",
+ "elements-miniscript",
  "hex",
  "minreq 3.0.0",
  "serde",
  "serde_json",
- "simplicityhl 0.8.0",
+ "simplicityhl",
  "thiserror",
-]
-
-[[package]]
-name = "smplx-std"
-version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e05855ac57a1b5f737a4bc244ebf5924453957a2066a0bb0fd8df033498386ba"
-dependencies = [
- "either",
- "serde",
- "simplicityhl 0.7.2",
- "smplx-macros 0.0.12",
- "smplx-sdk 0.0.12",
- "smplx-test 0.0.12",
 ]
 
 [[package]]
@@ -3628,28 +3456,10 @@ dependencies = [
  "rand 0.10.3",
  "rand_core 0.10.1",
  "serde",
- "simplicityhl 0.8.0",
- "smplx-macros 0.2.0",
- "smplx-sdk 0.2.0",
- "smplx-test 0.2.0",
-]
-
-[[package]]
-name = "smplx-test"
-version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a66ea20c2701a90faf10f9a18176058dd7a82222797d5ed6da9c83f0f1ca032"
-dependencies = [
- "electrsd",
- "proc-macro2",
- "quote",
- "serde",
- "simplicityhl 0.7.2",
- "smplx-regtest 0.0.12",
- "smplx-sdk 0.0.12",
- "syn 2.0.119",
- "thiserror",
- "toml 0.9.12+spec-1.1.0",
+ "simplicityhl",
+ "smplx-macros",
+ "smplx-sdk",
+ "smplx-test",
 ]
 
 [[package]]
@@ -3664,12 +3474,12 @@ dependencies = [
  "quote",
  "rand 0.10.3",
  "serde",
- "simplicityhl 0.8.0",
- "smplx-regtest 0.2.0",
- "smplx-sdk 0.2.0",
+ "simplicityhl",
+ "smplx-regtest",
+ "smplx-sdk",
  "syn 3.0.10",
  "thiserror",
- "toml 1.2.1+spec-1.1.0",
+ "toml",
 ]
 
 [[package]]
@@ -4164,21 +3974,6 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.9.12+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf92845e79fc2e2def6a5d828f0801e29a2f8acc037becc5ab08595c7d5e9863"
-dependencies = [
- "indexmap",
- "serde_core",
- "serde_spanned",
- "toml_datetime 0.7.5+spec-1.1.0",
- "toml_parser",
- "toml_writer",
- "winnow 0.7.15",
-]
-
-[[package]]
-name = "toml"
 version = "1.2.1+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5755c51863cdac711f1956baf8eb9588e060755f7d3c4c979e70ea1e1f32cd7"
@@ -4186,19 +3981,10 @@ dependencies = [
  "indexmap",
  "serde_core",
  "serde_spanned",
- "toml_datetime 1.1.3+spec-1.1.0",
+ "toml_datetime",
  "toml_parser",
  "toml_writer",
- "winnow 1.0.5",
-]
-
-[[package]]
-name = "toml_datetime"
-version = "0.7.5+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92e1cfed4a3038bc5a127e35a2d360f145e1f4b971b551a2ba5fd7aedf7e1347"
-dependencies = [
- "serde_core",
+ "winnow",
 ]
 
 [[package]]
@@ -4217,10 +4003,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd43688c4858d7264ae1cf9a9f874a67c3feb74a883b1cd7bebd6a4ea8307218"
 dependencies = [
  "indexmap",
- "toml_datetime 1.1.3+spec-1.1.0",
+ "toml_datetime",
  "toml_parser",
  "toml_writer",
- "winnow 1.0.5",
+ "winnow",
 ]
 
 [[package]]
@@ -4229,7 +4015,7 @@ version = "1.1.5+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
 dependencies = [
- "winnow 1.0.5",
+ "winnow",
 ]
 
 [[package]]
@@ -5016,12 +4802,6 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
-
-[[package]]
-name = "winnow"
-version = "0.7.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
 
 [[package]]
 name = "winnow"

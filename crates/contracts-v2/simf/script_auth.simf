@@ -1,3 +1,4 @@
+use std::lib::utxo::getters::script_hash::get_input_script_hash;
 use std::lib::asserts::assert_eq_256;
 
 use crate::utils::storage::{get_u256_slot_leaf, get_script_hash_for_tap_node};
@@ -15,9 +16,7 @@ fn assert_storage_with_current(auth_script_hash: u256) {
 }
 
 fn assert_input_script_hash(input_index: u32, expected_script_hash: u256) {
-    let input_script_hash: u256 = unwrap(jet::input_script_hash(input_index));
-
-    assert_eq_256(input_script_hash, expected_script_hash);
+    assert_eq_256(get_input_script_hash(input_index), expected_script_hash);
 }
 
 fn script_auth_check(auth_input_index: u32, auth_script_hash: u256) {

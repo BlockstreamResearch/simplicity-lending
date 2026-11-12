@@ -17,7 +17,7 @@ ring = { workspace = true }
 hex = { workspace = true }
 thiserror = { workspace = true }
 
-smplx-std = { version = "0.0.12" }
+smplx-std = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1"

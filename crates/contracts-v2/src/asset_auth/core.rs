@@ -1,7 +1,7 @@
 use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature, UTXO,
+    FinalTransaction, PartialInput, PartialOutput, ProgramInput, UTXO,
 };
 
 use crate::artifacts::asset_auth::AssetAuthProgram;
@@ -61,16 +61,16 @@ impl AssetAuth {
     ) {
         let program_witness: AssetAuthWitness = AssetAuthWitness {
             auth_input_index,
-            auth_asset_id: self.storage.auth_asset_id.into_inner().0,
+            auth_asset_id: self.storage.auth_asset_id.to_byte_array(),
         };
 
         ft.add_program_input(
             PartialInput::new(program_utxo),
             ProgramInput::new(
                 Box::new(self.program.as_ref().clone()),
-                Box::new(program_witness),
+                program_witness,
             ),
-            RequiredSignature::None,
+            None,
         );
     }
 }

@@ -1,8 +1,6 @@
 use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::{AssetId, Script};
-use simplex::transaction::{
-    FinalTransaction, PartialInput, PartialOutput, ProgramInput, RequiredSignature, UTXO,
-};
+use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, ProgramInput, UTXO};
 
 use crate::artifacts::script_auth::ScriptAuthProgram;
 use crate::artifacts::script_auth::derived_script_auth::{ScriptAuthArguments, ScriptAuthWitness};
@@ -66,11 +64,8 @@ impl ScriptAuth {
 
         ft.add_program_input(
             PartialInput::new(program_utxo),
-            ProgramInput::new(
-                Box::new(self.program.as_ref().clone()),
-                Box::new(program_witness),
-            ),
-            RequiredSignature::None,
+            ProgramInput::new(Box::new(self.program.as_ref().clone()), program_witness),
+            None,
         );
     }
 }
