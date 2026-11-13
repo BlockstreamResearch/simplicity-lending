@@ -1,0 +1,23 @@
+use std::lib::asserts::assert_eq_64;
+
+use crate::utils::protocol_fee::{fee_rate_denominator, get_protocol_fee_part};
+
+// (fee_amount, fee_rate, expected)
+type ProtocolFeePartCase = (u64, u64, u64);
+// expected
+type FeeRateDenominatorCase = u64;
+
+type Case = Either<ProtocolFeePartCase, FeeRateDenominatorCase>;
+
+fn main() {
+    match witness::CASE {
+        Left(case: ProtocolFeePartCase) => {
+            let (fee_amount, fee_rate, expected): ProtocolFeePartCase = case;
+
+            assert_eq_64(get_protocol_fee_part(fee_amount, fee_rate), expected);
+        },
+        Right(expected: FeeRateDenominatorCase) => {
+            assert_eq_64(fee_rate_denominator(), expected);
+        }
+    }
+}
