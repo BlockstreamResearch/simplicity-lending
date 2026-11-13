@@ -5,3 +5,5 @@
 pub mod asset_auth;
 #[rustfmt::skip]
 pub mod script_auth;
+#[rustfmt::skip]
+pub mod vault;

@@ -1,0 +1,13 @@
+use std::lib::u64::mul_div::mul_div_64;
+
+pub fn fee_rate_denominator() -> u64 {
+    100000
+}
+
+/// The protocol's part of `fee_amount` at `fee_rate`, where 100% is `fee_rate_denominator()`. Rounds down.
+pub fn get_protocol_fee_part(
+    fee_amount: u64,
+    fee_rate: u64
+) -> u64 {
+    mul_div_64(fee_amount, fee_rate, fee_rate_denominator())
+}

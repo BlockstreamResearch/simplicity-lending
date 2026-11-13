@@ -1,0 +1,356 @@
+use std::lib::asserts::{assert_eq_64, assert_eq_256, assert_eq_bool};
+use std::lib::binary::not;
+use std::lib::op_return::is_output_op_return;
+
+use std::lib::u64::math::{add_64, sub_64, gt_64, ge_64};
+use std::lib::utxo::getters::asset_id::{get_explicit_input_asset_id, get_explicit_output_asset_id};
+use std::lib::utxo::getters::asset_id_with_amount::{
+    get_explicit_current_asset_id_with_amount,
+    get_explicit_output_asset_id_with_amount
+};
+use std::lib::utxo::getters::script_hash::get_output_script_hash;
+
+use crate::vault::storage::{
+    VaultStorage,
+    script_hash_for,
+    is_finalized,
+    get_supplied_amount,
+    get_supplied_fee,
+    get_withdrawn_amount,
+    get_withdrawn_protocol_fee,
+    get_lender_asset_id,
+    get_lending_offer_asset_id,
+    with_supply,
+    with_lender_withdrawal,
+    with_protocol_fee_withdrawal,
+    assert_storage_with_current
+};
+use crate::utils::protocol_fee::get_protocol_fee_part;
+
+// (vault_output_index, lending_offer_input_index, lending_offer_output_index, amount_to_supply, fee_to_supply)
+type SupplyParams = (u32, u32, u32, u64, u64);
+// (vault_output_index, lender_nft_input_index, lender_nft_output_index, amount_to_withdraw)
+type PartialWithdrawalParams = (u32, u32, u32, u64);
+// (vault_output_index, lender_nft_input_index, lender_nft_output_index)
+type FullWithdrawalParams = (u32, u32, u32);
+// (vault_output_index, lending_offer_input_index, lending_offer_output_index, lender_nft_input_index, lender_nft_output_index)
+type LiquidationWithdrawalParams = (u32, u32, u32, u32, u32);
+// (vault_output_index, harvester_auth_input_index, harvester_auth_output_index)
+type HarvesterWithdrawalParams = (u32, u32, u32);
+
+type SupplyPath = Either<SupplyParams, SupplyParams>;
+type LenderWithdrawalPath = Either<PartialWithdrawalParams, FullWithdrawalParams>;
+type ClosingWithdrawalPath = Either<LiquidationWithdrawalParams, HarvesterWithdrawalParams>;
+type WithdrawalPath = Either<LenderWithdrawalPath, ClosingWithdrawalPath>;
+type VaultPath = Either<SupplyPath, WithdrawalPath>;
+
+// Protocol fee
+
+fn available_lender_shares(
+    storage: VaultStorage
+) -> u64 {
+    let supplied_protocol_fee: u64 = get_protocol_fee_part(
+        get_supplied_fee(storage),
+        param::PROTOCOL_FEE_RATE
+    );
+    let all_lender_shares: u64 = sub_64(get_supplied_amount(storage), supplied_protocol_fee);
+
+    sub_64(all_lender_shares, get_withdrawn_amount(storage))
+}
+
+fn available_protocol_fee(storage: VaultStorage) -> u64 {
+    let supplied_protocol_fee: u64 = get_protocol_fee_part(
+        get_supplied_fee(storage),
+        param::PROTOCOL_FEE_RATE
+    );
+
+    sub_64(supplied_protocol_fee, get_withdrawn_protocol_fee(storage))
+}
+
+// Checks
+
+/// The vault's own balance, which is always held in the principal asset.
+fn current_vault_balance() -> u64 {
+    let (asset_id, amount): (u256, u64) = get_explicit_current_asset_id_with_amount();
+
+    assert_eq_256(asset_id, param::PRINCIPAL_ASSET_ID);
+
+    amount
+}
+
+/// The auth UTXO moves from `input_index` to `output_index`, burned when `burn` is set.
+fn assert_auth_transfer(
+    input_index: u32,
+    output_index: u32,
+    auth_asset_id: u256,
+    burn: bool
+) {
+    assert_eq_256(get_explicit_input_asset_id(input_index), auth_asset_id);
+    assert_eq_256(get_explicit_output_asset_id(output_index), auth_asset_id);
+
+    assert_eq_bool(is_output_op_return(output_index), burn);
+}
+
+/// The output at `vault_output_index` is the vault with `new_storage`, holding `new_balance` of the principal asset.
+fn assert_vault_output(
+    vault_output_index: u32,
+    new_balance: u64,
+    new_storage: VaultStorage
+) {
+    let (
+        asset_id,
+        amount
+    ): (u256, u64) = get_explicit_output_asset_id_with_amount(vault_output_index);
+
+    assert_eq_256(asset_id, param::PRINCIPAL_ASSET_ID);
+    assert_eq_64(amount, new_balance);
+
+    assert_eq_256(get_output_script_hash(vault_output_index), script_hash_for(new_storage));
+}
+
+/// Withdraws `amount_to_withdraw`. The vault is closed when nothing is left in it,
+/// otherwise it is recreated at `vault_output_index` with `new_storage`.
+fn assert_closing_withdrawal(
+    vault_output_index: u32,
+    amount_to_withdraw: u64,
+    new_storage: VaultStorage
+) {
+    let balance: u64 = current_vault_balance();
+
+    match jet::eq_64(amount_to_withdraw, balance) {
+        false => {
+            assert_vault_output(
+                vault_output_index,
+                sub_64(balance, amount_to_withdraw),
+                new_storage
+            )
+        },
+        true => {}
+    };
+}
+
+// Spending paths
+
+/// Funds the vault next to the LendingOffer UTXO. The final supply burns the LendingOffer asset and
+/// finalizes the vault.
+///
+/// The LendingOffer contract spent in the same transaction is responsible for matching
+/// `amount_to_supply` and `fee_to_supply` with the payment it accepts.
+fn supply(
+    storage: VaultStorage,
+    params: SupplyParams,
+    finalize: bool
+) {
+    let (
+        vault_output_index,
+        lending_offer_input_index,
+        lending_offer_output_index,
+        amount_to_supply,
+        fee_to_supply
+    ): SupplyParams = params;
+
+    assert!(not(is_finalized(storage)));
+
+    assert_auth_transfer(
+        lending_offer_input_index,
+        lending_offer_output_index,
+        get_lending_offer_asset_id(storage),
+        finalize
+    );
+
+    assert!(gt_64(amount_to_supply, 0));
+    assert!(jet::le_64(fee_to_supply, amount_to_supply));
+
+    assert_vault_output(
+        vault_output_index,
+        add_64(current_vault_balance(), amount_to_supply),
+        with_supply(storage, amount_to_supply, fee_to_supply, finalize)
+    );
+}
+
+/// The lender withdraws part of their share before the offer is fully repaid, leaving at least
+/// MIN_VAULT_BALANCE in the vault.
+fn partial_withdrawal(
+    storage: VaultStorage,
+    params: PartialWithdrawalParams
+) {
+    let (
+        vault_output_index,
+        lender_nft_input_index,
+        lender_nft_output_index,
+        amount_to_withdraw
+    ): PartialWithdrawalParams = params;
+
+    assert!(not(is_finalized(storage)));
+
+    assert_auth_transfer(
+        lender_nft_input_index,
+        lender_nft_output_index,
+        get_lender_asset_id(storage),
+        false
+    );
+
+    assert!(gt_64(amount_to_withdraw, 0));
+    assert!(jet::lt_64(amount_to_withdraw, available_lender_shares(storage)));
+
+    let new_balance: u64 = sub_64(current_vault_balance(), amount_to_withdraw);
+
+    assert!(ge_64(new_balance, param::MIN_VAULT_BALANCE));
+
+    assert_vault_output(
+        vault_output_index,
+        new_balance,
+        with_lender_withdrawal(storage, amount_to_withdraw, false)
+    );
+}
+
+/// The lender burns the LenderNFT and withdraws their whole share once the vault is finalized.
+fn full_withdrawal(
+    storage: VaultStorage,
+    params: FullWithdrawalParams
+) {
+    let (
+        vault_output_index,
+        lender_nft_input_index,
+        lender_nft_output_index
+    ): FullWithdrawalParams = params;
+
+    assert!(is_finalized(storage));
+
+    assert_auth_transfer(
+        lender_nft_input_index,
+        lender_nft_output_index,
+        get_lender_asset_id(storage),
+        true
+    );
+
+    let amount_to_withdraw: u64 = available_lender_shares(storage);
+
+    assert!(gt_64(amount_to_withdraw, 0));
+
+    assert_closing_withdrawal(
+        vault_output_index,
+        amount_to_withdraw,
+        with_lender_withdrawal(storage, amount_to_withdraw, true)
+    );
+}
+
+/// The lender burns the LenderNFT and withdraws their whole share when the offer is liquidated,
+/// which burns the LendingOffer asset.
+fn liquidation_withdrawal(
+    storage: VaultStorage,
+    params: LiquidationWithdrawalParams
+) {
+    let (
+        vault_output_index,
+        lending_offer_input_index,
+        lending_offer_output_index,
+        lender_nft_input_index,
+        lender_nft_output_index
+    ): LiquidationWithdrawalParams = params;
+
+    assert!(not(is_finalized(storage)));
+
+    assert_auth_transfer(
+        lending_offer_input_index,
+        lending_offer_output_index,
+        get_lending_offer_asset_id(storage),
+        true
+    );
+    assert_auth_transfer(
+        lender_nft_input_index,
+        lender_nft_output_index,
+        get_lender_asset_id(storage),
+        true
+    );
+
+    let amount_to_withdraw: u64 = available_lender_shares(storage);
+
+    assert!(gt_64(amount_to_withdraw, 0));
+
+    assert_closing_withdrawal(
+        vault_output_index,
+        amount_to_withdraw,
+        with_lender_withdrawal(storage, amount_to_withdraw, true)
+    );
+}
+
+/// The protocol harvester withdraws all the protocol fee accumulated so far.
+fn harvester_withdrawal(
+    storage: VaultStorage,
+    params: HarvesterWithdrawalParams
+) {
+    let (
+        vault_output_index,
+        harvester_auth_input_index,
+        harvester_auth_output_index
+    ): HarvesterWithdrawalParams = params;
+
+    assert_auth_transfer(
+        harvester_auth_input_index,
+        harvester_auth_output_index,
+        param::PROTOCOL_HARVESTER_ASSET_ID,
+        false
+    );
+
+    let protocol_fee_to_withdraw: u64 = available_protocol_fee(storage);
+
+    assert!(gt_64(protocol_fee_to_withdraw, 0));
+
+    assert_closing_withdrawal(
+        vault_output_index,
+        protocol_fee_to_withdraw,
+        with_protocol_fee_withdrawal(storage, protocol_fee_to_withdraw)
+    );
+}
+
+fn main() {
+    let storage: VaultStorage = (
+        witness::IS_FINALIZED,
+        witness::SUPPLIED_AMOUNT,
+        witness::SUPPLIED_FEE,
+        witness::WITHDRAWN_AMOUNT,
+        witness::WITHDRAWN_PROTOCOL_FEE,
+        witness::LENDER_ASSET_ID,
+        witness::LENDING_OFFER_ASSET_ID
+    );
+
+    assert_storage_with_current(storage);
+
+    match witness::PATH {
+        Left(supply_path: SupplyPath) => {
+            match supply_path {
+                Left(params: SupplyParams) => {
+                    supply(storage, params, false)
+                },
+                Right(params: SupplyParams) => {
+                    supply(storage, params, true)
+                }
+            }
+        },
+        Right(withdrawal_path: WithdrawalPath) => {
+            match withdrawal_path {
+                Left(lender_path: LenderWithdrawalPath) => {
+                    match lender_path {
+                        Left(params: PartialWithdrawalParams) => {
+                            partial_withdrawal(storage, params)
+                        },
+                        Right(params: FullWithdrawalParams) => {
+                            full_withdrawal(storage, params)
+                        }
+                    }
+                },
+                Right(closing_path: ClosingWithdrawalPath) => {
+                    match closing_path {
+                        Left(params: LiquidationWithdrawalParams) => {
+                            liquidation_withdrawal(storage, params)
+                        },
+                        Right(params: HarvesterWithdrawalParams) => {
+                            harvester_withdrawal(storage, params)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,175 @@
+use std::lib::asserts::assert_eq_256;
+
+use std::lib::u1::convert::u1_to_u8;
+use std::lib::u64::math::add_64;
+
+use crate::utils::storage::{
+    get_u256_slot_leaf,
+    get_script_hash_for_tap_node
+};
+
+// (is_finalized, supplied_amount, supplied_fee, withdrawn_amount, withdrawn_protocol_fee, lender_asset_id, lending_offer_asset_id)
+pub type VaultStorage = (bool, u64, u64, u64, u64, u256, u256);
+
+/// SHA256 of the storage fields concatenated in order: a bool is one byte (0 or 1),
+/// a u64 is 8 bytes big-endian and a u256 is 32 bytes.
+pub fn storage_hash(
+    storage: VaultStorage
+) -> u256 {
+    let (
+        is_finalized,
+        supplied_amount,
+        supplied_fee,
+        withdrawn_amount,
+        withdrawn_protocol_fee,
+        lender_asset_id,
+        lending_offer_asset_id
+    ): VaultStorage = storage;
+
+    let ctx: Ctx8 = jet::sha_256_ctx_8_init();
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_1(ctx, u1_to_u8(<bool>::into(is_finalized)));
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_8(ctx, supplied_amount);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_8(ctx, supplied_fee);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_8(ctx, withdrawn_amount);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_8(ctx, withdrawn_protocol_fee);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, lender_asset_id);
+    let ctx: Ctx8 = jet::sha_256_ctx_8_add_32(ctx, lending_offer_asset_id);
+
+    jet::sha_256_ctx_8_finalize(ctx)
+}
+
+pub fn script_hash_for(storage: VaultStorage) -> u256 {
+    let storage_slot_leaf: u256 = get_u256_slot_leaf(storage_hash(storage));
+
+    let tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), storage_slot_leaf);
+
+    get_script_hash_for_tap_node(tap_node)
+}
+
+pub fn assert_storage_with_current(storage: VaultStorage) {
+    assert_eq_256(jet::current_script_hash(), script_hash_for(storage));
+}
+
+// Getters
+
+pub fn is_finalized(storage: VaultStorage) -> bool {
+    let (is_finalized, _, _, _, _, _, _): VaultStorage = storage;
+
+    is_finalized
+}
+
+pub fn get_supplied_amount(storage: VaultStorage) -> u64 {
+    let (_, supplied_amount, _, _, _, _, _): VaultStorage = storage;
+
+    supplied_amount
+}
+
+pub fn get_supplied_fee(storage: VaultStorage) -> u64 {
+    let (_, _, supplied_fee, _, _, _, _): VaultStorage = storage;
+
+    supplied_fee
+}
+
+pub fn get_withdrawn_amount(storage: VaultStorage) -> u64 {
+    let (_, _, _, withdrawn_amount, _, _, _): VaultStorage = storage;
+
+    withdrawn_amount
+}
+
+pub fn get_withdrawn_protocol_fee(storage: VaultStorage) -> u64 {
+    let (_, _, _, _, withdrawn_protocol_fee, _, _): VaultStorage = storage;
+
+    withdrawn_protocol_fee
+}
+
+pub fn get_lender_asset_id(storage: VaultStorage) -> u256 {
+    let (_, _, _, _, _, lender_asset_id, _): VaultStorage = storage;
+
+    lender_asset_id
+}
+
+pub fn get_lending_offer_asset_id(storage: VaultStorage) -> u256 {
+    let (_, _, _, _, _, _, lending_offer_asset_id): VaultStorage = storage;
+
+    lending_offer_asset_id
+}
+
+// Transitions
+
+pub fn with_supply(
+    storage: VaultStorage,
+    amount_to_supply: u64,
+    fee_to_supply: u64,
+    finalize: bool
+) -> VaultStorage {
+    let (
+        _,
+        supplied_amount,
+        supplied_fee,
+        withdrawn_amount,
+        withdrawn_protocol_fee,
+        lender_asset_id,
+        lending_offer_asset_id
+    ): VaultStorage = storage;
+
+    (
+        finalize,
+        add_64(supplied_amount, amount_to_supply),
+        add_64(supplied_fee, fee_to_supply),
+        withdrawn_amount,
+        withdrawn_protocol_fee,
+        lender_asset_id,
+        lending_offer_asset_id
+    )
+}
+
+pub fn with_lender_withdrawal(
+    storage: VaultStorage,
+    amount_to_withdraw: u64,
+    finalize: bool
+) -> VaultStorage {
+    let (
+        _,
+        supplied_amount,
+        supplied_fee,
+        withdrawn_amount,
+        withdrawn_protocol_fee,
+        lender_asset_id,
+        lending_offer_asset_id
+    ): VaultStorage = storage;
+
+    (
+        finalize,
+        supplied_amount,
+        supplied_fee,
+        add_64(withdrawn_amount, amount_to_withdraw),
+        withdrawn_protocol_fee,
+        lender_asset_id,
+        lending_offer_asset_id
+    )
+}
+
+pub fn with_protocol_fee_withdrawal(
+    storage: VaultStorage,
+    protocol_fee_to_withdraw: u64
+) -> VaultStorage {
+    let (
+        is_finalized,
+        supplied_amount,
+        supplied_fee,
+        withdrawn_amount,
+        withdrawn_protocol_fee,
+        lender_asset_id,
+        lending_offer_asset_id
+    ): VaultStorage = storage;
+
+    (
+        is_finalized,
+        supplied_amount,
+        supplied_fee,
+        withdrawn_amount,
+        add_64(withdrawn_protocol_fee, protocol_fee_to_withdraw),
+        lender_asset_id,
+        lending_offer_asset_id
+    )
+}
