@@ -10,14 +10,11 @@ use std::lib::utxo::getters::asset_id_with_amount::{
 };
 use std::lib::utxo::getters::script_hash::get_output_script_hash;
 
+use crate::contracts::vault::accounting::{available_lender_shares, available_protocol_fee};
 use crate::contracts::vault::storage::{
     VaultStorage,
     script_hash_for,
     is_finalized,
-    get_supplied_amount,
-    get_supplied_fee,
-    get_withdrawn_amount,
-    get_withdrawn_protocol_fee,
     get_lender_asset_id,
     get_lending_offer_asset_id,
     with_supply,
@@ -25,7 +22,6 @@ use crate::contracts::vault::storage::{
     with_protocol_fee_withdrawal,
     assert_storage_with_current
 };
-use crate::contracts::utils::protocol_fee::get_protocol_fee_part;
 
 // (vault_output_index, lending_offer_input_index, lending_offer_output_index, amount_to_supply, fee_to_supply)
 type SupplyParams = (u32, u32, u32, u64, u64);
@@ -43,29 +39,6 @@ type LenderWithdrawalPath = Either<PartialWithdrawalParams, FullWithdrawalParams
 type ClosingWithdrawalPath = Either<LiquidationWithdrawalParams, HarvesterWithdrawalParams>;
 type WithdrawalPath = Either<LenderWithdrawalPath, ClosingWithdrawalPath>;
 type VaultPath = Either<SupplyPath, WithdrawalPath>;
-
-// Protocol fee
-
-fn available_lender_shares(
-    storage: VaultStorage
-) -> u64 {
-    let supplied_protocol_fee: u64 = get_protocol_fee_part(
-        get_supplied_fee(storage),
-        param::PROTOCOL_FEE_RATE
-    );
-    let all_lender_shares: u64 = sub_64(get_supplied_amount(storage), supplied_protocol_fee);
-
-    sub_64(all_lender_shares, get_withdrawn_amount(storage))
-}
-
-fn available_protocol_fee(storage: VaultStorage) -> u64 {
-    let supplied_protocol_fee: u64 = get_protocol_fee_part(
-        get_supplied_fee(storage),
-        param::PROTOCOL_FEE_RATE
-    );
-
-    sub_64(supplied_protocol_fee, get_withdrawn_protocol_fee(storage))
-}
 
 // Checks
 
@@ -191,7 +164,10 @@ fn partial_withdrawal(
     );
 
     assert!(gt_64(amount_to_withdraw, 0));
-    assert!(jet::lt_64(amount_to_withdraw, available_lender_shares(storage)));
+    assert!(jet::lt_64(
+        amount_to_withdraw,
+        available_lender_shares(storage, param::PROTOCOL_FEE_RATE)
+    ));
 
     let new_balance: u64 = sub_64(current_vault_balance(), amount_to_withdraw);
 
@@ -224,7 +200,7 @@ fn full_withdrawal(
         true
     );
 
-    let amount_to_withdraw: u64 = available_lender_shares(storage);
+    let amount_to_withdraw: u64 = available_lender_shares(storage, param::PROTOCOL_FEE_RATE);
 
     assert!(gt_64(amount_to_withdraw, 0));
 
@@ -264,7 +240,7 @@ fn liquidation_withdrawal(
         true
     );
 
-    let amount_to_withdraw: u64 = available_lender_shares(storage);
+    let amount_to_withdraw: u64 = available_lender_shares(storage, param::PROTOCOL_FEE_RATE);
 
     assert!(gt_64(amount_to_withdraw, 0));
 
@@ -293,7 +269,7 @@ fn harvester_withdrawal(
         false
     );
 
-    let protocol_fee_to_withdraw: u64 = available_protocol_fee(storage);
+    let protocol_fee_to_withdraw: u64 = available_protocol_fee(storage, param::PROTOCOL_FEE_RATE);
 
     assert!(gt_64(protocol_fee_to_withdraw, 0));
 

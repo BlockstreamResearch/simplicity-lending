@@ -8,7 +8,6 @@ use crate::lender_principal_vault::{
     LenderPrincipalVaultWitnessBranch,
 };
 use crate::utils::auth_transfer::AuthTransfer;
-use crate::utils::protocol_fee::protocol_fee_part;
 use crate::utils::transaction::next_output_index;
 
 /// The vault in one state. Spending it through an `attach_*` method recreates the vault with
@@ -60,17 +59,13 @@ impl LenderPrincipalVault {
         self.storage
     }
 
-    /// The lender's share that is still in the vault: the supplied amount without the protocol fee
-    /// and without what the lender has withdrawn.
+    /// The lender's share that is still in the vault.
     ///
     /// # Errors
     /// Returns [`LenderPrincipalVaultError::AccountingOverflow`] if the state is inconsistent.
     pub fn available_lender_shares(&self) -> Result<u64, LenderPrincipalVaultError> {
         self.storage
-            .supplied_amount
-            .checked_sub(self.supplied_protocol_fee()?)
-            .and_then(|shares| shares.checked_sub(self.storage.withdrawn_amount))
-            .ok_or(LenderPrincipalVaultError::AccountingOverflow)
+            .available_lender_shares(self.parameters.protocol_fee_rate)
     }
 
     /// The protocol fee that is still in the vault.
@@ -78,9 +73,8 @@ impl LenderPrincipalVault {
     /// # Errors
     /// Returns [`LenderPrincipalVaultError::AccountingOverflow`] if the state is inconsistent.
     pub fn available_protocol_fee(&self) -> Result<u64, LenderPrincipalVaultError> {
-        self.supplied_protocol_fee()?
-            .checked_sub(self.storage.withdrawn_protocol_fee)
-            .ok_or(LenderPrincipalVaultError::AccountingOverflow)
+        self.storage
+            .available_protocol_fee(self.parameters.protocol_fee_rate)
     }
 
     /// The most the lender can withdraw partially from the vault holding `balance`, or `None` when
@@ -255,11 +249,6 @@ impl LenderPrincipalVault {
             protocol_fee_to_withdraw,
             new_storage,
         )
-    }
-
-    fn supplied_protocol_fee(&self) -> Result<u64, LenderPrincipalVaultError> {
-        protocol_fee_part(self.storage.supplied_fee, self.parameters.protocol_fee_rate)
-            .ok_or(LenderPrincipalVaultError::AccountingOverflow)
     }
 
     fn attach_input(

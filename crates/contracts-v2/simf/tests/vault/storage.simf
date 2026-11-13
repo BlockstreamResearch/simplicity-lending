@@ -1,0 +1,115 @@
+use std::lib::asserts::{assert_eq_64, assert_eq_256, assert_eq_bool};
+
+use crate::contracts::vault::storage::{
+    VaultStorage,
+    storage_hash,
+    assert_storage_with_current,
+    is_finalized,
+    get_supplied_amount,
+    get_supplied_fee,
+    get_withdrawn_amount,
+    get_withdrawn_protocol_fee,
+    get_lender_asset_id,
+    get_lending_offer_asset_id,
+    with_supply,
+    with_lender_withdrawal,
+    with_protocol_fee_withdrawal
+};
+use crate::tests::support::dispatch::{assert_selects_one_of, is_selected};
+
+fn assert_storage_eq(actual: VaultStorage, expected: VaultStorage) {
+    let (a0, a1, a2, a3, a4, a5, a6): VaultStorage = actual;
+    let (e0, e1, e2, e3, e4, e5, e6): VaultStorage = expected;
+
+    assert_eq_bool(a0, e0);
+    assert_eq_64(a1, e1);
+    assert_eq_64(a2, e2);
+    assert_eq_64(a3, e3);
+    assert_eq_64(a4, e4);
+    assert_eq_256(a5, e5);
+    assert_eq_256(a6, e6);
+}
+
+/// Each getter returns its own field of `storage`.
+fn assert_getters(storage: VaultStorage) {
+    let (
+        finalized,
+        supplied_amount,
+        supplied_fee,
+        withdrawn_amount,
+        withdrawn_protocol_fee,
+        lender_asset_id,
+        lending_offer_asset_id
+    ): VaultStorage = storage;
+
+    assert_eq_bool(is_finalized(storage), finalized);
+    assert_eq_64(get_supplied_amount(storage), supplied_amount);
+    assert_eq_64(get_supplied_fee(storage), supplied_fee);
+    assert_eq_64(get_withdrawn_amount(storage), withdrawn_amount);
+    assert_eq_64(get_withdrawn_protocol_fee(storage), withdrawn_protocol_fee);
+    assert_eq_256(get_lender_asset_id(storage), lender_asset_id);
+    assert_eq_256(get_lending_offer_asset_id(storage), lending_offer_asset_id);
+}
+
+// FUNCTION_INDEX selects the function, in lockstep with `Function` on the Rust side:
+// 0: storage_hash(STORAGE) == EXPECTED_HASH
+// 1: assert_storage_with_current(STORAGE), against the program's own storage slot
+// 2: the getters return the fields of STORAGE
+// 3: with_supply(STORAGE, AMOUNT, FEE, FINALIZE) == EXPECTED_STORAGE
+// 4: with_lender_withdrawal(STORAGE, AMOUNT, FINALIZE) == EXPECTED_STORAGE
+// 5: with_protocol_fee_withdrawal(STORAGE, AMOUNT) == EXPECTED_STORAGE
+fn main() {
+    let fn_idx: u8 = witness::FUNCTION_INDEX;
+
+    let storage: VaultStorage = witness::STORAGE;
+    let amount: u64 = witness::AMOUNT;
+    let fee: u64 = witness::FEE;
+    let finalize: bool = witness::FINALIZE;
+
+    let expected_hash: u256 = witness::EXPECTED_HASH;
+    let expected_storage: VaultStorage = witness::EXPECTED_STORAGE;
+
+    assert_selects_one_of(fn_idx, 6);
+
+    match is_selected(0, fn_idx) {
+        false => {},
+        true => {
+            assert_eq_256(storage_hash(storage), expected_hash)
+        }
+    };
+
+    match is_selected(1, fn_idx) {
+        false => {},
+        true => {
+            assert_storage_with_current(storage)
+        }
+    };
+
+    match is_selected(2, fn_idx) {
+        false => {},
+        true => {
+            assert_getters(storage)
+        }
+    };
+
+    match is_selected(3, fn_idx) {
+        false => {},
+        true => {
+            assert_storage_eq(with_supply(storage, amount, fee, finalize), expected_storage)
+        }
+    };
+
+    match is_selected(4, fn_idx) {
+        false => {},
+        true => {
+            assert_storage_eq(with_lender_withdrawal(storage, amount, finalize), expected_storage)
+        }
+    };
+
+    match is_selected(5, fn_idx) {
+        false => {},
+        true => {
+            assert_storage_eq(with_protocol_fee_withdrawal(storage, amount), expected_storage)
+        }
+    };
+}

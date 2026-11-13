@@ -3,6 +3,7 @@ use simplex::simplicityhl::elements::hashes::sha256;
 
 use crate::artifacts::contracts::vault::lender_principal_vault::LenderPrincipalVaultProgram;
 use crate::lender_principal_vault::LenderPrincipalVaultError;
+use crate::utils::protocol_fee::protocol_fee_part;
 use crate::utils::storage::set_storage_slots;
 
 /// The vault state. The contract keeps only its hash in the single storage slot and takes the
@@ -66,6 +67,34 @@ impl LenderPrincipalVaultStorage {
         [self.storage_hash()]
     }
 
+    /// The lender's share that is still in the vault: the supplied amount without the protocol fee
+    /// at `protocol_fee_rate` and without what the lender has withdrawn.
+    ///
+    /// # Errors
+    /// Returns [`LenderPrincipalVaultError::AccountingOverflow`] if the state is inconsistent.
+    pub fn available_lender_shares(
+        &self,
+        protocol_fee_rate: u64,
+    ) -> Result<u64, LenderPrincipalVaultError> {
+        self.supplied_amount
+            .checked_sub(self.supplied_protocol_fee(protocol_fee_rate)?)
+            .and_then(|shares| shares.checked_sub(self.withdrawn_amount))
+            .ok_or(LenderPrincipalVaultError::AccountingOverflow)
+    }
+
+    /// The protocol fee at `protocol_fee_rate` that is still in the vault.
+    ///
+    /// # Errors
+    /// Returns [`LenderPrincipalVaultError::AccountingOverflow`] if the state is inconsistent.
+    pub fn available_protocol_fee(
+        &self,
+        protocol_fee_rate: u64,
+    ) -> Result<u64, LenderPrincipalVaultError> {
+        self.supplied_protocol_fee(protocol_fee_rate)?
+            .checked_sub(self.withdrawn_protocol_fee)
+            .ok_or(LenderPrincipalVaultError::AccountingOverflow)
+    }
+
     /// The state after supplying `amount_to_supply` with `fee_to_supply` of it being the fee.
     ///
     /// # Errors
@@ -115,6 +144,14 @@ impl LenderPrincipalVaultStorage {
             )?,
             ..*self
         })
+    }
+
+    fn supplied_protocol_fee(
+        &self,
+        protocol_fee_rate: u64,
+    ) -> Result<u64, LenderPrincipalVaultError> {
+        protocol_fee_part(self.supplied_fee, protocol_fee_rate)
+            .ok_or(LenderPrincipalVaultError::AccountingOverflow)
     }
 
     pub(crate) fn apply(&self, program: &mut LenderPrincipalVaultProgram) {

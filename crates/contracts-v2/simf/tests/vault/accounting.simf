@@ -1,0 +1,36 @@
+use std::lib::asserts::assert_eq_64;
+
+use crate::contracts::vault::accounting::{available_lender_shares, available_protocol_fee};
+use crate::contracts::vault::storage::VaultStorage;
+use crate::tests::support::dispatch::{
+    assert_selects_one_of,
+    is_selected
+};
+
+// FUNCTION_INDEX selects the function, in lockstep with `Function` on the Rust side:
+// 0: available_lender_shares(STORAGE, PROTOCOL_FEE_RATE) == EXPECTED
+// 1: available_protocol_fee(STORAGE, PROTOCOL_FEE_RATE) == EXPECTED
+fn main() {
+    let fn_idx: u8 = witness::FUNCTION_INDEX;
+
+    let storage: VaultStorage = witness::STORAGE;
+    let protocol_fee_rate: u64 = witness::PROTOCOL_FEE_RATE;
+
+    let expected: u64 = witness::EXPECTED;
+
+    assert_selects_one_of(fn_idx, 2);
+
+    match is_selected(0, fn_idx) {
+        false => {},
+        true => {
+            assert_eq_64(available_lender_shares(storage, protocol_fee_rate), expected)
+        }
+    };
+
+    match is_selected(1, fn_idx) {
+        false => {},
+        true => {
+            assert_eq_64(available_protocol_fee(storage, protocol_fee_rate), expected)
+        }
+    };
+}

@@ -44,22 +44,3 @@ pub fn run(program: &Program, witness: impl Into<WitnessValues>) -> Result<(), P
 
     program.execute(&pst, &witness, 0, &network).map(|_| ())
 }
-
-#[track_caller]
-pub fn accepts(program: &Program, witness: impl Into<WitnessValues>) {
-    if let Err(error) = run(program, witness) {
-        panic!("expected the program to accept, but it failed: {error}");
-    }
-}
-
-/// Asserts that `program` fails while running on `witness`.
-///
-/// Any other error means the case is malformed and the function was never reached.
-#[track_caller]
-pub fn rejects(program: &Program, witness: impl Into<WitnessValues>) {
-    match run(program, witness) {
-        Err(ProgramError::Pruning(_) | ProgramError::Execution(_)) => {}
-        Err(other) => panic!("the case failed before the program ran: {other}"),
-        Ok(()) => panic!("expected the program to reject, but it accepted"),
-    }
-}

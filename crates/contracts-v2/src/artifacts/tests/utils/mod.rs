@@ -3,3 +3,5 @@
 #![allow(clippy::all)]
 #[rustfmt::skip]
 pub mod protocol_fee;
+#[rustfmt::skip]
+pub mod storage;

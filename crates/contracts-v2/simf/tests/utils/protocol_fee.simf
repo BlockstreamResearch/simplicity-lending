@@ -1,23 +1,35 @@
 use std::lib::asserts::assert_eq_64;
 
 use crate::contracts::utils::protocol_fee::{fee_rate_denominator, get_protocol_fee_part};
+use crate::tests::support::dispatch::{
+    assert_selects_one_of,
+    is_selected
+};
 
-// (fee_amount, fee_rate, expected)
-type ProtocolFeePartCase = (u64, u64, u64);
-// expected
-type FeeRateDenominatorCase = u64;
-
-type Case = Either<ProtocolFeePartCase, FeeRateDenominatorCase>;
-
+// FUNCTION_INDEX selects the function, in lockstep with `Function` on the Rust side:
+// 0: get_protocol_fee_part(FEE_AMOUNT, FEE_RATE) == EXPECTED
+// 1: fee_rate_denominator() == EXPECTED
 fn main() {
-    match witness::CASE {
-        Left(case: ProtocolFeePartCase) => {
-            let (fee_amount, fee_rate, expected): ProtocolFeePartCase = case;
+    let fn_idx: u8 = witness::FUNCTION_INDEX;
 
-            assert_eq_64(get_protocol_fee_part(fee_amount, fee_rate), expected);
-        },
-        Right(expected: FeeRateDenominatorCase) => {
-            assert_eq_64(fee_rate_denominator(), expected);
+    let fee_amount: u64 = witness::FEE_AMOUNT;
+    let fee_rate: u64 = witness::FEE_RATE;
+
+    let expected: u64 = witness::EXPECTED;
+
+    assert_selects_one_of(fn_idx, 2);
+
+    match is_selected(0, fn_idx) {
+        false => {},
+        true => {
+            assert_eq_64(get_protocol_fee_part(fee_amount, fee_rate), expected)
         }
-    }
+    };
+
+    match is_selected(1, fn_idx) {
+        false => {},
+        true => {
+            assert_eq_64(fee_rate_denominator(), expected)
+        }
+    };
 }

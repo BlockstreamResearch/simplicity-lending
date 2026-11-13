@@ -1,0 +1,43 @@
+use std::lib::u64::math::sub_64;
+
+use crate::contracts::utils::protocol_fee::get_protocol_fee_part;
+use crate::contracts::vault::storage::{
+    VaultStorage,
+    get_supplied_amount,
+    get_supplied_fee,
+    get_withdrawn_amount,
+    get_withdrawn_protocol_fee
+};
+
+/// The protocol's part of all the fee supplied to the vault.
+fn supplied_protocol_fee(
+    storage: VaultStorage,
+    protocol_fee_rate: u64
+) -> u64 {
+    get_protocol_fee_part(get_supplied_fee(storage), protocol_fee_rate)
+}
+
+/// The lender's share that is still in the vault: the supplied amount without the protocol fee
+/// and without what the lender has withdrawn.
+pub fn available_lender_shares(
+    storage: VaultStorage,
+    protocol_fee_rate: u64
+) -> u64 {
+    let all_lender_shares: u64 = sub_64(
+        get_supplied_amount(storage),
+        supplied_protocol_fee(storage, protocol_fee_rate)
+    );
+
+    sub_64(all_lender_shares, get_withdrawn_amount(storage))
+}
+
+/// The protocol fee that is still in the vault.
+pub fn available_protocol_fee(
+    storage: VaultStorage,
+    protocol_fee_rate: u64
+) -> u64 {
+    sub_64(
+        supplied_protocol_fee(storage, protocol_fee_rate),
+        get_withdrawn_protocol_fee(storage)
+    )
+}

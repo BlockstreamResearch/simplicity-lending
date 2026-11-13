@@ -1,0 +1,10 @@
+/// Whether the case selects the function at `fn_idx`.
+pub fn is_selected(index: u8, fn_idx: u8) -> bool {
+    jet::eq_8(index, fn_idx)
+}
+
+/// Fails a case that selects none of the program's `count` functions. Without it such a case runs
+/// no function and passes.
+pub fn assert_selects_one_of(index: u8, count: u8) {
+    assert!(jet::lt_8(index, count));
+}

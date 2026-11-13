@@ -2,4 +2,6 @@
 
 #![allow(clippy::all)]
 #[rustfmt::skip]
+pub mod vault;
+#[rustfmt::skip]
 pub mod utils;

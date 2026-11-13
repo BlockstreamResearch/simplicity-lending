@@ -1,0 +1,57 @@
+use std::lib::asserts::assert_eq_256;
+
+use crate::contracts::utils::storage::{
+    get_bool_slot_leaf,
+    get_u64_slot_leaf,
+    get_u256_slot_leaf,
+    get_script_hash_for_tap_node
+};
+use crate::tests::support::dispatch::{
+    assert_selects_one_of,
+    is_selected
+};
+
+/// The program's only storage slot has `slot_leaf` as its leaf.
+fn assert_current_slot_leaf(
+    slot_leaf: u256
+) {
+    let tap_node: u256 = jet::build_tapbranch(jet::tapleaf_hash(), slot_leaf);
+
+    assert_eq_256(jet::current_script_hash(), get_script_hash_for_tap_node(tap_node));
+}
+
+// FUNCTION_INDEX selects the function, in lockstep with `Function` on the Rust side. Each one
+// takes the value the program's only storage slot is claimed to hold:
+// 0: get_u256_slot_leaf(U256_VALUE)
+// 1: get_bool_slot_leaf(BOOL_VALUE)
+// 2: get_u64_slot_leaf(U64_VALUE)
+fn main() {
+    let fn_idx: u8 = witness::FUNCTION_INDEX;
+
+    let u256_value: u256 = witness::U256_VALUE;
+    let bool_value: bool = witness::BOOL_VALUE;
+    let u64_value: u64 = witness::U64_VALUE;
+
+    assert_selects_one_of(fn_idx, 3);
+
+    match is_selected(0, fn_idx) {
+        false => {},
+        true => {
+            assert_current_slot_leaf(get_u256_slot_leaf(u256_value))
+        }
+    };
+
+    match is_selected(1, fn_idx) {
+        false => {},
+        true => {
+            assert_current_slot_leaf(get_bool_slot_leaf(bool_value))
+        }
+    };
+
+    match is_selected(2, fn_idx) {
+        false => {},
+        true => {
+            assert_current_slot_leaf(get_u64_slot_leaf(u64_value))
+        }
+    };
+}
