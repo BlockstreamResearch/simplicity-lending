@@ -7,11 +7,11 @@ use simplex::simplicityhl::elements::Script;
 use simplex::simplicityhl::elements::secp256k1_zkp::XOnlyPublicKey;
 use simplex::simplicityhl::Arguments;
 #[derive(Clone)]
-pub struct LenderPrincipalVaultProgram {
+pub struct AssetAuthProgram {
     program: Program,
 }
-impl LenderPrincipalVaultProgram {
-    pub const SOURCE: &'static str = derived_lender_principal_vault::LENDER_PRINCIPAL_VAULT_CONTRACT_SOURCE;
+impl AssetAuthProgram {
+    pub const SOURCE: &'static str = derived_asset_auth::ASSET_AUTH_CONTRACT_SOURCE;
     #[must_use]
     pub fn new(arguments: impl Into<Arguments>) -> Self {
         Self {
@@ -60,14 +60,14 @@ impl LenderPrincipalVaultProgram {
         self.program.get_tapleaf_hash()
     }
 }
-impl AsRef<Program> for LenderPrincipalVaultProgram {
+impl AsRef<Program> for AssetAuthProgram {
     fn as_ref(&self) -> &Program {
         &self.program
     }
 }
-impl AsMut<Program> for LenderPrincipalVaultProgram {
+impl AsMut<Program> for AssetAuthProgram {
     fn as_mut(&mut self) -> &mut Program {
         &mut self.program
     }
 }
-include_simf!("src/artifacts/simf/vault/lender_principal_vault.simf");
+include_simf!("src/artifacts/simf/contracts/asset_auth.simf");

@@ -5,8 +5,8 @@ use simplex::simplicityhl::elements::AssetId;
 use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, PartialOutput, UTXO};
 use simplex::{FuzzMode, TestContext};
 
-use lending_contracts_v2::artifacts::asset_auth::AssetAuthProgram;
-use lending_contracts_v2::artifacts::asset_auth::derived_asset_auth::{
+use lending_contracts_v2::artifacts::contracts::asset_auth::AssetAuthProgram;
+use lending_contracts_v2::artifacts::contracts::asset_auth::derived_asset_auth::{
     AssetAuthArguments, AssetAuthWitness,
 };
 use lending_contracts_v2::asset_auth::{AssetAuth, AssetAuthStorage};

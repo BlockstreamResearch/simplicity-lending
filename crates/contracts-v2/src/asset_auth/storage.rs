@@ -1,6 +1,6 @@
 use simplex::simplicityhl::elements::AssetId;
 
-use crate::artifacts::asset_auth::AssetAuthProgram;
+use crate::artifacts::contracts::asset_auth::AssetAuthProgram;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AssetAuthStorage {

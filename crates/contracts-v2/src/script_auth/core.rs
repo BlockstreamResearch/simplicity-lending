@@ -2,8 +2,10 @@ use simplex::provider::SimplicityNetwork;
 use simplex::simplicityhl::elements::{AssetId, Script};
 use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, ProgramInput, UTXO};
 
-use crate::artifacts::script_auth::ScriptAuthProgram;
-use crate::artifacts::script_auth::derived_script_auth::{ScriptAuthArguments, ScriptAuthWitness};
+use crate::artifacts::contracts::script_auth::ScriptAuthProgram;
+use crate::artifacts::contracts::script_auth::derived_script_auth::{
+    ScriptAuthArguments, ScriptAuthWitness,
+};
 
 use crate::script_auth::ScriptAuthStorage;
 

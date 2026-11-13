@@ -10,7 +10,7 @@ use std::lib::utxo::getters::asset_id_with_amount::{
 };
 use std::lib::utxo::getters::script_hash::get_output_script_hash;
 
-use crate::vault::storage::{
+use crate::contracts::vault::storage::{
     VaultStorage,
     script_hash_for,
     is_finalized,
@@ -25,7 +25,7 @@ use crate::vault::storage::{
     with_protocol_fee_withdrawal,
     assert_storage_with_current
 };
-use crate::utils::protocol_fee::get_protocol_fee_part;
+use crate::contracts::utils::protocol_fee::get_protocol_fee_part;
 
 // (vault_output_index, lending_offer_input_index, lending_offer_output_index, amount_to_supply, fee_to_supply)
 type SupplyParams = (u32, u32, u32, u64, u64);

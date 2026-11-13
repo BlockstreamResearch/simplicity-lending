@@ -2,10 +2,6 @@
 
 #![allow(clippy::all)]
 #[rustfmt::skip]
-pub mod asset_auth;
-#[rustfmt::skip]
-pub mod script_auth;
-#[rustfmt::skip]
-pub mod vault;
+pub mod contracts;
 #[rustfmt::skip]
 pub mod tests;

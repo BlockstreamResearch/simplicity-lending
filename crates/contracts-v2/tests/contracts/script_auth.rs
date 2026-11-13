@@ -6,8 +6,8 @@ use simplex::transaction::{FinalTransaction, NativeSignature, PartialInput, Part
 use simplex::utils::hash_script;
 use simplex::{FuzzMode, TestContext};
 
-use lending_contracts_v2::artifacts::script_auth::ScriptAuthProgram;
-use lending_contracts_v2::artifacts::script_auth::derived_script_auth::{
+use lending_contracts_v2::artifacts::contracts::script_auth::ScriptAuthProgram;
+use lending_contracts_v2::artifacts::contracts::script_auth::derived_script_auth::{
     ScriptAuthArguments, ScriptAuthWitness,
 };
 use lending_contracts_v2::script_auth::{ScriptAuth, ScriptAuthStorage};

@@ -1,4 +1,4 @@
-use crate::artifacts::script_auth::ScriptAuthProgram;
+use crate::artifacts::contracts::script_auth::ScriptAuthProgram;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScriptAuthStorage {

@@ -3,7 +3,7 @@ use std::lib::asserts::assert_eq_256;
 use std::lib::u1::convert::u1_to_u8;
 use std::lib::u64::math::add_64;
 
-use crate::utils::storage::{
+use crate::contracts::utils::storage::{
     get_u256_slot_leaf,
     get_script_hash_for_tap_node
 };
