@@ -18,7 +18,7 @@ pub struct ScriptAuth {
 impl ScriptAuth {
     #[must_use]
     pub fn new(storage: ScriptAuthStorage, network: SimplicityNetwork) -> Self {
-        let mut program = ScriptAuthProgram::new(&ScriptAuthArguments::default())
+        let mut program = ScriptAuthProgram::new(ScriptAuthArguments::default())
             .with_storage_capacity(ScriptAuthStorage::SLOTS);
 
         storage.apply(&mut program);

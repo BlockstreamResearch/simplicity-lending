@@ -18,7 +18,7 @@ pub struct AssetAuth {
 impl AssetAuth {
     #[must_use]
     pub fn new(storage: AssetAuthStorage, network: SimplicityNetwork) -> Self {
-        let mut program = AssetAuthProgram::new(&AssetAuthArguments::default())
+        let mut program = AssetAuthProgram::new(AssetAuthArguments::default())
             .with_storage_capacity(AssetAuthStorage::SLOTS);
 
         storage.apply(&mut program);

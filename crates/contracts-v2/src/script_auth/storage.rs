@@ -1,4 +1,5 @@
 use crate::artifacts::contracts::script_auth::ScriptAuthProgram;
+use crate::utils::storage::set_storage_slots;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScriptAuthStorage {
@@ -14,8 +15,6 @@ impl ScriptAuthStorage {
     }
 
     pub(crate) fn apply(&self, program: &mut ScriptAuthProgram) {
-        for (index, slot) in self.slots().into_iter().enumerate() {
-            program.set_storage_at(index, slot);
-        }
+        set_storage_slots(program, &self.slots());
     }
 }

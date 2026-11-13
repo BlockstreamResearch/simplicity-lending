@@ -1,6 +1,7 @@
 use simplex::simplicityhl::elements::AssetId;
 
 use crate::artifacts::contracts::asset_auth::AssetAuthProgram;
+use crate::utils::storage::set_storage_slots;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AssetAuthStorage {
@@ -16,8 +17,6 @@ impl AssetAuthStorage {
     }
 
     pub(crate) fn apply(&self, program: &mut AssetAuthProgram) {
-        for (index, slot) in self.slots().into_iter().enumerate() {
-            program.set_storage_at(index, slot);
-        }
+        set_storage_slots(program, &self.slots());
     }
 }
