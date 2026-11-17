@@ -51,7 +51,8 @@ swagger-ui = ["dep:utoipa-swagger-ui"]
 version = "0.8"
 default-features = false
 features = [
-    "runtime-tokio-rustls",
+    "runtime-tokio",
+    "tls-rustls-aws-lc-rs",
     "macros",
     "postgres",
     "uuid",
