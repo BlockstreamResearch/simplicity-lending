@@ -1,12 +1,24 @@
 import { NETWORK_CONFIG } from '@/constants/network-config'
 
+import { hexToBytes } from './hex'
+import { segwitV0ScriptPubkeyToAddress } from './segwitAddress'
+
 const MINUTES_PER_BLOCK = 1 // Liquid ~1 min/block
 const MINUTES_PER_HOUR = 60
 const MINUTES_PER_DAY = 1440
-const GROUP_LOCALE = 'en-US'
+export const DISPLAY_LOCALE = 'en-US'
+
+const DATE_TIME_FORMAT: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+}
+const SHORT_DATE_FORMAT: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
 
 function formatDecimalParts(whole: bigint, frac: string, negative = false): string {
-  const wholeStr = whole.toLocaleString(GROUP_LOCALE)
+  const wholeStr = whole.toLocaleString(DISPLAY_LOCALE)
   const fracStr = frac.replace(/0+$/, '')
   const out = fracStr ? `${wholeStr}.${fracStr}` : wholeStr
   return negative ? `-${out}` : out
@@ -24,7 +36,7 @@ export function formatAmount(amount: bigint, decimals: number): string {
 }
 
 export function formatFeeReserve(amountSats: bigint): string {
-  return `${amountSats.toLocaleString(GROUP_LOCALE)} ${NETWORK_CONFIG.policyAssetSatsUnit}`
+  return `${amountSats.toLocaleString(DISPLAY_LOCALE)} ${NETWORK_CONFIG.policyAssetSatsUnit}`
 }
 
 // blocks remaining → "Expired" / "~Xm" / "~Xh" / ">Xd".
@@ -65,4 +77,25 @@ export function formatUsd(
   const [whole = '0', frac = ''] = Math.abs(value).toFixed(2).split('.')
   const formatted = formatDecimalParts(BigInt(whole), frac)
   return negative ? `-$${formatted}` : `$${formatted}`
+}
+
+export function formatDateTime(date: Date): string {
+  return date.toLocaleString(DISPLAY_LOCALE, DATE_TIME_FORMAT)
+}
+
+export function formatShortDate(date: Date): string {
+  return date.toLocaleDateString(DISPLAY_LOCALE, SHORT_DATE_FORMAT)
+}
+
+export function formatScriptPubkeyAsAddress(scriptPubkeyHex: string): string {
+  try {
+    return truncateAddress(
+      segwitV0ScriptPubkeyToAddress(
+        hexToBytes(scriptPubkeyHex),
+        NETWORK_CONFIG.unconfidentialAddressHrp,
+      ),
+    )
+  } catch {
+    return truncateAddress(scriptPubkeyHex)
+  }
 }

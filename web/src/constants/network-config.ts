@@ -21,6 +21,7 @@ export interface NetworkConfig {
   protocolFeeAsset: ConfigAsset
   /** Display unit for the policy asset's base unit (sats). */
   policyAssetSatsUnit: string
+  unconfidentialAddressHrp: string
 }
 
 // Which asset plays the collateral vs principal role, per network. Covenants
@@ -47,6 +48,7 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
       icon: UsdtIcon,
     },
     policyAssetSatsUnit: 'Lsats',
+    unconfidentialAddressHrp: 'ex',
   },
   liquidtestnet: {
     collateralAsset: {
@@ -70,6 +72,7 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
       icon: TestAssetIcon,
     },
     policyAssetSatsUnit: 'tLsats',
+    unconfidentialAddressHrp: 'tex',
   },
   regtest: {
     collateralAsset: {
@@ -91,6 +94,7 @@ const NETWORK_CONFIG_BY_NETWORK: Record<NetworkName, NetworkConfig> = {
       icon: UsdtIcon,
     },
     policyAssetSatsUnit: 'Lsats',
+    unconfidentialAddressHrp: 'ert',
   },
 }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { UiButton } from '@/components/ui/UiButton'
-import { useOpenOffer } from '@/hooks/useOfferModal'
+import { useOpenOffer } from '@/hooks/useOpenOffer'
 import type { OfferNotification } from '@/utils/notifications'
 
 import CardAlert from './CardAlert'

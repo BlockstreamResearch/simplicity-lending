@@ -4,8 +4,9 @@ import { BPS_DIVISOR, PROTOCOL_FEE_BPS } from '@/constants/offers'
 import { formatTermLeft } from './format'
 import { normalizeHex } from './hex'
 
-const AVERAGE_BLOCK_TIME_SECONDS = 60
-const BLOCKS_PER_DAY = (24 * 60 * 60) / AVERAGE_BLOCK_TIME_SECONDS
+export const AVERAGE_BLOCK_TIME_SECONDS = 60
+export const BLOCKS_PER_HOUR = (60 * 60) / AVERAGE_BLOCK_TIME_SECONDS
+export const BLOCKS_PER_DAY = 24 * BLOCKS_PER_HOUR
 const BLOCKS_PER_YEAR = 365 * BLOCKS_PER_DAY
 
 export function calcInterest(principal: bigint, bps: number): bigint {
@@ -32,6 +33,11 @@ export function feeToBps(feeBaseUnits: bigint, principalBaseUnits: bigint): numb
 export function computeApr(bps: number, loanDurationBlocks: number): number {
   if (loanDurationBlocks <= 0) return 0
   return (bps / Number(BPS_DIVISOR)) * (BLOCKS_PER_YEAR / loanDurationBlocks) * 100
+}
+
+export function computeAprAfterFees(bps: number, loanDurationBlocks: number): number {
+  const lenderShareBps = Number(BPS_DIVISOR) - PROTOCOL_FEE_BPS
+  return computeApr((bps * lenderShareBps) / Number(BPS_DIVISOR), loanDurationBlocks)
 }
 
 export function computeLtv({

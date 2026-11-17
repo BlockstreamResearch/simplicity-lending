@@ -3,6 +3,7 @@ export const esploraQueryKeys = {
   blockHeight: ['esplora', 'block', 'height'] as const,
   feeRate: ['esplora', 'feeRate'] as const,
   blockHash: (blockHeight: number) => ['esplora', 'block', 'hash', blockHeight] as const,
+  blockTimestamp: (blockHeight: number) => ['esplora', 'block', 'timestamp', blockHeight] as const,
   tx: (txId: string) => ['esplora', 'tx', txId] as const,
   txOutspends: (txId: string) => ['esplora', 'tx', txId, 'outspends'] as const,
   addressInfo: (address: string) => ['esplora', 'address', address, 'info'] as const,

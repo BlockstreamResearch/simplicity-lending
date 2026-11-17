@@ -7,6 +7,7 @@ import {
   type AddressInfo,
   addressInfoSchema,
   blockHeightTextSchema,
+  esploraBlockSchema,
   type EsploraOutspend,
   esploraOutspendListSchema,
   type EsploraTx,
@@ -145,6 +146,17 @@ export async function fetchBlockHashAtHeight(
   options: RequestParams = {},
 ): Promise<string> {
   return requestText(buildEsploraUrl(`/block-height/${blockHeight}`), { signal: options.signal })
+}
+
+export async function fetchBlockTimestampAtHeight(
+  blockHeight: number,
+  options: RequestParams = {},
+): Promise<number> {
+  const blockHash = await fetchBlockHashAtHeight(blockHeight, options)
+  const block = await requestJson(buildEsploraUrl(`/block/${blockHash}`), esploraBlockSchema, {
+    signal: options.signal,
+  })
+  return block.timestamp
 }
 
 export async function fetchBlockTxIds(

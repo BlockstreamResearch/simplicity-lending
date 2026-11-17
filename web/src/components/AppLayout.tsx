@@ -4,12 +4,10 @@ import { Link, Outlet } from 'react-router-dom'
 import { BellNotificationButton } from '@/components/BellNotificationButton'
 import ArrowSquareOutIcon from '@/components/icons/ArrowSquareOutIcon'
 import { JadeUnlockModal } from '@/components/JadeUnlockModal'
-import OfferActionModal from '@/components/modals/OfferActionModal'
 import { WalletButton } from '@/components/WalletButton'
 import { env } from '@/constants/env'
 import { ExternalLink } from '@/constants/links'
 import { RoutePath } from '@/constants/routes'
-import { useOfferModal } from '@/hooks/useOfferModal'
 
 const NAV = [
   { to: RoutePath.Dashboard, label: 'Dashboard' },
@@ -24,7 +22,6 @@ const NAV = [
 ]
 
 export default function AppLayout() {
-  const { close, isOpen, lastOffer } = useOfferModal()
   return (
     <main className='bg-surface text-foreground min-h-screen'>
       <div className='mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pt-6 pb-12 sm:px-8 lg:gap-10 lg:px-20 lg:pt-10 lg:pb-20'>
@@ -58,7 +55,6 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <OfferActionModal offer={lastOffer} isOpen={isOpen} onClose={close} onSuccess={close} />
         <Outlet />
         <JadeUnlockModal />
 

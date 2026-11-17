@@ -22,11 +22,7 @@ const WITNESS = {
 export const SCRIPT_AUTH_MAX_WEIGHT_TO_SATISFY = 400
 
 export function loadScriptAuthProgram(scriptHash: Bytes32): SimplicityProgram {
-  return SimplicityProgram.loadWithDebugSymbols(
-    sources.script_auth,
-    buildScriptAuthArguments(scriptHash),
-    true,
-  )
+  return SimplicityProgram.load(sources.script_auth, buildScriptAuthArguments(scriptHash))
 }
 
 export function buildScriptAuthArguments(scriptHash: Bytes32): SimplicityArguments {

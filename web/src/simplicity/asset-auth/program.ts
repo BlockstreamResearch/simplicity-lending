@@ -36,11 +36,7 @@ export interface AssetAuthWitnessParams {
 }
 
 export function loadAssetAuthProgram(params: AssetAuthProgramParams): SimplicityProgram {
-  return SimplicityProgram.loadWithDebugSymbols(
-    sources.asset_auth,
-    buildAssetAuthArguments(params),
-    true,
-  )
+  return SimplicityProgram.load(sources.asset_auth, buildAssetAuthArguments(params))
 }
 
 export function buildAssetAuthArguments(params: AssetAuthProgramParams): SimplicityArguments {

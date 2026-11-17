@@ -44,11 +44,7 @@ export const ISSUANCE_FACTORY_MAX_WEIGHT_TO_SATISFY: Record<IssuanceFactoryBranc
 export function loadIssuanceFactoryProgram(
   params: IssuanceFactoryProgramParams,
 ): SimplicityProgram {
-  return SimplicityProgram.loadWithDebugSymbols(
-    sources.issuance_factory,
-    buildIssuanceFactoryArguments(params),
-    true,
-  )
+  return SimplicityProgram.load(sources.issuance_factory, buildIssuanceFactoryArguments(params))
 }
 
 export function buildIssuanceFactoryArguments(

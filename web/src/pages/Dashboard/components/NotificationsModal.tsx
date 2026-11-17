@@ -1,6 +1,6 @@
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
-import { useOpenOffer } from '@/hooks/useOfferModal'
+import { useOpenOffer } from '@/hooks/useOpenOffer'
 import type { OfferNotification } from '@/utils/notifications'
 
 import CardAlert from './CardAlert'
