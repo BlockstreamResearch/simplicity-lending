@@ -1,10 +1,10 @@
 [package]
 name = "lending-contracts"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
 rust-version.workspace = true
 description = "Simplicity Lending contract"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 repository = "https://github.com/BlockstreamResearch/simplicity-lending"
 readme = "README.md"
 keywords = ["simplicity", "lending", "liquid", "bitcoin", "elements", "contracts"]
