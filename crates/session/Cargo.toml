@@ -1,10 +1,10 @@
 [package]
 name = "lending-session"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
 rust-version.workspace = true
 description = "Simplicity Lending session lib"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 readme = "README.md"
 publish = false
 
