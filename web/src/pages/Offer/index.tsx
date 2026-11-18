@@ -19,6 +19,7 @@ import { useWallet } from '@/providers/wallet/useWallet'
 import { resolveActorRole } from '@/utils/offerActions'
 import { getOfferPendingTx } from '@/utils/pendingTransactions'
 
+import OfferActivity from './components/Activity'
 import OfferSidebar from './components/OfferSidebar'
 import OfferSummary from './components/OfferSummary'
 
@@ -126,6 +127,7 @@ export default function OfferPage() {
               <div className='grid items-start gap-6 lg:grid-cols-3'>
                 <OfferSummary offer={offer} role={role} />
                 <OfferSidebar offer={offer} role={role} />
+                <OfferActivity offer={offer} role={role} />
               </div>
             </>
           )

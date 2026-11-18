@@ -295,7 +295,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
   })()
 
   return (
-    <section className='bg-surface-secondary flex min-w-0 flex-col gap-4 rounded-3xl p-4 sm:p-6'>
+    <section className='bg-surface-secondary flex min-w-0 flex-col gap-4 rounded-3xl p-4 sm:p-6 lg:row-span-2'>
       <div className='flex items-start justify-between gap-3'>
         <div className='flex min-w-0 flex-col'>
           <span className='text-foreground text-sm font-medium'>{deadline.title}</span>

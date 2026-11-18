@@ -30,7 +30,7 @@ export default function DetailsPanel({ title, rows, bordered }: DetailsPanelProp
         {rows.map((row, i) => (
           <div
             key={row.label}
-            className={`flex items-center justify-between gap-3 py-3 text-sm ${
+            className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-3 text-sm ${
               i > 0 ? 'border-separator border-t' : ''
             }`}
           >
@@ -51,7 +51,7 @@ export default function DetailsPanel({ title, rows, bordered }: DetailsPanelProp
                 </Tooltip>
               )}
             </span>
-            <span className='flex shrink-0 items-center gap-1 font-medium'>
+            <span className='ml-auto flex shrink-0 items-center gap-1 font-medium'>
               {row.value}
               {row.copyValue && <CopyButton value={row.copyValue} />}
             </span>
