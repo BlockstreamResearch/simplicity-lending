@@ -3,7 +3,6 @@ import type {
   OfferRepayment,
   OfferUtxoType,
   OfferVaultWithdrawal,
-  ParticipantType,
 } from '@/api/indexer/schemas'
 import type { PendingTxKind, PendingTxRecord } from '@/providers/pendingTransactions/types'
 
@@ -17,7 +16,6 @@ export interface ActivityAmount {
 interface ActivityEventBase {
   txid: string
   height: number
-  actor: ParticipantType
   amount: ActivityAmount
 }
 
@@ -70,7 +68,6 @@ export function getOfferActivity(offer: OfferDetails): OfferActivityEvent[] {
       type: 'created',
       txid: offer.created_at_txid,
       height: offer.created_at_height,
-      actor: 'borrower',
       amount: collateral(offer.collateral_amount),
     },
   ]
@@ -80,7 +77,6 @@ export function getOfferActivity(offer: OfferDetails): OfferActivityEvent[] {
       type: 'accepted',
       txid: accepted.txid,
       height: accepted.created_at_height,
-      actor: 'lender',
       amount: principal(offer.principal_amount),
     })
   }
@@ -90,7 +86,6 @@ export function getOfferActivity(offer: OfferDetails): OfferActivityEvent[] {
       type: 'principal-claimed',
       txid: borrowerPrincipal.spent_txid,
       height: borrowerPrincipal.spent_at_height,
-      actor: 'borrower',
       amount: principal(offer.principal_amount),
     })
   }
@@ -101,7 +96,6 @@ export function getOfferActivity(offer: OfferDetails): OfferActivityEvent[] {
         type: repayment.is_full ? 'full-repayment' : 'partial-repayment',
         txid: repayment.txid,
         height: repayment.height,
-        actor: 'borrower',
         amount: principal(repayment.amount_repaid),
         repayment,
       }),
@@ -114,7 +108,6 @@ export function getOfferActivity(offer: OfferDetails): OfferActivityEvent[] {
           type: withdrawal.is_full ? 'full-withdrawal' : 'partial-withdrawal',
           txid: withdrawal.txid,
           height: withdrawal.height,
-          actor: 'lender',
           amount: principal(withdrawal.amount_withdrawn),
           withdrawal,
         }),
@@ -126,7 +119,6 @@ export function getOfferActivity(offer: OfferDetails): OfferActivityEvent[] {
       type: 'cancelled',
       txid: cancellation.txid,
       height: cancellation.created_at_height,
-      actor: 'borrower',
       amount: collateral(offer.collateral_amount),
     })
   }
@@ -136,7 +128,6 @@ export function getOfferActivity(offer: OfferDetails): OfferActivityEvent[] {
       type: 'liquidated',
       txid: liquidation.txid,
       height: liquidation.created_at_height,
-      actor: 'lender',
       amount: collateral(getLiquidatedCollateral(offer)),
     })
   }

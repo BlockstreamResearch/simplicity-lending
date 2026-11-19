@@ -48,7 +48,6 @@ export default function ActivityEventModal({
           icon={<Icon className='size-4' />}
           tone={tone}
           caption={caption}
-          actor={event.actor}
         />
       }
     >

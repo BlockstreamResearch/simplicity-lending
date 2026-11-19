@@ -22,6 +22,7 @@ import { type ActorRole, type OfferAction, resolveOfferAction } from '@/utils/of
 import { getOfferTermLeft } from '@/utils/offers'
 
 import {
+  formatBlocksAgo,
   formatLoanTerm,
   getFullRepaymentHeight,
   getLenderPayout,
@@ -46,7 +47,7 @@ interface DeadlineView {
   title: string
   subtitle: string
   countdownBlocks?: number
-  summary?: string
+  summary?: string | null
 }
 
 interface ContentView {
@@ -97,10 +98,6 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
   const blocksToDeadline = getOfferTermLeft(offer, currentBlockHeight)
   const isExpired = isHeightKnown && blocksToDeadline < 0
   const dueDateText = dueDate ? formatDateTime(dueDate) : '–'
-  const blocksAgo = (height: number | null) =>
-    height === null || !isHeightKnown
-      ? undefined
-      : `${formatBlocksDuration(currentBlockHeight - height)} ago`
 
   const renderPrincipal = (amount: bigint) => (
     <AssetAmount
@@ -132,7 +129,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
           : {
               title: 'Expired',
               subtitle: `Was due ${dueDateText}`,
-              summary: blocksAgo(offer.loan_expiration_height),
+              summary: formatBlocksAgo(currentBlockHeight, offer.loan_expiration_height),
             }
       case 'repaid':
       case 'claimed': {
@@ -143,7 +140,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
           subtitle: `Was due ${dueDateText}`,
           summary:
             margin === null
-              ? undefined
+              ? null
               : `${formatBlocksDuration(Math.abs(margin))} ${margin >= 0 ? 'early' : 'late'}`,
         }
       }
@@ -151,13 +148,13 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
         return {
           title: 'Cancelled',
           subtitle: 'Before anyone accepted',
-          summary: blocksAgo(getUtxoCreatedHeight(offer, 'cancellation')),
+          summary: formatBlocksAgo(currentBlockHeight, getUtxoCreatedHeight(offer, 'cancellation')),
         }
       case 'liquidated':
         return {
           title: 'Expired',
           subtitle: `Was due ${dueDateText}`,
-          summary: blocksAgo(offer.loan_expiration_height),
+          summary: formatBlocksAgo(currentBlockHeight, offer.loan_expiration_height),
         }
     }
   })()

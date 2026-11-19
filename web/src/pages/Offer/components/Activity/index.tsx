@@ -26,9 +26,9 @@ const PENDING_TITLE: Record<OfferPendingTxKind, string> = {
   accept_offer: 'Accepting',
   cancel_offer: 'Cancelling',
   claim_principal: 'Claiming Principal',
-  repay_offer: 'In Repayment',
+  repay_offer: 'Repaying',
   claim_interest: 'Withdrawing',
-  liquidate_offer: 'In Liquidation',
+  liquidate_offer: 'Liquidating',
 }
 
 interface ActivityRowProps {
@@ -57,9 +57,9 @@ function ActivityRow({
   const { icon: AssetIcon } = isCollateral
     ? NETWORK_CONFIG.collateralAsset
     : NETWORK_CONFIG.principalAsset
-  const className = `relative flex min-h-9 w-full flex-col gap-1 rounded-sm px-3 py-1.5 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${
+  const className = `bg-surface relative flex min-h-9 w-full flex-col gap-1 rounded-sm px-4 py-3 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${
     hasTimeline
-      ? 'sm:before:bg-background sm:before:absolute sm:before:-top-3 sm:before:left-7.5 sm:before:h-3 sm:before:w-px sm:before:-translate-x-1/2'
+      ? 'sm:before:bg-separator sm:before:absolute sm:before:-top-3 sm:before:left-8.5 sm:before:h-3 sm:before:w-px sm:before:-translate-x-1/2'
       : ''
   }`
 
@@ -87,7 +87,7 @@ function ActivityRow({
         <button
           type='button'
           onClick={onPress}
-          className={`${className} hover:bg-table-row-hover focus-visible:bg-table-row-hover focus-visible:shadow-focus-ring cursor-pointer transition-colors outline-none`}
+          className={`${className} hover:bg-table-row-hover focus-visible:bg-table-row-hover active:bg-accent-soft focus-visible:shadow-focus-ring cursor-pointer transition-colors outline-none`}
         >
           {content}
         </button>
@@ -122,14 +122,14 @@ export default function OfferActivity({ offer, role }: OfferActivityProps) {
       case 'principal-claimed':
         return `Borrower claimed the ${formatPrincipalAmount(event.amount.value)} principal`
       case 'partial-repayment':
-        return `${formatPrincipalAmount(event.repayment.debt_after)} debt remaining · ${formatCollateralDisplay(event.repayment.collateral_unlocked)} collateral returned to borrower`
+        return `${formatPrincipalAmount(event.repayment.debt_after)} debt remaining · ${formatCollateralDisplay(event.repayment.collateral_unlocked)} collateral returned to the borrower`
       case 'full-repayment':
-        return `Debt fully repaid · ${formatCollateralDisplay(event.repayment.collateral_unlocked)} collateral returned to borrower`
+        return `Debt fully repaid · ${formatCollateralDisplay(event.repayment.collateral_unlocked)} collateral returned to the borrower`
       case 'partial-withdrawal':
       case 'full-withdrawal':
         return `${formatPrincipalAmount(event.withdrawal.vault_amount_after)} remaining in the lender's vault`
       case 'cancelled':
-        return 'Collateral returned to borrower'
+        return 'Collateral returned to the borrower'
       case 'liquidated':
         return 'Collateral transferred to the lender'
     }
@@ -142,7 +142,7 @@ export default function OfferActivity({ offer, role }: OfferActivityProps) {
         <h3 className='text-h4'>Activity</h3>
       </div>
 
-      <ol className='bg-surface flex flex-col gap-3 rounded-sm px-2 py-3 sm:px-4'>
+      <ol className='flex flex-col gap-3'>
         {events.map((event, index) => {
           const { title, Icon, tone } = ACTIVITY_EVENT_CONFIG[event.type]
           return (
@@ -172,7 +172,7 @@ export default function OfferActivity({ offer, role }: OfferActivityProps) {
               pending.isConfirmed ? 'Confirmed, updating the offer…' : 'Waiting for confirmation…'
             }
             amount={pending.amount}
-            time='---'
+            time='–'
             hasTimeline
           />
         ))}

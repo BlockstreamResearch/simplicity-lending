@@ -7,7 +7,6 @@ import DetailsPanel, { type DetailRow } from '@/components/DetailsPanel'
 import ArrowUpRightIcon from '@/components/icons/ArrowUpRightIcon'
 import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
 import { NETWORK_CONFIG } from '@/constants/network-config'
-import { PROTOCOL_FEE_LABEL, PROTOCOL_FEE_TOOLTIP } from '@/constants/offers'
 import { useBlockDate } from '@/hooks/useBlockDate'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import {
@@ -85,30 +84,22 @@ export default function ActivityEventDetailsBody({
 
   const details: EventDetailsView = (() => {
     switch (event.type) {
-      case 'created': {
-        const protocolFee = computeProtocolFee(interest)
+      case 'created':
         return {
           heroLabel: 'Collateral Locked',
           offerRows: [
             { label: 'Borrower Asks For', value: formatPrincipalAmount(offer.principal_amount) },
+            deadlineRow,
             {
               label: 'Interest',
               value: renderWithCaption(
                 `${formatPrincipalAmount(interest)} (${bpsToPercent(offer.interest_rate)} of ${formatPrincipalAmount(offer.principal_amount)})`,
-                `${formatPrincipalAmount(getLenderNetInterest(offer))} to lender, ${formatPrincipalAmount(protocolFee)} protocol fee`,
+                `${formatPrincipalAmount(getLenderNetInterest(offer))} to the lender, ${formatPrincipalAmount(computeProtocolFee(interest))} protocol fee`,
               ),
             },
-            {
-              label: PROTOCOL_FEE_LABEL,
-              tooltip: PROTOCOL_FEE_TOOLTIP,
-              multilineTooltip: true,
-              value: formatPrincipalAmount(protocolFee),
-            },
-            deadlineRow,
           ],
           wallet: { participant: 'borrower', action: 'Deposited from' },
         }
-      }
       case 'accepted':
         return {
           heroLabel: 'Principal Supplied',
