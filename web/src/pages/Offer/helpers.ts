@@ -5,10 +5,15 @@ import {
   BLOCKS_PER_HOUR,
   SECONDS_PER_MINUTE,
 } from '@/constants/blocks'
-import { DISPLAY_LOCALE } from '@/utils/format'
+import { DISPLAY_LOCALE, formatBlocksDuration } from '@/utils/format'
 import { calcInterest, computeProtocolFee } from '@/utils/offers'
 
 const LOAN_TERM_MAX_FRACTION_DIGITS = 2
+
+export function formatBlocksAgo(currentBlockHeight: number, height: number | null): string | null {
+  if (height === null || currentBlockHeight === 0) return null
+  return `${formatBlocksDuration(currentBlockHeight - height)} ago`
+}
 
 export function formatLoanTerm(blocks: number): { value: string; unit: string } {
   const [divisor, unit] =

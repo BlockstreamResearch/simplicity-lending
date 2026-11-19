@@ -10,6 +10,10 @@ export function getTxExplorerUrl(txId: string): string {
   return buildExplorerUrl(`/tx/${txId.trim()}`)
 }
 
+export function getBlockExplorerUrl(blockHeight: number): string {
+  return buildExplorerUrl(`/block-height/${blockHeight}`)
+}
+
 export function getAssetExplorerUrl(assetId: string): string {
   return buildExplorerUrl(`/asset/${assetId.trim()}`)
 }
