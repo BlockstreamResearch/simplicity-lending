@@ -78,9 +78,13 @@ export default function OfferPage() {
           return (
             <>
               <header className='flex flex-wrap items-center gap-3'>
-                <span className='flex -space-x-2' aria-hidden='true'>
-                  <CollateralIcon className='size-7' />
-                  <PrincipalIcon className='ring-surface size-7 rounded-full ring-2' />
+                <span className='flex -space-x-1.5' aria-hidden='true'>
+                  <span className='size-9 overflow-hidden rounded-full'>
+                    <CollateralIcon className='size-full scale-120' />
+                  </span>
+                  <span className='ring-surface relative size-9 overflow-hidden rounded-full ring-2'>
+                    <PrincipalIcon className='size-full scale-120' />
+                  </span>
                 </span>
                 <h2 className='text-h2'>Offer ID #{offer.id}</h2>
                 <OfferStatusChip
