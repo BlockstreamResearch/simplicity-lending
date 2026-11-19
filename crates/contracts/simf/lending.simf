@@ -67,12 +67,8 @@ fn get_script_hash_for_offer_storage(is_active: bool, borrower_debt: u64) -> u25
 
 // Main paths helpers
 
-fn get_protocol_fee_bps() -> u64 {
-    1_000 // 10%
-}
-
 fn get_protocol_fee_amount(fee_amount: u64) -> u64 {
-    apply_basis_points(fee_amount, get_protocol_fee_bps())
+    apply_basis_points(fee_amount, param::PROTOCOL_FEE_RATE)
 }
 
 fn get_total_fee_amount() -> u64 {
@@ -90,11 +86,10 @@ fn get_collateral_for_principal(principal_amount: u64, total_amount_to_repay: u6
     mul_div_64(principal_amount, param::COLLATERAL_AMOUNT, total_amount_to_repay)
 }
 
-fn split_repayment_by_fees(fee_left: u64, amount_to_repay: u64) -> (u64, u64) {
-    let fee_repaid: u64 = min_64(fee_left, amount_to_repay);
-    let protocol_fee_repaid: u64 = get_protocol_fee_amount(fee_repaid);
+fn get_repaid_protocol_fee(total_fee_amount: u64, already_repaid_amount: u64) -> u64 {
+    let fee_repaid: u64 = min_64(total_fee_amount, already_repaid_amount);
 
-    (fee_repaid, protocol_fee_repaid)
+    get_protocol_fee_amount(fee_repaid)
 }
 
 fn validate_collateral_input(
@@ -124,6 +119,57 @@ fn validate_collateral_input(
     (current_collateral_amount, already_unlocked_collateral)
 }
 
+// A vault exists exactly when something has already been supplied to it: the first non-zero
+// supply creates it as a plain output, every later one moves it from input to output. A zero
+// supply never reaches this function, so no zero-value vault output is ever required.
+fn validate_vault_supply(
+    vault_tapleaf_hash: u256,
+    vault_indexes: (u32, u32),
+    already_supplied_before: u64,
+    amount_to_supply: u64,
+    is_final_supply: bool
+) {
+    let (vault_input_index, vault_output_index): (u32, u32) = vault_indexes;
+
+    // A finalized vault stores its supply goal, which is exactly the amount supplied after the final supply.
+    let already_supplied_after: u64 = add_64(already_supplied_before, amount_to_supply);
+    let new_vault_cov_hash: u256 = match is_final_supply {
+        true => get_script_hash_for_vault_storage(vault_tapleaf_hash, false, already_supplied_after),
+        false => get_script_hash_for_vault_storage(vault_tapleaf_hash, true, already_supplied_after),
+    };
+
+    match jet::some_64(already_supplied_before) {
+        true => {
+            let current_vault_cov_hash: u256 = get_script_hash_for_vault_storage(
+                vault_tapleaf_hash,
+                true,
+                already_supplied_before
+            );
+
+            ensure_asset_transition_with_additional_amount(
+                vault_input_index,
+                vault_output_index,
+                param::PRINCIPAL_ASSET_ID,
+                amount_to_supply
+            );
+            ensure_script_hash_transition(
+                vault_input_index,
+                vault_output_index,
+                current_vault_cov_hash,
+                new_vault_cov_hash
+            );
+        },
+        false => {
+            ensure_output_asset_and_amount(
+                vault_output_index,
+                param::PRINCIPAL_ASSET_ID,
+                amount_to_supply
+            );
+            ensure_output_script_hash(vault_output_index, new_vault_cov_hash);
+        },
+    };
+}
+
 fn validate_vaults(
     lender_vault_indexes: (u32, u32),
     protocol_fee_vault_indexes: (u32, u32),
@@ -135,102 +181,39 @@ fn validate_vaults(
     let already_repaid_amount_before: u64 = sub_64(total_amount_to_repay, current_borrower_debt);
     let already_repaid_amount_after: u64 = add_64(already_repaid_amount_before, amount_to_repay);
 
-    let (
-        already_repaid_fee_before,
-        already_repaid_protocol_fee_before
-    ): (u64, u64) = split_repayment_by_fees(total_fee_amount, already_repaid_amount_before);
-    let (
-        already_repaid_fee_after,
-        already_repaid_protocol_fee_after
-    ): (u64, u64) = split_repayment_by_fees(total_fee_amount, already_repaid_amount_after);
+    let already_repaid_protocol_fee_before: u64 = get_repaid_protocol_fee(total_fee_amount, already_repaid_amount_before);
+    let already_repaid_protocol_fee_after: u64 = get_repaid_protocol_fee(total_fee_amount, already_repaid_amount_after);
 
     let protocol_fee_repaid: u64 = sub_64(already_repaid_protocol_fee_after, already_repaid_protocol_fee_before);
 
     let additional_lender_vault_amount: u64 = sub_64(amount_to_repay, protocol_fee_repaid);
+    ensure_non_zero_amount(additional_lender_vault_amount);
 
-    let total_protocol_fee: u64 = get_protocol_fee_amount(total_fee_amount);
-    let lender_vault_supply_goal: u64 = sub_64(total_amount_to_repay, total_protocol_fee);
     let lender_vault_already_supplied: u64 = sub_64(already_repaid_amount_before, already_repaid_protocol_fee_before);
 
-    let new_lender_vault_cov_hash: u256 = match jet::eq_64(current_borrower_debt, amount_to_repay) {
-        true => get_script_hash_for_vault_storage(param::LENDER_VAULT_TAPLEAF_HASH, false, lender_vault_supply_goal),
-        false => get_script_hash_for_vault_storage(
-            param::LENDER_VAULT_TAPLEAF_HASH,
-            true,
-            add_64(lender_vault_already_supplied, additional_lender_vault_amount)
-        ),
-    };
-    let new_protocol_fee_vault_cov_hash: u256 = match jet::eq_64(already_repaid_protocol_fee_after, total_protocol_fee) {
-        true => get_script_hash_for_vault_storage(param::PROTOCOL_FEE_VAULT_TAPLEAF_HASH, false, total_protocol_fee),
-        false => get_script_hash_for_vault_storage(param::PROTOCOL_FEE_VAULT_TAPLEAF_HASH, true, already_repaid_protocol_fee_after),
-    };
+    validate_vault_supply(
+        param::LENDER_VAULT_TAPLEAF_HASH,
+        lender_vault_indexes,
+        lender_vault_already_supplied,
+        additional_lender_vault_amount,
+        jet::eq_64(current_borrower_debt, amount_to_repay)
+    );
 
-    let (lender_vault_input_index, lender_vault_output_index): (u32, u32) = lender_vault_indexes;
-    let (
-        protocol_fee_vault_input_index,
-        protocol_fee_vault_output_index
-    ): (u32, u32) = protocol_fee_vault_indexes;
-
-    match jet::some_64(already_repaid_amount_before) {
+    // The protocol fee vault is only touched when this repayment owes the protocol something.
+    // With a zero rate, or while rounding keeps the protocol share at zero, it is not created at all.
+    match jet::some_64(protocol_fee_repaid) {
         true => {
-            let current_lender_vault_cov_hash: u256 = get_script_hash_for_vault_storage(
-                param::LENDER_VAULT_TAPLEAF_HASH,
-                true,
-                lender_vault_already_supplied
-            );
+            let total_protocol_fee: u64 = get_protocol_fee_amount(total_fee_amount);
 
-            ensure_asset_transition_with_additional_amount(
-                lender_vault_input_index,
-                lender_vault_output_index,
-                param::PRINCIPAL_ASSET_ID,
-                additional_lender_vault_amount
+            validate_vault_supply(
+                param::PROTOCOL_FEE_VAULT_TAPLEAF_HASH,
+                protocol_fee_vault_indexes,
+                already_repaid_protocol_fee_before,
+                protocol_fee_repaid,
+                jet::eq_64(already_repaid_protocol_fee_after, total_protocol_fee)
             );
-            ensure_script_hash_transition(
-                lender_vault_input_index,
-                lender_vault_output_index,
-                current_lender_vault_cov_hash,
-                new_lender_vault_cov_hash
-            );
-
-            match jet::lt_64(already_repaid_protocol_fee_before, total_protocol_fee) {
-                true => {
-                    let current_protocol_fee_vault_cov_hash: u256 = get_script_hash_for_vault_storage(
-                        param::PROTOCOL_FEE_VAULT_TAPLEAF_HASH,
-                        true,
-                        already_repaid_protocol_fee_before
-                    );
-
-                    ensure_asset_transition_with_additional_amount(
-                        protocol_fee_vault_input_index,
-                        protocol_fee_vault_output_index,
-                        param::PRINCIPAL_ASSET_ID,
-                        protocol_fee_repaid
-                    );
-                    ensure_script_hash_transition(
-                        protocol_fee_vault_input_index,
-                        protocol_fee_vault_output_index,
-                        current_protocol_fee_vault_cov_hash,
-                        new_protocol_fee_vault_cov_hash
-                    );
-                },
-                false => {}
-            };
         },
-        false => {
-            ensure_output_asset_and_amount(
-                lender_vault_output_index,
-                param::PRINCIPAL_ASSET_ID,
-                additional_lender_vault_amount
-            );
-            ensure_output_script_hash(lender_vault_output_index, new_lender_vault_cov_hash);
-
-            ensure_output_asset_and_amount(
-                protocol_fee_vault_output_index,
-                param::PRINCIPAL_ASSET_ID,
-                protocol_fee_repaid
-            );
-            ensure_output_script_hash(protocol_fee_vault_output_index, new_protocol_fee_vault_cov_hash);
-        },
+        false => {}
     };
 }
 
@@ -444,6 +427,10 @@ fn accept_offer() {
     let principal_output_index: u32 = get_acceptance_principal_output_index(lending_output_index);
 
     assert!(jet::is_zero_32(lending_input_index));
+
+    // A rate above 100% makes the protocol share exceed the interest, so every repayment would
+    // underflow and the loan could only be liquidated. Rejecting it here keeps such offers pending.
+    assert!(jet::le_64(param::PROTOCOL_FEE_RATE, get_max_basis_points()));
 
     let total_amount_to_repay: u64 = get_total_amount_to_repay(get_total_fee_amount());
     let current_script_hash: u256 = get_script_hash_for_offer_storage(false, total_amount_to_repay);
