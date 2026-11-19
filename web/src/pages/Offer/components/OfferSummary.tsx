@@ -107,7 +107,7 @@ export default function OfferSummary({ offer, role }: OfferSummaryProps) {
     switch (offer.status) {
       case 'pending':
         return {
-          subtitle: 'Open - nobody yet',
+          subtitle: 'Open – nobody yet',
           isPlaceholder: true,
           amountLabel: 'Needed to Fund It',
           amount: renderPrincipal(offer.principal_amount),
@@ -157,9 +157,10 @@ export default function OfferSummary({ offer, role }: OfferSummaryProps) {
       }
     }
     if (offer.status === 'liquidated') {
+      const unpaidInterest = lenderNetInterest - getRepaidToLender(offer)
       return {
         label: 'No Longer Claimable',
-        value: renderPrincipal(lenderNetInterest),
+        value: renderPrincipal(unpaidInterest > 0n ? unpaidInterest : 0n),
       }
     }
     return {
@@ -178,8 +179,10 @@ export default function OfferSummary({ offer, role }: OfferSummaryProps) {
     <section className='bg-surface-secondary flex min-w-0 flex-col gap-4 rounded-3xl p-4 sm:p-6 lg:col-span-2'>
       <div className='flex flex-col gap-4 sm:flex-row'>
         <ParticipantCard
+          participant='borrower'
           title='Borrower'
           subtitle={formatScriptPubkeyAsAddress(borrower?.script_pubkey ?? '')}
+          scriptPubkey={borrower?.script_pubkey}
           isYou={role === 'borrower'}
           amountLabel={COLLATERAL_LABEL_BY_STATUS[offer.status]}
           amount={
@@ -196,8 +199,10 @@ export default function OfferSummary({ offer, role }: OfferSummaryProps) {
           caption={borrowerCaption}
         />
         <ParticipantCard
+          participant='lender'
           title='Lender'
           subtitle={formatScriptPubkeyAsAddress(lender?.script_pubkey ?? '')}
+          scriptPubkey={lender?.script_pubkey}
           isYou={role === 'lender' && !lenderCard.isPlaceholder}
           {...lenderCard}
         />

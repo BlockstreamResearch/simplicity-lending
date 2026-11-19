@@ -11,19 +11,25 @@ import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useBlockDate } from '@/hooks/useBlockDate'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useWallet } from '@/providers/wallet/useWallet'
-import { formatAmount, formatDateTime, formatUsd } from '@/utils/format'
+import {
+  formatAmount,
+  formatBlocksDuration,
+  formatDateTime,
+  formatUsd,
+  splitBlocksDuration,
+} from '@/utils/format'
 import { type ActorRole, type OfferAction, resolveOfferAction } from '@/utils/offerActions'
+import { getOfferTermLeft } from '@/utils/offers'
 
 import {
-  formatBlocksDuration,
   formatLoanTerm,
   getFullRepaymentHeight,
   getLenderPayout,
   getLenderVaultBalance,
   getLiquidatedCollateral,
   getLoanDurationBlocks,
+  getRepaidToLender,
   getUtxoCreatedHeight,
-  splitBlocksDuration,
 } from '../helpers'
 
 type ActionWithButton = Exclude<OfferAction, 'none'>
@@ -88,7 +94,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
 
   const action = resolveOfferAction(offer, scriptPubkey, currentBlockHeight)
   const isHeightKnown = currentBlockHeight > 0
-  const blocksToDeadline = offer.loan_expiration_height - currentBlockHeight
+  const blocksToDeadline = getOfferTermLeft(offer, currentBlockHeight)
   const isExpired = isHeightKnown && blocksToDeadline < 0
   const dueDateText = dueDate ? formatDateTime(dueDate) : '–'
   const blocksAgo = (height: number | null) =>
@@ -166,7 +172,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
             title: 'Waiting for a Lender',
             description: isExpired
               ? 'Nobody accepted before the deadline. Cancel to get your collateral back.'
-              : 'Anyone with a connected wallet can accept and fund this offer. You can cancel any time before that.',
+              : 'You can cancel any time before someone accepts.',
           }
         }
         const term = formatLoanTerm(getLoanDurationBlocks(offer))
@@ -175,7 +181,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
           amount: renderPrincipal(offer.principal_amount),
           description: isExpired
             ? 'This offer expired before anyone accepted it.'
-            : `Locked until the borrower repays - up to ${term.value} ${term.unit.toLowerCase()}. You can withdraw repayments as they come in.`,
+            : `Locked until the borrower repays – up to ${term.value} ${term.unit.toLowerCase()}. You can withdraw repayments as they come in.`,
         }
       }
       case 'active':
@@ -210,7 +216,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
           return {
             title: 'Your Vault',
             amount: renderPrincipal(getLenderVaultBalance(offer)),
-            description: 'Fully repaid - withdraw everything in one go.',
+            description: 'Fully repaid – withdraw everything in one go.',
           }
         }
         return isBorrower
@@ -239,17 +245,18 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
         return isBorrower
           ? {
               title: 'Offer Cancelled',
-              description: 'Returned to your wallet. Nobody accepted before you cancelled.',
+              description: 'Your collateral is back in your wallet.',
             }
           : null
       case 'liquidated': {
         const liquidatedCollateral = getLiquidatedCollateral(offer)
         if (isLender) {
           const usd = formatUsd(liquidatedCollateral, collateralAsset.decimals, collateralPriceUsd)
+          const stillOwed = getLenderPayout(offer) - getRepaidToLender(offer)
           return {
             title: 'You Received',
             amount: renderCollateral(liquidatedCollateral),
-            description: `${usd ? `≈ ${usd} at today's price, instead` : 'Instead'} of the ${formatPrincipalAmount(getLenderPayout(offer))} you were owed.`,
+            description: `${usd ? `≈ ${usd} at today's price, instead` : 'Instead'} of the ${formatPrincipalAmount(stillOwed)} you were owed.`,
           }
         }
         return isBorrower

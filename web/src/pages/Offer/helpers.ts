@@ -1,39 +1,14 @@
 import type { OfferDetails, OfferShort, OfferUtxoType } from '@/api/indexer/schemas'
-import { DISPLAY_LOCALE } from '@/utils/format'
 import {
   AVERAGE_BLOCK_TIME_SECONDS,
   BLOCKS_PER_DAY,
   BLOCKS_PER_HOUR,
-  calcInterest,
-  computeProtocolFee,
-} from '@/utils/offers'
+  SECONDS_PER_MINUTE,
+} from '@/constants/blocks'
+import { DISPLAY_LOCALE } from '@/utils/format'
+import { calcInterest, computeProtocolFee } from '@/utils/offers'
 
-const SECONDS_PER_MINUTE = 60
 const LOAN_TERM_MAX_FRACTION_DIGITS = 2
-
-interface BlocksDuration {
-  days: number
-  hours: number
-  minutes: number
-}
-
-export function splitBlocksDuration(blocks: number): BlocksDuration {
-  const safeBlocks = Math.max(0, blocks)
-  return {
-    days: Math.floor(safeBlocks / BLOCKS_PER_DAY),
-    hours: Math.floor((safeBlocks % BLOCKS_PER_DAY) / BLOCKS_PER_HOUR),
-    minutes: Math.floor(
-      ((safeBlocks % BLOCKS_PER_HOUR) * AVERAGE_BLOCK_TIME_SECONDS) / SECONDS_PER_MINUTE,
-    ),
-  }
-}
-
-export function formatBlocksDuration(blocks: number): string {
-  const { days, hours, minutes } = splitBlocksDuration(blocks)
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`
-  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
-  return `${minutes}m`
-}
 
 export function formatLoanTerm(blocks: number): { value: string; unit: string } {
   const [divisor, unit] =

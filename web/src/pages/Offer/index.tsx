@@ -1,14 +1,18 @@
 import { Spinner } from '@heroui/react'
-import { useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '@/api/errors'
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffer } from '@/api/indexer/hooks'
 import BackLink from '@/components/BackLink'
+import CheckIcon from '@/components/icons/CheckIcon'
+import ShareNodesIcon from '@/components/icons/ShareNodesIcon'
 import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import { OffersLoadError } from '@/components/OffersLoadError'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
+import { UiButton } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -21,6 +25,10 @@ import OfferSummary from './components/OfferSummary'
 const OFFER_NOT_FOUND_HTTP_STATUS = 404
 const INVALID_OFFER_ID_HTTP_STATUS = 400
 
+const UNCLAIMED_PRINCIPAL_OVERDUE_HINT =
+  'The lender can now liquidate your collateral. Claim your loan first, then repay to keep it.'
+const DEFAULT_LOCATION_KEY = 'default'
+
 const OVERDUE_HINT_BY_ROLE = {
   borrower: 'The lender can now liquidate your collateral. Repay to keep it.',
   lender: 'The borrower can still repay until you liquidate.',
@@ -28,6 +36,10 @@ const OVERDUE_HINT_BY_ROLE = {
 
 export default function OfferPage() {
   const { offerId = '' } = useParams()
+  const navigate = useNavigate()
+  const { key: locationKey } = useLocation()
+  const canGoBack = locationKey !== DEFAULT_LOCATION_KEY
+  const [isLinkCopied, copyLink] = useCopyToClipboard()
   const { data: offer, error, refetch } = useOffer(offerId)
   const { pendingTxs } = usePendingTransactions()
   const { scriptPubkey } = useWallet()
@@ -41,31 +53,57 @@ export default function OfferPage() {
 
   return (
     <div className='flex flex-col gap-6'>
-      <BackLink />
+      <BackLink
+        label='Back'
+        onClick={event => {
+          if (!canGoBack) return
+          event.preventDefault()
+          void navigate(-1)
+        }}
+      />
 
       {(() => {
         if (offer) {
           const role = resolveActorRole(offer, scriptPubkey)
           const isOverdue =
-            offer.status === 'active' &&
-            currentBlockHeight > offer.loan_expiration_height &&
-            role !== 'guest'
+            offer.status === 'active' && currentBlockHeight > offer.loan_expiration_height
+          const overdueHint = (() => {
+            if (!isOverdue || role === 'guest') return null
+            if (role === 'borrower' && offer.borrower_principal_utxo) {
+              return UNCLAIMED_PRINCIPAL_OVERDUE_HINT
+            }
+            return OVERDUE_HINT_BY_ROLE[role]
+          })()
 
           return (
             <>
               <header className='flex flex-wrap items-center gap-3'>
                 <span className='flex -space-x-2' aria-hidden='true'>
                   <CollateralIcon className='size-7' />
-                  <PrincipalIcon className='size-7' />
+                  <PrincipalIcon className='ring-surface size-7 rounded-full ring-2' />
                 </span>
                 <h2 className='text-h2'>Offer ID #{offer.id}</h2>
                 <OfferStatusChip
                   status={offer.status}
                   isProcessing={Boolean(getOfferPendingTx(offer.id, pendingTxs))}
                 />
+                <UiButton
+                  className='ml-auto'
+                  variant='tertiary'
+                  size='sm'
+                  isIconOnly
+                  aria-label='Copy offer link'
+                  onPress={() => copyLink(window.location.href)}
+                >
+                  {isLinkCopied ? (
+                    <CheckIcon className='size-4' />
+                  ) : (
+                    <ShareNodesIcon className='size-4' />
+                  )}
+                </UiButton>
               </header>
 
-              {isOverdue && (
+              {overdueHint && (
                 <div
                   role='alert'
                   className='border-separator bg-surface-secondary text-foreground flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm'
@@ -76,7 +114,7 @@ export default function OfferPage() {
                       The deadline has passed with {formatPrincipalAmount(offer.current_debt)} still
                       unpaid.
                     </p>
-                    <p className='text-muted'>{OVERDUE_HINT_BY_ROLE[role]}</p>
+                    <p className='text-muted'>{overdueHint}</p>
                   </div>
                 </div>
               )}
@@ -98,7 +136,13 @@ export default function OfferPage() {
         }
 
         if (error) {
-          return <OffersLoadError error={error} onRetry={() => void refetch()} />
+          return (
+            <OffersLoadError
+              title='Couldn’t load the offer'
+              error={error}
+              onRetry={() => void refetch()}
+            />
+          )
         }
 
         return (

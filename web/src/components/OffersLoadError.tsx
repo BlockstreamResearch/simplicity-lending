@@ -6,9 +6,14 @@ import { ErrorHandler } from '@/utils/errorHandler'
 interface OffersLoadErrorProps {
   error: Error
   onRetry: () => void
+  title?: string
 }
 
-export function OffersLoadError({ error, onRetry }: OffersLoadErrorProps) {
+export function OffersLoadError({
+  error,
+  onRetry,
+  title = 'Couldn’t load offers',
+}: OffersLoadErrorProps) {
   return (
     <div className='bg-surface border-muted flex w-full flex-col items-center gap-3 rounded border border-dashed px-6 py-12 text-center'>
       <span className='bg-background border-border text-muted-secondary flex size-11 items-center justify-center rounded-full border'>
@@ -16,7 +21,7 @@ export function OffersLoadError({ error, onRetry }: OffersLoadErrorProps) {
       </span>
 
       <div className='flex max-w-xs flex-col gap-1'>
-        <p className='text-foreground text-sm font-semibold'>Couldn’t load offers</p>
+        <p className='text-foreground text-sm font-semibold'>{title}</p>
         <p className='text-muted wrap-break-word text-sm'>{ErrorHandler.describe(error)}</p>
       </div>
 
