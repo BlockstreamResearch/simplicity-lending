@@ -51,6 +51,7 @@ import {
   getAlreadyUnlockedCollateral,
   getProtocolFee,
   getRepaymentPhase,
+  getRepaymentSplit,
   getTotalAmountToRepay,
   getTotalFee,
 } from '@/simplicity/lending/utils'
@@ -256,21 +257,8 @@ export function usePartialRepayOffer() {
     const alreadyRepaidAmount = toUint64(totalAmountToRepay - currentDebt, 'alreadyRepaidAmount')
     const alreadyRepaidFee = toUint64(minUint64(totalFee, alreadyRepaidAmount), 'alreadyRepaidFee')
     const alreadyRepaidProtocolFee = getProtocolFee(alreadyRepaidFee)
-    const feeLeft = toUint64(totalFee - alreadyRepaidFee, 'feeLeft')
-    const feeRepaidNow = toUint64(minUint64(feeLeft, amountToRepay), 'feeRepaidNow')
-    // The covenant computes protocol fee as a cumulative delta — total-repaid-fee-after minus
-    // total-repaid-fee-before — not 10% of this installment's fee portion in isolation. Matching
-    // that here (instead of getProtocolFee(feeRepaidNow)) avoids drifting from the covenant's math
-    // when per-installment rounding would otherwise floor a small fee portion to zero.
-    const alreadyRepaidFeeAfter = toUint64(alreadyRepaidFee + feeRepaidNow, 'alreadyRepaidFeeAfter')
-    const protocolFeeRepaidNow = toUint64(
-      getProtocolFee(alreadyRepaidFeeAfter) - alreadyRepaidProtocolFee,
-      'protocolFeeRepaidNow',
-    )
-    const additionalLenderVaultAmount = toUint64(
-      amountToRepay - protocolFeeRepaidNow,
-      'additionalLenderVaultAmount',
-    )
+    const { protocolFee: protocolFeeRepaidNow, lenderVaultAmount: additionalLenderVaultAmount } =
+      getRepaymentSplit(offerParameters, currentDebt, amountToRepay)
     const lenderVaultAlreadySupplied = toUint64(
       alreadyRepaidAmount - alreadyRepaidProtocolFee,
       'lenderVaultAlreadySupplied',

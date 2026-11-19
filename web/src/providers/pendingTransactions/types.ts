@@ -19,6 +19,7 @@ export interface PendingTxRecord {
   offerId?: string
   previousOfferStatus?: OfferStatus
   expectedOfferStatus?: OfferStatus
+  amount?: bigint
   confirmationStatus: PendingTxConfirmationStatus
   confirmations: number | null
   createdAt: number
@@ -36,6 +37,7 @@ export interface AddPendingTxInput {
   offerId?: string
   previousOfferStatus?: OfferStatus
   expectedOfferStatus?: OfferStatus
+  amount?: bigint
 }
 
 export interface PendingTransactionsContextValue {

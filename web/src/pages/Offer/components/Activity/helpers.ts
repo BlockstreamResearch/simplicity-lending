@@ -46,10 +46,13 @@ interface PendingActivity {
 const collateral = (value: bigint): ActivityAmount => ({ asset: 'collateral', value })
 const principal = (value: bigint): ActivityAmount => ({ asset: 'principal', value })
 
-const PENDING_AMOUNT: Record<OfferPendingTxKind, (offer: OfferDetails) => ActivityAmount> = {
+const PENDING_AMOUNT: Record<
+  OfferPendingTxKind,
+  (offer: OfferDetails, tx: PendingTxRecord) => ActivityAmount
+> = {
   cancel_offer: offer => collateral(offer.collateral_amount),
   claim_principal: offer => principal(offer.principal_amount),
-  repay_offer: offer => principal(offer.current_debt),
+  repay_offer: (offer, tx) => principal(tx.amount ?? offer.current_debt),
   accept_offer: offer => principal(offer.principal_amount),
   claim_interest: offer => principal(getLenderVaultBalance(offer)),
   liquidate_offer: offer => collateral(offer.collateral_remaining),
@@ -153,7 +156,7 @@ export function getPendingActivity(
     .map(tx => ({
       txid: tx.txid,
       kind: tx.kind,
-      amount: PENDING_AMOUNT[tx.kind](offer),
+      amount: PENDING_AMOUNT[tx.kind](offer, tx),
       isConfirmed: tx.confirmationStatus !== 'processing',
     }))
 }

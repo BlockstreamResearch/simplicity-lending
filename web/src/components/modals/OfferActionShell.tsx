@@ -25,7 +25,7 @@ export interface OfferAction {
 interface OfferActionShellProps {
   isOpen: boolean
   title: ReactNode
-  chip: ReactNode
+  chip?: ReactNode
   action?: OfferAction
   onClose: () => void
   onSuccess?: () => void
