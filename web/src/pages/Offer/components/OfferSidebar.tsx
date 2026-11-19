@@ -187,8 +187,9 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
             ? {
                 title: 'Your Loan',
                 amount: renderPrincipal(offer.principal_amount),
-                description:
-                  'The loan is funded and waiting in the contract. The repayment clock is already running.',
+                description: isExpired
+                  ? 'The deadline has passed. Claim your loan, then repay before the lender liquidates your collateral.'
+                  : 'The loan is funded and waiting in the contract. The repayment clock is already running.',
               }
             : {
                 title: 'Your Debt',
