@@ -15,6 +15,7 @@ import { UiFieldLabel } from '@/components/ui/UiFieldLabel'
 import { UiModal } from '@/components/ui/UiModal'
 import { UiSelect } from '@/components/ui/UiSelect'
 import { UiTextField } from '@/components/ui/UiTextField'
+import { MINUTES_PER_DAY } from '@/constants/blocks'
 import { env } from '@/constants/env'
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
 import { BPS_DIVISOR } from '@/constants/offers'
@@ -44,7 +45,6 @@ import { selectByLargestFirst } from '@/utils/utxo'
 import { MAX_LTV } from '../helpers'
 import LoanMetricsSummary from './LoanMetricsSummary'
 
-const MINUTES_PER_DAY = 1440
 const TERM_OPTIONS = [
   ...(env.VITE_DEMO_MODE
     ? [

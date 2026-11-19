@@ -92,11 +92,7 @@ export const LENDING_MAX_WEIGHT_TO_SATISFY: Record<LendingBranch, number> = {
 }
 
 export function loadLendingProgram(params: LendingOfferProgramParams): SimplicityProgram {
-  return SimplicityProgram.loadWithDebugSymbols(
-    sources.lending,
-    buildLendingArguments(params),
-    true,
-  )
+  return SimplicityProgram.load(sources.lending, buildLendingArguments(params))
 }
 
 export function buildLendingArguments(params: LendingOfferProgramParams): SimplicityArguments {

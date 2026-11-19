@@ -7,14 +7,20 @@ const UNIT_ICON = Object.fromEntries(
   ]),
 )
 
-export function AssetAmount({ value, unit }: { value: string; unit: string }) {
+interface AssetAmountProps {
+  value: string
+  unit: string
+  total?: string
+}
+
+export function AssetAmount({ value, unit, total }: AssetAmountProps) {
   const Icon = UNIT_ICON[unit]
   return (
     <>
       {value}
       <span className='text-muted ml-1.5 inline-flex items-center gap-1 text-sm font-medium'>
         {Icon && <Icon className='size-4' />}
-        {unit}
+        {total ? `of ${total} ${unit}` : unit}
       </span>
     </>
   )

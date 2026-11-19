@@ -91,11 +91,7 @@ export const ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY: Record<AssetAuthVaultBranch
 }
 
 export function loadAssetAuthVaultProgram(params: AssetAuthVaultProgramParams): SimplicityProgram {
-  return SimplicityProgram.loadWithDebugSymbols(
-    sources.asset_auth_vault,
-    buildAssetAuthVaultArguments(params),
-    true,
-  )
+  return SimplicityProgram.load(sources.asset_auth_vault, buildAssetAuthVaultArguments(params))
 }
 
 export function buildAssetAuthVaultArguments(

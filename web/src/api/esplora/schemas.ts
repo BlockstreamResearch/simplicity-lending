@@ -102,5 +102,9 @@ export const blockHeightTextSchema = zod
   .regex(/^\d+$/, 'block height must be a positive integer string')
   .transform(value => Number.parseInt(value, 10))
 
+export const esploraBlockSchema = zod.object({
+  timestamp: zod.number(),
+})
+
 export const feeEstimatesSchema = zod.record(zod.string(), zod.number())
 export type FeeEstimates = zod.infer<typeof feeEstimatesSchema>

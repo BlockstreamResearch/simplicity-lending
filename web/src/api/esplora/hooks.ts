@@ -15,6 +15,7 @@ import {
   fetchAddressTxs,
   fetchAddressUtxo,
   fetchBlockHashAtHeight,
+  fetchBlockTimestampAtHeight,
   fetchLatestBlockHeight,
   fetchTx,
   fetchTxOutspends,
@@ -98,6 +99,16 @@ export function useBlockHashAtHeight(blockHeight: number): UseQueryResult<string
     queryFn: ({ signal }) => fetchBlockHashAtHeight(blockHeight, { signal }),
     staleTime: STALE_TIME_MS.immutable,
     gcTime: GC_TIME_MS.immutable,
+  })
+}
+
+export function useBlockTimestamp(blockHeight: number): UseQueryResult<number> {
+  return useQuery({
+    queryKey: esploraQueryKeys.blockTimestamp(blockHeight),
+    queryFn: ({ signal }) => fetchBlockTimestampAtHeight(blockHeight, { signal }),
+    staleTime: STALE_TIME_MS.immutable,
+    gcTime: GC_TIME_MS.immutable,
+    enabled: blockHeight > 0,
   })
 }
 
