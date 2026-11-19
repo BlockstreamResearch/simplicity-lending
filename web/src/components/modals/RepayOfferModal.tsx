@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { type ReactNode, useEffect, useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z as zod } from 'zod'
 
@@ -14,11 +14,13 @@ import {
   resolveActiveProtocolFeeVaultOutpoint,
   resolveBorrowerNftOutpoint,
 } from '@/api/indexer/utils'
+import DetailsPanel from '@/components/DetailsPanel'
 import HandArrowDownIcon from '@/components/icons/HandArrowDownIcon'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import { UiFieldLabel } from '@/components/ui/UiFieldLabel'
 import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { BPS_DIVISOR, PROTOCOL_FEE_BPS } from '@/constants/offers'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { usePartialRepayOffer } from '@/hooks/usePartialRepayOffer'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
@@ -33,14 +35,19 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { LENDING_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/lending/program'
-import { getAlreadyUnlockedCollateral } from '@/simplicity/lending/utils'
+import {
+  getAlreadyUnlockedCollateral,
+  getRepaymentPhase,
+  getRepaymentSplit,
+} from '@/simplicity/lending/utils'
 import { toBigintAmount } from '@/utils/bigint'
 import { DECIMAL_AMOUNT_RE, formatAmount, formatAmountInput } from '@/utils/format'
-import { calcInterest } from '@/utils/offers'
 import { toUint16, toUint64 } from '@/utils/uint'
 
 const REPAY_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
+
+const MIN_FIRST_REPAYMENT = (BPS_DIVISOR + BigInt(PROTOCOL_FEE_BPS) - 1n) / BigInt(PROTOCOL_FEE_BPS)
 
 const PRINCIPAL_AMOUNT_RE = new RegExp(
   `^\\d+(\\.\\d{1,${NETWORK_CONFIG.principalAsset.decimals}})?$`,
@@ -54,9 +61,15 @@ const principalAmountSchema = zod
   .regex(PRINCIPAL_AMOUNT_RE, `Use up to ${NETWORK_CONFIG.principalAsset.decimals} decimal places`)
   .transform(value => toBigintAmount(value, NETWORK_CONFIG.principalAsset.decimals))
 
-function createRepaySchema(currentDebt: bigint, spendable: bigint) {
+function createRepaySchema(
+  currentDebt: bigint,
+  spendable: bigint,
+  terms: Parameters<typeof getRepaymentSplit>[0],
+) {
   const { decimals, symbol } = NETWORK_CONFIG.principalAsset
   const formatPrincipal = (amount: bigint) => `${formatAmount(amount, decimals)} ${symbol}`
+  const debt = toUint64(currentDebt, 'currentDebt')
+  const isFirstRepayment = getRepaymentPhase(terms, debt) === 'NoRepayments'
 
   return zod.object({
     amount: principalAmountSchema.pipe(
@@ -64,18 +77,22 @@ function createRepaySchema(currentDebt: bigint, spendable: bigint) {
         .bigint()
         .positive('Enter a positive amount')
         .max(currentDebt, `Amount exceeds the debt left to repay (${formatPrincipal(currentDebt)})`)
-        .max(spendable, `Insufficient ${symbol} balance (${formatPrincipal(spendable)} available)`),
+        .max(spendable, `Insufficient ${symbol} balance (${formatPrincipal(spendable)} available)`)
+        .refine(
+          amount =>
+            !isFirstRepayment ||
+            amount > currentDebt ||
+            getRepaymentSplit(terms, debt, toUint64(amount, 'amountToRepay')).protocolFee > 0n,
+          `The first payment must be at least ${formatPrincipal(MIN_FIRST_REPAYMENT)}`,
+        ),
     ),
   })
 }
 
-function RepayPreviewRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className='border-separator flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t pt-3 text-sm font-medium'>
-      <span>{label}</span>
-      <span className='ml-auto'>{children}</span>
-    </div>
-  )
+interface RepaySubmission {
+  amount: bigint
+  remainingDebt: bigint
+  collateralReturned: bigint
 }
 
 interface RepayOfferModalProps {
@@ -143,16 +160,16 @@ export default function RepayOfferModal({
       })
     })
 
-  const { mutate, reset, data, status } = useMutation({
-    mutationFn: repayBorrowOffer,
-    onSuccess: (result, amountToRepay) => {
+  const { mutate, reset, data, status, variables } = useMutation({
+    mutationFn: (submission: RepaySubmission) => repayBorrowOffer(submission.amount),
+    onSuccess: (result, submission) => {
       void addPendingTx({
         txid: result.txid,
         kind: 'repay_offer',
         walletScriptPubkey: scriptPubkey ?? '',
         offerId: offer.id,
         previousOfferStatus: 'active',
-        amount: amountToRepay,
+        amount: submission.amount,
       })
     },
   })
@@ -167,10 +184,23 @@ export default function RepayOfferModal({
       : 0n
   const principalBalance = BigInt(confirmedBalances[principalAsset.id] ?? 0)
   const spendable = principalBalance > feeBuffer ? principalBalance - feeBuffer : 0n
+  const maxAmount = spendable < offer.current_debt ? spendable : offer.current_debt
+
+  const offerParameters = useMemo(
+    () => ({
+      collateralAmount: toUint64(offer.collateral_amount, 'collateralAmount'),
+      principalAmount: toUint64(offer.principal_amount, 'principalAmount'),
+      principalInterestRate: toUint16(offer.interest_rate, 'principalInterestRate'),
+    }),
+    [offer.collateral_amount, offer.principal_amount, offer.interest_rate],
+  )
+  const getCollateralReturned = (remainingDebt: bigint) =>
+    getAlreadyUnlockedCollateral(offerParameters, toUint64(remainingDebt, 'remainingDebt')) -
+    getAlreadyUnlockedCollateral(offerParameters, toUint64(offer.current_debt, 'currentDebt'))
 
   const resolver = useMemo(
-    () => zodResolver(createRepaySchema(offer.current_debt, spendable)),
-    [offer.current_debt, spendable],
+    () => zodResolver(createRepaySchema(offer.current_debt, spendable, offerParameters)),
+    [offer.current_debt, spendable, offerParameters],
   )
   const {
     control,
@@ -195,29 +225,27 @@ export default function RepayOfferModal({
     enteredAmount > 0n && enteredAmount <= offer.current_debt
       ? offer.current_debt - enteredAmount
       : null
-  const offerParameters = {
-    collateralAmount: toUint64(offer.collateral_amount, 'collateralAmount'),
-    principalAmount: toUint64(offer.principal_amount, 'principalAmount'),
-    principalInterestRate: toUint16(offer.interest_rate, 'principalInterestRate'),
-  }
-  const collateralReturned =
-    remainingDebt === null
-      ? null
-      : getAlreadyUnlockedCollateral(offerParameters, toUint64(remainingDebt, 'remainingDebt')) -
-        getAlreadyUnlockedCollateral(offerParameters, toUint64(offer.current_debt, 'currentDebt'))
+  const collateralReturned = remainingDebt === null ? null : getCollateralReturned(remainingDebt)
+  const actionLabel = !isValid
+    ? 'Repay'
+    : enteredAmount === offer.current_debt
+      ? 'Repay in Full'
+      : `Repay ${formatPrincipalAmount(enteredAmount)}`
 
-  const txSummary = useMemo(() => {
-    const interest = calcInterest(offer.principal_amount, offer.interest_rate)
-    return [
-      { label: 'Principal', value: formatPrincipalAmount(offer.principal_amount) },
-      { label: 'Interest', value: formatPrincipalAmount(interest) },
-      {
-        label: 'Total Repayment',
-        value: formatPrincipalAmount(offer.principal_amount + interest),
-      },
-      { label: 'Collateral Returned', value: formatCollateralDisplay(offer.collateral_amount) },
-    ]
-  }, [offer, formatPrincipalAmount, formatCollateralDisplay])
+  const txSummary = useMemo(
+    () =>
+      variables
+        ? [
+            { label: 'Repaid', value: formatPrincipalAmount(variables.amount) },
+            { label: 'Remaining Debt', value: formatPrincipalAmount(variables.remainingDebt) },
+            {
+              label: 'Collateral Returned',
+              value: formatCollateralDisplay(variables.collateralReturned),
+            },
+          ]
+        : [],
+    [variables, formatPrincipalAmount, formatCollateralDisplay],
+  )
 
   return (
     <OfferActionShell
@@ -234,14 +262,22 @@ export default function RepayOfferModal({
         </>
       }
       action={{
-        label: 'Confirm',
+        label: actionLabel,
         variant: 'primary',
         eyebrow: 'Repay Loan',
         summary: txSummary,
         status,
         disabled: !isValid,
         txid: data?.txid,
-        onConfirm: () => void handleSubmit(values => mutate(values.amount))(),
+        onConfirm: () =>
+          void handleSubmit(({ amount }) => {
+            const debtAfter = offer.current_debt - amount
+            mutate({
+              amount,
+              remainingDebt: debtAfter,
+              collateralReturned: getCollateralReturned(debtAfter),
+            })
+          })(),
       }}
       onClose={() => {
         reset()
@@ -265,40 +301,44 @@ export default function RepayOfferModal({
         </section>
         <section className='bg-surface-secondary flex flex-col gap-6 rounded-xl p-6'>
           <h4 className='text-muted text-xs'>Repay Details</h4>
-          <div className='flex flex-col gap-3'>
-            <Controller
-              control={control}
-              name='amount'
-              render={({ field, fieldState }) => (
-                <UiTextField
-                  label={<UiFieldLabel required>Repayment Amount</UiFieldLabel>}
-                  placeholder='0.00'
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  endContent={principalAsset.symbol}
-                  onMax={() =>
-                    field.onChange(formatAmountInput(offer.current_debt, principalAsset.decimals))
-                  }
-                  isMaxDisabled={enteredAmount === offer.current_debt}
-                  errorMessage={fieldState.error?.message}
-                />
-              )}
-            />
-            <RepayPreviewRow label='Remaining Debt'>
-              {remainingDebt === null ? '—' : formatPrincipalAmount(remainingDebt)}
-            </RepayPreviewRow>
-            <RepayPreviewRow label='Returned to You'>
-              {collateralReturned === null ? (
-                '—'
-              ) : (
-                <span className='text-success'>
-                  + {formatCollateralDisplay(collateralReturned)}
-                </span>
-              )}
-            </RepayPreviewRow>
-          </div>
+          <Controller
+            control={control}
+            name='amount'
+            render={({ field, fieldState }) => (
+              <UiTextField
+                label={<UiFieldLabel required>Repayment Amount</UiFieldLabel>}
+                placeholder='0.00'
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                endContent={principalAsset.symbol}
+                onMax={() => field.onChange(formatAmountInput(maxAmount, principalAsset.decimals))}
+                isMaxDisabled={maxAmount === 0n || enteredAmount === maxAmount}
+                errorMessage={fieldState.error?.message}
+              />
+            )}
+          />
         </section>
+        <DetailsPanel
+          title='After This Payment'
+          rows={[
+            {
+              label: 'Remaining Debt',
+              value: remainingDebt === null ? '—' : formatPrincipalAmount(remainingDebt),
+            },
+            {
+              label: 'Returned to You',
+              value:
+                collateralReturned === null ? (
+                  '—'
+                ) : (
+                  <span className='text-success'>
+                    + {formatCollateralDisplay(collateralReturned)}
+                  </span>
+                ),
+            },
+          ]}
+        />
       </div>
     </OfferActionShell>
   )
