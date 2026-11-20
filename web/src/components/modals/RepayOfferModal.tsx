@@ -41,14 +41,26 @@ import {
   getRepaymentPhase,
   getRepaymentSplit,
 } from '@/simplicity/lending/utils'
-import { formatAmount, formatAmountInput } from '@/utils/format'
-import { principalAmountSchema } from '@/utils/principalAmountSchema'
+import { toBigintAmount } from '@/utils/bigint'
+import { DECIMAL_AMOUNT_RE, formatAmount, formatAmountInput } from '@/utils/format'
 import { toUint16, toUint64 } from '@/utils/uint'
 
 const REPAY_WEIGHT_UNITS =
   LENDING_MAX_WEIGHT_TO_SATISFY.FullRepayment + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
 
 const MIN_FIRST_REPAYMENT = (BPS_DIVISOR + BigInt(PROTOCOL_FEE_BPS) - 1n) / BigInt(PROTOCOL_FEE_BPS)
+
+const PRINCIPAL_AMOUNT_RE = new RegExp(
+  `^\\d+(\\.\\d{1,${NETWORK_CONFIG.principalAsset.decimals}})?$`,
+)
+
+const principalAmountSchema = zod
+  .string()
+  .trim()
+  .min(1, 'Enter an amount')
+  .regex(DECIMAL_AMOUNT_RE, 'Enter a valid amount')
+  .regex(PRINCIPAL_AMOUNT_RE, `Use up to ${NETWORK_CONFIG.principalAsset.decimals} decimal places`)
+  .transform(value => toBigintAmount(value, NETWORK_CONFIG.principalAsset.decimals))
 
 function createRepaySchema(
   currentDebt: bigint,

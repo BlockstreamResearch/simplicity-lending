@@ -171,6 +171,9 @@ export function useLiquidateOffer() {
     const currentDebt = params.currentDebt?.trim()
       ? toUint64(BigInt(params.currentDebt.trim()), 'currentDebt')
       : getTotalAmountToRepay(offerParameters)
+    if (currentDebt < getTotalAmountToRepay(offerParameters) && !params.lenderVault) {
+      throw new Error('Lender vault UTXO not found')
+    }
     const activeLendingSpendInfo = buildLendingOfferSpendInfo(
       lendingProgram,
       offerParameters,

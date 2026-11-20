@@ -148,7 +148,7 @@ export default function LiquidateOfferModal({
       title='Liquidate'
       icon={{ Icon: TriangleExclamationIcon, tone: 'danger' }}
       action={{
-        label: `Liquidate ${formatCollateralDisplay(liveOffer.collateral_remaining)}`,
+        label: 'Confirm Liquidation',
         variant: 'danger',
         eyebrow: 'Liquidate',
         summary: txSummary,
@@ -176,29 +176,30 @@ export default function LiquidateOfferModal({
           rows={[
             {
               label: 'Unpaid Debt',
+              tooltip: 'What the borrower still owes. You take the collateral instead.',
               value: (
                 <span className='text-danger'>{formatPrincipalAmount(liveOffer.current_debt)}</span>
               ),
             },
             {
-              label: 'Repayment Deadline',
+              label: 'Deadline Was',
+              tooltip: 'The borrower had to repay by this time. After it, you can liquidate.',
               value: deadlineDate ? formatDateTime(deadlineDate) : '–',
             },
+            ...(vaultBalance > 0n
+              ? [
+                  {
+                    label: 'From Your Vault',
+                    tooltip:
+                      'Repayments still in your vault. They come to you in the same transaction.',
+                    value: (
+                      <span className='text-success'>+ {formatPrincipalAmount(vaultBalance)}</span>
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
-        {vaultBalance > 0n && (
-          <DetailsPanel
-            title='You Also Receive'
-            rows={[
-              {
-                label: 'From Your Vault',
-                value: (
-                  <span className='text-success'>+ {formatPrincipalAmount(vaultBalance)}</span>
-                ),
-              },
-            ]}
-          />
-        )}
         <div className='border-warning/30 bg-warning/10 text-warning rounded-2xl border px-4 py-3 text-sm'>
           This ends the loan. The borrower won&apos;t be able to repay anymore.
         </div>

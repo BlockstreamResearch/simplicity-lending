@@ -6,8 +6,7 @@ export const BPS_DIVISOR = 10_000n
 
 export const VAULT_MIN_REMAINDER = 1n
 
-export const VAULT_CHANGED_MESSAGE =
-  'The vault has just changed (a new repayment came in). Reopen and try again.'
+export const VAULT_CHANGED_MESSAGE = 'The vault has just changed. Reopen and try again.'
 
 export const PROTOCOL_FEE_BPS = 1000
 

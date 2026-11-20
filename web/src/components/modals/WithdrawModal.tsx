@@ -1,12 +1,8 @@
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo } from 'react'
-import { Controller, useForm, useWatch } from 'react-hook-form'
-import { z as zod } from 'zod'
+import { useMutation } from '@tanstack/react-query'
+import { useMemo } from 'react'
 
-import { FALLBACK_FEE_RATE_SAT_PER_KVB, fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { isTxOutputSpent } from '@/api/esplora/methods'
-import { esploraQueryKeys } from '@/api/esplora/queryKeys'
 import { useOffer } from '@/api/indexer/hooks'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
@@ -21,8 +17,6 @@ import DetailsPanel from '@/components/DetailsPanel'
 import ArrowUpFromBracketIcon from '@/components/icons/ArrowUpFromBracketIcon'
 import AmountHeroCard from '@/components/modals/AmountHeroCard'
 import OfferActionShell from '@/components/modals/OfferActionShell'
-import { UiFieldLabel } from '@/components/ui/UiFieldLabel'
-import { UiTextField } from '@/components/ui/UiTextField'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { VAULT_CHANGED_MESSAGE, VAULT_MIN_REMAINDER } from '@/constants/offers'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
@@ -38,28 +32,10 @@ import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth-vault/program'
-import { formatAmount, formatAmountInput } from '@/utils/format'
-import { principalAmountSchema } from '@/utils/principalAmountSchema'
+import { formatAmount } from '@/utils/format'
 
 const WITHDRAW_WEIGHT_UNITS =
   ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawPart + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
-
-function createWithdrawSchema(withdrawable: bigint) {
-  const { decimals, symbol } = NETWORK_CONFIG.principalAsset
-  const formatPrincipal = (amount: bigint) => `${formatAmount(amount, decimals)} ${symbol}`
-
-  return zod.object({
-    amount: principalAmountSchema.pipe(
-      zod
-        .bigint()
-        .positive('Enter a positive amount')
-        .max(
-          withdrawable,
-          `You can withdraw up to ${formatPrincipal(withdrawable)} now. ${formatPrincipal(VAULT_MIN_REMAINDER)} stays in the vault until the loan is closed.`,
-        ),
-    ),
-  })
-}
 
 interface WithdrawSubmission {
   amount: bigint
@@ -75,7 +51,7 @@ interface WithdrawModalProps {
 
 export default function WithdrawModal({ isOpen, offer, onClose, onSuccess }: WithdrawModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { syncWallet, getBlindedWalletUtxos, scriptPubkey, confirmedBalances } = useWallet()
+  const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { withdrawLenderVaultPart } = useLenderVaultWithdrawPart()
   const runStandardTransactionFlow = useStandardTransactionFlow()
@@ -134,39 +110,6 @@ export default function WithdrawModal({ isOpen, offer, onClose, onSuccess }: Wit
     },
   })
 
-  const { data: feeRate = FALLBACK_FEE_RATE_SAT_PER_KVB } = useQuery({
-    queryKey: esploraQueryKeys.feeRate,
-    queryFn: () => fetchFeeRateSatPerKvb(),
-  })
-  const policyAssetId = lwkNetwork.policyAsset().toString()
-  const hasFeeBalance =
-    BigInt(confirmedBalances[policyAssetId] ?? 0) >=
-    estimateFeeBudgetSats(WITHDRAW_WEIGHT_UNITS, feeRate)
-
-  const resolver = useMemo(() => zodResolver(createWithdrawSchema(withdrawable)), [withdrawable])
-  const {
-    control,
-    handleSubmit,
-    trigger,
-    getValues,
-    reset: resetForm,
-    formState: { isValid },
-  } = useForm({
-    resolver,
-    mode: 'all',
-    defaultValues: { amount: '' },
-  })
-
-  useEffect(() => {
-    if (getValues('amount')) void trigger('amount')
-  }, [resolver, getValues, trigger])
-
-  const parsedAmount = principalAmountSchema.safeParse(useWatch({ control, name: 'amount' }))
-  const enteredAmount = parsedAmount.success ? parsedAmount.data : 0n
-  const leftInVault =
-    enteredAmount > 0n && enteredAmount <= withdrawable ? vaultBalance - enteredAmount : null
-  const actionLabel = isValid ? `Withdraw ${formatPrincipalAmount(enteredAmount)}` : 'Withdraw'
-
   const txSummary = useMemo(
     () =>
       variables
@@ -184,68 +127,51 @@ export default function WithdrawModal({ isOpen, offer, onClose, onSuccess }: Wit
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title='Withdraw'
+      title='Partial Withdrawal'
       icon={{ Icon: ArrowUpFromBracketIcon, tone: 'success' }}
       action={{
-        label: actionLabel,
+        label: 'Confirm Withdrawal',
         variant: 'primary',
         eyebrow: 'Withdraw',
         summary: txSummary,
         status,
-        disabled: !isValid || !hasFeeBalance,
+        disabled: withdrawable === 0n,
         txid: data?.txid,
-        onConfirm: () => void handleSubmit(({ amount }) => mutate({ amount, vaultBalance }))(),
+        onConfirm: () => mutate({ amount: withdrawable, vaultBalance }),
       }}
       onClose={() => {
         reset()
-        resetForm()
         onClose()
       }}
       onSuccess={onSuccess}
     >
       <div className='text-foreground flex flex-col gap-8'>
         <AmountHeroCard
-          label='Available to Withdraw'
+          label='Withdraw'
           icon={principalAsset.icon}
           value={offerDetails ? formatAmount(withdrawable, principalAsset.decimals) : '—'}
           unit={principalAsset.symbol}
         />
-        <section className='bg-surface-secondary flex flex-col gap-6 rounded-xl p-6'>
-          <h4 className='text-muted text-xs'>Withdraw Details</h4>
-          <Controller
-            control={control}
-            name='amount'
-            render={({ field, fieldState }) => (
-              <UiTextField
-                label={<UiFieldLabel required>Withdrawal Amount</UiFieldLabel>}
-                placeholder='0.00'
-                value={field.value}
-                onChange={field.onChange}
-                onBlur={field.onBlur}
-                endContent={principalAsset.symbol}
-                onMax={() =>
-                  field.onChange(formatAmountInput(withdrawable, principalAsset.decimals))
-                }
-                isMaxDisabled={withdrawable === 0n || enteredAmount === withdrawable}
-                errorMessage={fieldState.error?.message}
-              />
-            )}
-          />
-        </section>
         <DetailsPanel
-          title='After This Withdrawal'
+          title='Withdraw Details'
           rows={[
             {
-              label: 'Left in Vault',
-              value: leftInVault === null ? '—' : formatPrincipalAmount(leftInVault),
+              label: "Lender's Vault",
+              tooltip: `${formatPrincipalAmount(VAULT_MIN_REMAINDER)} stays in the vault so the borrower can keep repaying. You get it back when the loan closes.`,
+              value: offerDetails ? (
+                <>
+                  <span className='text-muted line-through'>
+                    {formatAmount(vaultBalance, principalAsset.decimals)}
+                  </span>
+                  <span className='text-muted'>→</span>
+                  {formatPrincipalAmount(vaultBalance - withdrawable)}
+                </>
+              ) : (
+                '—'
+              ),
             },
           ]}
         />
-        {!hasFeeBalance && (
-          <div className='border-warning/30 bg-warning/10 text-warning rounded-2xl border px-4 py-3 text-sm'>
-            Not enough {NETWORK_CONFIG.collateralAsset.symbol} to pay the network fee.
-          </div>
-        )}
       </div>
     </OfferActionShell>
   )

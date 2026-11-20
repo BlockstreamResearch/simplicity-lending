@@ -5,15 +5,13 @@ import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
 import { useOffer } from '@/api/indexer/hooks'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import {
-  findFinalizedLenderVault,
-  resolveLenderNftOutpoint,
-  resolveLenderVaultOutpoint,
-} from '@/api/indexer/utils'
+import { findFinalizedLenderVault, resolveLenderNftOutpoint, toOutpoint } from '@/api/indexer/utils'
+import DetailsPanel from '@/components/DetailsPanel'
 import ArrowUpFromBracketIcon from '@/components/icons/ArrowUpFromBracketIcon'
 import AmountHeroCard from '@/components/modals/AmountHeroCard'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { VAULT_CHANGED_MESSAGE } from '@/constants/offers'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
@@ -55,11 +53,11 @@ export default function WithdrawAllModal({
   const { principalAsset } = NETWORK_CONFIG
   const vaultBalance = offerDetails ? (findFinalizedLenderVault(offerDetails)?.amount ?? 0n) : 0n
 
-  const withdrawAll = () =>
+  const withdrawAll = (expectedAmount: bigint) =>
     runStandardTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
-      const vaultOutpoint = resolveLenderVaultOutpoint(fullOffer)
-      if (!vaultOutpoint) throw new Error('Lender vault UTXO not found')
+      const vault = findFinalizedLenderVault(fullOffer)
+      if (vault?.amount !== expectedAmount) throw new Error(VAULT_CHANGED_MESSAGE)
 
       const lenderNftOutpoint = resolveLenderNftOutpoint(fullOffer)
       if (!lenderNftOutpoint) throw new Error('Lender NFT UTXO not found')
@@ -78,19 +76,15 @@ export default function WithdrawAllModal({
       )
 
       return claimLenderVault({
-        lenderVaultOutpoint: vaultOutpoint,
+        lenderVaultOutpoint: toOutpoint(vault),
         lenderNftOutpoint,
         createOfferTxid: offer.created_at_txid,
         feeOutpoints: feeUtxos.map(utxoToOutpointString),
       })
     })
 
-  const { mutate, reset, data, status, variables } = useMutation<
-    Awaited<ReturnType<typeof withdrawAll>>,
-    Error,
-    bigint
-  >({
-    mutationFn: () => withdrawAll(),
+  const { mutate, reset, data, status, variables } = useMutation({
+    mutationFn: withdrawAll,
     onSuccess: (result, amount) => {
       void addPendingTx({
         txid: result.txid,
@@ -115,10 +109,10 @@ export default function WithdrawAllModal({
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title='Withdraw All'
+      title='Full Withdrawal'
       icon={{ Icon: ArrowUpFromBracketIcon, tone: 'success' }}
       action={{
-        label: offerDetails ? `Withdraw ${formatPrincipalAmount(vaultBalance)}` : 'Withdraw All',
+        label: 'Confirm Withdrawal',
         variant: 'primary',
         eyebrow: 'Withdraw',
         summary: txSummary,
@@ -133,12 +127,33 @@ export default function WithdrawAllModal({
       }}
       onSuccess={onSuccess}
     >
-      <AmountHeroCard
-        label='Available to Withdraw'
-        icon={principalAsset.icon}
-        value={offerDetails ? formatAmount(vaultBalance, principalAsset.decimals) : '—'}
-        unit={principalAsset.symbol}
-      />
+      <div className='text-foreground flex flex-col gap-8'>
+        <AmountHeroCard
+          label='Withdraw'
+          icon={principalAsset.icon}
+          value={offerDetails ? formatAmount(vaultBalance, principalAsset.decimals) : '—'}
+          unit={principalAsset.symbol}
+        />
+        <DetailsPanel
+          title='Withdraw Details'
+          rows={[
+            {
+              label: "Lender's Vault",
+              value: offerDetails ? (
+                <>
+                  <span className='text-muted line-through'>
+                    {formatAmount(vaultBalance, principalAsset.decimals)}
+                  </span>
+                  <span className='text-muted'>→</span>
+                  {formatPrincipalAmount(0n)}
+                </>
+              ) : (
+                '—'
+              ),
+            },
+          ]}
+        />
+      </div>
     </OfferActionShell>
   )
 }
