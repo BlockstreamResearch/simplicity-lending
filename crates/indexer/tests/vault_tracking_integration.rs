@@ -8,10 +8,11 @@ use common::vault_tracking::{
     build_lender_vault_withdraw_all_tx, build_lender_vault_withdraw_on_liquidation_tx,
     build_principal_phase_partial_repayment_tx, build_protocol_vault_withdraw_all_tx,
     build_second_partial_repayment_tx, build_vault_withdraw_part_tx, count_offer_repayments,
-    count_offer_vault_withdrawals, count_unspent_utxos_of_type, fetch_active_vault_rows,
-    fetch_offer_balances, fetch_offer_status, fetch_offer_vault_withdrawals, load_registry,
-    offer_lending_params, process_tx_through_registry, seed_minimal_factory,
-    seed_trackable_active_offer,
+    count_offer_vault_withdrawals, count_unspent_utxos_of_type, count_vault_rows_of_type,
+    fetch_active_vault_rows, fetch_offer_balances, fetch_offer_status,
+    fetch_offer_vault_withdrawals, load_registry, offer_lending_params,
+    process_tx_through_registry, seed_minimal_factory, seed_trackable_active_offer,
+    seed_trackable_active_offer_with_fee_rate,
 };
 use lending_indexer::models::{OfferStatus, UtxoType, VaultType};
 use serial_test::serial;
@@ -111,7 +112,7 @@ async fn second_partial_repayment_supplies_vaults() -> anyhow::Result<()> {
     let second_tx = build_second_partial_repayment_tx(
         continuing_outpoint,
         lender_vault_outpoint,
-        protocol_vault_outpoint,
+        Some(protocol_vault_outpoint),
         &offer,
         debt_after_first,
         SECOND_PARTIAL_AMOUNT,
@@ -435,10 +436,10 @@ async fn partial_that_completes_fee_finalizes_protocol_vault() -> anyhow::Result
             txid: first_txid,
             vout: 2,
         },
-        OutPoint {
+        Some(OutPoint {
             txid: first_txid,
             vout: 3,
-        },
+        }),
         &offer,
         debt_after_first,
         remaining_fee,
@@ -507,10 +508,10 @@ async fn principal_phase_partial_does_not_spend_protocol_vault() -> anyhow::Resu
             txid: first_txid,
             vout: 2,
         },
-        OutPoint {
+        Some(OutPoint {
             txid: first_txid,
             vout: 3,
-        },
+        }),
         &offer,
         debt_after_first,
         remaining_fee,
@@ -597,10 +598,10 @@ async fn full_repayment_after_partials_finalizes_lender_vault() -> anyhow::Resul
             txid: first_txid,
             vout: 2,
         },
-        OutPoint {
+        Some(OutPoint {
             txid: first_txid,
             vout: 3,
-        },
+        }),
         &offer,
         debt_after_first,
         remaining_fee,
@@ -880,6 +881,243 @@ async fn batch_withdraw_of_protocol_vaults_indexes_each_vault() -> anyhow::Resul
         assert_eq!(withdrawals[0].amount_withdrawn, protocol_fee as i64);
         assert_eq!(withdrawals[0].vault_amount_after, 0);
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn zero_protocol_fee_offer_tracks_only_lender_vault() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
+    let (offer_id, active_outpoint, mut offer) =
+        seed_trackable_active_offer_with_fee_rate(&pool, factory_id, 30, 100, 0).await?;
+    let mut registry = load_registry(&pool).await?;
+
+    let (first_tx, debt_after_first) =
+        build_first_partial_repayment_tx(active_outpoint, &offer, FIRST_PARTIAL_AMOUNT)?;
+    let first_txid = first_tx.txid();
+    process_tx_through_registry(&pool, &mut registry, &first_tx, TRACKABLE_REPAYMENT_HEIGHT)
+        .await?;
+    apply_repayment_to_offer(&mut offer, FIRST_PARTIAL_AMOUNT)?;
+
+    let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    assert_eq!(vaults.len(), 1);
+    let lender = vault_of_type(&vaults, VaultType::Lender);
+    assert_eq!(lender.amount, FIRST_PARTIAL_AMOUNT as i64);
+    assert_eq!(lender.vout, 2);
+    assert!(!lender.is_finalized);
+
+    // Still repaying interest: without a protocol fee vault the lender vault is the only one spent.
+    let second_tx = build_second_partial_repayment_tx(
+        OutPoint {
+            txid: first_txid,
+            vout: 1,
+        },
+        OutPoint {
+            txid: first_txid,
+            vout: 2,
+        },
+        None,
+        &offer,
+        debt_after_first,
+        SECOND_PARTIAL_AMOUNT,
+    )?;
+    let second_txid = second_tx.txid();
+    process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &second_tx,
+        TRACKABLE_REPAYMENT_HEIGHT + 1,
+    )
+    .await?;
+    apply_repayment_to_offer(&mut offer, SECOND_PARTIAL_AMOUNT)?;
+
+    let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    assert_eq!(vaults.len(), 1);
+    let lender = vault_of_type(&vaults, VaultType::Lender);
+    assert_eq!(
+        lender.amount,
+        (FIRST_PARTIAL_AMOUNT + SECOND_PARTIAL_AMOUNT) as i64
+    );
+    assert_eq!(lender.txid, second_txid.to_byte_array().to_vec());
+
+    let full_tx = build_full_repayment_after_partials_tx(
+        OutPoint {
+            txid: second_txid,
+            vout: 1,
+        },
+        OutPoint {
+            txid: second_txid,
+            vout: 2,
+        },
+        None,
+        &offer,
+    )?;
+    process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &full_tx,
+        TRACKABLE_REPAYMENT_HEIGHT + 2,
+    )
+    .await?;
+
+    assert_eq!(
+        fetch_offer_status(&pool, offer_id).await?,
+        OfferStatus::Repaid
+    );
+
+    let total = offer_lending_params(&offer)?
+        .offer_parameters
+        .get_total_amount_to_repay();
+    let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    assert_eq!(vaults.len(), 1);
+    let lender = vault_of_type(&vaults, VaultType::Lender);
+    assert!(lender.is_finalized);
+    assert_eq!(lender.amount, total as i64);
+    assert_eq!(
+        count_vault_rows_of_type(&pool, offer_id, VaultType::ProtocolFee).await?,
+        0
+    );
+    assert_eq!(count_offer_repayments(&pool, offer_id, None).await?, 3);
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn zero_protocol_fee_full_repayment_creates_only_lender_vault() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
+    let (offer_id, active_outpoint, offer) =
+        seed_trackable_active_offer_with_fee_rate(&pool, factory_id, 31, 100, 0).await?;
+
+    let tx = build_full_repayment_tx(active_outpoint, &offer)?;
+    let mut registry = load_registry(&pool).await?;
+    process_tx_through_registry(&pool, &mut registry, &tx, TRACKABLE_REPAYMENT_HEIGHT).await?;
+
+    assert_eq!(
+        fetch_offer_status(&pool, offer_id).await?,
+        OfferStatus::Repaid
+    );
+
+    let total = offer_lending_params(&offer)?
+        .offer_parameters
+        .get_total_amount_to_repay();
+    let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    assert_eq!(vaults.len(), 1);
+    let lender = vault_of_type(&vaults, VaultType::Lender);
+    assert!(lender.is_finalized);
+    assert_eq!(lender.amount, total as i64);
+    assert_eq!(lender.vout, 1);
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn protocol_fee_vault_is_created_by_first_repayment_with_protocol_share() -> anyhow::Result<()>
+{
+    const INSTALLMENT: u64 = 5;
+
+    let pool = test_pool().await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
+    let (offer_id, active_outpoint, mut offer) =
+        seed_trackable_active_offer(&pool, factory_id, 32, 100).await?;
+    let mut registry = load_registry(&pool).await?;
+
+    // floor(5 * 10%) = 0: nothing for the protocol, so only the lender vault is created.
+    let (first_tx, debt_after_first) =
+        build_first_partial_repayment_tx(active_outpoint, &offer, INSTALLMENT)?;
+    let first_txid = first_tx.txid();
+    process_tx_through_registry(&pool, &mut registry, &first_tx, TRACKABLE_REPAYMENT_HEIGHT)
+        .await?;
+    apply_repayment_to_offer(&mut offer, INSTALLMENT)?;
+
+    let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    assert_eq!(vaults.len(), 1);
+    assert_eq!(
+        vault_of_type(&vaults, VaultType::Lender).amount,
+        INSTALLMENT as i64
+    );
+
+    // floor(10 * 10%) - floor(5 * 10%) = 1: this repayment creates the protocol fee vault.
+    let second_tx = build_second_partial_repayment_tx(
+        OutPoint {
+            txid: first_txid,
+            vout: 1,
+        },
+        OutPoint {
+            txid: first_txid,
+            vout: 2,
+        },
+        None,
+        &offer,
+        debt_after_first,
+        INSTALLMENT,
+    )?;
+    let second_txid = second_tx.txid();
+    let debt_after_second = debt_after_first - INSTALLMENT;
+    process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &second_tx,
+        TRACKABLE_REPAYMENT_HEIGHT + 1,
+    )
+    .await?;
+    apply_repayment_to_offer(&mut offer, INSTALLMENT)?;
+
+    let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    assert_eq!(vaults.len(), 2);
+    let lender = vault_of_type(&vaults, VaultType::Lender);
+    let protocol = vault_of_type(&vaults, VaultType::ProtocolFee).clone();
+    assert_eq!(lender.amount, 9);
+    assert_eq!(protocol.amount, 1);
+    assert_eq!(protocol.already_supplied, 1);
+    assert!(!protocol.is_finalized);
+    assert_eq!(protocol.txid, second_txid.to_byte_array().to_vec());
+    assert_eq!(protocol.vout, 3);
+    assert_eq!(
+        protocol.created_at_height,
+        (TRACKABLE_REPAYMENT_HEIGHT + 1) as i64
+    );
+
+    // floor(15 * 10%) - floor(10 * 10%) = 0: the protocol fee vault is left untouched.
+    let third_tx = build_second_partial_repayment_tx(
+        OutPoint {
+            txid: second_txid,
+            vout: 1,
+        },
+        OutPoint {
+            txid: second_txid,
+            vout: 2,
+        },
+        None,
+        &offer,
+        debt_after_second,
+        INSTALLMENT,
+    )?;
+    let third_txid = third_tx.txid();
+    process_tx_through_registry(
+        &pool,
+        &mut registry,
+        &third_tx,
+        TRACKABLE_REPAYMENT_HEIGHT + 2,
+    )
+    .await?;
+
+    let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
+    assert_eq!(vaults.len(), 2);
+    let lender = vault_of_type(&vaults, VaultType::Lender);
+    assert_eq!(lender.amount, 14);
+    assert_eq!(lender.txid, third_txid.to_byte_array().to_vec());
+    let protocol_after = vault_of_type(&vaults, VaultType::ProtocolFee);
+    assert_eq!(protocol_after.id, protocol.id);
+    assert_eq!(protocol_after.amount, 1);
+    assert_eq!(
+        count_vault_rows_of_type(&pool, offer_id, VaultType::ProtocolFee).await?,
+        1
+    );
 
     Ok(())
 }

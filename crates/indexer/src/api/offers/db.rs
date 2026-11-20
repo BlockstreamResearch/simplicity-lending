@@ -101,6 +101,7 @@ async fn fetch_offer_model_by_id(
             current_debt,
             collateral_remaining,
             interest_rate,
+            protocol_fee_rate,
             loan_expiration_time,
             updated_at_height,
             created_at_height,

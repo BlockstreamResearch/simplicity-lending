@@ -31,6 +31,7 @@ fn offer_list_body() -> String {
                     "current_debt": "500",
                     "collateral_remaining": "1000",
                     "interest_rate": 250,
+                    "protocol_fee_rate": 1000,
                     "loan_expiration_height": 123,
                     "updated_at_height": 456,
                     "created_at_height": 456,
@@ -72,6 +73,7 @@ async fn list_offers_parses_paginated_response() {
     assert_eq!(item.current_debt, "500");
     assert_eq!(item.collateral_remaining, "1000");
     assert_eq!(item.interest_rate, 250);
+    assert_eq!(item.protocol_fee_rate, 1000);
     assert_eq!(item.updated_at_height, 456);
     assert!(item.participants.is_empty());
     assert!(item.borrower_principal_utxo.is_none());
@@ -135,6 +137,7 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
             "current_debt": "77",
             "collateral_remaining": "99",
             "interest_rate": 12,
+            "protocol_fee_rate": 0,
             "loan_expiration_height": 321,
             "updated_at_height": 55,
             "created_at_height": 55,
@@ -183,6 +186,7 @@ async fn get_offer_parses_flattened_details_with_duplicate_participants_key() {
     let details = client.get_offer(OFFER_ID).await.expect("offer details");
 
     assert_eq!(details.info.base.status, OfferStatus::Pending);
+    assert_eq!(details.info.base.protocol_fee_rate, 0);
     assert_eq!(details.info.borrower_nft_asset, "0a09");
     // Flattened short-item participants stay empty; the real list is top-level.
     assert!(details.info.base.participants.is_empty());

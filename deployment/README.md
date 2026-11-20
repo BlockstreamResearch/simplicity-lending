@@ -62,6 +62,7 @@ Optional indexer overrides of `base.yaml`:
 - `INDEXER_ESPLORA__NETWORK`: `liquid`, `liquidtestnet`, or `regtest`
 - `INDEXER_INDEXER__INTERVAL`: background polling interval in milliseconds
 - `INDEXER_INDEXER__PROTOCOL_FEE_KEEPER_ASSET_ID`: protocol-fee keeper asset tracked by the indexer
+- `INDEXER_INDEXER__ALLOWED_PROTOCOL_FEE_RATES`: comma-separated protocol fee rates in basis points (e.g. `0,1000`); offers created with any other rate are not indexed
 - `INDEXER_INDEXER__LAST_INDEXED_HEIGHT`: first height to index from on an empty database
 - `INDEXER_INDEXER__ASSET_REGISTRY__DOMAIN`: ELIP-0100 issuer domain (the public host, e.g. `lending.example.com`); asset registration is disabled while unset
 - `INDEXER_INDEXER__ASSET_REGISTRY__REGISTRY_URL`: asset registry to submit to; an empty value skips submission

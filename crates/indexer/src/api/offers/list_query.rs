@@ -25,6 +25,7 @@ const OFFERS_SHORT_LIST_SELECT: &str = r#"
         current_debt,
         collateral_remaining,
         interest_rate,
+        protocol_fee_rate,
         loan_expiration_time,
         updated_at_height,
         created_at_height,

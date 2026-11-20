@@ -31,9 +31,9 @@ impl LendingOfferParameters {
         })
     }
 
+    /// Lender vault state at `current_debt`. Before the first repayment the vault does not exist
+    /// on-chain yet, see [`OfferParameters::has_lender_vault`].
     pub fn get_lender_vault(&self, current_debt: u64) -> AssetAuthVault {
-        let parameters = self.get_lender_vault_parameters();
-
         let already_repaid_amount = self
             .offer_parameters
             .get_already_repaid_amount(current_debt);
@@ -41,27 +41,20 @@ impl LendingOfferParameters {
             .offer_parameters
             .get_already_repaid_protocol_fee(current_debt);
 
-        let already_supplied = already_repaid_amount - already_repaid_protocol_fee;
-
-        if already_supplied >= parameters.supply_goal {
-            AssetAuthVault::new_finalized(parameters)
-        } else {
-            AssetAuthVault::new_active(parameters, already_supplied)
-        }
+        AssetAuthVault::new_with_supplied(
+            self.get_lender_vault_parameters(),
+            already_repaid_amount - already_repaid_protocol_fee,
+        )
     }
 
+    /// Protocol fee vault state at `current_debt`. The vault does not exist on-chain until some
+    /// protocol fee is repaid, see [`OfferParameters::has_protocol_fee_vault`].
     pub fn get_protocol_fee_vault(&self, current_debt: u64) -> AssetAuthVault {
-        let parameters = self.get_protocol_fee_vault_parameters();
-
-        let already_repaid_protocol_fee = self
-            .offer_parameters
-            .get_already_repaid_protocol_fee(current_debt);
-
-        if already_repaid_protocol_fee >= parameters.supply_goal {
-            AssetAuthVault::new_finalized(parameters)
-        } else {
-            AssetAuthVault::new_active(parameters, already_repaid_protocol_fee)
-        }
+        AssetAuthVault::new_with_supplied(
+            self.get_protocol_fee_vault_parameters(),
+            self.offer_parameters
+                .get_already_repaid_protocol_fee(current_debt),
+        )
     }
 
     pub fn get_lender_vault_parameters(&self) -> AssetAuthVaultParameters {
@@ -100,6 +93,7 @@ impl LendingOfferParameters {
             collateral_amount: self.offer_parameters.collateral_amount,
             principal_amount: self.offer_parameters.principal_amount,
             principal_interest_rate: self.offer_parameters.principal_interest_rate as u64,
+            protocol_fee_rate: self.offer_parameters.protocol_fee_rate as u64,
             loan_expiration_time: self.offer_parameters.loan_expiration_time,
             lender_vault_tapleaf_hash: self.get_lender_vault_tapleaf_hash(),
             protocol_fee_vault_tapleaf_hash: self.get_protocol_fee_vault_tapleaf_hash(),
@@ -108,11 +102,11 @@ impl LendingOfferParameters {
     }
 
     fn get_lender_vault_tapleaf_hash(&self) -> [u8; 32] {
-        AssetAuthVault::new_active(self.get_lender_vault_parameters(), 0).get_tapleaf_hash()
+        AssetAuthVault::get_program_tapleaf_hash(self.get_lender_vault_parameters())
     }
 
     fn get_protocol_fee_vault_tapleaf_hash(&self) -> [u8; 32] {
-        AssetAuthVault::new_active(self.get_protocol_fee_vault_parameters(), 0).get_tapleaf_hash()
+        AssetAuthVault::get_program_tapleaf_hash(self.get_protocol_fee_vault_parameters())
     }
 }
 
@@ -140,6 +134,7 @@ mod tests {
                 principal_amount: 1_000,
                 loan_expiration_time: 100_000,
                 principal_interest_rate: 1_000, // total_fee = 100, total_protocol_fee = 10
+                protocol_fee_rate: 1_000,
             },
             network: SimplicityNetwork::default_regtest(),
         }
@@ -150,7 +145,7 @@ mod tests {
         let params = test_params();
         let current_debt = 1_100 - 45; // already_repaid_fee = 45, still in RepayingOfferFee phase
 
-        let onchain_already_repaid_protocol_fee = calculate_protocol_fee(45);
+        let onchain_already_repaid_protocol_fee = calculate_protocol_fee(45, 1_000);
         assert_eq!(onchain_already_repaid_protocol_fee, 4);
 
         let reconstructed_already_supplied = params
@@ -168,7 +163,7 @@ mod tests {
         let params = test_params();
         let current_debt = 1_100 - 45;
 
-        let onchain_already_repaid_protocol_fee = calculate_protocol_fee(45);
+        let onchain_already_repaid_protocol_fee = calculate_protocol_fee(45, 1_000);
         let onchain_lender_vault_already_supplied = 45 - onchain_already_repaid_protocol_fee;
         assert_eq!(onchain_lender_vault_already_supplied, 41);
 
@@ -180,5 +175,22 @@ mod tests {
             reconstructed_already_supplied,
             onchain_lender_vault_already_supplied,
         );
+    }
+
+    #[test]
+    fn zero_protocol_fee_rate_builds_arguments() {
+        let mut params = test_params();
+        params.offer_parameters.protocol_fee_rate = 0;
+
+        let arguments = params.build_arguments();
+        assert_eq!(arguments.protocol_fee_rate, 0);
+
+        let protocol_fee_vault = params.get_protocol_fee_vault(1_000);
+        assert!(protocol_fee_vault.is_finalized_offer());
+        assert_eq!(protocol_fee_vault.get_already_supplied_amount(), 0);
+
+        let lender_vault = params.get_lender_vault(0);
+        assert!(lender_vault.is_finalized_offer());
+        assert_eq!(lender_vault.get_already_supplied_amount(), 1_100);
     }
 }

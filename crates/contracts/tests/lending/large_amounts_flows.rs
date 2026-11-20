@@ -47,6 +47,7 @@ fn setup_pending(
             principal_amount,
             loan_expiration_time: current_height + 60,
             principal_interest_rate,
+            protocol_fee_rate: 1_000,
         },
         issuance_factory,
         issued_principal,

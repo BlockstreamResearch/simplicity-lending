@@ -46,6 +46,9 @@ pub struct OfferDetailsResponseSchema {
     /// Interest rate in basis points.
     #[schema(example = 120)]
     pub interest_rate: u32,
+    /// Share of the interest routed to the protocol fee vault, in basis points.
+    #[schema(example = 1000)]
+    pub protocol_fee_rate: u32,
     pub loan_expiration_height: u32,
     pub updated_at_height: u64,
     pub created_at_height: u64,

@@ -24,7 +24,9 @@ The app lets the borrower type the fee as an amount. It divides that amount by t
 
 The rate is stored in two places, at two widths. Publishing an offer writes it into the `OP_RETURN` metadata as a `u16`, and the app enforces the same bound, so a published offer stops at 65535 basis points, or 655.35%. The lending program then takes that value as `PRINCIPAL_INTEREST_RATE`, a `u64`, and places no such ceiling of its own.
 
-The app also shows an APR. That figure annualizes the fee against the principal and the term so offers of different lengths can be compared. It is not a rate the contract charges, and it is computed from the whole fee. The protocol keeps 10% of the fee as it is paid, so a lender's return is about a tenth lower than the APR on screen. The borrower still owes the full fee.
+The offer also fixes the protocol fee rate: the share of the fee paid to the protocol, in basis points from 0 to 10000. It is written into the same `OP_RETURN` metadata as a `u16` and taken by the lending program as `PROTOCOL_FEE_RATE`. A rate of 0 leaves the whole fee to the lender. The app creates offers with a rate of 1000, or 10%.
+
+The app also shows an APR. That figure annualizes the fee against the principal and the term so offers of different lengths can be compared. It is not a rate the contract charges, and it is computed from the whole fee. The protocol keeps its share of the fee as it is paid, so with the app's 10% rate a lender's return is about a tenth lower than the APR on screen. The borrower still owes the full fee.
 
 ## Term
 
