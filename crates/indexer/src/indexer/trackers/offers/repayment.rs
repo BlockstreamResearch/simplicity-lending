@@ -141,6 +141,7 @@ mod tests {
                 principal_amount: 10_000,
                 loan_expiration_time: 12_345,
                 principal_interest_rate: 1_000,
+                protocol_fee_rate: 1_000,
             },
             network: SimplicityNetwork::default_regtest(),
         }

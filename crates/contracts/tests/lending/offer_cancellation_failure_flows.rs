@@ -27,6 +27,7 @@ fn default_offer_cancellation_setup(
         principal_amount: 10000,
         loan_expiration_time: current_height + 60,
         principal_interest_rate: 1000,
+        protocol_fee_rate: 1_000,
     };
 
     setup_pending_offer(

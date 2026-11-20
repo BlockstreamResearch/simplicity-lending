@@ -75,6 +75,8 @@ fn lending_offer_parameters_from_indexer(
             principal_amount: parse_amount("principal_amount", &info.base.principal_amount)?,
             loan_expiration_time: info.base.loan_expiration_height,
             principal_interest_rate: parse_interest_rate(info.base.interest_rate)?,
+            // TODO: read the rate from the indexer once its offer API exposes it.
+            protocol_fee_rate: lending_indexer::models::STORED_OFFER_PROTOCOL_FEE_RATE,
         },
         network,
     })

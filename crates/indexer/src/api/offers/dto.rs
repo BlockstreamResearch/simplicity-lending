@@ -386,6 +386,7 @@ mod tests {
             principal_amount: 10_000,
             loan_expiration_time: 1_234_567,
             principal_interest_rate: 1_000,
+            protocol_fee_rate: 1_000,
         }
     }
 

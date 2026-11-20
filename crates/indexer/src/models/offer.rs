@@ -12,6 +12,10 @@ use simplex::{
 
 use crate::models::{ParticipantType, UtxoType};
 
+/// Protocol fee rate assumed for stored offers, which do not keep their own rate yet.
+// TODO: persist the rate decoded from the offer creation metadata and use it here instead.
+pub const STORED_OFFER_PROTOCOL_FEE_RATE: u16 = 1_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UtxoData {
     Offer(UtxoType),
@@ -177,6 +181,7 @@ impl OfferModel {
                 principal_amount: self.principal_amount as u64,
                 loan_expiration_time,
                 principal_interest_rate: interest_rate,
+                protocol_fee_rate: STORED_OFFER_PROTOCOL_FEE_RATE,
             },
             network,
         })
@@ -189,6 +194,7 @@ impl OfferModel {
             principal_amount: self.principal_amount as u64,
             loan_expiration_time: self.loan_expiration_time as u32,
             principal_interest_rate: self.interest_rate as u16,
+            protocol_fee_rate: STORED_OFFER_PROTOCOL_FEE_RATE,
         }
     }
 
@@ -242,6 +248,7 @@ mod tests {
                 principal_amount: 500,
                 loan_expiration_time: 12_345,
                 principal_interest_rate: 250,
+                protocol_fee_rate: 1_000,
             },
             network: SimplicityNetwork::LiquidTestnet,
         }
