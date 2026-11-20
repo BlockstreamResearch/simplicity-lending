@@ -18,9 +18,11 @@ export type OfferAction =
   | 'cancel'
   | 'repay'
   | 'claim-principal'
-  | 'claim-interest'
+  | 'withdraw-all'
   | 'liquidate'
   | 'none'
+
+export type OfferModalAction = OfferAction | 'withdraw'
 
 function isOfferExpired(offer: OfferShort, currentBlockHeight: number): boolean {
   return currentBlockHeight > offer.loan_expiration_height
@@ -33,7 +35,7 @@ function resolveLenderAction(offer: OfferShort, expired: boolean): OfferAction {
     case 'active':
       return expired ? 'liquidate' : 'none'
     case 'repaid':
-      return 'claim-interest'
+      return 'withdraw-all'
     default:
       return 'none'
   }

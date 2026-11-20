@@ -42,7 +42,8 @@ export const PENDING_TX_KIND_LABEL: Record<PendingTxKind, string> = {
   cancel_offer: 'Cancel offer',
   claim_principal: 'Claim principal',
   repay_offer: 'Repay loan',
-  claim_interest: 'Claim repayment',
+  claim_interest: 'Withdraw repayments',
+  withdraw_part: 'Withdraw from vault',
   liquidate_offer: 'Liquidate offer',
 }
 

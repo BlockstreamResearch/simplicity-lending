@@ -4,19 +4,20 @@ import { useBlockHeight } from '@/api/esplora/hooks'
 import type { OfferShort } from '@/api/indexer/schemas'
 import AcceptOfferModal from '@/components/modals/AcceptOfferModal'
 import CancelOfferModal from '@/components/modals/CancelOfferModal'
-import ClaimModal from '@/components/modals/ClaimModal'
 import ClaimPrincipalModal from '@/components/modals/ClaimPrincipalModal'
 import LiquidateOfferModal from '@/components/modals/LiquidateOfferModal'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import RepayOfferModal from '@/components/modals/RepayOfferModal'
+import WithdrawAllModal from '@/components/modals/WithdrawAllModal'
+import WithdrawModal from '@/components/modals/WithdrawModal'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { useNow } from '@/hooks/useNow'
 import CardAlert from '@/pages/Dashboard/components/CardAlert'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
 import { truncateAddress } from '@/utils/format'
-import { resolveOfferAction } from '@/utils/offerActions'
+import { type OfferModalAction, resolveOfferAction } from '@/utils/offerActions'
 import {
   getMempoolBlockingTx,
   getOfferPendingTx,
@@ -27,6 +28,7 @@ const STUCK_CHECK_INTERVAL_MS = 1_000
 
 interface OfferActionModalProps {
   offer: OfferShort | null
+  action?: OfferModalAction
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
@@ -34,6 +36,7 @@ interface OfferActionModalProps {
 
 export default function OfferActionModal({
   offer,
+  action,
   isOpen,
   onClose,
   onSuccess,
@@ -43,23 +46,24 @@ export default function OfferActionModal({
   const { pendingTxs } = usePendingTransactions()
 
   const sameOfferPendingTx = offer ? getOfferPendingTx(offer.id, pendingTxs) : null
-  const liveAction = offer ? resolveOfferAction(offer, scriptPubkey, currentBlockHeight) : 'none'
+  const requestedAction: OfferModalAction =
+    action ?? (offer ? resolveOfferAction(offer, scriptPubkey, currentBlockHeight) : 'none')
 
   const isBlockedByOtherTx =
-    !sameOfferPendingTx && liveAction !== 'none' && Boolean(getMempoolBlockingTx(pendingTxs))
+    !sameOfferPendingTx && requestedAction !== 'none' && Boolean(getMempoolBlockingTx(pendingTxs))
   const isProcessingNow = Boolean(sameOfferPendingTx) || isBlockedByOtherTx
 
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
   const [isProcessingAtOpen, setIsProcessingAtOpen] = useState(isProcessingNow)
   const [isBlockedByOtherTxAtOpen, setIsBlockedByOtherTxAtOpen] = useState(isBlockedByOtherTx)
-  const [actionAtOpen, setActionAtOpen] = useState(liveAction)
+  const [actionAtOpen, setActionAtOpen] = useState(requestedAction)
   const [hasConfirmedRetry, setHasConfirmedRetry] = useState(false)
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
     if (isOpen) {
       setIsProcessingAtOpen(isProcessingNow)
       setIsBlockedByOtherTxAtOpen(isBlockedByOtherTx)
-      setActionAtOpen(liveAction)
+      setActionAtOpen(requestedAction)
       setHasConfirmedRetry(false)
     }
   }
@@ -131,8 +135,12 @@ export default function OfferActionModal({
       return (
         <RepayOfferModal isOpen={isOpen} offer={offer} onClose={onClose} onSuccess={onSuccess} />
       )
-    case 'claim-interest':
-      return <ClaimModal isOpen={isOpen} offer={offer} onClose={onClose} onSuccess={onSuccess} />
+    case 'withdraw':
+      return <WithdrawModal isOpen={isOpen} offer={offer} onClose={onClose} onSuccess={onSuccess} />
+    case 'withdraw-all':
+      return (
+        <WithdrawAllModal isOpen={isOpen} offer={offer} onClose={onClose} onSuccess={onSuccess} />
+      )
     default:
       return (
         <OfferActionShell

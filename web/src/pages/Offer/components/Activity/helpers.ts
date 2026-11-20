@@ -4,6 +4,7 @@ import type {
   OfferUtxoType,
   OfferVaultWithdrawal,
 } from '@/api/indexer/schemas'
+import { getWithdrawableAmount } from '@/api/indexer/utils'
 import type { PendingTxKind, PendingTxRecord } from '@/providers/pendingTransactions/types'
 
 import { getLenderVaultBalance, getLiquidatedCollateral } from '../../helpers'
@@ -54,7 +55,8 @@ const PENDING_AMOUNT: Record<
   claim_principal: offer => principal(offer.principal_amount),
   repay_offer: (offer, tx) => principal(tx.amount ?? offer.current_debt),
   accept_offer: offer => principal(offer.principal_amount),
-  claim_interest: offer => principal(getLenderVaultBalance(offer)),
+  claim_interest: (offer, tx) => principal(tx.amount ?? getLenderVaultBalance(offer)),
+  withdraw_part: (offer, tx) => principal(tx.amount ?? getWithdrawableAmount(offer)),
   liquidate_offer: offer => collateral(offer.collateral_remaining),
 }
 
