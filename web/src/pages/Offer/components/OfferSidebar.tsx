@@ -3,11 +3,13 @@ import { type ReactNode, useCallback, useState } from 'react'
 
 import { useBlockHeight } from '@/api/esplora/hooks'
 import type { OfferDetails } from '@/api/indexer/schemas'
+import { getWithdrawableAmount } from '@/api/indexer/utils'
 import { useAssetPriceUsd } from '@/api/prices/hooks'
 import { AssetAmount } from '@/components/AssetAmount'
 import OfferActionModal from '@/components/modals/OfferActionModal'
 import { UiButton, type UiButtonProps } from '@/components/ui/UiButton'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { VAULT_MIN_REMAINDER } from '@/constants/offers'
 import { useBlockDate } from '@/hooks/useBlockDate'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useWallet } from '@/providers/wallet/useWallet'
@@ -18,7 +20,7 @@ import {
   formatUsd,
   splitBlocksDuration,
 } from '@/utils/format'
-import { type ActorRole, type OfferAction, resolveOfferAction } from '@/utils/offerActions'
+import { type ActorRole, type OfferModalAction, resolveOfferAction } from '@/utils/offerActions'
 import { getOfferTermLeft } from '@/utils/offers'
 
 import {
@@ -33,13 +35,14 @@ import {
   getUtxoCreatedHeight,
 } from '../helpers'
 
-type ActionWithButton = Exclude<OfferAction, 'none'>
+type ActionWithButton = Exclude<OfferModalAction, 'none'>
 const ACTION_BUTTON_VARIANT: Record<ActionWithButton, UiButtonProps['variant']> = {
   accept: 'primary',
   cancel: 'danger-soft',
   repay: 'primary',
   'claim-principal': 'primary',
-  'claim-interest': 'primary',
+  withdraw: 'primary',
+  'withdraw-all': 'primary',
   liquidate: 'danger',
 }
 
@@ -48,6 +51,11 @@ interface DeadlineView {
   subtitle: string
   countdownBlocks?: number
   summary?: string | null
+}
+
+interface ActionPanelView {
+  buttons: { action: ActionWithButton; label: string }[]
+  hint?: string
 }
 
 interface ContentView {
@@ -90,13 +98,15 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
   const collateralPriceUsd = useAssetPriceUsd(collateralAsset.id)
   const dueDate = useBlockDate(offer.loan_expiration_height, offer.created_at_height)
-  const [isActionOpen, setIsActionOpen] = useState(false)
-  const closeAction = useCallback(() => setIsActionOpen(false), [])
+  const [openedAction, setOpenedAction] = useState<ActionWithButton | null>(null)
+  const closeAction = useCallback(() => setOpenedAction(null), [])
 
   const action = resolveOfferAction(offer, scriptPubkey, currentBlockHeight)
   const isHeightKnown = currentBlockHeight > 0
   const blocksToDeadline = getOfferTermLeft(offer, currentBlockHeight)
   const isExpired = isHeightKnown && blocksToDeadline < 0
+  const vaultBalance = getLenderVaultBalance(offer)
+  const withdrawable = getWithdrawableAmount(offer)
   const dueDateText = dueDate ? formatDateTime(dueDate) : '–'
 
   const renderPrincipal = (amount: bigint) => (
@@ -200,12 +210,17 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
               }
         }
         if (isLender) {
+          const description = (() => {
+            if (isExpired)
+              return 'The deadline has passed. You can take the collateral for the unpaid debt.'
+            return withdrawable > 0n
+              ? undefined
+              : 'Repayments land here. You can withdraw them as they come in.'
+          })()
           return {
             title: 'Your Vault',
-            amount: renderPrincipal(getLenderVaultBalance(offer)),
-            description: isExpired
-              ? 'The deadline has passed. You can take the collateral for the unpaid debt.'
-              : 'Repayments land here, held by the contract until you withdraw them.',
+            amount: renderPrincipal(vaultBalance),
+            description,
           }
         }
         return null
@@ -213,7 +228,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
         if (isLender) {
           return {
             title: 'Your Vault',
-            amount: renderPrincipal(getLenderVaultBalance(offer)),
+            amount: renderPrincipal(vaultBalance),
             description: 'Fully repaid – withdraw everything in one go.',
           }
         }
@@ -270,25 +285,46 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
     }
   })()
 
-  const actionButton = (() => {
+  const actionPanel: ActionPanelView | null = (() => {
+    const liquidateButton = {
+      action: 'liquidate',
+      label: `Liquidate ${formatCollateralDisplay(offer.collateral_remaining)}`,
+    } as const
+    const withdrawButton = { action: 'withdraw', label: 'Withdraw' } as const
+
     switch (action) {
       case 'none':
-        return null
+        return role === 'lender' && withdrawable > 0n
+          ? {
+              buttons: [withdrawButton],
+              hint: `${formatPrincipalAmount(VAULT_MIN_REMAINDER)} stays in the vault until the loan is closed.`,
+            }
+          : null
       case 'accept':
-        return { label: 'Accept Offer' }
+        return { buttons: [{ action, label: 'Accept Offer' }] }
       case 'cancel':
         return {
-          label: 'Cancel Offer',
+          buttons: [{ action, label: 'Cancel Offer' }],
           hint: `Your ${formatCollateralDisplay(offer.collateral_amount)} comes straight back to your wallet.`,
         }
       case 'repay':
-        return { label: 'Repay', hint: 'Each payment returns a share of your collateral.' }
+        return {
+          buttons: [{ action, label: 'Repay' }],
+          hint: 'Each payment returns a share of your collateral.',
+        }
       case 'claim-principal':
-        return { label: `Claim ${formatPrincipalAmount(offer.principal_amount)}` }
-      case 'claim-interest':
-        return { label: 'Withdraw All' }
+        return {
+          buttons: [{ action, label: `Claim ${formatPrincipalAmount(offer.principal_amount)}` }],
+        }
+      case 'withdraw-all':
+        return { buttons: [{ action, label: 'Withdraw All' }] }
       case 'liquidate':
-        return { label: `Liquidate ${formatCollateralDisplay(offer.collateral_remaining)}` }
+        return withdrawable > 0n
+          ? {
+              buttons: [liquidateButton, withdrawButton],
+              hint: "Liquidate also sends you what's left in your vault.",
+            }
+          : { buttons: [liquidateButton] }
     }
   })()
 
@@ -314,24 +350,26 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
       )}
 
       {reconnecting && <Skeleton className='h-10 w-full rounded-lg' />}
-      {!reconnecting && actionButton && action !== 'none' && (
+      {!reconnecting && actionPanel && (
         <div className='flex flex-col gap-2'>
-          <UiButton
-            className='w-full'
-            variant={ACTION_BUTTON_VARIANT[action]}
-            onPress={() => setIsActionOpen(true)}
-          >
-            {actionButton.label}
-          </UiButton>
-          {'hint' in actionButton && (
-            <p className='text-muted text-center text-xs'>{actionButton.hint}</p>
-          )}
+          {actionPanel.buttons.map(button => (
+            <UiButton
+              key={button.action}
+              className='w-full'
+              variant={ACTION_BUTTON_VARIANT[button.action]}
+              onPress={() => setOpenedAction(button.action)}
+            >
+              {button.label}
+            </UiButton>
+          ))}
+          {actionPanel.hint && <p className='text-muted text-center text-xs'>{actionPanel.hint}</p>}
         </div>
       )}
 
       <OfferActionModal
         offer={offer}
-        isOpen={isActionOpen && connectionStatus !== 'locked' && !reconnecting}
+        action={openedAction ?? undefined}
+        isOpen={openedAction !== null && connectionStatus !== 'locked' && !reconnecting}
         onClose={closeAction}
         onSuccess={closeAction}
       />

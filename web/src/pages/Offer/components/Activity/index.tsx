@@ -28,6 +28,7 @@ const PENDING_TITLE: Record<OfferPendingTxKind, string> = {
   claim_principal: 'Claiming Principal',
   repay_offer: 'Repaying',
   claim_interest: 'Withdrawing',
+  withdraw_part: 'Withdrawing',
   liquidate_offer: 'Liquidating',
 }
 

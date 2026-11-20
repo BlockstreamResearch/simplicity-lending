@@ -32,12 +32,12 @@ const NOTIFICATION_META: Record<OfferActionKey, NotificationMeta> = {
     priority: 0,
     describe: id => `Loan #${id} has expired. You can now claim the collateral.`,
   },
-  'claim-interest': {
+  'withdraw-all': {
     variant: 'accent',
     title: 'Repayment Available',
-    actionLabel: 'Claim Now',
+    actionLabel: 'Withdraw Now',
     priority: 1,
-    describe: id => `Loan #${id} has been repaid. You can now claim the repayment.`,
+    describe: id => `Loan #${id} has been repaid. You can now withdraw the repayment.`,
   },
   'claim-principal': {
     variant: 'accent',
@@ -68,7 +68,7 @@ function shouldNotify(
   currentBlockHeight: number | undefined,
 ): boolean {
   switch (action) {
-    case 'claim-interest':
+    case 'withdraw-all':
     case 'claim-principal':
     case 'liquidate':
       return true

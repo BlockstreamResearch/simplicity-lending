@@ -1,14 +1,20 @@
-import { Chip } from '@heroui/react'
 import { useMutation } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { fetchFeeRateSatPerKvb } from '@/api/esplora/fee'
+import { useOffer } from '@/api/indexer/hooks'
 import { fetchOffer } from '@/api/indexer/methods'
 import type { OfferShort } from '@/api/indexer/schemas'
-import { resolveLenderNftOutpoint, resolveLenderVaultOutpoint } from '@/api/indexer/utils'
+import {
+  findFinalizedLenderVault,
+  resolveLenderNftOutpoint,
+  resolveLenderVaultOutpoint,
+} from '@/api/indexer/utils'
+import ArrowUpFromBracketIcon from '@/components/icons/ArrowUpFromBracketIcon'
+import AmountHeroCard from '@/components/modals/AmountHeroCard'
 import OfferActionShell from '@/components/modals/OfferActionShell'
-import OfferDetailsBody from '@/components/modals/OfferDetailsBody'
 import { NETWORK_CONFIG } from '@/constants/network-config'
+import { useFormatAmount } from '@/hooks/useFormatAmount'
 import { useLenderVaultClaim } from '@/hooks/useLenderVaultClaim'
 import { useStandardTransactionFlow } from '@/hooks/useStandardTransactionFlow'
 import {
@@ -22,27 +28,34 @@ import { usePendingTransactions } from '@/providers/pendingTransactions/usePendi
 import { useWallet } from '@/providers/wallet/useWallet'
 import { ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY } from '@/simplicity/asset-auth-vault/program'
 import { formatAmount } from '@/utils/format'
-import { calcInterest } from '@/utils/offers'
 
-const CLAIM_WEIGHT_UNITS =
+const WITHDRAW_ALL_WEIGHT_UNITS =
   ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawAll + EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY
 
-interface ClaimModalProps {
+interface WithdrawAllModalProps {
   isOpen: boolean
   offer: OfferShort
   onClose: () => void
   onSuccess: () => void
 }
 
-export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimModalProps) {
-  const { principalAsset } = NETWORK_CONFIG
+export default function WithdrawAllModal({
+  isOpen,
+  offer,
+  onClose,
+  onSuccess,
+}: WithdrawAllModalProps) {
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey } = useWallet()
   const { lwkNetwork } = useLwk()
   const { claimLenderVault } = useLenderVaultClaim()
   const runStandardTransactionFlow = useStandardTransactionFlow()
   const { addPendingTx } = usePendingTransactions()
+  const { formatPrincipalAmount } = useFormatAmount()
+  const { data: offerDetails } = useOffer(offer.id)
+  const { principalAsset } = NETWORK_CONFIG
+  const vaultBalance = offerDetails ? (findFinalizedLenderVault(offerDetails)?.amount ?? 0n) : 0n
 
-  const claimVault = () =>
+  const withdrawAll = () =>
     runStandardTransactionFlow(async () => {
       const fullOffer = await fetchOffer(offer.id)
       const vaultOutpoint = resolveLenderVaultOutpoint(fullOffer)
@@ -56,7 +69,7 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
         getBlindedWalletUtxos(),
         fetchFeeRateSatPerKvb(),
       ])
-      const feeBudgetSats = estimateFeeBudgetSats(CLAIM_WEIGHT_UNITS, feeRate)
+      const feeBudgetSats = estimateFeeBudgetSats(WITHDRAW_ALL_WEIGHT_UNITS, feeRate)
       const feeUtxos = selectFeeUtxos(
         blindedWalletUtxos,
         lwkNetwork.policyAsset(),
@@ -72,9 +85,13 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
       })
     })
 
-  const { mutate, reset, data, status } = useMutation({
-    mutationFn: claimVault,
-    onSuccess: result => {
+  const { mutate, reset, data, status, variables } = useMutation<
+    Awaited<ReturnType<typeof withdrawAll>>,
+    Error,
+    bigint
+  >({
+    mutationFn: () => withdrawAll(),
+    onSuccess: (result, amount) => {
       void addPendingTx({
         txid: result.txid,
         kind: 'claim_interest',
@@ -82,45 +99,33 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
         offerId: offer.id,
         previousOfferStatus: 'repaid',
         expectedOfferStatus: 'claimed',
+        amount,
       })
     },
   })
 
-  const txSummary = useMemo(() => {
-    const interestAmount = calcInterest(offer.principal_amount, offer.interest_rate)
-    return [
-      {
-        label: 'Principal',
-        value: `${formatAmount(offer.principal_amount, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
-      {
-        label: 'Interest',
-        value: `${formatAmount(interestAmount, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
-      {
-        label: 'Total',
-        value: `${formatAmount(offer.principal_amount + interestAmount, principalAsset.decimals)} ${principalAsset.symbol}`,
-      },
-    ]
-  }, [offer, principalAsset])
+  const txSummary = useMemo(
+    () =>
+      variables === undefined
+        ? []
+        : [{ label: 'Withdrawn', value: formatPrincipalAmount(variables) }],
+    [variables, formatPrincipalAmount],
+  )
 
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title='Claim Offer'
-      chip={
-        <Chip color='accent' variant='soft' size='sm'>
-          Claim
-        </Chip>
-      }
+      title='Withdraw All'
+      icon={{ Icon: ArrowUpFromBracketIcon, tone: 'success' }}
       action={{
-        label: 'Claim',
+        label: offerDetails ? `Withdraw ${formatPrincipalAmount(vaultBalance)}` : 'Withdraw All',
         variant: 'primary',
-        eyebrow: 'Claim Vault',
+        eyebrow: 'Withdraw',
         summary: txSummary,
         status,
+        disabled: vaultBalance === 0n,
         txid: data?.txid,
-        onConfirm: () => mutate(),
+        onConfirm: () => mutate(vaultBalance),
       }}
       onClose={() => {
         reset()
@@ -128,7 +133,12 @@ export default function ClaimModal({ isOpen, offer, onClose, onSuccess }: ClaimM
       }}
       onSuccess={onSuccess}
     >
-      <OfferDetailsBody offer={offer} />
+      <AmountHeroCard
+        label='Available to Withdraw'
+        icon={principalAsset.icon}
+        value={offerDetails ? formatAmount(vaultBalance, principalAsset.decimals) : '—'}
+        unit={principalAsset.symbol}
+      />
     </OfferActionShell>
   )
 }

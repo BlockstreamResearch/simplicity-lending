@@ -134,8 +134,10 @@ function useOfferCleanupPolling({
             ? !result.data.borrower_principal_utxo && record.confirmationStatus !== 'processing'
             : record.kind === 'repay_offer'
               ? result.data.repayments.some(repayment => repayment.txid === record.txid)
-              : record.expectedOfferStatus !== undefined &&
-                result.data.status === record.expectedOfferStatus
+              : record.kind === 'withdraw_part'
+                ? result.data.withdrawals.some(withdrawal => withdrawal.txid === record.txid)
+                : record.expectedOfferStatus !== undefined &&
+                  result.data.status === record.expectedOfferStatus
 
         if (isCleaned) {
           onRemoveRef.current(record.txid)

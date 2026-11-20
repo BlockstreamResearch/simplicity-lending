@@ -8,6 +8,7 @@ export type PendingTxKind =
   | 'claim_principal'
   | 'repay_offer'
   | 'claim_interest'
+  | 'withdraw_part'
   | 'liquidate_offer'
 
 export type PendingTxConfirmationStatus = 'processing' | 'confirmed' | 'finalized' | 'failed'
