@@ -12,10 +12,6 @@ use simplex::{
 
 use crate::models::{ParticipantType, UtxoType};
 
-/// Protocol fee rate assumed for stored offers, which do not keep their own rate yet.
-// TODO: persist the rate decoded from the offer creation metadata and use it here instead.
-pub const STORED_OFFER_PROTOCOL_FEE_RATE: u16 = 1_000;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UtxoData {
     Offer(UtxoType),
@@ -94,6 +90,7 @@ pub struct OfferModel {
     pub current_debt: i64,
     pub collateral_remaining: i64,
     pub interest_rate: i32,
+    pub protocol_fee_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
     pub updated_at_height: i64,
@@ -138,6 +135,7 @@ impl OfferModel {
             current_debt,
             collateral_remaining: collateral_amount,
             interest_rate: offer_parameters.offer_parameters.principal_interest_rate as i32,
+            protocol_fee_rate: offer_parameters.offer_parameters.protocol_fee_rate as i32,
             loan_expiration_time: offer_parameters.offer_parameters.loan_expiration_time as i32,
             current_status: OfferStatus::Pending,
             updated_at_height: block_height as i64,
@@ -160,6 +158,9 @@ impl OfferModel {
 
         let interest_rate = u16::try_from(self.interest_rate)
             .with_context(|| format!("interest_rate out of range: {}", self.interest_rate))?;
+        let protocol_fee_rate = u16::try_from(self.protocol_fee_rate).with_context(|| {
+            format!("protocol_fee_rate out of range: {}", self.protocol_fee_rate)
+        })?;
         let loan_expiration_time = u32::try_from(self.loan_expiration_time).with_context(|| {
             format!(
                 "loan_expiration_time out of range: {}",
@@ -181,7 +182,7 @@ impl OfferModel {
                 principal_amount: self.principal_amount as u64,
                 loan_expiration_time,
                 principal_interest_rate: interest_rate,
-                protocol_fee_rate: STORED_OFFER_PROTOCOL_FEE_RATE,
+                protocol_fee_rate,
             },
             network,
         })
@@ -194,7 +195,7 @@ impl OfferModel {
             principal_amount: self.principal_amount as u64,
             loan_expiration_time: self.loan_expiration_time as u32,
             principal_interest_rate: self.interest_rate as u16,
-            protocol_fee_rate: STORED_OFFER_PROTOCOL_FEE_RATE,
+            protocol_fee_rate: self.protocol_fee_rate as u16,
         }
     }
 
@@ -219,6 +220,7 @@ pub struct OfferModelShort {
     pub current_debt: i64,
     pub collateral_remaining: i64,
     pub interest_rate: i32,
+    pub protocol_fee_rate: i32,
     pub loan_expiration_time: i32,
     pub current_status: OfferStatus,
     pub updated_at_height: i64,

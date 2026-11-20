@@ -162,6 +162,7 @@ pub async fn fetch_offer(sql_tx: &mut DbTx<'_>, offer_id: i64) -> Result<OfferMo
             current_debt,
             collateral_remaining,
             interest_rate,
+            protocol_fee_rate,
             loan_expiration_time,
             updated_at_height,
             created_at_height,

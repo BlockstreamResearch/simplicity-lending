@@ -98,6 +98,9 @@ pub struct OfferListItemShort {
     /// Interest rate in basis points.
     #[schema(example = 120)]
     pub interest_rate: u32,
+    /// Share of the interest routed to the protocol fee vault, in basis points.
+    #[schema(example = 1000)]
+    pub protocol_fee_rate: u32,
     pub loan_expiration_height: u32,
     /// Block height of the latest offer status update.
     pub updated_at_height: u64,
@@ -139,6 +142,7 @@ impl From<OfferModelShort> for OfferListItemShort {
             current_debt: format_satoshis(value.current_debt),
             collateral_remaining: format_satoshis(value.collateral_remaining),
             interest_rate: value.interest_rate as u32,
+            protocol_fee_rate: value.protocol_fee_rate as u32,
             loan_expiration_height: value.loan_expiration_time as u32,
             updated_at_height: value.updated_at_height as u64,
             created_at_height: value.created_at_height as u64,
@@ -173,6 +177,7 @@ impl From<OfferModel> for OfferListItemFull {
                 current_debt: format_satoshis(value.current_debt),
                 collateral_remaining: format_satoshis(value.collateral_remaining),
                 interest_rate: value.interest_rate as u32,
+                protocol_fee_rate: value.protocol_fee_rate as u32,
                 loan_expiration_height: value.loan_expiration_time as u32,
                 updated_at_height: value.updated_at_height as u64,
                 created_at_height: value.created_at_height as u64,
@@ -419,6 +424,7 @@ mod tests {
             current_debt: 512,
             collateral_remaining: 1000,
             interest_rate: 250,
+            protocol_fee_rate: 1_000,
             loan_expiration_time: 123,
             current_status: OfferStatus::Active,
             updated_at_height: 456,
@@ -437,6 +443,7 @@ mod tests {
         assert_eq!(dto.current_debt, "512");
         assert_eq!(dto.collateral_remaining, "1000");
         assert_eq!(dto.interest_rate, 250);
+        assert_eq!(dto.protocol_fee_rate, 1_000);
         assert_eq!(dto.loan_expiration_height, 123);
         assert_eq!(dto.created_at_height, 456);
         assert_eq!(dto.created_at_txid, "ccbbaa");
@@ -497,6 +504,7 @@ mod tests {
             current_debt: 77,
             collateral_remaining: 99,
             interest_rate: 12,
+            protocol_fee_rate: 0,
             loan_expiration_time: 321,
             current_status: OfferStatus::Pending,
             updated_at_height: 55,
@@ -513,6 +521,7 @@ mod tests {
         assert_eq!(dto.base.current_debt, "77");
         assert_eq!(dto.base.collateral_remaining, "99");
         assert_eq!(dto.base.created_at_txid, "adde");
+        assert_eq!(dto.base.protocol_fee_rate, 0);
         assert_eq!(dto.borrower_nft_asset, "0a09");
         assert_eq!(dto.lender_nft_asset, "0c0b");
         assert_eq!(dto.protocol_fee_keeper_asset, "2c0b");

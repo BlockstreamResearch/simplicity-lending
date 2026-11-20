@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use uuid::Uuid;
 
 use simplex::{
@@ -25,6 +27,7 @@ struct ParsedOfferCreation {
 
 pub struct OfferCreationsTracker {
     protocol_fee_keeper_asset_id: AssetId,
+    allowed_protocol_fee_rates: BTreeSet<u16>,
     network: SimplicityNetwork,
     asset_registration: Option<AssetRegistration>,
 }
@@ -32,11 +35,13 @@ pub struct OfferCreationsTracker {
 impl OfferCreationsTracker {
     pub fn new(
         protocol_fee_keeper_asset_id: AssetId,
+        allowed_protocol_fee_rates: BTreeSet<u16>,
         network: SimplicityNetwork,
         asset_registration: Option<AssetRegistration>,
     ) -> Self {
         Self {
             protocol_fee_keeper_asset_id,
+            allowed_protocol_fee_rates,
             network,
             asset_registration,
         }
@@ -166,6 +171,17 @@ impl OfferCreationsTracker {
             LendingOffer::try_from_tx(tx, self.protocol_fee_keeper_asset_id, self.network).ok()?;
 
         let parameters = *created.offer.get_parameters();
+
+        let protocol_fee_rate = parameters.offer_parameters.protocol_fee_rate;
+        if !self.allowed_protocol_fee_rates.contains(&protocol_fee_rate) {
+            tracing::debug!(
+                txid = %tx.txid(),
+                %protocol_fee_rate,
+                "Offer created with a protocol fee rate that is not allowed, skipping"
+            );
+            return None;
+        }
+
         let outputs = OfferCreationOutputs {
             pending_offer_vout: created.pending_offer_vout,
             borrower_nft_vout: created.borrower_nft_vout,

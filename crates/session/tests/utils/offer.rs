@@ -47,7 +47,7 @@ pub fn offer_params(
             principal_amount: TEST_PRINCIPAL_AMOUNT,
             loan_expiration_time: current_height + loan_expiration_offset,
             principal_interest_rate: 1_000,
-            protocol_fee_rate: lending_indexer::models::STORED_OFFER_PROTOCOL_FEE_RATE,
+            protocol_fee_rate: 1_000,
         },
     })
 }

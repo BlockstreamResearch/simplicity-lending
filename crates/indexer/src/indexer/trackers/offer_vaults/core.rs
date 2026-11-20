@@ -19,7 +19,7 @@ use crate::{
 };
 use lending_contracts::programs::{
     asset_auth_vault::{AssetAuthVault, AssetAuthVaultParameters, AssetAuthVaultTxKind},
-    lending::LendingOfferParameters,
+    lending::{LendingOfferParameters, LendingOfferRepaymentScan},
 };
 
 /// Pre-spend vault UTXO amounts: `(lender_amount, protocol_fee_amount)`.
@@ -66,7 +66,7 @@ impl VaultsTracker {
     }
 
     /// Process vault inputs in `tx`. Must run before `OffersTracker` inserts the
-    /// continuing vault outputs (`supply_vault`) so the unique active-vault index
+    /// continuing vault outputs (`index_repayment_vaults`) so the unique active-vault index
     /// is satisfied. Pre-spend amounts for classification are taken from a snapshot
     /// captured earlier in `TrackerRegistry::process_tx`.
     pub async fn process_tx_spends(
@@ -92,7 +92,9 @@ impl VaultsTracker {
             .map(|(_, e)| e.amount)
     }
 
-    /// Snapshot pre-spend vault amounts for an offer. Returns `None` when no lender vault exists.
+    /// Snapshot pre-spend vault amounts for an offer. Returns `None` when no lender vault exists,
+    /// i.e. before the first repayment. The protocol fee amount is `None` while the offer has no
+    /// protocol fee vault, which is always the case for a zero protocol fee rate.
     pub fn snapshot_vault_amounts(&self, offer_id: i64) -> Option<VaultAmountsBefore> {
         let lender = self.get_vault_amount(offer_id, VaultType::Lender)?;
         let protocol = self.get_vault_amount(offer_id, VaultType::ProtocolFee);
@@ -100,77 +102,87 @@ impl VaultsTracker {
         Some((lender, protocol))
     }
 
-    /// Index a newly created vault output — called by `OffersTracker` on the **first** repayment,
-    /// when no vault UTXO for this offer existed before.
-    pub async fn create_vault(
+    /// Index the vault outputs of a repayment found by the lending scanner: the lender vault
+    /// always, the protocol fee vault only when the repayment carried a protocol share (the scan
+    /// then reports its vout). A vault output either creates the vault or continues one that
+    /// `process_tx_spends` already marked spent earlier in this transaction, so both cases are
+    /// indexed the same way.
+    pub async fn index_repayment_vaults(
         &mut self,
         sql_tx: &mut DbTx<'_>,
-        outpoint: OutPoint,
-        entry: VaultWatchEntry,
+        offer_id: i64,
+        tx: &Transaction,
+        scan: &LendingOfferRepaymentScan,
+        offer_params: &LendingOfferParameters,
         block_height: u64,
     ) -> anyhow::Result<()> {
-        self.index_vault(sql_tx, outpoint, entry, block_height)
-            .await
+        self.index_repayment_vault(
+            sql_tx,
+            offer_id,
+            VaultType::Lender,
+            tx,
+            scan.lender_vault_vout,
+            scan.debt_after,
+            offer_params,
+            block_height,
+        )
+        .await?;
+
+        if let Some(protocol_fee_vault_vout) = scan.protocol_fee_vault_vout {
+            self.index_repayment_vault(
+                sql_tx,
+                offer_id,
+                VaultType::ProtocolFee,
+                tx,
+                protocol_fee_vault_vout,
+                scan.debt_after,
+                offer_params,
+                block_height,
+            )
+            .await?;
+        }
+
+        Ok(())
     }
 
-    /// Handle a Supply/FinalSupply spend of an existing vault — called by `OffersTracker` on the
-    /// **second and subsequent** repayments, when a vault UTXO was already spent (and removed from
-    /// cache) by `process_tx_spends` earlier in the same transaction.
-    ///
-    /// At this point the old vault is already marked spent in the DB and removed from the cache by
-    /// `on_vault_spend`. This method inserts the new continuing vault output.
     #[allow(clippy::too_many_arguments)]
-    pub async fn supply_vault(
+    async fn index_repayment_vault(
         &mut self,
         sql_tx: &mut DbTx<'_>,
         offer_id: i64,
         vault_type: VaultType,
         tx: &Transaction,
+        vout: u32,
         debt_after: u64,
         offer_params: &LendingOfferParameters,
         block_height: u64,
     ) -> anyhow::Result<()> {
-        let txid = tx.txid();
-        let vault_params = vault_type.vault_parameters(offer_params);
         let vault_after = vault_type.get_vault(offer_params, debt_after);
 
-        let (vout, amount, already_supplied, is_finalized) = if vault_after.is_finalized_offer() {
-            // `scan_final_supply` must be called on the *pre-supply active* vault. After
-            // reconstruction from `debt_after` the vault is already finalized, so match the
-            // finalized script in the tx instead.
-            let (vault_vout, vault_amount_after) =
-                vault_after.find_unique_vout_matching(tx).ok_or_else(|| {
-                    anyhow::anyhow!("supply_vault: could not find finalized vault output in tx")
-                })?;
-            (
-                vault_vout,
-                vault_amount_after,
-                vault_params.supply_goal,
-                true,
-            )
-        } else {
-            let already_supplied_after = vault_after.get_already_supplied_amount();
-            let (vault_vout, vault_amount_after) =
-                vault_after.find_unique_vout_matching(tx).ok_or_else(|| {
-                    anyhow::anyhow!("supply_vault: could not find vault output in tx")
-                })?;
-            (
-                vault_vout,
-                vault_amount_after,
-                already_supplied_after,
-                false,
-            )
-        };
+        let output = tx
+            .output
+            .get(vout as usize)
+            .filter(|output| vault_after.matches_output(output))
+            .ok_or_else(|| {
+                anyhow::anyhow!("{vault_type:?} vault output {vout} does not match the vault state")
+            })?;
+        let amount = output
+            .value
+            .explicit()
+            .ok_or_else(|| anyhow::anyhow!("{vault_type:?} vault output {vout} is confidential"))?;
 
         self.index_vault(
             sql_tx,
-            OutPoint { txid, vout },
+            OutPoint {
+                txid: tx.txid(),
+                vout,
+            },
             VaultWatchEntry {
                 offer_id,
                 vault_type,
                 amount,
-                already_supplied,
-                is_finalized,
+                already_supplied: vault_after.get_already_supplied_amount(),
+                is_finalized: vault_after.is_finalized_offer(),
             },
             block_height,
         )

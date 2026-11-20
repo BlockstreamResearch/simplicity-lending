@@ -9,13 +9,13 @@ use simplex::{
 use crate::{
     db::DbTx,
     indexer::cache::WatchCache,
-    indexer::trackers::offer_vaults::{VaultSnapshotsByOffer, VaultWatchEntry, VaultsTracker},
+    indexer::trackers::offer_vaults::{VaultSnapshotsByOffer, VaultsTracker},
     indexer::trackers::offers::{
         ActiveOfferSpendKind, classify_active_offer_spend, fetch_offer, insert_offer_repayment,
         insert_offer_utxo, load_offer_utxos_cache, partial_repayment_amounts_from_scan,
         spend_offer_utxo, update_offer_debt_and_collateral, update_offer_status,
     },
-    models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType, VaultType},
+    models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -185,11 +185,10 @@ impl OffersTracker {
                 let offer = offer_model.to_active_lending_offer(self.network)?;
 
                 // Pre-spend vault amounts are snapshotted before VaultsTracker processes
-                // inputs in this tx (see `vault_snapshots_for_tx`). On the first partial
-                // (NoRepayments phase) the snapshot is None and the classifier works via
+                // inputs in this tx (see `vault_snapshots_for_tx`). Before the first repayment
+                // there is no vault yet: the snapshot is None and the classifier works via
                 // output-only matching.
                 let vault_amounts_before = vault_snapshots.get(&offer_id).copied().flatten();
-                let is_first_repayment = vault_amounts_before.is_none();
 
                 match classify_active_offer_spend(&offer, tx, vault_amounts_before)? {
                     ActiveOfferSpendKind::FullRepayment { scan } => {
@@ -203,7 +202,6 @@ impl OffersTracker {
                             block_height,
                             vaults,
                             tx,
-                            is_first_repayment,
                         )
                         .await
                     }
@@ -218,7 +216,6 @@ impl OffersTracker {
                             block_height,
                             vaults,
                             tx,
-                            is_first_repayment,
                         )
                         .await
                     }
@@ -393,7 +390,6 @@ impl OffersTracker {
         block_height: u64,
         vaults: &mut VaultsTracker,
         tx: &Transaction,
-        is_first_repayment: bool,
     ) -> anyhow::Result<()> {
         let continuing_vout = scan.continuing_offer_vout.ok_or_else(|| {
             anyhow::anyhow!("partial repayment scan missing continuing_offer_vout")
@@ -434,81 +430,9 @@ impl OffersTracker {
 
         let offer_lending = offer_model.to_lending_offer_parameters(self.network)?;
 
-        if is_first_repayment {
-            // First repayment: vault UTXOs are being created for the first time.
-            let lender_vault_after = offer_lending.get_lender_vault(amounts.debt_after);
-            let protocol_vault_after = offer_lending.get_protocol_fee_vault(amounts.debt_after);
-
-            let lender_amount = explicit_output_amount(tx, scan.lender_vault_vout)
-                .ok_or_else(|| anyhow::anyhow!("lender vault output not found in tx"))?;
-            vaults
-                .create_vault(
-                    sql_tx,
-                    OutPoint {
-                        txid,
-                        vout: scan.lender_vault_vout,
-                    },
-                    VaultWatchEntry {
-                        offer_id,
-                        vault_type: VaultType::Lender,
-                        amount: lender_amount,
-                        already_supplied: lender_vault_after.get_already_supplied_amount(),
-                        is_finalized: lender_vault_after.is_finalized_offer(),
-                    },
-                    block_height,
-                )
-                .await?;
-
-            if let Some(protocol_vout) = scan.protocol_fee_vault_vout {
-                let protocol_amount = explicit_output_amount(tx, protocol_vout)
-                    .ok_or_else(|| anyhow::anyhow!("protocol fee vault output not found in tx"))?;
-                vaults
-                    .create_vault(
-                        sql_tx,
-                        OutPoint {
-                            txid,
-                            vout: protocol_vout,
-                        },
-                        VaultWatchEntry {
-                            offer_id,
-                            vault_type: VaultType::ProtocolFee,
-                            amount: protocol_amount,
-                            already_supplied: protocol_vault_after.get_already_supplied_amount(),
-                            is_finalized: protocol_vault_after.is_finalized_offer(),
-                        },
-                        block_height,
-                    )
-                    .await?;
-            }
-        } else {
-            // 2nd+ repayment: existing vault UTXOs were spent and removed from cache by
-            // VaultsTracker::process_tx_spends. Insert the new continuing outputs.
-            vaults
-                .supply_vault(
-                    sql_tx,
-                    offer_id,
-                    VaultType::Lender,
-                    tx,
-                    amounts.debt_after,
-                    &offer_lending,
-                    block_height,
-                )
-                .await?;
-
-            if scan.protocol_fee_vault_vout.is_some() {
-                vaults
-                    .supply_vault(
-                        sql_tx,
-                        offer_id,
-                        VaultType::ProtocolFee,
-                        tx,
-                        amounts.debt_after,
-                        &offer_lending,
-                        block_height,
-                    )
-                    .await?;
-            }
-        }
+        vaults
+            .index_repayment_vaults(sql_tx, offer_id, tx, scan, &offer_lending, block_height)
+            .await?;
 
         let continuing_outpoint = OutPoint {
             txid,
@@ -561,7 +485,6 @@ impl OffersTracker {
         block_height: u64,
         vaults: &mut VaultsTracker,
         tx: &Transaction,
-        is_first_repayment: bool,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
         self.cache.remove(old_outpoint);
@@ -584,89 +507,13 @@ impl OffersTracker {
         )
         .await?;
 
-        // Full repayment finalizes both vaults.
-        // For finalized vaults already_supplied == supply_goal.
+        // Full repayment finalizes the lender vault, and the protocol fee vault when the
+        // repayment still carried a protocol share.
         let offer_lending = offer_model.to_lending_offer_parameters(self.network)?;
 
-        if is_first_repayment {
-            // First (and only) repayment: vault UTXOs are being created for the first time.
-            let lender_params = offer_lending.get_lender_vault_parameters();
-            let protocol_params = offer_lending.get_protocol_fee_vault_parameters();
-
-            let lender_amount =
-                explicit_output_amount(tx, scan.lender_vault_vout).ok_or_else(|| {
-                    anyhow::anyhow!("lender vault output not found in full repayment tx")
-                })?;
-            vaults
-                .create_vault(
-                    sql_tx,
-                    OutPoint {
-                        txid,
-                        vout: scan.lender_vault_vout,
-                    },
-                    VaultWatchEntry {
-                        offer_id,
-                        vault_type: VaultType::Lender,
-                        amount: lender_amount,
-                        already_supplied: lender_params.supply_goal,
-                        is_finalized: true,
-                    },
-                    block_height,
-                )
-                .await?;
-
-            if let Some(protocol_vout) = scan.protocol_fee_vault_vout {
-                let protocol_amount =
-                    explicit_output_amount(tx, protocol_vout).ok_or_else(|| {
-                        anyhow::anyhow!("protocol fee vault output not found in full repayment tx")
-                    })?;
-                vaults
-                    .create_vault(
-                        sql_tx,
-                        OutPoint {
-                            txid,
-                            vout: protocol_vout,
-                        },
-                        VaultWatchEntry {
-                            offer_id,
-                            vault_type: VaultType::ProtocolFee,
-                            amount: protocol_amount,
-                            already_supplied: protocol_params.supply_goal,
-                            is_finalized: true,
-                        },
-                        block_height,
-                    )
-                    .await?;
-            }
-        } else {
-            // 2nd+ repayment: existing vault UTXOs were already spent by VaultsTracker.
-            // debt_after = 0 on full repayment → vaults are finalized.
-            vaults
-                .supply_vault(
-                    sql_tx,
-                    offer_id,
-                    VaultType::Lender,
-                    tx,
-                    scan.debt_after,
-                    &offer_lending,
-                    block_height,
-                )
-                .await?;
-
-            if scan.protocol_fee_vault_vout.is_some() {
-                vaults
-                    .supply_vault(
-                        sql_tx,
-                        offer_id,
-                        VaultType::ProtocolFee,
-                        tx,
-                        scan.debt_after,
-                        &offer_lending,
-                        block_height,
-                    )
-                    .await?;
-            }
-        }
+        vaults
+            .index_repayment_vaults(sql_tx, offer_id, tx, scan, &offer_lending, block_height)
+            .await?;
 
         update_offer_debt_and_collateral(sql_tx, offer_id, 0, 0, block_height).await?;
         update_offer_status(sql_tx, offer_id, OfferStatus::Repaid, block_height).await?;
@@ -721,11 +568,4 @@ impl OffersTracker {
 
         tx.output[0].is_null_data() && tx.output[1].is_null_data() && !tx.output[2].is_null_data()
     }
-}
-
-/// Return the explicit value of output at `vout` in `tx`, or `None`.
-fn explicit_output_amount(tx: &Transaction, vout: u32) -> Option<u64> {
-    tx.output
-        .get(vout as usize)
-        .and_then(|out| out.value.explicit())
 }

@@ -115,6 +115,7 @@ pub fn offer_model(
         current_debt: 506,
         collateral_remaining: 1_000,
         interest_rate: 120,
+        protocol_fee_rate: 1_000,
         loan_expiration_time: 1_234_567,
         current_status: OfferStatus::Pending,
         updated_at_height: created_at_height,

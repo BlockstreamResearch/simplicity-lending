@@ -84,6 +84,8 @@ Any key of `base.yaml` can be overridden as `INDEXER_<SECTION>__<KEY>` (nested k
 INDEXER_APPLICATION__HOST=0.0.0.0
 INDEXER_ESPLORA__NETWORK=liquid
 INDEXER_INDEXER__LAST_INDEXED_HEIGHT=2601330
+# Protocol fee rates (basis points) of the offers to index; others are skipped
+INDEXER_INDEXER__ALLOWED_PROTOCOL_FEE_RATES=0,1000
 # Enables ELIP-0100 asset registration (disabled while unset)
 INDEXER_INDEXER__ASSET_REGISTRY__DOMAIN=lending.example.com
 # An empty value skips registry submission

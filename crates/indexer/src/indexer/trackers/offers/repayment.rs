@@ -23,8 +23,8 @@ pub struct PartialRepaymentAmounts {
 /// Classify a spend of an active lending offer UTXO using contract scanners.
 ///
 /// `vault_amounts_before` is `(lender_vault_amount, protocol_vault_amount)` from prevouts.
-/// Pass `None` for the first (`NoRepayments`) partial; fee/principal supply phases need
-/// `Some(...)` once vault UTXO amounts are tracked in the indexer.
+/// Pass `None` before the first repayment, when no vault exists yet; later repayments need
+/// `Some(...)`, with the protocol amount set once the offer has a protocol fee vault.
 pub fn classify_active_offer_spend(
     offer: &LendingOffer,
     tx: &Transaction,
