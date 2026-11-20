@@ -288,6 +288,7 @@ The following parameters are available for `GET /offers`, `GET /borrowers/offers
 - `collateral_asset`, `principal_asset` (hex)
 - `collateral_amount`, `principal_amount` (decimal strings, satoshi)
 - `interest_rate` (basis points, e.g. 1000 = 10%)
+- `protocol_fee_rate` (share of the interest paid to the protocol, basis points)
 - `loan_expiration_height` (block height)
 - `updated_at_height` (block height of the latest offer status update)
 - `created_at_height`, `created_at_txid` (hex)

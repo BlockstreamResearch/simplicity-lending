@@ -21,6 +21,7 @@ These values are fixed when the offer output is created. Changing any of them pr
 | `PRINCIPAL_ASSET_ID` | `u256` | Asset the lender pays and the borrower repays. |
 | `PRINCIPAL_AMOUNT` | `u64` | Amount of that asset the lender pays. |
 | `PRINCIPAL_INTEREST_RATE` | `u64` | Fee rate in basis points. |
+| `PROTOCOL_FEE_RATE` | `u64` | Share of the fee paid to the protocol, in basis points. Zero means the whole fee goes to the lender. |
 | `LOAN_EXPIRATION_TIME` | `u32` | Deadline as a Liquid block height. |
 | `BORROWER_NFT_ASSET_ID` | `u256` | Token that authorizes the borrower. |
 | `LENDER_NFT_ASSET_ID` | `u256` | Token that authorizes the lender. |
@@ -36,10 +37,10 @@ The remaining debt is not one of those parameters. A repayment or a liquidation 
 
 | Path | Witness | What it checks |
 | --- | --- | --- |
-| [Funding](../lender/fund-offer.md) | none | The collateral returns at the same amount on an output marked active. The lender NFT is presented and returned at amount 1. The principal is paid, for `PRINCIPAL_AMOUNT`, to `PRINCIPAL_OUTPUT_SCRIPT_HASH`. Any block height is accepted. |
+| [Funding](../lender/fund-offer.md) | none | The collateral returns at the same amount on an output marked active. The lender NFT is presented and returned at amount 1. The principal is paid, for `PRINCIPAL_AMOUNT`, to `PRINCIPAL_OUTPUT_SCRIPT_HASH`. `PROTOCOL_FEE_RATE` is at most 10000 basis points. Any block height is accepted. |
 | [Cancelling](../borrower/cancel-offer.md) | none | The input is still the pending offer and holds the original collateral. The borrower NFT and the lender NFT are burned. The collateral may leave the contract. |
-| Partial repayment | `current_debt: u64`, `amount_to_repay: u64` | The payment is greater than zero and less than `current_debt`. A share of the collateral, in proportion to the payment against the total amount owed, leaves the output, and the rest stays. The borrower NFT is returned. The fee is taken before the principal, and the protocol fee share and the lender's share must each land on an [asset auth vault](./asset-auth-vault.md). |
-| [Full repayment](../borrower/repay.md) | `current_debt: u64` | The collateral input still accounts for the original collateral. The borrower NFT is burned, and the remaining debt is paid into the vaults. This path finalizes the lender's vault. The protocol fee vault is finalized once its share of the fee has been paid. |
+| Partial repayment | `current_debt: u64`, `amount_to_repay: u64` | The payment is greater than zero and less than `current_debt`. A share of the collateral, in proportion to the payment against the total amount owed, leaves the output, and the rest stays. The borrower NFT is returned. The fee is taken before the principal. The lender's share, which must be greater than zero, lands on an [asset auth vault](./asset-auth-vault.md). The protocol fee share lands on its own vault only when it is greater than zero. |
+| [Full repayment](../borrower/repay.md) | `current_debt: u64` | The collateral input still accounts for the original collateral. The borrower NFT is burned, and the remaining debt is paid into the vaults. This path finalizes the lender's vault. The protocol fee vault, if the offer has one, is finalized once its share of the fee has been paid. |
 | [Liquidation](../lender/liquidate.md) | `current_debt: u64` | The transaction's block height has reached `LOAN_EXPIRATION_TIME`. This is the only path that reads the deadline. The collateral input still accounts for what has not been repaid, the lender NFT is burned, and the collateral may leave the contract. |
 
 These paths read assets, amounts, scripts, and, for liquidation, the block height.
