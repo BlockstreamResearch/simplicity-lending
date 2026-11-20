@@ -132,8 +132,10 @@ function useOfferCleanupPolling({
         const isCleaned =
           record.kind === 'claim_principal'
             ? !result.data.borrower_principal_utxo && record.confirmationStatus !== 'processing'
-            : record.expectedOfferStatus !== undefined &&
-              result.data.status === record.expectedOfferStatus
+            : record.kind === 'repay_offer'
+              ? result.data.repayments.some(repayment => repayment.txid === record.txid)
+              : record.expectedOfferStatus !== undefined &&
+                result.data.status === record.expectedOfferStatus
 
         if (isCleaned) {
           onRemoveRef.current(record.txid)

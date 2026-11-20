@@ -39,6 +39,12 @@ export function formatAmount(amount: bigint, decimals: number): string {
   return formatDecimalParts(whole, frac.toString().padStart(decimals, '0'), negative)
 }
 
+export function formatAmountInput(amount: bigint, decimals: number): string {
+  const base = 10n ** BigInt(decimals)
+  const frac = (amount % base).toString().padStart(decimals, '0').replace(/0+$/, '')
+  return frac ? `${amount / base}.${frac}` : `${amount / base}`
+}
+
 export function formatFeeReserve(amountSats: bigint): string {
   return `${amountSats.toLocaleString(DISPLAY_LOCALE)} ${NETWORK_CONFIG.policyAssetSatsUnit}`
 }

@@ -1,5 +1,5 @@
 import { BPS_DIVISOR } from '@/constants/offers'
-import { toUint64, type Uint16, type Uint64 } from '@/utils/uint'
+import { minUint64, toUint64, type Uint16, type Uint64 } from '@/utils/uint'
 
 interface TotalAmountToRepayParams {
   principalAmount: Uint64
@@ -27,6 +27,40 @@ const PROTOCOL_FEE_BPS = 1_000n
 
 export function getProtocolFee(feeAmount: Uint64): Uint64 {
   return toUint64((feeAmount * PROTOCOL_FEE_BPS) / BPS_DIVISOR, 'protocolFee')
+}
+
+interface RepaymentSplit {
+  protocolFee: Uint64
+  lenderVaultAmount: Uint64
+}
+
+export function getRepaymentSplit(
+  params: TotalAmountToRepayParams,
+  currentDebt: Uint64,
+  amountToRepay: Uint64,
+): RepaymentSplit {
+  const totalFee = getTotalFee(params)
+  const alreadyRepaidAmountBefore = toUint64(
+    getTotalAmountToRepay(params) - currentDebt,
+    'alreadyRepaidAmountBefore',
+  )
+  const alreadyRepaidAmountAfter = toUint64(
+    alreadyRepaidAmountBefore + amountToRepay,
+    'alreadyRepaidAmountAfter',
+  )
+  const protocolFee = toUint64(
+    getProtocolFee(
+      toUint64(minUint64(totalFee, alreadyRepaidAmountAfter), 'alreadyRepaidFeeAfter'),
+    ) -
+      getProtocolFee(
+        toUint64(minUint64(totalFee, alreadyRepaidAmountBefore), 'alreadyRepaidFeeBefore'),
+      ),
+    'protocolFeeRepaidNow',
+  )
+  return {
+    protocolFee,
+    lenderVaultAmount: toUint64(amountToRepay - protocolFee, 'additionalLenderVaultAmount'),
+  }
 }
 
 interface CollateralForPrincipalParams extends TotalAmountToRepayParams {

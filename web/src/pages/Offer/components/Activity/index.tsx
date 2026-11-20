@@ -37,7 +37,7 @@ interface ActivityRowProps {
   tone: string
   caption: string
   amount: ActivityAmount
-  time: string
+  time?: string
   hasTimeline: boolean
   onPress?: () => void
 }
@@ -74,7 +74,7 @@ function ActivityRow({
               ? formatCollateralDisplay(amount.value)
               : formatPrincipalAmount(amount.value)}
           </span>
-          <span className='text-muted text-xs whitespace-nowrap'>{time}</span>
+          {time && <span className='text-muted text-xs whitespace-nowrap'>{time}</span>}
         </span>
         <ChevronRightIcon className={`text-muted size-4 shrink-0 ${onPress ? '' : 'invisible'}`} />
       </span>
@@ -172,7 +172,6 @@ export default function OfferActivity({ offer, role }: OfferActivityProps) {
               pending.isConfirmed ? 'Confirmed, updating the offer…' : 'Waiting for confirmation…'
             }
             amount={pending.amount}
-            time='–'
             hasTimeline
           />
         ))}
