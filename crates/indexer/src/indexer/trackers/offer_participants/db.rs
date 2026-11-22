@@ -88,6 +88,8 @@ pub async fn get_offer_participant_asset_id(
     }
 }
 
+/// The generated `id` picks the latest participant of an offer, so rows must be
+/// inserted in transaction processing order.
 #[tracing::instrument(
     name = "Inserting offer participant UTXO into DB",
     skip(sql_tx, participant_utxo),

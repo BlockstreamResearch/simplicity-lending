@@ -147,7 +147,7 @@ async fn enrich_offer_list_items(
             script_pubkey
         FROM offer_participants
         WHERE offer_id = ANY($1)
-        ORDER BY offer_id, participant_type, created_at_height DESC
+        ORDER BY offer_id, participant_type, id DESC
         "#,
     )
     .bind(&offer_ids)

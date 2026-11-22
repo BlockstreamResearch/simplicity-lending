@@ -132,7 +132,7 @@ async fn fetch_latest_participants(
             spent_at_height
         FROM offer_participants
         WHERE offer_id = $1
-        ORDER BY participant_type, created_at_height DESC
+        ORDER BY participant_type, id DESC
         "#,
         offer_id,
     )
