@@ -11,7 +11,7 @@ use common::vault_tracking::{
     count_offer_vault_withdrawals, count_unspent_utxos_of_type, fetch_active_vault_rows,
     fetch_offer_balances, fetch_offer_status, fetch_offer_vault_withdrawals, load_registry,
     offer_lending_params, process_tx_through_registry, seed_minimal_factory,
-    seed_trackable_active_offer,
+    seed_trackable_active_offer, vault_of_type,
 };
 use lending_indexer::models::{OfferStatus, UtxoType, VaultType};
 use serial_test::serial;
@@ -354,16 +354,6 @@ async fn lender_vault_withdrawal_on_liquidation_without_offer_spend_keeps_offer_
     assert_eq!(withdrawals[0].vault_amount_after, 0);
 
     Ok(())
-}
-
-fn vault_of_type(
-    vaults: &[lending_indexer::models::OfferVaultModel],
-    vault_type: VaultType,
-) -> &lending_indexer::models::OfferVaultModel {
-    vaults
-        .iter()
-        .find(|vault| vault.vault_type == vault_type)
-        .unwrap_or_else(|| panic!("missing {vault_type:?} vault"))
 }
 
 #[tokio::test]

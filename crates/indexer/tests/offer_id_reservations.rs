@@ -1,24 +1,11 @@
 mod common;
 
-use common::{factory_model, offer_model, test_pool, unique_32_bytes_from_uuid};
-use lending_indexer::indexer::{insert_factory, insert_offer};
+use common::vault_tracking::seed_minimal_factory;
+use common::{offer_model, test_pool};
+use lending_indexer::indexer::insert_offer;
 use lending_indexer::models::OfferModel;
 use serial_test::serial;
 use sqlx::PgPool;
-use uuid::Uuid;
-
-async fn seed_factory(pool: &PgPool) -> anyhow::Result<Uuid> {
-    let id = Uuid::new_v4();
-    let mut sql_tx = pool.begin().await?;
-    insert_factory(
-        &mut sql_tx,
-        &factory_model(id, 100, unique_32_bytes_from_uuid(id)),
-    )
-    .await?;
-    sql_tx.commit().await?;
-
-    Ok(id)
-}
 
 async fn insert(pool: &PgPool, offer: &OfferModel) -> anyhow::Result<Option<i64>> {
     let mut sql_tx = pool.begin().await?;
@@ -52,7 +39,7 @@ async fn remove_with_reservation(pool: &PgPool, offer_id: i64) -> anyhow::Result
 #[serial]
 async fn reinserted_offer_gets_its_reserved_id() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let factory_id = seed_factory(&pool).await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
     let first = offer_model(1, factory_id, 100);
     let second = offer_model(2, factory_id, 100);
 
@@ -71,7 +58,7 @@ async fn reinserted_offer_gets_its_reserved_id() -> anyhow::Result<()> {
 #[serial]
 async fn other_offers_never_take_a_reserved_id() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let factory_id = seed_factory(&pool).await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
     let removed = offer_model(1, factory_id, 100);
 
     let removed_id = insert(&pool, &removed).await?.expect("offer inserted");
@@ -91,7 +78,7 @@ async fn other_offers_never_take_a_reserved_id() -> anyhow::Result<()> {
 #[serial]
 async fn already_indexed_offer_is_still_skipped() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let factory_id = seed_factory(&pool).await?;
+    let factory_id = seed_minimal_factory(&pool).await?;
     let offer = offer_model(1, factory_id, 100);
 
     insert(&pool, &offer).await?.expect("offer inserted");

@@ -19,7 +19,6 @@ pub enum RollbackError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RolledBackBlock {
-    pub height: u64,
     pub hash: String,
     pub parent_hash: String,
 }
@@ -78,7 +77,6 @@ pub async fn rollback_block(
     tracing::info!(%height, hash = %block.hash, "Block rolled back");
 
     Ok(RolledBackBlock {
-        height,
         hash: block.hash,
         parent_hash: parent.hash,
     })

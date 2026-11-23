@@ -7,8 +7,9 @@ use common::vault_tracking::{
     seed_trackable_active_offer,
 };
 use common::{
-    explicit_asset_output, factory_model, non_op_return_script, normal_output, null_data_output,
-    outpoint_with_txid_byte, seed_factory_row, seed_pending_offer, test_pool, tx_with_input,
+    acceptance_tx, cancellation_tx, explicit_asset_output, factory_model, non_op_return_script,
+    normal_output, outpoint_with_txid_byte, seed_factory_row, seed_pending_offer, test_pool,
+    tx_with_input,
 };
 use lending_indexer::configuration::IndexerSettings;
 use lending_indexer::indexer::{REORG_HISTORY_DEPTH, StepOutcome, Worker};
@@ -52,10 +53,6 @@ async fn seed(pool: &PgPool) -> anyhow::Result<Seeded> {
     })
 }
 
-fn acceptance(pending_outpoint: OutPoint) -> Transaction {
-    tx_with_input(pending_outpoint, vec![normal_output(), normal_output()])
-}
-
 /// Another acceptance of the same offer, e.g. by a different lender.
 fn competing_acceptance(pending_outpoint: OutPoint) -> Transaction {
     tx_with_input(
@@ -63,18 +60,6 @@ fn competing_acceptance(pending_outpoint: OutPoint) -> Transaction {
         vec![
             normal_output(),
             explicit_asset_output(9, non_op_return_script()),
-        ],
-    )
-}
-
-fn cancellation(pending_outpoint: OutPoint) -> Transaction {
-    tx_with_input(
-        pending_outpoint,
-        vec![
-            null_data_output(),
-            null_data_output(),
-            normal_output(),
-            normal_output(),
         ],
     )
 }
@@ -129,7 +114,7 @@ async fn block_replaced_at_the_tip_height_is_rolled_back_and_reindexed() -> anyh
     let pool = test_pool().await?;
     let seeded = seed(&pool).await?;
     let chain = FakeChain::new(BASE);
-    chain.push(vec![acceptance(seeded.pending_outpoint)]);
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
     let mut worker = start_worker(&pool, &chain).await?;
 
     assert_eq!(
@@ -142,7 +127,7 @@ async fn block_replaced_at_the_tip_height_is_rolled_back_and_reindexed() -> anyh
     );
 
     // No new block: the replacement is only visible through the hash at the same height.
-    chain.reorg(1, vec![vec![cancellation(seeded.pending_outpoint)]]);
+    chain.reorg(1, vec![vec![cancellation_tx(seeded.pending_outpoint)]]);
 
     assert_eq!(
         sync(&mut worker).await?,
@@ -166,7 +151,7 @@ async fn new_block_on_another_parent_rolls_back_and_dropped_tx_is_indexed_later(
     let pool = test_pool().await?;
     let seeded = seed(&pool).await?;
     let chain = FakeChain::new(BASE);
-    chain.push(vec![acceptance(seeded.pending_outpoint)]);
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
     let mut worker = start_worker(&pool, &chain).await?;
     sync(&mut worker).await?;
 
@@ -187,7 +172,7 @@ async fn new_block_on_another_parent_rolls_back_and_dropped_tx_is_indexed_later(
     );
 
     // The same acceptance is mined again in a later block.
-    chain.push(vec![acceptance(seeded.pending_outpoint)]);
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
     sync(&mut worker).await?;
 
     assert_eq!(
@@ -204,7 +189,7 @@ async fn competing_tx_in_the_replacement_block_wins() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let seeded = seed(&pool).await?;
     let chain = FakeChain::new(BASE);
-    chain.push(vec![acceptance(seeded.pending_outpoint)]);
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
     let mut worker = start_worker(&pool, &chain).await?;
     sync(&mut worker).await?;
 
@@ -226,7 +211,7 @@ async fn two_block_reorg_rolls_back_both_blocks() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let seeded = seed(&pool).await?;
     let chain = FakeChain::new(BASE);
-    chain.push(vec![acceptance(seeded.pending_outpoint)]);
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
     chain.push(vec![seeded.first_partial.clone()]);
     let mut worker = start_worker(&pool, &chain).await?;
     sync(&mut worker).await?;
@@ -303,7 +288,7 @@ async fn lagging_tip_changes_nothing() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let seeded = seed(&pool).await?;
     let chain = FakeChain::new(BASE);
-    chain.push(vec![acceptance(seeded.pending_outpoint)]);
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
     let mut worker = start_worker(&pool, &chain).await?;
     sync(&mut worker).await?;
     let indexed = dump_indexer_state(&pool).await?;
@@ -322,12 +307,12 @@ async fn restarted_worker_detects_a_reorg_that_happened_while_it_was_down() -> a
     let pool = test_pool().await?;
     let seeded = seed(&pool).await?;
     let chain = FakeChain::new(BASE);
-    chain.push(vec![acceptance(seeded.pending_outpoint)]);
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
     let mut worker = start_worker(&pool, &chain).await?;
     sync(&mut worker).await?;
     drop(worker);
 
-    chain.reorg(1, vec![vec![cancellation(seeded.pending_outpoint)]]);
+    chain.reorg(1, vec![vec![cancellation_tx(seeded.pending_outpoint)]]);
     let mut worker = start_worker(&pool, &chain).await?;
 
     assert_eq!(
@@ -351,11 +336,11 @@ async fn restart_between_rollback_and_reindex_resumes_from_the_parent() -> anyho
     let pool = test_pool().await?;
     let seeded = seed(&pool).await?;
     let chain = FakeChain::new(BASE);
-    chain.push(vec![acceptance(seeded.pending_outpoint)]);
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
     let mut worker = start_worker(&pool, &chain).await?;
     sync(&mut worker).await?;
 
-    chain.reorg(1, vec![vec![cancellation(seeded.pending_outpoint)]]);
+    chain.reorg(1, vec![vec![cancellation_tx(seeded.pending_outpoint)]]);
     assert_eq!(worker.step().await?, StepOutcome::RolledBack(BASE + 1));
     drop(worker);
 
@@ -382,7 +367,7 @@ async fn state_after_a_reorg_equals_indexing_the_new_chain_from_scratch() -> any
     let chain = FakeChain::new(BASE);
     chain.push(vec![noise(0)]);
     chain.push(vec![
-        acceptance(seeded.pending_outpoint),
+        acceptance_tx(seeded.pending_outpoint),
         seeded.first_partial.clone(),
     ]);
     let mut worker = start_worker(&pool, &chain).await?;
@@ -390,7 +375,7 @@ async fn state_after_a_reorg_equals_indexing_the_new_chain_from_scratch() -> any
 
     // The acceptance is replaced by a cancellation and the repayment moves one block later.
     let new_blocks = vec![
-        vec![cancellation(seeded.pending_outpoint)],
+        vec![cancellation_tx(seeded.pending_outpoint)],
         vec![seeded.first_partial.clone()],
     ];
     chain.reorg(1, new_blocks.clone());

@@ -350,6 +350,24 @@ pub fn tx_with_input(spent: OutPoint, outputs: Vec<TxOut>) -> Transaction {
     }
 }
 
+/// Accepts the pending offer at `pending_outpoint`.
+pub fn acceptance_tx(pending_outpoint: OutPoint) -> Transaction {
+    tx_with_input(pending_outpoint, vec![normal_output(), normal_output()])
+}
+
+/// Cancels the pending offer at `pending_outpoint`.
+pub fn cancellation_tx(pending_outpoint: OutPoint) -> Transaction {
+    tx_with_input(
+        pending_outpoint,
+        vec![
+            null_data_output(),
+            null_data_output(),
+            normal_output(),
+            normal_output(),
+        ],
+    )
+}
+
 pub fn tx_with_inputs(spent: Vec<OutPoint>, outputs: Vec<TxOut>) -> Transaction {
     Transaction {
         version: 2,

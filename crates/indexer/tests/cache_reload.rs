@@ -3,43 +3,19 @@ mod common;
 use common::db_state::{dump_chain_state, index_block, rollback};
 use common::vault_tracking::{
     FIRST_PARTIAL_AMOUNT, SECOND_PARTIAL_AMOUNT, TRACKABLE_REPAYMENT_HEIGHT,
-    build_first_partial_repayment_tx, build_second_partial_repayment_tx, fetch_offer_status,
-    load_registry, offer_lending_params, seed_minimal_factory, seed_trackable_active_offer,
+    apply_repayment_to_offer, build_first_partial_repayment_tx, build_second_partial_repayment_tx,
+    fetch_offer_status, load_registry, seed_minimal_factory, seed_trackable_active_offer,
 };
-use common::{normal_output, null_data_output, seed_pending_offer, test_pool, tx_with_input};
+use common::{
+    acceptance_tx, cancellation_tx, normal_output, seed_pending_offer, test_pool, tx_with_input,
+};
 use lending_indexer::models::OfferStatus;
 use serial_test::serial;
-use simplex::simplicityhl::elements::{OutPoint, Transaction};
-use sqlx::PgPool;
+use simplex::simplicityhl::elements::OutPoint;
 
 const PARENT: u64 = TRACKABLE_REPAYMENT_HEIGHT;
 const BLOCK: u64 = PARENT + 1;
 const SEED_HEIGHT: i64 = 100;
-
-fn cancellation_tx(pending_outpoint: OutPoint) -> Transaction {
-    tx_with_input(
-        pending_outpoint,
-        vec![
-            null_data_output(),
-            null_data_output(),
-            normal_output(),
-            normal_output(),
-        ],
-    )
-}
-
-/// Indexes `acceptance` as [`BLOCK`] and rolls it back. The registry keeps its caches.
-async fn accept_and_roll_back(
-    pool: &PgPool,
-    registry: &mut lending_indexer::indexer::TrackerRegistry,
-    acceptance: &Transaction,
-) -> anyhow::Result<()> {
-    index_block(pool, registry, PARENT, &[]).await?;
-    index_block(pool, registry, BLOCK, std::slice::from_ref(acceptance)).await?;
-    rollback(pool, BLOCK).await?;
-
-    Ok(())
-}
 
 #[tokio::test]
 #[serial]
@@ -50,8 +26,15 @@ async fn utxo_unspent_by_rollback_is_tracked_again_after_reload() -> anyhow::Res
         seed_pending_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
     let mut registry = load_registry(&pool).await?;
 
-    let acceptance = tx_with_input(pending_outpoint, vec![normal_output(), normal_output()]);
-    accept_and_roll_back(&pool, &mut registry, &acceptance).await?;
+    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    index_block(
+        &pool,
+        &mut registry,
+        BLOCK,
+        &[acceptance_tx(pending_outpoint)],
+    )
+    .await?;
+    rollback(&pool, BLOCK).await?;
 
     // The stale cache dropped the pending UTXO when the acceptance spent it.
     let mut sql_tx = pool.begin().await?;
@@ -147,11 +130,7 @@ async fn reindexing_after_rollback_and_reload_reproduces_the_block() -> anyhow::
     let first_txid = first.txid();
     index_block(&pool, &mut registry, PARENT, &[first]).await?;
 
-    offer.current_debt = debt_after_first as i64;
-    offer.collateral_remaining -= offer_lending_params(&offer)?
-        .offer_parameters
-        .get_collateral_for_principal(FIRST_PARTIAL_AMOUNT)
-        as i64;
+    apply_repayment_to_offer(&mut offer, FIRST_PARTIAL_AMOUNT)?;
     let second = build_second_partial_repayment_tx(
         OutPoint::new(first_txid, 1),
         OutPoint::new(first_txid, 2),

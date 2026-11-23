@@ -106,6 +106,13 @@ pub async fn process_tx_through_registry(
     Ok(())
 }
 
+pub fn vault_of_type(vaults: &[OfferVaultModel], vault_type: VaultType) -> &OfferVaultModel {
+    vaults
+        .iter()
+        .find(|vault| vault.vault_type == vault_type)
+        .unwrap_or_else(|| panic!("missing {vault_type:?} vault"))
+}
+
 pub async fn fetch_offer_status(pool: &PgPool, offer_id: i64) -> anyhow::Result<OfferStatus> {
     let status = sqlx::query_scalar!(
         r#"SELECT current_status AS "status: OfferStatus" FROM offers WHERE id = $1"#,

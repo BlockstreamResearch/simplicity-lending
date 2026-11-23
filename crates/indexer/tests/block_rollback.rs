@@ -8,13 +8,14 @@ use common::db_state::{
 };
 use common::vault_tracking::{
     FIRST_PARTIAL_AMOUNT, SECOND_PARTIAL_AMOUNT, TRACKABLE_REPAYMENT_HEIGHT,
-    build_first_partial_repayment_tx, build_full_repayment_tx, build_lender_vault_withdraw_all_tx,
-    build_lender_vault_withdraw_on_liquidation_tx, build_second_partial_repayment_tx,
-    build_vault_withdraw_part_tx, fetch_active_vault_rows, load_registry, offer_lending_params,
-    seed_minimal_factory, seed_trackable_active_offer,
+    apply_repayment_to_offer, build_first_partial_repayment_tx, build_full_repayment_tx,
+    build_lender_vault_withdraw_all_tx, build_lender_vault_withdraw_on_liquidation_tx,
+    build_second_partial_repayment_tx, build_vault_withdraw_part_tx, fetch_active_vault_rows,
+    load_registry, offer_lending_params, seed_minimal_factory, seed_trackable_active_offer,
+    vault_of_type,
 };
 use common::{
-    explicit_asset_output, factory_model, non_op_return_script, normal_output, null_data_output,
+    acceptance_tx, cancellation_tx, explicit_asset_output, factory_model, non_op_return_script,
     offer_model, outpoint_from_offer_id, outpoint_with_txid_byte, seed_participant_utxo_row,
     seed_pending_offer, test_pool, tx_with_input, unique_32_bytes_from_uuid, unspent_offer_utxo,
     unspent_participant,
@@ -100,9 +101,13 @@ async fn offer_acceptance_rolls_back() -> anyhow::Result<()> {
     let mut registry = load_registry(&pool).await?;
     index_block(&pool, &mut registry, PARENT, &[]).await?;
 
-    let acceptance = tx_with_input(pending_outpoint, vec![normal_output(), normal_output()]);
-
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[acceptance]).await
+    assert_block_rolls_back(
+        &pool,
+        &mut registry,
+        BLOCK,
+        &[acceptance_tx(pending_outpoint)],
+    )
+    .await
 }
 
 #[tokio::test]
@@ -114,17 +119,13 @@ async fn offer_cancellation_rolls_back() -> anyhow::Result<()> {
     let mut registry = load_registry(&pool).await?;
     index_block(&pool, &mut registry, PARENT, &[]).await?;
 
-    let cancellation = tx_with_input(
-        pending_outpoint,
-        vec![
-            null_data_output(),
-            null_data_output(),
-            normal_output(),
-            normal_output(),
-        ],
-    );
-
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[cancellation]).await
+    assert_block_rolls_back(
+        &pool,
+        &mut registry,
+        BLOCK,
+        &[cancellation_tx(pending_outpoint)],
+    )
+    .await
 }
 
 #[tokio::test]
@@ -187,11 +188,7 @@ async fn second_partial_repayment_rolls_back() -> anyhow::Result<()> {
     let first_txid = first.txid();
     index_block(&pool, &mut registry, PARENT, &[first]).await?;
 
-    offer.current_debt = debt_after_first as i64;
-    offer.collateral_remaining -= offer_lending_params(&offer)?
-        .offer_parameters
-        .get_collateral_for_principal(FIRST_PARTIAL_AMOUNT)
-        as i64;
+    apply_repayment_to_offer(&mut offer, FIRST_PARTIAL_AMOUNT)?;
     let second = build_second_partial_repayment_tx(
         OutPoint {
             txid: first_txid,
@@ -245,10 +242,7 @@ async fn liquidation_rolls_back() -> anyhow::Result<()> {
     index_block(&pool, &mut registry, PARENT, &[repayment]).await?;
 
     let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
-    let lender_vault = vaults
-        .iter()
-        .find(|vault| vault.vault_type == VaultType::Lender)
-        .expect("lender vault");
+    let lender_vault = vault_of_type(&vaults, VaultType::Lender);
     let liquidation = build_lender_vault_withdraw_on_liquidation_tx(
         vec![
             OutPoint {
@@ -282,10 +276,7 @@ async fn vault_withdraw_part_rolls_back() -> anyhow::Result<()> {
     index_block(&pool, &mut registry, PARENT, &[repayment]).await?;
 
     let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
-    let lender_vault = vaults
-        .iter()
-        .find(|vault| vault.vault_type == VaultType::Lender)
-        .expect("lender vault");
+    let lender_vault = vault_of_type(&vaults, VaultType::Lender);
     let withdrawal = build_vault_withdraw_part_tx(
         OutPoint {
             txid: repayment_txid,

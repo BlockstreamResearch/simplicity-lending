@@ -40,19 +40,9 @@ impl FakeChain {
         }
     }
 
-    pub fn tip_height(&self) -> u64 {
-        let inner = self.inner.lock().unwrap();
-        inner.base_height + inner.active.len() as u64 - 1
-    }
-
-    pub fn hash_at(&self, height: u64) -> String {
-        let inner = self.inner.lock().unwrap();
-        inner.active[(height - inner.base_height) as usize].clone()
-    }
-
     /// Mines a block with `txs` on top of the chain. The hash depends only on the parent and
     /// the txids, so the same blocks on the same parent get the same hashes.
-    pub fn push(&self, txs: Vec<Transaction>) -> String {
+    pub fn push(&self, txs: Vec<Transaction>) {
         let mut inner = self.inner.lock().unwrap();
         let parent = inner.active.last().expect("base block").clone();
 
@@ -66,9 +56,7 @@ impl FakeChain {
         inner
             .blocks
             .insert(hash.clone(), StoredBlock { parent, txs });
-        inner.active.push(hash.clone());
-
-        hash
+        inner.active.push(hash);
     }
 
     /// Replaces the last `depth` blocks with `blocks`.
@@ -93,9 +81,10 @@ impl FakeChain {
 
 impl ChainSource for FakeChain {
     async fn tip_height(&self) -> anyhow::Result<u64> {
-        let reported = self.inner.lock().unwrap().reported_tip;
+        let inner = self.inner.lock().unwrap();
+        let tip = inner.base_height + inner.active.len() as u64 - 1;
 
-        Ok(reported.unwrap_or_else(|| FakeChain::tip_height(self)))
+        Ok(inner.reported_tip.unwrap_or(tip))
     }
 
     async fn block_hash_at(&self, height: u64) -> anyhow::Result<String> {
