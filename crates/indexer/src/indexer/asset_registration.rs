@@ -142,14 +142,13 @@ impl AssetRegistration {
         }
     }
 
-    /// Fire-and-forget registry submission.
+    /// Fire-and-forget registry submission, spawned by [`RegistrationQueue::commit_block`].
     ///
-    /// The delayed retries cover the  block's DB commit (the domain proof is served from it)
-    /// and transient registry errors.
+    /// The delayed retries cover API restarts and transient registry errors.
     ///
     /// Failures are logged, never propagated (the registry is transport for the
     /// already-committed contract, not a trust anchor).
-    pub fn spawn_registration(&self, asset_id: AssetId, contract: serde_json::Value) {
+    fn spawn_registration(&self, asset_id: AssetId, contract: serde_json::Value) {
         let Some(registry_url) = &self.registry_url else {
             tracing::warn!(
                 %asset_id,
@@ -208,11 +207,60 @@ impl AssetRegistration {
     }
 }
 
+/// Registry submissions of the block being indexed.
+///
+/// They are spawned only after the block commits: a failed block is retried, and the
+/// registry checks the domain proof served from the DB.
+pub struct RegistrationQueue {
+    registration: Option<AssetRegistration>,
+    pending: Vec<(AssetId, serde_json::Value)>,
+}
+
+impl RegistrationQueue {
+    pub fn new(registration: Option<AssetRegistration>) -> Self {
+        Self {
+            registration,
+            pending: Vec::new(),
+        }
+    }
+
+    /// Queues a submission when `tx` committed the expected contract for `asset_id`.
+    pub fn queue_verified(&mut self, kind: AssetContractKind, tx: &Transaction, asset_id: AssetId) {
+        let Some(registration) = &self.registration else {
+            return;
+        };
+
+        if let Some(contract) = registration.verified_contract(kind, tx, asset_id) {
+            self.pending.push((asset_id, contract));
+        }
+    }
+
+    /// Spawns the queued submissions. Call after the block's SQL commit.
+    pub fn commit_block(&mut self) {
+        let pending = std::mem::take(&mut self.pending);
+
+        let Some(registration) = &self.registration else {
+            return;
+        };
+
+        for (asset_id, contract) in pending {
+            registration.spawn_registration(asset_id, contract);
+        }
+    }
+
+    pub fn abort_block(&mut self) {
+        self.pending.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use simplex::simplicityhl::elements::OutPoint;
 
-    use super::{AssetContractKind, AssetRegistration};
+    use serde_json::json;
+    use simplex::simplicityhl::elements::{AssetId, LockTime, Transaction};
+
+    use super::{AssetContractKind, AssetRegistration, RegistrationQueue};
     use crate::configuration::AssetRegistrySettings;
 
     const FUNDING_TXID: &str = "0e19e938c74378ae83b549213a12be88ede6e32e1407bfdf50c4ec3f927408ec";
@@ -279,5 +327,71 @@ mod tests {
             AssetId::new_issuance(prevout, hash).to_string(),
             "649d593b45d51b21a03ddf0773f67384b72ef337b0f689ed81e950a01f871f5f"
         );
+    }
+
+    fn submission(asset_byte: u8) -> (AssetId, serde_json::Value) {
+        (
+            AssetId::from_byte_array([asset_byte; 32]),
+            json!({ "seed": asset_byte }),
+        )
+    }
+
+    fn empty_tx() -> Transaction {
+        Transaction {
+            version: 2,
+            lock_time: LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        }
+    }
+
+    #[test]
+    fn queue_ignores_assets_while_registration_is_disabled() {
+        let mut queue = RegistrationQueue::new(None);
+
+        queue.queue_verified(
+            AssetContractKind::Factory,
+            &empty_tx(),
+            AssetId::from_byte_array([1; 32]),
+        );
+
+        assert!(queue.pending.is_empty());
+    }
+
+    #[test]
+    fn queue_skips_assets_without_a_committed_contract() {
+        let mut queue = RegistrationQueue::new(Some(registration("lending.example")));
+
+        queue.queue_verified(
+            AssetContractKind::Factory,
+            &empty_tx(),
+            AssetId::from_byte_array([1; 32]),
+        );
+
+        assert!(queue.pending.is_empty());
+    }
+
+    #[test]
+    fn abort_block_drops_queued_submissions() {
+        let mut queue = RegistrationQueue::new(Some(registration("lending.example")));
+        queue.pending.push(submission(1));
+
+        queue.abort_block();
+
+        assert!(queue.pending.is_empty());
+    }
+
+    #[test]
+    fn commit_block_releases_queued_submissions_once() {
+        // Without `registry_url` a released submission is only logged.
+        let mut queue = RegistrationQueue::new(Some(registration("lending.example")));
+        queue.pending.push(submission(1));
+        queue.pending.push(submission(2));
+
+        queue.commit_block();
+        assert!(queue.pending.is_empty());
+
+        queue.commit_block();
+        assert!(queue.pending.is_empty());
     }
 }

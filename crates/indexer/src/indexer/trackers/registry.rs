@@ -9,7 +9,8 @@ use crate::{
     db::DbTx,
     indexer::{
         AssetRegistration, FactoriesTracker, FactoryAuthsTracker, FactoryCreationsTracker,
-        OfferCreationsTracker, OfferParticipantsTracker, OffersTracker, VaultsTracker,
+        OfferCreationsTracker, OfferParticipantsTracker, OffersTracker, RegistrationQueue,
+        VaultsTracker,
     },
 };
 
@@ -21,6 +22,7 @@ pub struct TrackerRegistry {
     offers: OffersTracker,
     participants: OfferParticipantsTracker,
     creations: OfferCreationsTracker,
+    registrations: RegistrationQueue,
 }
 
 impl TrackerRegistry {
@@ -34,20 +36,12 @@ impl TrackerRegistry {
         Ok(Self {
             factories: FactoriesTracker::load(db_pool, network).await?,
             factory_auths: FactoryAuthsTracker::load(db_pool).await?,
-            factory_creations: FactoryCreationsTracker::new(
-                2,
-                0,
-                network,
-                asset_registration.clone(),
-            ),
+            factory_creations: FactoryCreationsTracker::new(2, 0, network),
             vaults: VaultsTracker::load(db_pool, network).await?,
             offers: OffersTracker::load(db_pool, network).await?,
             participants: OfferParticipantsTracker::load(db_pool).await?,
-            creations: OfferCreationsTracker::new(
-                protocol_fee_keeper_asset_id,
-                network,
-                asset_registration,
-            ),
+            creations: OfferCreationsTracker::new(protocol_fee_keeper_asset_id, network),
+            registrations: RegistrationQueue::new(asset_registration),
         })
     }
 
@@ -65,6 +59,7 @@ impl TrackerRegistry {
         self.vaults.commit_block();
         self.offers.commit_block();
         self.participants.commit_block();
+        self.registrations.commit_block();
     }
 
     pub fn abort_block(&mut self) {
@@ -73,6 +68,7 @@ impl TrackerRegistry {
         self.vaults.abort_block();
         self.offers.abort_block();
         self.participants.abort_block();
+        self.registrations.abort_block();
     }
 
     #[tracing::instrument(
@@ -115,6 +111,7 @@ impl TrackerRegistry {
                 block_height,
                 &mut self.factories,
                 &mut self.factory_auths,
+                &mut self.registrations,
             )
             .await?;
 
@@ -127,6 +124,7 @@ impl TrackerRegistry {
                     factory_id,
                     &mut self.offers,
                     &mut self.participants,
+                    &mut self.registrations,
                 )
                 .await?;
         }

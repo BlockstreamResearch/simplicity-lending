@@ -8,7 +8,7 @@ use crate::{
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{
-        AssetContractKind, AssetRegistration, FactoriesTracker, FactoryAuthsTracker, insert_factory,
+        AssetContractKind, FactoriesTracker, FactoryAuthsTracker, RegistrationQueue, insert_factory,
     },
     models::FactoryModel,
 };
@@ -17,21 +17,14 @@ pub struct FactoryCreationsTracker {
     issuing_utxos_count: u8,
     reissuance_flags: u64,
     network: SimplicityNetwork,
-    asset_registration: Option<AssetRegistration>,
 }
 
 impl FactoryCreationsTracker {
-    pub fn new(
-        issuing_utxos_count: u8,
-        reissuance_flags: u64,
-        network: SimplicityNetwork,
-        asset_registration: Option<AssetRegistration>,
-    ) -> Self {
+    pub fn new(issuing_utxos_count: u8, reissuance_flags: u64, network: SimplicityNetwork) -> Self {
         Self {
             issuing_utxos_count,
             reissuance_flags,
             network,
-            asset_registration,
         }
     }
 
@@ -42,6 +35,7 @@ impl FactoryCreationsTracker {
         block_height: u64,
         factories: &mut FactoriesTracker,
         factory_auths: &mut FactoryAuthsTracker,
+        registrations: &mut RegistrationQueue,
     ) -> anyhow::Result<()> {
         if let Some(created) = self.is_factory_creation_tx(tx) {
             let factory_asset_id = created.factory_asset_id;
@@ -59,12 +53,7 @@ impl FactoryCreationsTracker {
             // Best-effort ELIP-0100 metadata registration.
             // When the creation committed the expected asset contract, submit it to the registry.
             // Verifying the metadata remains the wallets' responsibility.
-            if let Some(registration) = &self.asset_registration
-                && let Some(contract) =
-                    registration.verified_contract(AssetContractKind::Factory, tx, factory_asset_id)
-            {
-                registration.spawn_registration(factory_asset_id, contract);
-            }
+            registrations.queue_verified(AssetContractKind::Factory, tx, factory_asset_id);
         }
 
         Ok(())

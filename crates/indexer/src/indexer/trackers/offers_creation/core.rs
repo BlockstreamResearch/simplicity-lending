@@ -12,8 +12,8 @@ use crate::{
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
     indexer::{
-        AssetContractKind, AssetRegistration, OfferCreationOutputs, OfferParticipantsTracker,
-        OffersTracker, ParticipantCreationUtxo, trackers::offers_creation::insert_offer,
+        AssetContractKind, OfferCreationOutputs, OfferParticipantsTracker, OffersTracker,
+        ParticipantCreationUtxo, RegistrationQueue, trackers::offers_creation::insert_offer,
     },
     models::{OfferModel, ParticipantType},
 };
@@ -26,22 +26,17 @@ struct ParsedOfferCreation {
 pub struct OfferCreationsTracker {
     protocol_fee_keeper_asset_id: AssetId,
     network: SimplicityNetwork,
-    asset_registration: Option<AssetRegistration>,
 }
 
 impl OfferCreationsTracker {
-    pub fn new(
-        protocol_fee_keeper_asset_id: AssetId,
-        network: SimplicityNetwork,
-        asset_registration: Option<AssetRegistration>,
-    ) -> Self {
+    pub fn new(protocol_fee_keeper_asset_id: AssetId, network: SimplicityNetwork) -> Self {
         Self {
             protocol_fee_keeper_asset_id,
             network,
-            asset_registration,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn process_creation_tx(
         &self,
         sql_tx: &mut DbTx<'_>,
@@ -50,6 +45,7 @@ impl OfferCreationsTracker {
         factory_id: Uuid,
         offers: &mut OffersTracker,
         participants: &mut OfferParticipantsTracker,
+        registrations: &mut RegistrationQueue,
     ) -> anyhow::Result<()> {
         if let Some(creation) = self.parse_offer_creation_tx(tx) {
             self.handle_offer_creation(
@@ -60,6 +56,7 @@ impl OfferCreationsTracker {
                 block_height,
                 offers,
                 participants,
+                registrations,
             )
             .await?
         }
@@ -77,6 +74,7 @@ impl OfferCreationsTracker {
         block_height: u64,
         offers: &mut OffersTracker,
         participants: &mut OfferParticipantsTracker,
+        registrations: &mut RegistrationQueue,
     ) -> anyhow::Result<()> {
         let txid = tx.txid();
 
@@ -141,21 +139,17 @@ impl OfferCreationsTracker {
         // mirroring the factory asset flow: when the creation committed the
         // expected contract, submit it to the registry. Verifying the metadata
         // remains the wallets' responsibility.
-        if let Some(registration) = &self.asset_registration {
-            for (kind, asset_id) in [
-                (
-                    AssetContractKind::BorrowerNft,
-                    creation.parameters.borrower_nft_asset_id,
-                ),
-                (
-                    AssetContractKind::LenderNft,
-                    creation.parameters.lender_nft_asset_id,
-                ),
-            ] {
-                if let Some(contract) = registration.verified_contract(kind, tx, asset_id) {
-                    registration.spawn_registration(asset_id, contract);
-                }
-            }
+        for (kind, asset_id) in [
+            (
+                AssetContractKind::BorrowerNft,
+                creation.parameters.borrower_nft_asset_id,
+            ),
+            (
+                AssetContractKind::LenderNft,
+                creation.parameters.lender_nft_asset_id,
+            ),
+        ] {
+            registrations.queue_verified(kind, tx, asset_id);
         }
 
         Ok(())
