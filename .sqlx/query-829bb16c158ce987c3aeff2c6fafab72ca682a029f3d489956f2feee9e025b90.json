@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM indexed_blocks WHERE height <= $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "829bb16c158ce987c3aeff2c6fafab72ca682a029f3d489956f2feee9e025b90"
+}

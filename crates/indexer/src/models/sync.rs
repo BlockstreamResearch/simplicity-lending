@@ -7,3 +7,10 @@ pub struct SyncModel {
     pub last_indexed_hash: String,
     pub updated_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct IndexedBlockModel {
+    pub height: i64,
+    pub hash: String,
+    pub revertible: bool,
+}

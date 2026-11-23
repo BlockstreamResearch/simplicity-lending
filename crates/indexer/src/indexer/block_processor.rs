@@ -65,6 +65,7 @@ impl BlockProcessor {
                     .await?;
             }
 
+            db::record_indexed_block(&mut sql_tx, block_height, &block_hash).await?;
             db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
 
             notify_indexer_event(

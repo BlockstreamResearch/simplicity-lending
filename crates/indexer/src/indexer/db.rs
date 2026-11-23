@@ -1,6 +1,9 @@
 use sqlx::PgPool;
 
-use crate::db::DbTx;
+use crate::{db::DbTx, models::IndexedBlockModel};
+
+/// Number of most recent blocks kept in `indexed_blocks`, which bounds the rollback depth.
+pub const REORG_HISTORY_DEPTH: u64 = 6;
 
 #[tracing::instrument(
     name = "Upserting new sync state into DB",
@@ -32,6 +35,61 @@ pub async fn upsert_sync_state(
     })?;
 
     Ok(())
+}
+
+/// Records an indexed block and drops the history beyond [`REORG_HISTORY_DEPTH`].
+#[tracing::instrument(
+    name = "Recording indexed block in DB",
+    skip(sql_tx, height, hash),
+    fields(height = %height, hash = %hash),
+)]
+pub async fn record_indexed_block(
+    sql_tx: &mut DbTx<'_>,
+    height: u64,
+    hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO indexed_blocks (height, hash, revertible)
+        VALUES ($1, $2, true)
+        "#,
+        height as i64,
+        hash,
+    )
+    .execute(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to record indexed block: {e:?}");
+        e
+    })?;
+
+    sqlx::query!(
+        "DELETE FROM indexed_blocks WHERE height <= $1",
+        height as i64 - REORG_HISTORY_DEPTH as i64,
+    )
+    .execute(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to prune indexed blocks: {e:?}");
+        e
+    })?;
+
+    Ok(())
+}
+
+#[tracing::instrument(name = "Getting last indexed block", skip(db))]
+pub async fn get_last_indexed_block(db: &PgPool) -> Result<Option<IndexedBlockModel>, sqlx::Error> {
+    sqlx::query_as!(
+        IndexedBlockModel,
+        r#"
+        SELECT height, hash, revertible
+        FROM indexed_blocks
+        ORDER BY height DESC
+        LIMIT 1
+        "#
+    )
+    .fetch_optional(db)
+    .await
 }
 
 #[tracing::instrument(name = "Getting last indexed block height", skip(db))]
