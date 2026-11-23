@@ -1,0 +1,118 @@
+use lending_indexer::db::DbTx;
+use lending_indexer::indexer::{
+    RollbackError, RolledBackBlock, TrackerRegistry, record_indexed_block, rollback_block,
+    upsert_sync_state,
+};
+use simplex::simplicityhl::elements::Transaction;
+use sqlx::PgPool;
+
+/// Indexer tables with the columns their rows are ordered by in a dump.
+const DUMPED_TABLES: &[(&str, &str)] = &[
+    ("factories", "id"),
+    ("factory_utxos", "txid, vout"),
+    ("factory_auths", "txid, vout"),
+    ("offers", "id"),
+    ("offer_utxos", "txid, vout"),
+    ("offer_participants", "txid, vout"),
+    ("offer_repayments", "txid"),
+    ("offer_vaults", "txid, vout"),
+    ("offer_vault_withdrawals", "offer_id, txid, vault_type"),
+    ("offer_state_snapshots", "height, offer_id"),
+    ("factory_state_snapshots", "height, factory_id"),
+    ("indexed_blocks", "height"),
+    ("sync_state", "id"),
+];
+
+pub fn block_hash(height: u64) -> String {
+    format!("hash-{height}")
+}
+
+/// Every row of the indexer tables, except `sync_state.updated_at` (a wall-clock time)
+/// and `offer_id_reservations` (kept after a rollback on purpose).
+pub async fn dump_indexer_state(pool: &PgPool) -> anyhow::Result<serde_json::Value> {
+    let mut state = serde_json::Map::new();
+
+    for (table, order_by) in DUMPED_TABLES {
+        let rows: String = sqlx::query_scalar(&format!(
+            "SELECT COALESCE(jsonb_agg(to_jsonb(t) - 'updated_at' ORDER BY {order_by}), '[]')::text \
+             FROM {table} t"
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        state.insert((*table).to_string(), serde_json::from_str(&rows)?);
+    }
+
+    Ok(serde_json::Value::Object(state))
+}
+
+/// Records block `height` the way `BlockProcessor` does after processing its transactions.
+pub async fn finish_block(sql_tx: &mut DbTx<'_>, height: u64) -> anyhow::Result<()> {
+    record_indexed_block(sql_tx, height, &block_hash(height)).await?;
+    upsert_sync_state(sql_tx, height, block_hash(height)).await?;
+
+    Ok(())
+}
+
+/// Indexes `txs` as block `height` in one SQL transaction, as `BlockProcessor` does.
+pub async fn index_block(
+    pool: &PgPool,
+    registry: &mut TrackerRegistry,
+    height: u64,
+    txs: &[Transaction],
+) -> anyhow::Result<()> {
+    let mut sql_tx = pool.begin().await?;
+    registry.begin_block();
+
+    for tx in txs {
+        registry.process_tx(&mut sql_tx, tx, height).await?;
+    }
+    finish_block(&mut sql_tx, height).await?;
+
+    sql_tx.commit().await?;
+    registry.commit_block();
+
+    Ok(())
+}
+
+pub async fn rollback(pool: &PgPool, height: u64) -> Result<RolledBackBlock, RollbackError> {
+    let mut sql_tx = pool.begin().await?;
+    let rolled_back = rollback_block(&mut sql_tx, height).await?;
+    sql_tx.commit().await?;
+
+    Ok(rolled_back)
+}
+
+/// Rolls back block `height` and checks the DB is exactly as it was before the block.
+pub async fn assert_rollback_restores(
+    pool: &PgPool,
+    height: u64,
+    before: &serde_json::Value,
+) -> anyhow::Result<()> {
+    assert_ne!(
+        &dump_indexer_state(pool).await?,
+        before,
+        "block #{height} changed nothing"
+    );
+
+    rollback(pool, height).await?;
+
+    assert_eq!(&dump_indexer_state(pool).await?, before);
+
+    Ok(())
+}
+
+/// Indexes `txs` as block `height` on top of the current state, rolls it back and checks
+/// the DB is exactly as it was before the block.
+pub async fn assert_block_rolls_back(
+    pool: &PgPool,
+    registry: &mut TrackerRegistry,
+    height: u64,
+    txs: &[Transaction],
+) -> anyhow::Result<()> {
+    let before = dump_indexer_state(pool).await?;
+
+    index_block(pool, registry, height, txs).await?;
+
+    assert_rollback_restores(pool, height, &before).await
+}

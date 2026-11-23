@@ -12,6 +12,10 @@ pub enum IndexerEvent {
     BlockIndexed {
         height: u64,
     },
+    BlockReverted {
+        height: u64,
+        hash: String,
+    },
     FactoryCreated {
         id: Uuid,
         height: u64,
@@ -52,6 +56,7 @@ impl IndexerEvent {
     pub fn sse_event_name(&self) -> &'static str {
         match self {
             Self::BlockIndexed { .. } => "block_indexed",
+            Self::BlockReverted { .. } => "block_reverted",
             Self::FactoryCreated { .. } => "factory_created",
             Self::OfferCreated { .. } => "offer_created",
             Self::OfferStatusUpdated { .. } => "offer_status_updated",
@@ -74,6 +79,19 @@ mod tests {
 
         assert_eq!(json["type"], "block_indexed");
         assert_eq!(json["height"], 123);
+    }
+
+    #[test]
+    fn block_reverted_serializes_with_type_tag() {
+        let event = IndexerEvent::BlockReverted {
+            height: 123,
+            hash: "aabb".to_string(),
+        };
+        let json = serde_json::to_value(&event).expect("serialize");
+
+        assert_eq!(json["type"], "block_reverted");
+        assert_eq!(json["height"], 123);
+        assert_eq!(json["hash"], "aabb");
     }
 
     #[test]
@@ -162,6 +180,10 @@ mod tests {
     fn events_roundtrip() {
         let events = [
             IndexerEvent::BlockIndexed { height: 42 },
+            IndexerEvent::BlockReverted {
+                height: 42,
+                hash: "aa".to_string(),
+            },
             IndexerEvent::FactoryCreated {
                 id: Uuid::new_v4(),
                 height: 1,

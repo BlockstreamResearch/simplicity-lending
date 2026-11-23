@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE offer_participants SET spent_txid = NULL, spent_at_height = NULL WHERE spent_at_height = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52232171771da279cec0e178d487c3fbad3c2f28b8331142b35b4f4004c5091e"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE factory_auths SET spent_txid = NULL, spent_at_height = NULL WHERE spent_at_height = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7f34e9dd6d4f562bb8106769385d0a4e414f6720798a8ed48c0e55ed4b292f21"
+}

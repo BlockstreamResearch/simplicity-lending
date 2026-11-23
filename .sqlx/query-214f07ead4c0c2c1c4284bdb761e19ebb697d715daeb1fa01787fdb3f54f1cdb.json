@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM factory_auths WHERE created_at_height = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "214f07ead4c0c2c1c4284bdb761e19ebb697d715daeb1fa01787fdb3f54f1cdb"
+}

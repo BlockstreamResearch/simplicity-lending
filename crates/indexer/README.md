@@ -201,6 +201,7 @@ Event types:
 | SSE `event:` | When emitted | Suggested client action |
 | :--- | :--- | :--- |
 | `block_indexed` | After each indexed block | Refetch lists using `not_expired`, overviews |
+| `block_reverted` | An indexed block was replaced on chain (reorg) and its changes were rolled back | Refetch everything; events already received for that block no longer hold |
 | `factory_created` | New issuance factory indexed | Refetch `GET /factories/{id}` or `/factories/by-script` |
 | `offer_created` | New offer indexed (`pending`) | Refetch `GET /borrowers/offers` when `borrower_script_pubkey` matches; or `GET /offers/{id}` |
 | `offer_status_updated` | Offer status transition | Refetch offer details and role-specific lists |
@@ -212,6 +213,9 @@ Examples:
 ```
 event: block_indexed
 data: {"type":"block_indexed","height":2500001}
+
+event: block_reverted
+data: {"type":"block_reverted","height":2500001,"hash":"aabb…"}
 
 event: factory_created
 data: {"type":"factory_created","id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","height":2500001,"factory_auth_script_pubkey":"52ac…"}
