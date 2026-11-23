@@ -1,31 +1,21 @@
-use std::sync::Arc;
-
 use sqlx::PgPool;
-
-use simplex::provider::{EsploraProvider, ProviderTrait};
 
 use uuid::Uuid;
 
 use crate::{
     events::{IndexerEvent, notify_indexer_event},
-    indexer::{db, provider::call_provider, trackers::TrackerRegistry},
+    indexer::{ChainBlock, db, trackers::TrackerRegistry},
 };
 
 pub struct BlockProcessor {
     db_pool: PgPool,
-    provider: Arc<EsploraProvider>,
     tracker_registry: TrackerRegistry,
 }
 
 impl BlockProcessor {
-    pub fn new(
-        db_pool: PgPool,
-        provider: Arc<EsploraProvider>,
-        tracker_registry: TrackerRegistry,
-    ) -> Self {
+    pub fn new(db_pool: PgPool, tracker_registry: TrackerRegistry) -> Self {
         Self {
             db_pool,
-            provider,
             tracker_registry,
         }
     }
@@ -36,23 +26,15 @@ impl BlockProcessor {
 
     #[tracing::instrument(
         name = "Processing block",
-        skip(self),
-        fields(block_run_id = %Uuid::new_v4(), height = %block_height)
+        skip(self, block),
+        fields(block_run_id = %Uuid::new_v4(), height = %block.height)
     )]
-    pub async fn process_block(&mut self, block_height: u64) -> anyhow::Result<()> {
-        let height = u32::try_from(block_height)?;
-
-        let (block_hash, txs) = call_provider(&self.provider, move |provider| {
-            let block_hash = provider.fetch_block_hash_at_height(height)?;
-            let txs = provider
-                .fetch_block_txids(&block_hash)?
-                .iter()
-                .map(|txid| provider.fetch_transaction(txid))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            Ok((block_hash, txs))
-        })
-        .await?;
+    pub async fn process_block(&mut self, block: ChainBlock) -> anyhow::Result<()> {
+        let ChainBlock {
+            height: block_height,
+            hash: block_hash,
+            txs,
+        } = block;
         let tx_count = txs.len();
 
         let mut sql_tx = self.db_pool.begin().await?;
