@@ -1,3 +1,8 @@
+# Cap on concurrent SSE streams (/api/events). Each stream holds two nginx
+# connections (client + upstream), so the total must stay well below
+# worker_connections.
+limit_conn_zone $server_name zone=sse_total:1m;
+
 server {
   listen 80;
   server_name _;
@@ -17,6 +22,23 @@ server {
     proxy_ssl_server_name on;
     proxy_set_header Host $proxy_host;
     proxy_redirect off;
+  }
+
+  # Server-Sent Events: unbuffered and capped in total.
+  location = /api/events {
+    limit_conn sse_total 256;
+    limit_conn_status 429;
+
+    proxy_pass http://api:8000/events;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header Connection "";
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_buffering off;
+    proxy_cache off;
   }
 
   location /api/ {
