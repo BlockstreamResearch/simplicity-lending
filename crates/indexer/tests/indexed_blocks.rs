@@ -1,7 +1,10 @@
 mod common;
 
 use common::test_pool;
-use lending_indexer::indexer::{REORG_HISTORY_DEPTH, get_last_indexed_block, record_indexed_block};
+use lending_indexer::indexer::{
+    REORG_HISTORY_DEPTH, drop_starting_block, get_last_indexed_block, record_indexed_block,
+    record_starting_block, upsert_sync_state,
+};
 use lending_indexer::models::IndexedBlockModel;
 use serial_test::serial;
 use sqlx::PgPool;
@@ -66,6 +69,27 @@ async fn history_keeps_only_the_most_recent_blocks() -> anyhow::Result<()> {
         .map(|height| height as i64)
         .collect();
     assert_eq!(recorded_heights(&pool).await?, expected);
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn starting_block_is_dropped_only_before_the_first_indexed_block() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    record_starting_block(&pool, 100, "hash-100").await?;
+
+    assert!(drop_starting_block(&pool, 100).await?);
+    assert_eq!(get_last_indexed_block(&pool).await?, None);
+
+    // A block indexed before undo data existed has `sync_state`, like after the migration.
+    record_starting_block(&pool, 100, "hash-100").await?;
+    let mut sql_tx = pool.begin().await?;
+    upsert_sync_state(&mut sql_tx, 100, "hash-100".to_string()).await?;
+    sql_tx.commit().await?;
+
+    assert!(!drop_starting_block(&pool, 100).await?);
+    assert_eq!(recorded_heights(&pool).await?, vec![100]);
 
     Ok(())
 }

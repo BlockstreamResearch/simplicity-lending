@@ -42,6 +42,10 @@ impl BlockProcessor {
         Ok(db::record_starting_block(&self.db_pool, height, hash).await?)
     }
 
+    pub async fn drop_starting_block(&self, height: u64) -> anyhow::Result<bool> {
+        Ok(db::drop_starting_block(&self.db_pool, height).await?)
+    }
+
     #[tracing::instrument(
         name = "Processing block",
         skip(self, block),

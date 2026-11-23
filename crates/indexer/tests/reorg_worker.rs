@@ -12,7 +12,9 @@ use common::{
     tx_with_input,
 };
 use lending_indexer::configuration::IndexerSettings;
-use lending_indexer::indexer::{REORG_HISTORY_DEPTH, StepOutcome, Worker};
+use lending_indexer::indexer::{
+    ChainSource, REORG_HISTORY_DEPTH, StepOutcome, Worker, get_last_indexed_block,
+};
 use lending_indexer::models::{OfferStatus, UtxoType};
 use serial_test::serial;
 use simplex::provider::SimplicityNetwork;
@@ -139,6 +141,38 @@ async fn block_replaced_at_the_tip_height_is_rolled_back_and_reindexed() -> anyh
     assert_eq!(
         fetch_offer_status(&pool, seeded.pending_offer_id).await?,
         OfferStatus::Cancelled
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn replaced_starting_block_is_recorded_again() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+    let seeded = seed(&pool).await?;
+    // The starting block is the chain tip, so it can be replaced.
+    let chain = FakeChain::new(BASE - 1);
+    chain.push(vec![noise(0)]);
+    let mut worker = start_worker(&pool, &chain).await?;
+    assert_eq!(sync(&mut worker).await?, vec![]);
+
+    chain.reorg(1, vec![vec![noise(1)]]);
+
+    assert_eq!(
+        sync(&mut worker).await?,
+        vec![StepOutcome::RolledBack(BASE)]
+    );
+    assert_eq!(
+        get_last_indexed_block(&pool).await?.map(|block| block.hash),
+        Some(chain.block_hash_at(BASE).await?)
+    );
+
+    chain.push(vec![acceptance_tx(seeded.pending_outpoint)]);
+
+    assert_eq!(
+        sync(&mut worker).await?,
+        vec![StepOutcome::Indexed(BASE + 1)]
     );
 
     Ok(())

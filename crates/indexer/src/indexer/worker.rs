@@ -15,7 +15,8 @@ use crate::indexer::{
 pub enum StepOutcome {
     /// The block at this height was indexed.
     Indexed(u64),
-    /// The block at this height left the chain and was rolled back.
+    /// The block at this height left the chain and was rolled back. For the starting block
+    /// of an empty DB, the new block at this height is recorded on the next step instead.
     RolledBack(u64),
     /// The last indexed block is the chain tip.
     UpToDate,
@@ -180,6 +181,17 @@ impl<C: ChainSource> Worker<C> {
 
     async fn rollback_last_block(&mut self) -> anyhow::Result<StepOutcome> {
         let height = self.last_indexed_height;
+
+        // Nothing was indexed on top of the starting block, so it is simply recorded again.
+        if self.block_processor.drop_starting_block(height).await? {
+            tracing::warn!(
+                height,
+                "Starting block left the chain, recording the new one"
+            );
+            self.last_indexed_hash = None;
+            return Ok(StepOutcome::RolledBack(height));
+        }
+
         tracing::warn!(height, "Indexed block left the chain, rolling it back");
 
         let rolled_back = self.block_processor.rollback_block(height).await?;

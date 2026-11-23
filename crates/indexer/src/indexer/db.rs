@@ -113,6 +113,27 @@ pub async fn record_starting_block(
     Ok(())
 }
 
+/// Removes the starting block at `height` while no block has been indexed yet, i.e.
+/// `sync_state` is still empty. Returns whether it was removed.
+#[tracing::instrument(name = "Dropping starting block from DB", skip(db))]
+pub async fn drop_starting_block(db: &PgPool, height: u64) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query!(
+        r#"
+        DELETE FROM indexed_blocks
+        WHERE height = $1 AND NOT revertible AND NOT EXISTS (SELECT 1 FROM sync_state)
+        "#,
+        height as i64,
+    )
+    .execute(db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to drop starting block: {e:?}");
+        e
+    })?;
+
+    Ok(result.rows_affected() == 1)
+}
+
 #[tracing::instrument(name = "Getting last indexed block", skip(db))]
 pub async fn get_last_indexed_block(db: &PgPool) -> Result<Option<IndexedBlockModel>, sqlx::Error> {
     sqlx::query_as!(

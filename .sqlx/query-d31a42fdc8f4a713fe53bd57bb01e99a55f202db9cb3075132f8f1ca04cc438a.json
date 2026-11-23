@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM indexed_blocks\n        WHERE height = $1 AND NOT revertible AND NOT EXISTS (SELECT 1 FROM sync_state)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d31a42fdc8f4a713fe53bd57bb01e99a55f202db9cb3075132f8f1ca04cc438a"
+}
