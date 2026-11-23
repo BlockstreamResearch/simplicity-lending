@@ -1,5 +1,5 @@
 use simplex::fuzz::FuzzProgramTrait;
-use simplex::transaction::FinalTransaction;
+use simplex::transaction::{FinalTransaction, PartialInput, PartialOutput, UTXO};
 
 /// Edits the witness of the `P` spending `input`.
 ///
@@ -25,4 +25,14 @@ pub fn witness<P: FuzzProgramTrait>(
 /// Swaps inputs `a` and `b`, witnesses included.
 pub fn swap_inputs(ft: &mut FinalTransaction, a: usize, b: usize) {
     ft.inputs_mut().swap(a, b);
+}
+
+/// Spends `utxo` at `input` in place of the UTXO it spent, keeping how the input is signed.
+pub fn input_utxo(ft: &mut FinalTransaction, input: usize, utxo: UTXO) {
+    ft.inputs_mut()[input].partial_input = PartialInput::new(utxo);
+}
+
+/// Edits the output at `output`.
+pub fn output(ft: &mut FinalTransaction, output: usize, edit: impl FnOnce(&mut PartialOutput)) {
+    edit(&mut ft.outputs_mut()[output]);
 }

@@ -20,6 +20,17 @@ pub fn signer_utxo(context: &TestContext, asset: AssetId) -> anyhow::Result<UTXO
         .ok_or_else(|| anyhow::anyhow!("the signer holds no explicit UTXO of {asset}"))
 }
 
+/// The explicit UTXO of `asset` holding the most among those the default signer holds.
+pub fn largest_signer_utxo(context: &TestContext, asset: AssetId) -> anyhow::Result<UTXO> {
+    context
+        .get_default_signer()
+        .get_utxos_asset(asset)?
+        .into_iter()
+        .filter(UTXO::is_explicit)
+        .max_by_key(UTXO::explicit_amount)
+        .ok_or_else(|| anyhow::anyhow!("the signer holds no explicit UTXO of {asset}"))
+}
+
 /// `ft` with the change sent to the default signer explicitly.
 pub fn with_explicit_change(context: &TestContext, ft: &FinalTransaction) -> FinalTransaction {
     let mut ft = ft.clone();
@@ -99,4 +110,9 @@ pub fn fund_signer(context: &TestContext, amount: u64) -> anyhow::Result<UTXO> {
         .into_iter()
         .find(|utxo| utxo.outpoint == outpoint)
         .ok_or_else(|| anyhow::anyhow!("{outpoint} is not a signer UTXO"))
+}
+
+/// The script of an output that burns what it holds.
+pub fn burn_script() -> Script {
+    Script::new_op_return(&[])
 }
