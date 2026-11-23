@@ -90,16 +90,47 @@ pub async fn spend_factory_utxo(
     Ok(())
 }
 
+/// Saves the factory's state before its first in-place update in the block, so the block
+/// can be rolled back. Every in-place `UPDATE factories` must call it first.
+async fn snapshot_factory_state(
+    sql_tx: &mut DbTx<'_>,
+    factory_id: Uuid,
+    block_height: u64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO factory_state_snapshots (height, factory_id, current_status)
+        SELECT $1, id, current_status
+        FROM factories
+        WHERE id = $2
+        ON CONFLICT (height, factory_id) DO NOTHING
+        "#,
+        block_height as i64,
+        factory_id,
+    )
+    .execute(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to snapshot factory state: {e:?}");
+        e
+    })?;
+
+    Ok(())
+}
+
 #[tracing::instrument(
     name = "Updating factory status in DB",
     skip(sql_tx),
-    fields(factory_id = %factory_id, status = ?new_status)
+    fields(factory_id = %factory_id, status = ?new_status, block_height = %block_height)
 )]
 pub async fn update_factory_status(
     sql_tx: &mut DbTx<'_>,
     factory_id: Uuid,
     new_status: FactoryStatus,
+    block_height: u64,
 ) -> Result<(), sqlx::Error> {
+    snapshot_factory_state(sql_tx, factory_id, block_height).await?;
+
     sqlx::query!(
         r#"
         UPDATE factories SET current_status = $1 WHERE id = $2

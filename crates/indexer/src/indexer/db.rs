@@ -37,7 +37,8 @@ pub async fn upsert_sync_state(
     Ok(())
 }
 
-/// Records an indexed block and drops the history beyond [`REORG_HISTORY_DEPTH`].
+/// Records an indexed block and drops the history (blocks and state snapshots) beyond
+/// [`REORG_HISTORY_DEPTH`].
 #[tracing::instrument(
     name = "Recording indexed block in DB",
     skip(sql_tx, height, hash),
@@ -63,14 +64,23 @@ pub async fn record_indexed_block(
         e
     })?;
 
+    prune_reorg_history(sql_tx, height as i64 - REORG_HISTORY_DEPTH as i64).await
+}
+
+async fn prune_reorg_history(sql_tx: &mut DbTx<'_>, up_to_height: i64) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        "DELETE FROM indexed_blocks WHERE height <= $1",
-        height as i64 - REORG_HISTORY_DEPTH as i64,
+        r#"
+        WITH
+            blocks AS (DELETE FROM indexed_blocks WHERE height <= $1),
+            offers AS (DELETE FROM offer_state_snapshots WHERE height <= $1)
+        DELETE FROM factory_state_snapshots WHERE height <= $1
+        "#,
+        up_to_height
     )
     .execute(&mut **sql_tx)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to prune indexed blocks: {e:?}");
+        tracing::error!("Failed to prune reorg history: {e:?}");
         e
     })?;
 

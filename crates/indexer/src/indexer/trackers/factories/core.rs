@@ -159,7 +159,8 @@ impl FactoriesTracker {
                 Ok(FactoryProgramTxEffect::AssetsIssued(factory_id))
             }
             Some(IssuanceFactoryTxKind::FactoryRemoval) => {
-                update_factory_status(sql_tx, factory_id, FactoryStatus::Removed).await?;
+                update_factory_status(sql_tx, factory_id, FactoryStatus::Removed, block_height)
+                    .await?;
                 tracing::info!(
                     %factory_id,
                     %txid,

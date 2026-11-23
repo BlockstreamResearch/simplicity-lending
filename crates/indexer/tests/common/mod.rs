@@ -36,7 +36,9 @@ pub async fn test_pool() -> anyhow::Result<PgPool> {
             offer_utxos,
             offers,
             sync_state,
-            indexed_blocks
+            indexed_blocks,
+            offer_state_snapshots,
+            factory_state_snapshots
         RESTART IDENTITY CASCADE
         "#,
     )
@@ -128,7 +130,13 @@ pub async fn seed_factory_row(pool: &PgPool, factory: &FactoryModel) -> anyhow::
     let mut sql_tx = pool.begin().await?;
     insert_factory(&mut sql_tx, factory).await?;
     if !matches!(factory.current_status, FactoryStatus::Removed) {
-        update_factory_status(&mut sql_tx, factory.id, factory.current_status).await?;
+        update_factory_status(
+            &mut sql_tx,
+            factory.id,
+            factory.current_status,
+            factory.created_at_height as u64,
+        )
+        .await?;
     }
     sql_tx.commit().await?;
     Ok(())
