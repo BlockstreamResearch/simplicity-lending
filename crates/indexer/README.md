@@ -236,7 +236,7 @@ API and indexer may run as separate processes (`RUN_MODE=api` / `RUN_MODE=indexe
 ### Identifiers
 
 - **Offer `id`**: internal auto-increment integer (`BIGINT`), serialized in JSON responses as a **decimal string** (e.g. `"1"`). Assigned by PostgreSQL on insert. Used in nested `offer_id` fields and `GET /offers/by-script` responses. Not present on-chain. The path parameter in `GET /offers/{id}` is a numeric ID (e.g. `/offers/42`).
-- **`issuance_factory_id`**: UUID of the issuance factory that created the offer.
+- **`issuance_factory_id`**: UUID of the issuance factory that created the offer. New factories get a UUID v5 derived from the factory creation txid, so the id stays the same when the factory is re-indexed.
 - **`created_at_txid`**: on-chain unique key (hex) of the offer creation transaction.
 
 Example short offer item:

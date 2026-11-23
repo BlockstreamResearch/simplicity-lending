@@ -34,6 +34,14 @@ pub enum FactoryStatus {
     Removed,
 }
 
+/// Namespace of the factory ids derived from creation txids. Must never change.
+const FACTORY_ID_NAMESPACE: Uuid = Uuid::from_u128(0xb41844d9_49d2_4498_86b2_699c5b0c112d);
+
+/// Factory id derived from its creation `txid`, so a re-indexed factory keeps its id.
+pub fn factory_id_from_txid(txid: Txid) -> Uuid {
+    Uuid::new_v5(&FACTORY_ID_NAMESPACE, txid.as_byte_array())
+}
+
 #[derive(Debug, sqlx::FromRow)]
 pub struct FactoryModel {
     pub id: Uuid,
@@ -56,7 +64,7 @@ impl FactoryModel {
         let factory_parameters = issuance_factory.get_parameters();
 
         Self {
-            id: Uuid::new_v4(),
+            id: factory_id_from_txid(txid),
             factory_asset_id: factory_asset_id.to_byte_array().to_vec(),
             program_script_pubkey: issuance_factory.get_script_pubkey().to_bytes(),
             issuing_utxos_count: factory_parameters.issuing_utxos_count as i16,
@@ -65,5 +73,31 @@ impl FactoryModel {
             created_at_height: block_height as i64,
             created_at_txid: txid.as_byte_array().to_vec(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use simplex::simplicityhl::elements::Txid;
+
+    use super::factory_id_from_txid;
+
+    #[test]
+    fn factory_id_is_stable_per_creation_txid() {
+        let txid = Txid::from_byte_array([1; 32]);
+
+        assert_eq!(factory_id_from_txid(txid), factory_id_from_txid(txid));
+        assert_ne!(
+            factory_id_from_txid(txid),
+            factory_id_from_txid(Txid::from_byte_array([2; 32]))
+        );
+    }
+
+    #[test]
+    fn factory_id_is_pinned() {
+        assert_eq!(
+            factory_id_from_txid(Txid::from_byte_array([1; 32])).to_string(),
+            "7fea3149-4899-5802-ba61-4443f4298160"
+        );
     }
 }
