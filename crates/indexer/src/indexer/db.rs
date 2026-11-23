@@ -87,6 +87,32 @@ async fn prune_reorg_history(sql_tx: &mut DbTx<'_>, up_to_height: i64) -> Result
     Ok(())
 }
 
+/// Records the block an empty DB starts indexing after, so the first indexed block can be
+/// checked against it. It was not indexed, so it cannot be rolled back.
+#[tracing::instrument(name = "Recording starting block in DB", skip(db, hash), fields(%height, %hash))]
+pub async fn record_starting_block(
+    db: &PgPool,
+    height: u64,
+    hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO indexed_blocks (height, hash, revertible)
+        VALUES ($1, $2, false)
+        "#,
+        height as i64,
+        hash,
+    )
+    .execute(db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to record starting block: {e:?}");
+        e
+    })?;
+
+    Ok(())
+}
+
 #[tracing::instrument(name = "Getting last indexed block", skip(db))]
 pub async fn get_last_indexed_block(db: &PgPool) -> Result<Option<IndexedBlockModel>, sqlx::Error> {
     sqlx::query_as!(

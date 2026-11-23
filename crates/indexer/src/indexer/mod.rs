@@ -15,4 +15,4 @@ pub use chain::{ChainBlock, ChainSource, EsploraChainSource};
 pub use db::*;
 pub use rollback::*;
 pub use trackers::*;
-pub use worker::Worker;
+pub use worker::{StepOutcome, Worker};

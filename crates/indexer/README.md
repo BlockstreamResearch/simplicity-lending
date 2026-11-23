@@ -41,6 +41,14 @@ To identify transactions creating `PreLock` covenants, the engine applies a stri
 2. Uses the extracted `PreLockArguments` to derive the expected `PreLock` covenant address.
 3. Compares the derived address against the `script_pubkey` of the **0-th** output. If they match, the transaction is indexed as a valid new offer.
 
+#### Chain Reorganizations
+
+Liquid can replace its most recent block. The indexer keeps the hashes of the last few indexed blocks (`indexed_blocks`) and, before indexing block `N + 1`, checks that its parent is the indexed block `N`. While no new block arrives, it compares the hash at `N` instead.
+
+When block `N` left the chain, the indexer rolls it back in one SQL transaction: it deletes the rows created at `N`, clears the spends recorded at `N`, restores the offer and factory state saved before `N` changed it (`offer_state_snapshots`, `factory_state_snapshots`), and moves `sync_state` back to `N - 1`. It then reloads its UTXO caches and indexes the new block. An offer re-indexed from the same creation transaction keeps its id (`offer_id_reservations`), and a factory keeps its id because it is derived from the creation txid.
+
+A rollback emits `block_reverted`. Events already sent for the rolled back block no longer hold. Blocks indexed before this mechanism existed, and blocks deeper than the kept history, cannot be rolled back: the indexer then stops making progress and logs the error.
+
 ### API Service
 
 The API is implemented as a REST service built with `Axum`, leveraging `PostgreSQL` and `SQLx` for asynchronous, type-safe persistence. It features integrated `tracing` to provide structured logging and comprehensive request monitoring out of the box.

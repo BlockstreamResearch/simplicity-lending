@@ -375,6 +375,7 @@ pub fn padded_tx_with_inputs(known_inputs: Vec<OutPoint>, outputs: Vec<TxOut>) -
     tx_with_inputs(inputs, outputs)
 }
 
+pub mod chain;
 pub mod db_state;
 pub mod vault_tracking;
 

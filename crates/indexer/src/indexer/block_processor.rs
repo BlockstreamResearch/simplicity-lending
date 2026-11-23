@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     events::{IndexerEvent, notify_indexer_event},
-    indexer::{ChainBlock, db, trackers::TrackerRegistry},
+    indexer::{ChainBlock, RolledBackBlock, db, rollback_block, trackers::TrackerRegistry},
 };
 
 pub struct BlockProcessor {
@@ -22,6 +22,24 @@ impl BlockProcessor {
 
     pub fn tracker_registry(&self) -> &TrackerRegistry {
         &self.tracker_registry
+    }
+
+    /// Rolls back the last indexed block `height` in one SQL transaction. The tracker
+    /// caches are stale afterwards until [`Self::reload_caches`] succeeds.
+    pub async fn rollback_block(&mut self, height: u64) -> anyhow::Result<RolledBackBlock> {
+        let mut sql_tx = self.db_pool.begin().await?;
+        let rolled_back = rollback_block(&mut sql_tx, height).await?;
+        sql_tx.commit().await?;
+
+        Ok(rolled_back)
+    }
+
+    pub async fn reload_caches(&mut self) -> anyhow::Result<()> {
+        self.tracker_registry.reload_caches(&self.db_pool).await
+    }
+
+    pub async fn record_starting_block(&self, height: u64, hash: &str) -> anyhow::Result<()> {
+        Ok(db::record_starting_block(&self.db_pool, height, hash).await?)
     }
 
     #[tracing::instrument(
