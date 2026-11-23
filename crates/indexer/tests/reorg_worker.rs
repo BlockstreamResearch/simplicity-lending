@@ -329,7 +329,7 @@ async fn lagging_tip_changes_nothing() -> anyhow::Result<()> {
 
     chain.report_tip(Some(BASE));
 
-    assert_eq!(worker.step().await?, StepOutcome::Waiting);
+    assert_eq!(worker.step().await?, StepOutcome::UpToDate);
     assert_eq!(dump_indexer_state(&pool).await?, indexed);
 
     Ok(())

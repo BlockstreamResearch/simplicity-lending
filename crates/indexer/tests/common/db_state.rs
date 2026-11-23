@@ -1,10 +1,11 @@
 use lending_indexer::db::DbTx;
 use lending_indexer::indexer::{
-    RollbackError, RolledBackBlock, TrackerRegistry, record_indexed_block, rollback_block,
-    upsert_sync_state,
+    BlockProcessor, ChainBlock, record_indexed_block, upsert_sync_state,
 };
 use simplex::simplicityhl::elements::Transaction;
 use sqlx::PgPool;
+
+use super::vault_tracking::load_registry;
 
 /// Indexer tables: name, columns a dump is ordered by, and the identity column whose values
 /// follow insertion order rather than the chain.
@@ -65,7 +66,7 @@ async fn dump(pool: &PgPool, skip_identity_ids: bool) -> anyhow::Result<serde_js
     Ok(serde_json::Value::Object(state))
 }
 
-/// Records block `height` the way `BlockProcessor` does after processing its transactions.
+/// Records block `height` in `sql_tx`, for blocks whose rows a test writes by hand.
 pub async fn finish_block(sql_tx: &mut DbTx<'_>, height: u64) -> anyhow::Result<()> {
     record_indexed_block(sql_tx, height, &block_hash(height)).await?;
     upsert_sync_state(sql_tx, height, block_hash(height)).await?;
@@ -73,38 +74,32 @@ pub async fn finish_block(sql_tx: &mut DbTx<'_>, height: u64) -> anyhow::Result<
     Ok(())
 }
 
-/// Indexes `txs` as block `height` in one SQL transaction, as `BlockProcessor` does.
+pub async fn block_processor(pool: &PgPool) -> anyhow::Result<BlockProcessor> {
+    Ok(BlockProcessor::new(
+        pool.clone(),
+        load_registry(pool).await?,
+    ))
+}
+
+/// Indexes `txs` as block `height`, hashed with [`block_hash`].
 pub async fn index_block(
-    pool: &PgPool,
-    registry: &mut TrackerRegistry,
+    processor: &mut BlockProcessor,
     height: u64,
     txs: &[Transaction],
 ) -> anyhow::Result<()> {
-    let mut sql_tx = pool.begin().await?;
-    registry.begin_block();
-
-    for tx in txs {
-        registry.process_tx(&mut sql_tx, tx, height).await?;
-    }
-    finish_block(&mut sql_tx, height).await?;
-
-    sql_tx.commit().await?;
-    registry.commit_block();
-
-    Ok(())
-}
-
-pub async fn rollback(pool: &PgPool, height: u64) -> Result<RolledBackBlock, RollbackError> {
-    let mut sql_tx = pool.begin().await?;
-    let rolled_back = rollback_block(&mut sql_tx, height).await?;
-    sql_tx.commit().await?;
-
-    Ok(rolled_back)
+    processor
+        .process_block(ChainBlock {
+            height,
+            hash: block_hash(height),
+            txs: txs.to_vec(),
+        })
+        .await
 }
 
 /// Rolls back block `height` and checks the DB is exactly as it was before the block.
 pub async fn assert_rollback_restores(
     pool: &PgPool,
+    processor: &mut BlockProcessor,
     height: u64,
     before: &serde_json::Value,
 ) -> anyhow::Result<()> {
@@ -114,7 +109,7 @@ pub async fn assert_rollback_restores(
         "block #{height} changed nothing"
     );
 
-    rollback(pool, height).await?;
+    processor.rollback_block(height).await?;
 
     assert_eq!(&dump_indexer_state(pool).await?, before);
 
@@ -125,13 +120,13 @@ pub async fn assert_rollback_restores(
 /// the DB is exactly as it was before the block.
 pub async fn assert_block_rolls_back(
     pool: &PgPool,
-    registry: &mut TrackerRegistry,
+    processor: &mut BlockProcessor,
     height: u64,
     txs: &[Transaction],
 ) -> anyhow::Result<()> {
     let before = dump_indexer_state(pool).await?;
 
-    index_block(pool, registry, height, txs).await?;
+    index_block(processor, height, txs).await?;
 
-    assert_rollback_restores(pool, height, &before).await
+    assert_rollback_restores(pool, processor, height, &before).await
 }

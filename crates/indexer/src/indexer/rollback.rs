@@ -1,7 +1,7 @@
 use crate::{
     db::DbTx,
     events::{IndexerEvent, notify_indexer_event},
-    indexer::upsert_sync_state,
+    indexer::{db::delete_block_history, upsert_sync_state},
     models::IndexedBlockModel,
 };
 
@@ -17,19 +17,11 @@ pub enum RollbackError {
     Db(#[from] sqlx::Error),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RolledBackBlock {
-    pub hash: String,
-    pub parent_hash: String,
-}
-
 /// Reverts everything the last indexed block `height` wrote and makes its parent the last
-/// indexed block. Tracker caches are not touched and must be reloaded after the commit.
+/// indexed block. Returns the parent's hash. Tracker caches are not touched and must be
+/// reloaded after the commit.
 #[tracing::instrument(name = "Rolling back block", skip(sql_tx), fields(%height))]
-pub async fn rollback_block(
-    sql_tx: &mut DbTx<'_>,
-    height: u64,
-) -> Result<RolledBackBlock, RollbackError> {
+pub async fn rollback_block(sql_tx: &mut DbTx<'_>, height: u64) -> Result<String, RollbackError> {
     let (block, parent) = last_block_and_parent(sql_tx, height).await?;
     let h = height as i64;
 
@@ -51,18 +43,7 @@ pub async fn rollback_block(
     restore_snapshots(sql_tx, h).await?;
     unmark_spent_at(sql_tx, h).await?;
 
-    sqlx::query!(
-        r#"
-        WITH
-            blocks AS (DELETE FROM indexed_blocks WHERE height = $1),
-            offers AS (DELETE FROM offer_state_snapshots WHERE height = $1)
-        DELETE FROM factory_state_snapshots WHERE height = $1
-        "#,
-        h
-    )
-    .execute(&mut **sql_tx)
-    .await?;
-
+    delete_block_history(sql_tx, h, h).await?;
     upsert_sync_state(sql_tx, parent.height as u64, parent.hash.clone()).await?;
 
     notify_indexer_event(
@@ -76,10 +57,7 @@ pub async fn rollback_block(
 
     tracing::info!(%height, hash = %block.hash, "Block rolled back");
 
-    Ok(RolledBackBlock {
-        hash: block.hash,
-        parent_hash: parent.hash,
-    })
+    Ok(parent.hash)
 }
 
 async fn last_block_and_parent(

@@ -3,16 +3,15 @@ mod common;
 use std::time::Duration;
 
 use common::db_state::{
-    assert_block_rolls_back, assert_rollback_restores, block_hash, dump_indexer_state,
-    finish_block, index_block, rollback,
+    assert_block_rolls_back, assert_rollback_restores, block_hash, block_processor,
+    dump_indexer_state, finish_block, index_block,
 };
 use common::vault_tracking::{
     FIRST_PARTIAL_AMOUNT, SECOND_PARTIAL_AMOUNT, TRACKABLE_REPAYMENT_HEIGHT,
     apply_repayment_to_offer, build_first_partial_repayment_tx, build_full_repayment_tx,
     build_lender_vault_withdraw_all_tx, build_lender_vault_withdraw_on_liquidation_tx,
     build_second_partial_repayment_tx, build_vault_withdraw_part_tx, fetch_active_vault_rows,
-    load_registry, offer_lending_params, seed_minimal_factory, seed_trackable_active_offer,
-    vault_of_type,
+    offer_lending_params, seed_minimal_factory, seed_trackable_active_offer, vault_of_type,
 };
 use common::{
     acceptance_tx, cancellation_tx, explicit_asset_output, factory_model, non_op_return_script,
@@ -98,12 +97,12 @@ async fn offer_acceptance_rolls_back() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let factory_id = seed_minimal_factory(&pool).await?;
     let (_, pending_outpoint) = seed_pending_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
 
     assert_block_rolls_back(
         &pool,
-        &mut registry,
+        &mut processor,
         BLOCK,
         &[acceptance_tx(pending_outpoint)],
     )
@@ -116,12 +115,12 @@ async fn offer_cancellation_rolls_back() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let factory_id = seed_minimal_factory(&pool).await?;
     let (_, pending_outpoint) = seed_pending_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
 
     assert_block_rolls_back(
         &pool,
-        &mut registry,
+        &mut processor,
         BLOCK,
         &[cancellation_tx(pending_outpoint)],
     )
@@ -146,8 +145,8 @@ async fn participant_nft_move_rolls_back() -> anyhow::Result<()> {
         ),
     )
     .await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
 
     // The borrower NFT (asset `[7; 32]`) moves to a new owner.
     let transfer = tx_with_input(
@@ -155,7 +154,7 @@ async fn participant_nft_move_rolls_back() -> anyhow::Result<()> {
         vec![explicit_asset_output(7, non_op_return_script())],
     );
 
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[transfer]).await
+    assert_block_rolls_back(&pool, &mut processor, BLOCK, &[transfer]).await
 }
 
 #[tokio::test]
@@ -165,13 +164,13 @@ async fn first_partial_repayment_rolls_back() -> anyhow::Result<()> {
     let factory_id = seed_minimal_factory(&pool).await?;
     let (_, active_outpoint, offer) =
         seed_trackable_active_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
 
     let (repayment, _) =
         build_first_partial_repayment_tx(active_outpoint, &offer, FIRST_PARTIAL_AMOUNT)?;
 
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[repayment]).await
+    assert_block_rolls_back(&pool, &mut processor, BLOCK, &[repayment]).await
 }
 
 #[tokio::test]
@@ -181,12 +180,12 @@ async fn second_partial_repayment_rolls_back() -> anyhow::Result<()> {
     let factory_id = seed_minimal_factory(&pool).await?;
     let (_, active_outpoint, mut offer) =
         seed_trackable_active_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
+    let mut processor = block_processor(&pool).await?;
 
     let (first, debt_after_first) =
         build_first_partial_repayment_tx(active_outpoint, &offer, FIRST_PARTIAL_AMOUNT)?;
     let first_txid = first.txid();
-    index_block(&pool, &mut registry, PARENT, &[first]).await?;
+    index_block(&mut processor, PARENT, &[first]).await?;
 
     apply_repayment_to_offer(&mut offer, FIRST_PARTIAL_AMOUNT)?;
     let second = build_second_partial_repayment_tx(
@@ -209,7 +208,7 @@ async fn second_partial_repayment_rolls_back() -> anyhow::Result<()> {
 
     // The spent vaults and their continuing outputs share the partial unique index on
     // unspent vaults, so this also covers the rollback order.
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[second]).await
+    assert_block_rolls_back(&pool, &mut processor, BLOCK, &[second]).await
 }
 
 #[tokio::test]
@@ -219,12 +218,12 @@ async fn full_repayment_rolls_back() -> anyhow::Result<()> {
     let factory_id = seed_minimal_factory(&pool).await?;
     let (_, active_outpoint, offer) =
         seed_trackable_active_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
 
     let repayment = build_full_repayment_tx(active_outpoint, &offer)?;
 
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[repayment]).await
+    assert_block_rolls_back(&pool, &mut processor, BLOCK, &[repayment]).await
 }
 
 #[tokio::test]
@@ -234,12 +233,12 @@ async fn liquidation_rolls_back() -> anyhow::Result<()> {
     let factory_id = seed_minimal_factory(&pool).await?;
     let (offer_id, active_outpoint, offer) =
         seed_trackable_active_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
+    let mut processor = block_processor(&pool).await?;
 
     let (repayment, _) =
         build_first_partial_repayment_tx(active_outpoint, &offer, FIRST_PARTIAL_AMOUNT)?;
     let repayment_txid = repayment.txid();
-    index_block(&pool, &mut registry, PARENT, &[repayment]).await?;
+    index_block(&mut processor, PARENT, &[repayment]).await?;
 
     let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
     let lender_vault = vault_of_type(&vaults, VaultType::Lender);
@@ -258,7 +257,7 @@ async fn liquidation_rolls_back() -> anyhow::Result<()> {
         lender_vault.amount as u64,
     )?;
 
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[liquidation]).await
+    assert_block_rolls_back(&pool, &mut processor, BLOCK, &[liquidation]).await
 }
 
 #[tokio::test]
@@ -268,12 +267,12 @@ async fn vault_withdraw_part_rolls_back() -> anyhow::Result<()> {
     let factory_id = seed_minimal_factory(&pool).await?;
     let (offer_id, active_outpoint, offer) =
         seed_trackable_active_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
+    let mut processor = block_processor(&pool).await?;
 
     let (repayment, _) =
         build_first_partial_repayment_tx(active_outpoint, &offer, FIRST_PARTIAL_AMOUNT)?;
     let repayment_txid = repayment.txid();
-    index_block(&pool, &mut registry, PARENT, &[repayment]).await?;
+    index_block(&mut processor, PARENT, &[repayment]).await?;
 
     let vaults = fetch_active_vault_rows(&pool, offer_id).await?;
     let lender_vault = vault_of_type(&vaults, VaultType::Lender);
@@ -289,7 +288,7 @@ async fn vault_withdraw_part_rolls_back() -> anyhow::Result<()> {
         lender_vault.amount as u64 / 2,
     )?;
 
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[withdrawal]).await
+    assert_block_rolls_back(&pool, &mut processor, BLOCK, &[withdrawal]).await
 }
 
 fn lender_claim_tx(
@@ -317,13 +316,13 @@ async fn lender_claim_rolls_back() -> anyhow::Result<()> {
     let factory_id = seed_minimal_factory(&pool).await?;
     let (_, active_outpoint, offer) =
         seed_trackable_active_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
+    let mut processor = block_processor(&pool).await?;
 
     let repayment = build_full_repayment_tx(active_outpoint, &offer)?;
     let claim = lender_claim_tx(repayment.txid(), &offer)?;
-    index_block(&pool, &mut registry, PARENT, &[repayment]).await?;
+    index_block(&mut processor, PARENT, &[repayment]).await?;
 
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[claim]).await
+    assert_block_rolls_back(&pool, &mut processor, BLOCK, &[claim]).await
 }
 
 #[tokio::test]
@@ -333,14 +332,14 @@ async fn repayment_and_claim_in_one_block_roll_back() -> anyhow::Result<()> {
     let factory_id = seed_minimal_factory(&pool).await?;
     let (_, active_outpoint, offer) =
         seed_trackable_active_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
 
     // The offer changes status twice and the lender vault is created and spent in the block.
     let repayment = build_full_repayment_tx(active_outpoint, &offer)?;
     let claim = lender_claim_tx(repayment.txid(), &offer)?;
 
-    assert_block_rolls_back(&pool, &mut registry, BLOCK, &[repayment, claim]).await
+    assert_block_rolls_back(&pool, &mut processor, BLOCK, &[repayment, claim]).await
 }
 
 #[tokio::test]
@@ -349,8 +348,8 @@ async fn factory_utxo_moves_and_removal_roll_back() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let moved_factory = seed_factory_with_utxos(&pool, 0x41).await?;
     let removed_factory = seed_factory_with_utxos(&pool, 0x42).await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
     let before = dump_indexer_state(&pool).await?;
 
     let issuance_txid = Txid::from_byte_array([0x43; 32]);
@@ -396,15 +395,15 @@ async fn factory_utxo_moves_and_removal_roll_back() -> anyhow::Result<()> {
     finish_block(&mut sql_tx, BLOCK).await?;
     sql_tx.commit().await?;
 
-    assert_rollback_restores(&pool, BLOCK, &before).await
+    assert_rollback_restores(&pool, &mut processor, BLOCK, &before).await
 }
 
 #[tokio::test]
 #[serial]
 async fn entities_created_in_the_block_are_removed() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
     let before = dump_indexer_state(&pool).await?;
 
     let creation_txid = Txid::from_byte_array([0x51; 32]);
@@ -458,7 +457,7 @@ async fn entities_created_in_the_block_are_removed() -> anyhow::Result<()> {
     finish_block(&mut sql_tx, BLOCK).await?;
     sql_tx.commit().await?;
 
-    assert_rollback_restores(&pool, BLOCK, &before).await?;
+    assert_rollback_restores(&pool, &mut processor, BLOCK, &before).await?;
 
     let reservations: Vec<(Vec<u8>, i64)> =
         sqlx::query_as("SELECT created_at_txid, offer_id FROM offer_id_reservations")
@@ -473,16 +472,14 @@ async fn entities_created_in_the_block_are_removed() -> anyhow::Result<()> {
 #[serial]
 async fn rollback_makes_the_parent_the_last_block_and_notifies() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
-    index_block(&pool, &mut registry, BLOCK, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
+    index_block(&mut processor, BLOCK, &[]).await?;
 
     let mut listener = PgListener::connect_with(&pool).await?;
     listener.listen(INDEXER_EVENTS_CHANNEL).await?;
 
-    let rolled_back = rollback(&pool, BLOCK).await?;
-    assert_eq!(rolled_back.hash, block_hash(BLOCK));
-    assert_eq!(rolled_back.parent_hash, block_hash(PARENT));
+    assert_eq!(processor.rollback_block(BLOCK).await?, block_hash(PARENT));
 
     let (height, hash): (i64, String) = sqlx::query_as(
         "SELECT last_indexed_height, last_indexed_hash FROM sync_state WHERE id = 1",
@@ -508,12 +505,12 @@ async fn rollback_makes_the_parent_the_last_block_and_notifies() -> anyhow::Resu
 #[serial]
 async fn rollback_refuses_a_block_that_is_not_the_last() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, PARENT, &[]).await?;
-    index_block(&pool, &mut registry, BLOCK, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
+    index_block(&mut processor, BLOCK, &[]).await?;
     let before = dump_indexer_state(&pool).await?;
 
-    let result = rollback(&pool, PARENT).await;
+    let result = processor.rollback_block(PARENT).await;
 
     assert!(matches!(
         result,
@@ -531,8 +528,9 @@ async fn rollback_refuses_a_block_that_is_not_the_last() -> anyhow::Result<()> {
 #[serial]
 async fn rollback_refuses_without_history() -> anyhow::Result<()> {
     let pool = test_pool().await?;
+    let mut processor = block_processor(&pool).await?;
 
-    let result = rollback(&pool, BLOCK).await;
+    let result = processor.rollback_block(BLOCK).await;
 
     assert!(matches!(
         result,
@@ -549,6 +547,7 @@ async fn rollback_refuses_without_history() -> anyhow::Result<()> {
 #[serial]
 async fn rollback_refuses_a_block_without_undo_data() -> anyhow::Result<()> {
     let pool = test_pool().await?;
+    let mut processor = block_processor(&pool).await?;
     sqlx::query(
         "INSERT INTO indexed_blocks (height, hash, revertible) VALUES ($1, 'a', true), ($2, 'b', false)",
     )
@@ -558,7 +557,7 @@ async fn rollback_refuses_a_block_without_undo_data() -> anyhow::Result<()> {
     .await?;
     let before = dump_indexer_state(&pool).await?;
 
-    let result = rollback(&pool, BLOCK).await;
+    let result = processor.rollback_block(BLOCK).await;
 
     assert!(matches!(
         result,
@@ -573,11 +572,11 @@ async fn rollback_refuses_a_block_without_undo_data() -> anyhow::Result<()> {
 #[serial]
 async fn rollback_refuses_a_block_without_parent() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    let mut registry = load_registry(&pool).await?;
-    index_block(&pool, &mut registry, BLOCK, &[]).await?;
+    let mut processor = block_processor(&pool).await?;
+    index_block(&mut processor, BLOCK, &[]).await?;
     let before = dump_indexer_state(&pool).await?;
 
-    let result = rollback(&pool, BLOCK).await;
+    let result = processor.rollback_block(BLOCK).await;
 
     assert!(matches!(
         result,

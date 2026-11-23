@@ -64,23 +64,29 @@ pub async fn record_indexed_block(
         e
     })?;
 
-    prune_reorg_history(sql_tx, height as i64 - REORG_HISTORY_DEPTH as i64).await
+    delete_block_history(sql_tx, 0, height as i64 - REORG_HISTORY_DEPTH as i64).await
 }
 
-async fn prune_reorg_history(sql_tx: &mut DbTx<'_>, up_to_height: i64) -> Result<(), sqlx::Error> {
+/// Deletes the recorded blocks and state snapshots at heights `from..=to`.
+pub(crate) async fn delete_block_history(
+    sql_tx: &mut DbTx<'_>,
+    from: i64,
+    to: i64,
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         WITH
-            blocks AS (DELETE FROM indexed_blocks WHERE height <= $1),
-            offers AS (DELETE FROM offer_state_snapshots WHERE height <= $1)
-        DELETE FROM factory_state_snapshots WHERE height <= $1
+            blocks AS (DELETE FROM indexed_blocks WHERE height BETWEEN $1 AND $2),
+            offers AS (DELETE FROM offer_state_snapshots WHERE height BETWEEN $1 AND $2)
+        DELETE FROM factory_state_snapshots WHERE height BETWEEN $1 AND $2
         "#,
-        up_to_height
+        from,
+        to
     )
     .execute(&mut **sql_tx)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to prune reorg history: {e:?}");
+        tracing::error!("Failed to delete block history: {e:?}");
         e
     })?;
 

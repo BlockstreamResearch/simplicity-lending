@@ -18,10 +18,9 @@ pub enum StepOutcome {
     /// The block at this height left the chain and was rolled back. For the starting block
     /// of an empty DB, the new block at this height is recorded on the next step instead.
     RolledBack(u64),
-    /// The last indexed block is the chain tip.
+    /// Nothing to index: the last indexed block is the chain tip, or above the tip reported
+    /// by a lagging Esplora backend.
     UpToDate,
-    /// The chain tip is below the last indexed block, e.g. a lagging Esplora backend.
-    Waiting,
 }
 
 pub struct Worker<C: ChainSource> {
@@ -29,7 +28,7 @@ pub struct Worker<C: ChainSource> {
     last_indexed_height: u64,
     /// `None` on an empty DB until the starting block is recorded.
     last_indexed_hash: Option<String>,
-    /// Set when a rollback committed but the tracker caches could not be reloaded.
+    /// Set by a rollback; the tracker caches are reloaded before the next step.
     caches_stale: bool,
     interval: Interval,
     block_processor: BlockProcessor,
@@ -92,7 +91,7 @@ impl<C: ChainSource> Worker<C> {
             loop {
                 match self.step_towards(tip_height).await {
                     Ok(StepOutcome::Indexed(_) | StepOutcome::RolledBack(_)) => {}
-                    Ok(StepOutcome::UpToDate | StepOutcome::Waiting) => break,
+                    Ok(StepOutcome::UpToDate) => break,
                     Err(error) => {
                         tracing::error!(
                             last_indexed_height = self.last_indexed_height,
@@ -125,7 +124,7 @@ impl<C: ChainSource> Worker<C> {
                 last_indexed_height = self.last_indexed_height,
                 "Chain tip is below the last indexed block, waiting"
             );
-            return Ok(StepOutcome::Waiting);
+            return Ok(StepOutcome::UpToDate);
         }
 
         let last_hash = match &self.last_indexed_hash {
@@ -194,14 +193,11 @@ impl<C: ChainSource> Worker<C> {
 
         tracing::warn!(height, "Indexed block left the chain, rolling it back");
 
-        let rolled_back = self.block_processor.rollback_block(height).await?;
+        let parent_hash = self.block_processor.rollback_block(height).await?;
 
         self.last_indexed_height = height - 1;
-        self.last_indexed_hash = Some(rolled_back.parent_hash);
+        self.last_indexed_hash = Some(parent_hash);
         self.caches_stale = true;
-
-        self.block_processor.reload_caches().await?;
-        self.caches_stale = false;
 
         Ok(StepOutcome::RolledBack(height))
     }

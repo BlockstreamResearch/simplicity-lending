@@ -1,11 +1,16 @@
 mod common;
 
+use common::db_state::{block_processor, finish_block, index_block};
 use common::vault_tracking::seed_minimal_factory;
 use common::{offer_model, test_pool};
 use lending_indexer::indexer::insert_offer;
 use lending_indexer::models::OfferModel;
 use serial_test::serial;
 use sqlx::PgPool;
+
+const PARENT: u64 = 100;
+/// The block whose offer is rolled back.
+const BLOCK: u64 = PARENT + 1;
 
 async fn insert(pool: &PgPool, offer: &OfferModel) -> anyhow::Result<Option<i64>> {
     let mut sql_tx = pool.begin().await?;
@@ -15,24 +20,22 @@ async fn insert(pool: &PgPool, offer: &OfferModel) -> anyhow::Result<Option<i64>
     Ok(id)
 }
 
-/// Removes the offer and reserves its id, as a block rollback does.
-async fn remove_with_reservation(pool: &PgPool, offer_id: i64) -> anyhow::Result<()> {
-    sqlx::query(
-        r#"
-        INSERT INTO offer_id_reservations (created_at_txid, offer_id)
-        SELECT created_at_txid, id FROM offers WHERE id = $1
-        "#,
-    )
-    .bind(offer_id)
-    .execute(pool)
-    .await?;
+/// Creates `offer` in [`BLOCK`] and rolls the block back, which removes the offer and
+/// reserves its id. Returns that id.
+async fn create_and_roll_back(pool: &PgPool, offer: &OfferModel) -> anyhow::Result<i64> {
+    let mut processor = block_processor(pool).await?;
+    index_block(&mut processor, PARENT, &[]).await?;
 
-    sqlx::query("DELETE FROM offers WHERE id = $1")
-        .bind(offer_id)
-        .execute(pool)
-        .await?;
+    let mut sql_tx = pool.begin().await?;
+    let offer_id = insert_offer(&mut sql_tx, offer)
+        .await?
+        .expect("offer inserted");
+    finish_block(&mut sql_tx, BLOCK).await?;
+    sql_tx.commit().await?;
 
-    Ok(())
+    processor.rollback_block(BLOCK).await?;
+
+    Ok(offer_id)
 }
 
 #[tokio::test]
@@ -40,14 +43,11 @@ async fn remove_with_reservation(pool: &PgPool, offer_id: i64) -> anyhow::Result
 async fn reinserted_offer_gets_its_reserved_id() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let factory_id = seed_minimal_factory(&pool).await?;
-    let first = offer_model(1, factory_id, 100);
-    let second = offer_model(2, factory_id, 100);
+    let first = offer_model(1, factory_id, PARENT as i64);
+    let second = offer_model(2, factory_id, BLOCK as i64);
 
     insert(&pool, &first).await?.expect("first offer inserted");
-    let second_id = insert(&pool, &second)
-        .await?
-        .expect("second offer inserted");
-    remove_with_reservation(&pool, second_id).await?;
+    let second_id = create_and_roll_back(&pool, &second).await?;
 
     assert_eq!(insert(&pool, &second).await?, Some(second_id));
 
@@ -59,12 +59,11 @@ async fn reinserted_offer_gets_its_reserved_id() -> anyhow::Result<()> {
 async fn other_offers_never_take_a_reserved_id() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let factory_id = seed_minimal_factory(&pool).await?;
-    let removed = offer_model(1, factory_id, 100);
+    let removed = offer_model(1, factory_id, BLOCK as i64);
 
-    let removed_id = insert(&pool, &removed).await?.expect("offer inserted");
-    remove_with_reservation(&pool, removed_id).await?;
+    let removed_id = create_and_roll_back(&pool, &removed).await?;
 
-    let new_id = insert(&pool, &offer_model(2, factory_id, 101))
+    let new_id = insert(&pool, &offer_model(2, factory_id, BLOCK as i64))
         .await?
         .expect("new offer inserted");
     assert_ne!(new_id, removed_id);

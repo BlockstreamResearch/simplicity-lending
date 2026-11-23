@@ -1,5 +1,6 @@
 mod common;
 
+use common::db_state::block_hash;
 use common::test_pool;
 use lending_indexer::indexer::{
     REORG_HISTORY_DEPTH, drop_starting_block, get_last_indexed_block, record_indexed_block,
@@ -11,7 +12,7 @@ use sqlx::PgPool;
 
 async fn record(pool: &PgPool, height: u64) -> anyhow::Result<()> {
     let mut sql_tx = pool.begin().await?;
-    record_indexed_block(&mut sql_tx, height, &format!("hash-{height}")).await?;
+    record_indexed_block(&mut sql_tx, height, &block_hash(height)).await?;
     sql_tx.commit().await?;
 
     Ok(())
@@ -47,7 +48,7 @@ async fn recorded_block_is_the_last_revertible_block() -> anyhow::Result<()> {
         get_last_indexed_block(&pool).await?,
         Some(IndexedBlockModel {
             height: 101,
-            hash: "hash-101".to_string(),
+            hash: block_hash(101),
             revertible: true,
         })
     );
@@ -77,15 +78,15 @@ async fn history_keeps_only_the_most_recent_blocks() -> anyhow::Result<()> {
 #[serial]
 async fn starting_block_is_dropped_only_before_the_first_indexed_block() -> anyhow::Result<()> {
     let pool = test_pool().await?;
-    record_starting_block(&pool, 100, "hash-100").await?;
+    record_starting_block(&pool, 100, &block_hash(100)).await?;
 
     assert!(drop_starting_block(&pool, 100).await?);
     assert_eq!(get_last_indexed_block(&pool).await?, None);
 
     // A block indexed before undo data existed has `sync_state`, like after the migration.
-    record_starting_block(&pool, 100, "hash-100").await?;
+    record_starting_block(&pool, 100, &block_hash(100)).await?;
     let mut sql_tx = pool.begin().await?;
-    upsert_sync_state(&mut sql_tx, 100, "hash-100".to_string()).await?;
+    upsert_sync_state(&mut sql_tx, 100, block_hash(100)).await?;
     sql_tx.commit().await?;
 
     assert!(!drop_starting_block(&pool, 100).await?);
