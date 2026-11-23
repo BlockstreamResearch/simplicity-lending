@@ -45,6 +45,24 @@ impl TrackerRegistry {
         })
     }
 
+    /// Reloads the tracker caches from the DB, which a block rollback leaves stale.
+    /// Call between blocks; on error the current caches are kept.
+    pub async fn reload_caches(&mut self, db_pool: &PgPool) -> anyhow::Result<()> {
+        let factories = self.factories.reloaded(db_pool).await?;
+        let factory_auths = self.factory_auths.reloaded(db_pool).await?;
+        let vaults = self.vaults.reloaded(db_pool).await?;
+        let offers = self.offers.reloaded(db_pool).await?;
+        let participants = self.participants.reloaded(db_pool).await?;
+
+        self.factories = factories;
+        self.factory_auths = factory_auths;
+        self.vaults = vaults;
+        self.offers = offers;
+        self.participants = participants;
+
+        Ok(())
+    }
+
     pub fn begin_block(&mut self) {
         self.factories.begin_block();
         self.factory_auths.begin_block();

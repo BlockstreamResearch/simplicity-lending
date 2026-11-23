@@ -53,6 +53,11 @@ impl VaultsTracker {
         })
     }
 
+    /// The same tracker with its cache loaded from the DB again.
+    pub async fn reloaded(&self, db_pool: &PgPool) -> anyhow::Result<Self> {
+        Self::load(db_pool, self.network).await
+    }
+
     pub fn begin_block(&mut self) {
         self.cache.begin_block();
     }

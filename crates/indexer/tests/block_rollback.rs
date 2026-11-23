@@ -15,9 +15,9 @@ use common::vault_tracking::{
 };
 use common::{
     explicit_asset_output, factory_model, non_op_return_script, normal_output, null_data_output,
-    offer_model, outpoint_from_offer_id, outpoint_with_txid_byte, seed_offer_row,
-    seed_offer_utxo_row, seed_participant_utxo_row, test_pool, tx_with_input,
-    unique_32_bytes_from_uuid, unspent_offer_utxo, unspent_participant,
+    offer_model, outpoint_from_offer_id, outpoint_with_txid_byte, seed_participant_utxo_row,
+    seed_pending_offer, test_pool, tx_with_input, unique_32_bytes_from_uuid, unspent_offer_utxo,
+    unspent_participant,
 };
 use lending_indexer::events::{INDEXER_EVENTS_CHANNEL, IndexerEvent};
 use lending_indexer::indexer::{
@@ -39,28 +39,6 @@ const PARENT: u64 = TRACKABLE_REPAYMENT_HEIGHT;
 /// The block that is indexed and rolled back.
 const BLOCK: u64 = PARENT + 1;
 const SEED_HEIGHT: i64 = 100;
-
-async fn seed_pending_offer(
-    pool: &PgPool,
-    factory_id: Uuid,
-    txid_seed: i64,
-) -> anyhow::Result<(i64, OutPoint)> {
-    let offer_id =
-        seed_offer_row(pool, &mut offer_model(txid_seed, factory_id, SEED_HEIGHT)).await?;
-    let pending_outpoint = outpoint_from_offer_id(txid_seed, 0);
-    seed_offer_utxo_row(
-        pool,
-        &unspent_offer_utxo(
-            offer_id,
-            pending_outpoint,
-            UtxoType::PendingOffer,
-            SEED_HEIGHT,
-        ),
-    )
-    .await?;
-
-    Ok((offer_id, pending_outpoint))
-}
 
 fn factory_utxo(factory_id: Uuid, outpoint: OutPoint, height: u64) -> FactoryUtxoModel {
     FactoryUtxoModel {
@@ -118,7 +96,7 @@ async fn seed_factory_with_utxos(pool: &PgPool, txid_byte: u8) -> anyhow::Result
 async fn offer_acceptance_rolls_back() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let factory_id = seed_minimal_factory(&pool).await?;
-    let (_, pending_outpoint) = seed_pending_offer(&pool, factory_id, 1).await?;
+    let (_, pending_outpoint) = seed_pending_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
     let mut registry = load_registry(&pool).await?;
     index_block(&pool, &mut registry, PARENT, &[]).await?;
 
@@ -132,7 +110,7 @@ async fn offer_acceptance_rolls_back() -> anyhow::Result<()> {
 async fn offer_cancellation_rolls_back() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let factory_id = seed_minimal_factory(&pool).await?;
-    let (_, pending_outpoint) = seed_pending_offer(&pool, factory_id, 1).await?;
+    let (_, pending_outpoint) = seed_pending_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
     let mut registry = load_registry(&pool).await?;
     index_block(&pool, &mut registry, PARENT, &[]).await?;
 
@@ -154,7 +132,7 @@ async fn offer_cancellation_rolls_back() -> anyhow::Result<()> {
 async fn participant_nft_move_rolls_back() -> anyhow::Result<()> {
     let pool = test_pool().await?;
     let factory_id = seed_minimal_factory(&pool).await?;
-    let (offer_id, _) = seed_pending_offer(&pool, factory_id, 1).await?;
+    let (offer_id, _) = seed_pending_offer(&pool, factory_id, 1, SEED_HEIGHT).await?;
     let borrower_outpoint = outpoint_with_txid_byte(0x31, 0);
     seed_participant_utxo_row(
         &pool,

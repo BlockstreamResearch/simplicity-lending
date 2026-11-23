@@ -181,6 +181,33 @@ pub async fn seed_offer_row(pool: &PgPool, offer: &mut OfferModel) -> anyhow::Re
     Ok(id)
 }
 
+/// Seeds a pending offer with its unspent pending-offer UTXO at `outpoint_from_offer_id(txid_seed, 0)`.
+pub async fn seed_pending_offer(
+    pool: &PgPool,
+    factory_id: Uuid,
+    txid_seed: i64,
+    created_at_height: i64,
+) -> anyhow::Result<(i64, OutPoint)> {
+    let offer_id = seed_offer_row(
+        pool,
+        &mut offer_model(txid_seed, factory_id, created_at_height),
+    )
+    .await?;
+    let pending_outpoint = outpoint_from_offer_id(txid_seed, 0);
+    seed_offer_utxo_row(
+        pool,
+        &unspent_offer_utxo(
+            offer_id,
+            pending_outpoint,
+            UtxoType::PendingOffer,
+            created_at_height,
+        ),
+    )
+    .await?;
+
+    Ok((offer_id, pending_outpoint))
+}
+
 pub async fn seed_offer_utxo_row(pool: &PgPool, utxo: &OfferUtxoModel) -> anyhow::Result<()> {
     let mut sql_tx = pool.begin().await?;
     insert_offer_utxo(&mut sql_tx, utxo).await?;
