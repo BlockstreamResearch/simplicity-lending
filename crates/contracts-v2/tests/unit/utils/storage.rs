@@ -3,56 +3,84 @@ use lending_contracts_v2::artifacts::tests::utils::storage::derived_storage::{
     StorageArguments, StorageWitness,
 };
 
-use crate::support::expect;
+use crate::support::case::DispatchCase;
+use crate::support::expect::Rejection::Assertion;
 
-/// The functions of the test program, by the index it selects them with: the slot leaf of a value
-/// of each type.
+/// The functions of the test program, the slot leaf of a value of each type.
 #[derive(Clone, Copy)]
 enum Function {
-    U256,
-    Bool,
-    U64,
+    U256 = 0,
+    Bool = 1,
+    U64 = 2,
 }
 
 const FUNCTIONS: u8 = 3;
 
-/// The program holding `slot` in its only storage slot. It accepts a case when the slot leaf of the
-/// claimed value gives the program's own script hash.
-fn program(slot: [u8; 32]) -> StorageProgram {
-    let mut program = StorageProgram::new(StorageArguments::default()).with_storage_capacity(1);
-    program.set_storage_at(0, slot);
-
-    program
+/// The program holds `slot` in its only storage slot, and the witness claims a value it holds. The
+/// program accepts when the slot leaf of the claimed value gives its own script hash.
+#[derive(Clone, Debug)]
+struct Case {
+    witness: StorageWitness,
+    slot: [u8; 32],
 }
 
-fn case(function: Function) -> StorageWitness {
-    StorageWitness {
-        function_index: function as u8,
-        u256_value: [0; 32],
-        bool_value: false,
-        u64_value: 0,
+impl Case {
+    fn new(function: Function, slot: [u8; 32]) -> Self {
+        Self {
+            witness: StorageWitness {
+                function_index: function as u8,
+                u256_value: [0; 32],
+                bool_value: false,
+                u64_value: 0,
+            },
+            slot,
+        }
+    }
+
+    /// The same case under an index that selects no function.
+    fn unknown_function(mut self) -> Self {
+        self.witness.function_index = FUNCTIONS;
+        self
     }
 }
 
-fn u256_case(u256_value: [u8; 32]) -> StorageWitness {
-    StorageWitness {
-        u256_value,
-        ..case(Function::U256)
+impl DispatchCase for Case {
+    type Program = StorageProgram;
+
+    fn program(&self) -> StorageProgram {
+        let mut program = StorageProgram::new(StorageArguments::default()).with_storage_capacity(1);
+        program.set_storage_at(0, self.slot);
+
+        program
+    }
+
+    fn witness(&self) -> StorageWitness {
+        self.witness.clone()
     }
 }
 
-fn bool_case(bool_value: bool) -> StorageWitness {
-    StorageWitness {
-        bool_value,
-        ..case(Function::Bool)
-    }
+// 0. get_u256_slot_leaf
+fn claim_u256(slot: [u8; 32], value: [u8; 32]) -> Case {
+    let mut case = Case::new(Function::U256, slot);
+    case.witness.u256_value = value;
+
+    case
 }
 
-fn u64_case(u64_value: u64) -> StorageWitness {
-    StorageWitness {
-        u64_value,
-        ..case(Function::U64)
-    }
+// 1. get_bool_slot_leaf
+fn claim_bool(slot: [u8; 32], value: bool) -> Case {
+    let mut case = Case::new(Function::Bool, slot);
+    case.witness.bool_value = value;
+
+    case
+}
+
+// 2. get_u64_slot_leaf
+fn claim_u64(slot: [u8; 32], value: u64) -> Case {
+    let mut case = Case::new(Function::U64, slot);
+    case.witness.u64_value = value;
+
+    case
 }
 
 /// A slot holding `value` as a 32-byte big-endian number.
@@ -69,41 +97,46 @@ fn bool_slot(value: bool) -> [u8; 32] {
 
 #[test]
 fn rejects_unknown_function() {
-    expect::rejects(
-        program([0; 32]).as_ref(),
-        StorageWitness {
-            function_index: FUNCTIONS,
-            ..u256_case([0; 32])
-        },
-    );
+    claim_u256([0; 32], [0; 32])
+        .unknown_function()
+        .rejects(Assertion);
 }
 
+// 0. get_u256_slot_leaf
 #[test]
 fn u256_slot_leaf_matches_storage() {
     let pattern: [u8; 32] = std::array::from_fn(|index| index as u8);
 
     for slot in [[0; 32], [0xff; 32], pattern] {
-        let program = program(slot);
-
-        expect::accepts(program.as_ref(), u256_case(slot));
+        claim_u256(slot, slot).accepts();
 
         for byte in [0, 31] {
             let mut other = slot;
             other[byte] ^= 1;
 
-            expect::rejects(program.as_ref(), u256_case(other));
+            claim_u256(slot, other).rejects(Assertion);
         }
     }
 }
 
+// 1. get_bool_slot_leaf
+#[test]
+fn bool_slot_leaf_matches_storage() {
+    for value in [false, true] {
+        claim_bool(bool_slot(value), value).accepts();
+        claim_bool(bool_slot(value), !value).rejects(Assertion);
+    }
+}
+
+// 2. get_u64_slot_leaf
 #[test]
 fn u64_slot_leaf_matches_storage() {
     for value in [0, 1, u64::MAX, 0x0102_0304_0506_0708] {
-        let program = program(u64_slot(value));
+        let slot = u64_slot(value);
 
-        expect::accepts(program.as_ref(), u64_case(value));
-        expect::rejects(program.as_ref(), u64_case(value ^ 1));
-        expect::rejects(program.as_ref(), u64_case(value.swap_bytes() ^ 1));
+        claim_u64(slot, value).accepts();
+        claim_u64(slot, value ^ 1).rejects(Assertion);
+        claim_u64(slot, value.swap_bytes() ^ 1).rejects(Assertion);
     }
 }
 
@@ -112,15 +145,5 @@ fn u64_slot_leaf_takes_only_low_bytes_as_value() {
     let mut slot = u64_slot(7);
     slot[0] = 1;
 
-    expect::rejects(program(slot).as_ref(), u64_case(7));
-}
-
-#[test]
-fn bool_slot_leaf_matches_storage() {
-    for value in [false, true] {
-        let program = program(bool_slot(value));
-
-        expect::accepts(program.as_ref(), bool_case(value));
-        expect::rejects(program.as_ref(), bool_case(!value));
-    }
+    claim_u64(slot, 7).rejects(Assertion);
 }

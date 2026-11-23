@@ -1,48 +1,75 @@
+use std::fmt::Debug;
+
 use simplex::fuzz::proptest::prelude::{Just, Strategy, any, prop_oneof};
-use simplex::fuzz::{Expect, FuzzProgramTrait, FuzzProgramValues, Scenario};
+use simplex::fuzz::proptest::strategy::ValueTree;
+use simplex::fuzz::proptest::test_runner::TestRunner;
+use simplex::fuzz::{Expect, FuzzProgramValues, Scenario};
+use simplex::program::ProgramSchema;
 use simplex::{FuzzMode, TestContext};
 
 use lending_contracts_v2::utils::protocol_fee::FEE_RATE_DENOMINATOR;
 
+use crate::support::case::{DispatchCase, WitnessOf};
 use crate::support::execution;
 
 /// The name of the program in [`run`] scenarios.
 const FUZZED: &str = "unit";
 
-/// Fuzzes `program`, which takes no arguments, on the witnesses `cases` generates.
+/// Fuzzes the cases `build` makes from `inputs`, against a model.
 ///
-/// `set_expected` writes the model's result into a case, and the program must reject any other
-/// expected value. The program must accept a case exactly when `model_accepts` holds for it.
-pub fn run<P>(
+/// `reference` writes the model's result into the expected values of a witness and says whether the
+/// program must accept it. The program must reject any other expected value.
+///
+/// Only for programs that take no arguments and read no storage.
+pub fn run<C, T>(
     context: &TestContext<FuzzMode>,
-    program: &P,
-    template: P::Witness,
-    cases: impl Strategy<Value = P::Witness> + 'static,
-    set_expected: impl Fn(&mut P::Witness) + 'static,
-    model_accepts: impl Fn(&P::Witness) -> bool + 'static,
+    inputs: impl Strategy<Value = T> + 'static,
+    build: impl Fn(T) -> C + 'static,
+    reference: fn(&mut WitnessOf<C>) -> bool,
 ) where
-    P: FuzzProgramTrait,
-    P::Arguments: Default,
+    C: DispatchCase,
+    T: Debug + 'static,
+    <C::Program as ProgramSchema>::Arguments: Default,
+    WitnessOf<C>: Clone,
 {
-    let values = cases.prop_map(|witness| -> FuzzProgramValues {
-        (P::Arguments::default().into(), witness.into()).into()
+    // The engine replaces the witness of the template, any generated case will do
+    let template = build(
+        inputs
+            .new_tree(&mut TestRunner::deterministic())
+            .expect("the strategy generates a value")
+            .current(),
+    );
+
+    let values = inputs.prop_map(move |input| -> FuzzProgramValues {
+        (
+            <C::Program as ProgramSchema>::Arguments::default().into(),
+            build(input).witness().into(),
+        )
+            .into()
     });
 
     let mut scenario = Scenario::new(execution::spend(
-        program.as_ref(),
-        template,
+        template.program().as_ref(),
+        template.witness(),
         *context.get_network(),
     ));
 
     scenario
-        .add::<P>(FUZZED)
+        .add::<C::Program>(FUZZED)
         .spends(0)
         .custom_strategy(values)
-        .requires_witness(move |witness, _| set_expected(witness));
+        .requires_witness(move |witness, _| {
+            reference(witness);
+        });
 
     context
         .engine(scenario)
-        .spec(move |case| accept_if(model_accepts(case.program::<P>(FUZZED).witness())))
+        .spec(move |case| {
+            let program = case.program::<C::Program>(FUZZED);
+            let mut witness = program.witness().clone();
+
+            accept_if(reference(&mut witness))
+        })
         .run();
 }
 
