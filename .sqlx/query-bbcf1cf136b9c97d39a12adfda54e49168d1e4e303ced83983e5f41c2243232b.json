@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO offers (\n            id, issuance_factory_id, collateral_asset_id, principal_asset_id,\n            borrower_nft_asset_id, lender_nft_asset_id, protocol_fee_keeper_asset_id,\n            collateral_amount, principal_amount, current_debt, collateral_remaining,\n            interest_rate, loan_expiration_time, updated_at_height, created_at_height,\n            created_at_txid\n        ) VALUES (\n            COALESCE(\n                (SELECT offer_id FROM offer_id_reservations WHERE created_at_txid = $15),\n                nextval(pg_get_serial_sequence('offers', 'id'))\n            ),\n            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15\n        )\n        ON CONFLICT (created_at_txid) DO NOTHING\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int4",
+        "Int4",
+        "Int8",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bbcf1cf136b9c97d39a12adfda54e49168d1e4e303ced83983e5f41c2243232b"
+}

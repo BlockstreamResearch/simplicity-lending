@@ -38,7 +38,8 @@ pub async fn test_pool() -> anyhow::Result<PgPool> {
             sync_state,
             indexed_blocks,
             offer_state_snapshots,
-            factory_state_snapshots
+            factory_state_snapshots,
+            offer_id_reservations
         RESTART IDENTITY CASCADE
         "#,
     )
