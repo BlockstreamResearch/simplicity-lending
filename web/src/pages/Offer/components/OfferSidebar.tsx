@@ -34,6 +34,7 @@ import {
   getLenderPayout,
   getLenderVaultBalance,
   getLiquidatedCollateral,
+  getLiquidationVaultPayout,
   getLoanDurationBlocks,
   getRepaidToLender,
   getUtxoCreatedHeight,
@@ -290,12 +291,40 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
       case 'liquidated': {
         const liquidatedCollateral = getLiquidatedCollateral(offer)
         if (isLender) {
-          const usd = formatUsd(liquidatedCollateral, collateralAsset.decimals, collateralPriceUsd)
           const stillOwed = getLenderPayout(offer) - getRepaidToLender(offer)
+          const vaultPayout = getLiquidationVaultPayout(offer)
+          const collateralValueInPrincipal =
+            collateralPriceUsd === null
+              ? null
+              : BigInt(
+                  Math.round(
+                    Number(liquidatedCollateral) *
+                      collateralPriceUsd *
+                      10 ** (principalAsset.decimals - collateralAsset.decimals),
+                  ),
+                )
+          const receivedUsd =
+            collateralValueInPrincipal === null
+              ? null
+              : formatUsd(collateralValueInPrincipal + vaultPayout, principalAsset.decimals, 1)
           return {
             title: 'You Received',
-            amount: renderCollateral(liquidatedCollateral),
-            description: `${usd ? `≈ ${usd} at today's price, instead` : 'Instead'} of the ${formatPrincipalAmount(stillOwed)} you were owed.`,
+            amount:
+              vaultPayout > 0n ? (
+                <span className='flex flex-col gap-2'>
+                  <span className='flex flex-col gap-0.5'>
+                    <span className='text-muted text-sm font-medium'>Collateral</span>
+                    <span>{renderCollateral(liquidatedCollateral)}</span>
+                  </span>
+                  <span className='flex flex-col gap-0.5'>
+                    <span className='text-muted text-sm font-medium'>From Your Vault</span>
+                    <span>{renderPrincipal(vaultPayout)}</span>
+                  </span>
+                </span>
+              ) : (
+                renderCollateral(liquidatedCollateral)
+              ),
+            description: `${receivedUsd ? `≈ ${receivedUsd}${vaultPayout > 0n ? ' in total' : ''} at today's price, instead` : 'Instead'} of the ${formatPrincipalAmount(stillOwed)} you were owed.`,
           }
         }
         return isBorrower

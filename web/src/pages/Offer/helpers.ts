@@ -64,6 +64,13 @@ export function getLiquidatedCollateral(offer: OfferDetails): bigint {
   return offer.collateral_amount - getReturnedCollateral(offer)
 }
 
+export function getLiquidationVaultPayout(offer: OfferDetails): bigint {
+  const liquidationTxid = offer.utxos.find(utxo => utxo.utxo_type === 'liquidation')?.txid
+  return offer.withdrawals
+    .filter(withdrawal => withdrawal.vault_type === 'lender' && withdrawal.txid === liquidationTxid)
+    .reduce((sum, withdrawal) => sum + withdrawal.amount_withdrawn, 0n)
+}
+
 export function getUtxoCreatedHeight(offer: OfferDetails, utxoType: OfferUtxoType): number | null {
   return offer.utxos.find(utxo => utxo.utxo_type === utxoType)?.created_at_height ?? null
 }
