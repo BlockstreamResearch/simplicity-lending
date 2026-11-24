@@ -414,17 +414,10 @@ impl LendingOffer {
         borrower_debt_before: u64,
         amount_to_repay: u64,
     ) {
-        let already_repaid_protocol_fee_before = self
+        let repaid_protocol_fee = self
             .parameters
             .offer_parameters
-            .get_already_repaid_protocol_fee(borrower_debt_before);
-        let already_repaid_protocol_fee_after = self
-            .parameters
-            .offer_parameters
-            .get_already_repaid_protocol_fee(self.get_current_debt());
-
-        let repaid_protocol_fee =
-            already_repaid_protocol_fee_after - already_repaid_protocol_fee_before;
+            .get_repaid_protocol_fee(borrower_debt_before, amount_to_repay);
 
         let mut lender_vault = self.parameters.get_lender_vault(borrower_debt_before);
         let mut protocol_fee_vault = self.parameters.get_protocol_fee_vault(borrower_debt_before);
