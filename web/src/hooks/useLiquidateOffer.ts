@@ -30,6 +30,12 @@ import {
 import { useLwk } from '@/providers/lwk/useLwk'
 import { usePendingTransactions } from '@/providers/pendingTransactions/usePendingTransactions'
 import { useWallet } from '@/providers/wallet/useWallet'
+import {
+  ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY,
+  buildAssetAuthVaultSpendInfo,
+  buildAssetAuthVaultWitness,
+  loadAssetAuthVaultProgram,
+} from '@/simplicity/asset-auth-vault/program'
 import { findPendingOfferMetadata } from '@/simplicity/lending/metadata'
 import {
   buildDerivedLendingOfferProgramParams,
@@ -38,20 +44,25 @@ import {
   LENDING_MAX_WEIGHT_TO_SATISFY,
   loadLendingProgram,
 } from '@/simplicity/lending/program'
-import { getTotalAmountToRepay } from '@/simplicity/lending/utils'
+import { getProtocolFee, getTotalAmountToRepay, getTotalFee } from '@/simplicity/lending/utils'
 import { bytesToHex } from '@/utils/hex'
 import { getProcessingTxids } from '@/utils/pendingTransactions'
-import { toBytes32, toUint64 } from '@/utils/uint'
+import { toBytes32, toUint32, toUint64 } from '@/utils/uint'
 
 const NFT_AMOUNT = 1n
 const MAX_SEQUENCE_NON_RBF = 0xfffffffe
 const BURN_PAYLOAD = new TextEncoder().encode('burn')
+const LENDING_INPUT_INDEX = 0
+const LENDER_VAULT_INPUT_INDEX = 2
+const LENDER_NFT_INPUT_INDEX = toUint32(1, 'lenderNftInputIndex')
+const LENDER_NFT_BURN_OUTPUT_INDEX = toUint32(0, 'lenderNftBurnOutputIndex')
 
 export interface LiquidateOfferParams {
   activeOfferOutpoint: string
   createOfferTxid: string
   lenderNftOutpoint: string
   currentDebt?: string
+  lenderVault?: { outpoint: string; alreadySupplied: string }
   feeOutpoints: string[]
 }
 
@@ -79,9 +90,17 @@ export function useLiquidateOffer() {
   ): Promise<UpdatedPset<LiquidateOfferSummary>> => {
     const activeOfferOutpoint = new OutPoint(params.activeOfferOutpoint)
     const lenderNftOutpoint = new OutPoint(params.lenderNftOutpoint)
+    const lenderVaultOutpoint = params.lenderVault
+      ? new OutPoint(params.lenderVault.outpoint)
+      : null
     const feeOutpoints = params.feeOutpoints.map(o => new OutPoint(o))
     assertDistinctOutpoints(
-      [activeOfferOutpoint, lenderNftOutpoint, ...feeOutpoints],
+      [
+        activeOfferOutpoint,
+        lenderNftOutpoint,
+        ...(lenderVaultOutpoint ? [lenderVaultOutpoint] : []),
+        ...feeOutpoints,
+      ],
       'Liquidation inputs must use distinct outpoints',
     )
     const [receiveAddressString, wollet, feeRate] = await Promise.all([
@@ -100,10 +119,11 @@ export function useLiquidateOffer() {
       throw new Error(`Fee outpoints must be wallet ${NETWORK_CONFIG.collateralAsset.symbol} UTXOs`)
     }
     // TODO: Handle with indexer
-    const [activeOfferTx, createOfferTx, lenderNftTx, feeTxs] = await Promise.all([
+    const [activeOfferTx, createOfferTx, lenderNftTx, lenderVaultTx, feeTxs] = await Promise.all([
       fetchTransaction(activeOfferOutpoint),
       fetchTransaction(new OutPoint(`${params.createOfferTxid}:0`)),
       fetchTransaction(lenderNftOutpoint),
+      lenderVaultOutpoint ? fetchTransaction(lenderVaultOutpoint) : null,
       Promise.all(feeOutpoints.map(o => fetchTransaction(o))),
     ])
     const activeOfferTxOut = requireTxOut(activeOfferTx, activeOfferOutpoint.vout(), 'Active offer')
@@ -151,6 +171,9 @@ export function useLiquidateOffer() {
     const currentDebt = params.currentDebt?.trim()
       ? toUint64(BigInt(params.currentDebt.trim()), 'currentDebt')
       : getTotalAmountToRepay(offerParameters)
+    if (currentDebt < getTotalAmountToRepay(offerParameters) && !params.lenderVault) {
+      throw new Error('Lender vault UTXO not found')
+    }
     const activeLendingSpendInfo = buildLendingOfferSpendInfo(
       lendingProgram,
       offerParameters,
@@ -163,6 +186,45 @@ export function useLiquidateOffer() {
       activeLendingSpendInfo.scriptPubkey,
       'Active offer output does not match the reconstructed active Lending covenant',
     )
+
+    const lenderVault = (() => {
+      if (!params.lenderVault || !lenderVaultOutpoint || !lenderVaultTx) return null
+      const txOut = requireTxOut(lenderVaultTx, lenderVaultOutpoint.vout(), 'Lender vault')
+      const asset = requireExplicitAsset(txOut, 'Lender vault')
+      const amount = requireExplicitAmount(txOut, 'Lender vault')
+      const alreadySupplied = toUint64(
+        BigInt(params.lenderVault.alreadySupplied.trim()),
+        'alreadySupplied',
+      )
+      const program = loadAssetAuthVaultProgram({
+        vaultAssetId: toBytes32(asset.toBytes(), 'principalAssetId'),
+        keeperAuthAssetId: toBytes32(lenderNftAsset.toBytes(), 'lenderNftAssetId'),
+        supplierAuthAssetId: toBytes32(borrowerNftAsset.toBytes(), 'borrowerNftAssetId'),
+        supplyGoal: toUint64(
+          getTotalAmountToRepay(offerParameters) - getProtocolFee(getTotalFee(offerParameters)),
+          'lenderVaultSupplyGoal',
+        ),
+        withKeeperAssetBurn: true,
+        withSupplierAssetBurn: true,
+        liquidationHeight: metadata.loanExpirationTime,
+      })
+      const spendInfo = buildAssetAuthVaultSpendInfo(program, { isActive: true, alreadySupplied })
+      assertScriptMatches(
+        txOut.scriptPubkey(),
+        spendInfo.scriptPubkey,
+        'Lender vault output does not match the reconstructed active AssetAuthVault covenant',
+      )
+      return {
+        outpoint: lenderVaultOutpoint,
+        tx: lenderVaultTx,
+        txOut,
+        asset,
+        amount,
+        alreadySupplied,
+        program,
+        spendInfo,
+      }
+    })()
 
     const burnScript = Script.newOpReturn(BURN_PAYLOAD)
     if (params.feeOutpoints.length === 0) throw new Error('At least one fee UTXO is required')
@@ -189,6 +251,18 @@ export function useLiquidateOffer() {
           amount: NFT_AMOUNT,
           maxWeightToSatisfy: EXPLICIT_SIGNATURE_MAX_WEIGHT_TO_SATISFY,
         },
+        ...(lenderVault
+          ? [
+              {
+                outpoint: lenderVault.outpoint,
+                prevout: lenderVault.txOut,
+                asset: lenderVault.asset,
+                amount: lenderVault.amount,
+                sequence: MAX_SEQUENCE_NON_RBF,
+                maxWeightToSatisfy: ASSET_AUTH_VAULT_MAX_WEIGHT_TO_SATISFY.WithdrawOnLiquidation,
+              },
+            ]
+          : []),
         ...feeUtxos.map((utxo, index) => ({
           outpoint: feeOutpoints[index],
           prevout: feeTxOuts[index],
@@ -209,6 +283,16 @@ export function useLiquidateOffer() {
           asset: collateralAsset,
           blindingPubkey: collateralRecipient.blindingPubkey(),
         },
+        ...(lenderVault
+          ? [
+              {
+                script: collateralRecipient.scriptPubkey(),
+                amount: lenderVault.amount,
+                asset: lenderVault.asset,
+                blindingPubkey: collateralRecipient.blindingPubkey(),
+              },
+            ]
+          : []),
       ],
       changeAddress,
       feeRateSatPerKvb: feeRate,
@@ -222,16 +306,45 @@ export function useLiquidateOffer() {
       finalize: (signedPset: Pset) => {
         const txWithWalletWitnesses = wollet.finalize(signedPset).extractTx()
 
-        const prevouts = [activeOfferTxOut, lenderNftTxOut, ...feeTxOuts]
-        const finalizedTx = lendingProgram.finalizeTransaction(
+        const buildPrevouts = () => [
+          requireTxOut(activeOfferTx, activeOfferOutpoint.vout(), 'Active offer'),
+          requireTxOut(lenderNftTx, lenderNftOutpoint.vout(), 'Lender NFT'),
+          ...(lenderVault
+            ? [requireTxOut(lenderVault.tx, lenderVault.outpoint.vout(), 'Lender vault')]
+            : []),
+          ...feeTxs.map((tx, index) =>
+            requireTxOut(
+              tx,
+              feeOutpoints[index].vout(),
+              `Fee ${NETWORK_CONFIG.collateralAsset.symbol}`,
+            ),
+          ),
+        ]
+        const liquidatedTx = lendingProgram.finalizeTransaction(
           txWithWalletWitnesses,
           activeLendingSpendInfo.controlBlock(lendingProgram.cmr),
-          prevouts,
-          0,
+          buildPrevouts(),
+          LENDING_INPUT_INDEX,
           buildLendingWitness({ branch: 'Liquidation', currentDebt }),
           lwkNetwork,
           SimplicityLogLevel.Trace,
         )
+        const finalizedTx = lenderVault
+          ? lenderVault.program.finalizeTransaction(
+              liquidatedTx,
+              lenderVault.spendInfo.controlBlock(lenderVault.program.cmr),
+              buildPrevouts(),
+              LENDER_VAULT_INPUT_INDEX,
+              buildAssetAuthVaultWitness({
+                branch: 'WithdrawOnLiquidation',
+                inputKeeperIndex: LENDER_NFT_INPUT_INDEX,
+                outputKeeperIndex: LENDER_NFT_BURN_OUTPUT_INDEX,
+                alreadySupplied: lenderVault.alreadySupplied,
+              }),
+              lwkNetwork,
+              SimplicityLogLevel.Trace,
+            )
+          : liquidatedTx
 
         // TODO: Remove debug summary before release
         return {
@@ -240,13 +353,17 @@ export function useLiquidateOffer() {
             inputs: {
               '0 Active offer Lending': params.activeOfferOutpoint,
               '1 Lender NFT (wallet)': params.lenderNftOutpoint,
-              [`2+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
+              '2 Lender vault AssetAuthVault': params.lenderVault?.outpoint ?? 'None',
+              [`${lenderVault ? 3 : 2}+ Fee ${NETWORK_CONFIG.collateralAsset.symbol} (wallet)`]:
                 params.feeOutpoints.join(', '),
               'Create-offer tx (metadata)': params.createOfferTxid,
             },
             outputs: {
               '0 Lender NFT burn': bytesToHex(burnScript.bytes()),
               '1 Unlocked collateral': collateralRecipient.toString(),
+              '2 Lender vault payout': lenderVault
+                ? `${lenderVault.amount.toString()} to ${collateralRecipient.toString()}`
+                : 'None',
               [`${NETWORK_CONFIG.collateralAsset.symbol} change`]: changeAddress.toString(),
             },
             assetIds: {

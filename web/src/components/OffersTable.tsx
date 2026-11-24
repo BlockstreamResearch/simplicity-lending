@@ -146,7 +146,7 @@ export default function OffersTable<T extends OfferShort>({
         if (offer.status === 'active' && expired)
           return { severity: 'danger', message: 'Loan expired. You can liquidate the collateral.' }
         if (offer.status === 'repaid')
-          return { severity: 'warning', message: 'Claim your loan repayment.' }
+          return { severity: 'warning', message: 'Withdraw your loan repayment.' }
       }
       if (role === 'borrower') {
         if (offer.status === 'pending' && expired)

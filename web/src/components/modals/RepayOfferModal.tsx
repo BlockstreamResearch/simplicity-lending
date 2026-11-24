@@ -16,6 +16,7 @@ import {
 } from '@/api/indexer/utils'
 import DetailsPanel from '@/components/DetailsPanel'
 import HandArrowDownIcon from '@/components/icons/HandArrowDownIcon'
+import AmountHeroCard from '@/components/modals/AmountHeroCard'
 import OfferActionShell from '@/components/modals/OfferActionShell'
 import { UiFieldLabel } from '@/components/ui/UiFieldLabel'
 import { UiTextField } from '@/components/ui/UiTextField'
@@ -109,7 +110,6 @@ export default function RepayOfferModal({
   onSuccess,
 }: RepayOfferModalProps) {
   const { principalAsset } = NETWORK_CONFIG
-  const { icon: PrincipalIcon } = principalAsset
   const { syncWallet, getBlindedWalletUtxos, scriptPubkey, confirmedBalances } = useWallet()
   const { lwkNetwork } = useLwk()
   const { partialRepayOffer } = usePartialRepayOffer()
@@ -250,17 +250,8 @@ export default function RepayOfferModal({
   return (
     <OfferActionShell
       isOpen={isOpen}
-      title={
-        <>
-          <span
-            aria-hidden='true'
-            className='bg-accent-soft text-accent-soft-foreground flex size-9 shrink-0 items-center justify-center rounded-full'
-          >
-            <HandArrowDownIcon className='size-4' />
-          </span>
-          <span className='text-h4 text-foreground'>Repay</span>
-        </>
-      }
+      title='Repay'
+      icon={{ Icon: HandArrowDownIcon, tone: 'accent' }}
       action={{
         label: actionLabel,
         variant: 'primary',
@@ -287,18 +278,12 @@ export default function RepayOfferModal({
       onSuccess={onSuccess}
     >
       <div className='text-foreground flex flex-col gap-8'>
-        <section className='bg-surface-secondary flex flex-col gap-3 rounded-xl p-6'>
-          <span className='text-h4 text-muted'>Left to Repay</span>
-          <p className='flex items-center gap-2'>
-            <PrincipalIcon className='size-6 shrink-0' />
-            <span className='text-display break-all'>
-              {formatAmount(offer.current_debt, principalAsset.decimals)}
-            </span>
-            <span className='text-muted self-end pb-0.5 text-sm font-medium'>
-              {principalAsset.symbol}
-            </span>
-          </p>
-        </section>
+        <AmountHeroCard
+          label='Left to Repay'
+          icon={principalAsset.icon}
+          value={formatAmount(offer.current_debt, principalAsset.decimals)}
+          unit={principalAsset.symbol}
+        />
         <section className='bg-surface-secondary flex flex-col gap-6 rounded-xl p-6'>
           <h4 className='text-muted text-xs'>Repay Details</h4>
           <Controller

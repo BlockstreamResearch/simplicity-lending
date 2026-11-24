@@ -1,5 +1,5 @@
 import type { MutationStatus } from '@tanstack/react-query'
-import { type ReactNode, useState } from 'react'
+import { type ComponentType, type ReactNode, type SVGProps, useState } from 'react'
 
 import {
   TransactionBody,
@@ -22,9 +22,19 @@ export interface OfferAction {
   onConfirm: () => void
 }
 
+const ICON_TONE_CONFIG = {
+  accent: 'bg-accent-soft text-accent-soft-foreground',
+  success: 'bg-success-soft text-success-soft-foreground',
+  danger: 'bg-danger-soft text-danger-soft-foreground',
+} as const
+
 interface OfferActionShellProps {
   isOpen: boolean
-  title: ReactNode
+  title: string
+  icon?: {
+    Icon: ComponentType<SVGProps<SVGSVGElement>>
+    tone: keyof typeof ICON_TONE_CONFIG
+  }
   chip?: ReactNode
   action?: OfferAction
   onClose: () => void
@@ -61,6 +71,7 @@ function deriveView(action: OfferAction | undefined): ActionView {
 export default function OfferActionShell({
   isOpen,
   title,
+  icon,
   chip,
   action,
   onClose,
@@ -108,6 +119,14 @@ export default function OfferActionShell({
             />
           ) : (
             <span className='flex items-center gap-3'>
+              {icon && (
+                <span
+                  aria-hidden='true'
+                  className={`flex size-9 shrink-0 items-center justify-center rounded-full ${ICON_TONE_CONFIG[icon.tone]}`}
+                >
+                  <icon.Icon className='size-4' />
+                </span>
+              )}
               {title}
               {chip}
             </span>

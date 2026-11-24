@@ -63,6 +63,11 @@ export async function fetchTxRaw(txId: string, options: RequestParams = {}): Pro
   return requestBytes(buildEsploraUrl(`/tx/${txId}/raw`), { signal: options.signal })
 }
 
+export async function isTxOutputSpent(txId: string, vout: number): Promise<boolean> {
+  const outspends = await fetchTxOutspends(txId)
+  return outspends[vout]?.spent ?? false
+}
+
 export async function fetchTxOutspends(
   txId: string,
   options: RequestParams = {},

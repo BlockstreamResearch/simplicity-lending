@@ -1,4 +1,5 @@
-import type { OfferDetails } from '@/api/indexer/schemas'
+import type { OfferDetails, OfferVault } from '@/api/indexer/schemas'
+import { VAULT_MIN_REMAINDER } from '@/constants/offers'
 
 export const toOutpoint = (entry: { txid: string; vout: number }) => `${entry.txid}:${entry.vout}`
 
@@ -25,13 +26,30 @@ export function resolveActiveOutpoint(offer: OfferDetails): string | null {
   return utxo ? toOutpoint(utxo) : null
 }
 
+export function findFinalizedLenderVault(offer: OfferDetails): OfferVault | null {
+  return offer.vaults.find(v => v.vault_type === 'lender' && v.is_finalized) ?? null
+}
+
 export function resolveLenderVaultOutpoint(offer: OfferDetails): string | null {
-  const vault = offer.vaults.find(v => v.vault_type === 'lender' && v.is_finalized)
+  const vault = findFinalizedLenderVault(offer)
   return vault ? toOutpoint(vault) : null
 }
 
+export function findActiveLenderVault(offer: OfferDetails): OfferVault | null {
+  return offer.vaults.find(v => v.vault_type === 'lender' && !v.is_finalized) ?? null
+}
+
+export function getActiveLenderVaultBalance(offer: OfferDetails): bigint {
+  return findActiveLenderVault(offer)?.amount ?? 0n
+}
+
+export function getWithdrawableAmount(offer: OfferDetails): bigint {
+  const balance = getActiveLenderVaultBalance(offer)
+  return balance > VAULT_MIN_REMAINDER ? balance - VAULT_MIN_REMAINDER : 0n
+}
+
 export function resolveActiveLenderVaultOutpoint(offer: OfferDetails): string | null {
-  const vault = offer.vaults.find(v => v.vault_type === 'lender' && !v.is_finalized)
+  const vault = findActiveLenderVault(offer)
   return vault ? toOutpoint(vault) : null
 }
 
