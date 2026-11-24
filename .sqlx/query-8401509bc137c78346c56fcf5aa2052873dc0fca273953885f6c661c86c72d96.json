@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM offer_participants WHERE created_at_height = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8401509bc137c78346c56fcf5aa2052873dc0fca273953885f6c661c86c72d96"
+}

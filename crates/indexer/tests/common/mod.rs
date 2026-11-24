@@ -35,7 +35,14 @@ pub async fn test_pool() -> anyhow::Result<PgPool> {
             offer_participants,
             offer_utxos,
             offers,
-            sync_state
+            factory_auths,
+            factory_utxos,
+            factories,
+            sync_state,
+            indexed_blocks,
+            offer_state_snapshots,
+            factory_state_snapshots,
+            offer_id_reservations
         RESTART IDENTITY CASCADE
         "#,
     )
@@ -127,7 +134,13 @@ pub async fn seed_factory_row(pool: &PgPool, factory: &FactoryModel) -> anyhow::
     let mut sql_tx = pool.begin().await?;
     insert_factory(&mut sql_tx, factory).await?;
     if !matches!(factory.current_status, FactoryStatus::Removed) {
-        update_factory_status(&mut sql_tx, factory.id, factory.current_status).await?;
+        update_factory_status(
+            &mut sql_tx,
+            factory.id,
+            factory.current_status,
+            factory.created_at_height as u64,
+        )
+        .await?;
     }
     sql_tx.commit().await?;
     Ok(())
@@ -166,6 +179,33 @@ pub async fn seed_offer_row(pool: &PgPool, offer: &mut OfferModel) -> anyhow::Re
     }
     sql_tx.commit().await?;
     Ok(id)
+}
+
+/// Seeds a pending offer with its unspent pending-offer UTXO at `outpoint_from_offer_id(txid_seed, 0)`.
+pub async fn seed_pending_offer(
+    pool: &PgPool,
+    factory_id: Uuid,
+    txid_seed: i64,
+    created_at_height: i64,
+) -> anyhow::Result<(i64, OutPoint)> {
+    let offer_id = seed_offer_row(
+        pool,
+        &mut offer_model(txid_seed, factory_id, created_at_height),
+    )
+    .await?;
+    let pending_outpoint = outpoint_from_offer_id(txid_seed, 0);
+    seed_offer_utxo_row(
+        pool,
+        &unspent_offer_utxo(
+            offer_id,
+            pending_outpoint,
+            UtxoType::PendingOffer,
+            created_at_height,
+        ),
+    )
+    .await?;
+
+    Ok((offer_id, pending_outpoint))
 }
 
 pub async fn seed_offer_utxo_row(pool: &PgPool, utxo: &OfferUtxoModel) -> anyhow::Result<()> {
@@ -310,6 +350,24 @@ pub fn tx_with_input(spent: OutPoint, outputs: Vec<TxOut>) -> Transaction {
     }
 }
 
+/// Accepts the pending offer at `pending_outpoint`.
+pub fn acceptance_tx(pending_outpoint: OutPoint) -> Transaction {
+    tx_with_input(pending_outpoint, vec![normal_output(), normal_output()])
+}
+
+/// Cancels the pending offer at `pending_outpoint`.
+pub fn cancellation_tx(pending_outpoint: OutPoint) -> Transaction {
+    tx_with_input(
+        pending_outpoint,
+        vec![
+            null_data_output(),
+            null_data_output(),
+            normal_output(),
+            normal_output(),
+        ],
+    )
+}
+
 pub fn tx_with_inputs(spent: Vec<OutPoint>, outputs: Vec<TxOut>) -> Transaction {
     Transaction {
         version: 2,
@@ -335,6 +393,8 @@ pub fn padded_tx_with_inputs(known_inputs: Vec<OutPoint>, outputs: Vec<TxOut>) -
     tx_with_inputs(inputs, outputs)
 }
 
+pub mod chain;
+pub mod db_state;
 pub mod vault_tracking;
 
 pub fn explicit_asset_output(asset_byte: u8, script_pubkey: Script) -> TxOut {

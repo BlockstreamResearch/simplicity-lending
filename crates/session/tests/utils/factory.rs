@@ -377,7 +377,13 @@ pub async fn remove_factory_and_index_it(
         remove_txid,
     )
     .await?;
-    update_factory_status(&mut sql_tx, factory.id, FactoryStatus::Removed).await?;
+    update_factory_status(
+        &mut sql_tx,
+        factory.id,
+        FactoryStatus::Removed,
+        FACTORY_REMOVE_BLOCK_HEIGHT,
+    )
+    .await?;
     sql_tx.commit().await?;
 
     Ok(())

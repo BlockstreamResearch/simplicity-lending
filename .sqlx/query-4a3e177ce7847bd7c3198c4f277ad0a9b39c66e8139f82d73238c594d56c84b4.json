@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT height, hash, revertible\n        FROM indexed_blocks\n        ORDER BY height DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "height",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "revertible",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4a3e177ce7847bd7c3198c4f277ad0a9b39c66e8139f82d73238c594d56c84b4"
+}

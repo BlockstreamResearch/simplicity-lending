@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE factory_utxos SET spent_txid = NULL, spent_at_height = NULL WHERE spent_at_height = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "21d31679e0a4d5b4204bc8fc08a6cf925c8c9ba8ec45ed26428858ec80e698ce"
+}

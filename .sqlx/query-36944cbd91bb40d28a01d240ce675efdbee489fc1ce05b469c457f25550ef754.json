@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM offer_vault_withdrawals WHERE height = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "36944cbd91bb40d28a01d240ce675efdbee489fc1ce05b469c457f25550ef754"
+}

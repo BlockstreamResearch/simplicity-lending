@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE offers\n        SET current_status = snapshot.current_status,\n            current_debt = snapshot.current_debt,\n            collateral_remaining = snapshot.collateral_remaining,\n            updated_at_height = snapshot.updated_at_height\n        FROM offer_state_snapshots snapshot\n        WHERE snapshot.height = $1 AND snapshot.offer_id = offers.id\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "78c11870816108f4b2189cb765a412de85bc4ba3759fce59ab50f75b2023f2be"
+}

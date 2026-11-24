@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE offer_utxos SET spent_txid = NULL, spent_at_height = NULL WHERE spent_at_height = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8d3c9d3ab48f3cc320545572dc1e58361b6aad5254bfb106fb4993ff50275f92"
+}

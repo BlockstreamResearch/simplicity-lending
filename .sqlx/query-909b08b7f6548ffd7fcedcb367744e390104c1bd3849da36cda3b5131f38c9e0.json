@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE factories\n        SET current_status = snapshot.current_status\n        FROM factory_state_snapshots snapshot\n        WHERE snapshot.height = $1 AND snapshot.factory_id = factories.id\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "909b08b7f6548ffd7fcedcb367744e390104c1bd3849da36cda3b5131f38c9e0"
+}

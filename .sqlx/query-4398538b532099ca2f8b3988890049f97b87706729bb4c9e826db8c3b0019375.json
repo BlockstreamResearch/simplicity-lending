@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO offer_state_snapshots (\n            height, offer_id, current_status, current_debt, collateral_remaining,\n            updated_at_height\n        )\n        SELECT $1, id, current_status, current_debt, collateral_remaining, updated_at_height\n        FROM offers\n        WHERE id = $2\n        ON CONFLICT (height, offer_id) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4398538b532099ca2f8b3988890049f97b87706729bb4c9e826db8c3b0019375"
+}

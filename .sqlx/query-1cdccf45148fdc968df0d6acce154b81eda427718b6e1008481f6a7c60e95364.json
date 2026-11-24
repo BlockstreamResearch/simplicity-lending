@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO offer_id_reservations (created_at_txid, offer_id)\n        SELECT created_at_txid, id FROM offers WHERE created_at_height = $1\n        ON CONFLICT DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1cdccf45148fdc968df0d6acce154b81eda427718b6e1008481f6a7c60e95364"
+}

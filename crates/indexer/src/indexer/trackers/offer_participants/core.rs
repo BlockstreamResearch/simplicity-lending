@@ -35,6 +35,11 @@ impl OfferParticipantsTracker {
         })
     }
 
+    /// The same tracker with its cache loaded from the DB again.
+    pub async fn reloaded(&self, db_pool: &PgPool) -> anyhow::Result<Self> {
+        Self::load(db_pool).await
+    }
+
     pub async fn process_tx_spends(
         &mut self,
         sql_tx: &mut DbTx<'_>,

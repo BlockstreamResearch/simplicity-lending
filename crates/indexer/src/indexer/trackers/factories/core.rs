@@ -57,6 +57,11 @@ impl FactoriesTracker {
         })
     }
 
+    /// The same tracker with its cache loaded from the DB again.
+    pub async fn reloaded(&self, db_pool: &PgPool) -> anyhow::Result<Self> {
+        Self::load(db_pool, self.network).await
+    }
+
     pub async fn process_tx_spends(
         &mut self,
         sql_tx: &mut DbTx<'_>,
@@ -159,7 +164,8 @@ impl FactoriesTracker {
                 Ok(FactoryProgramTxEffect::AssetsIssued(factory_id))
             }
             Some(IssuanceFactoryTxKind::FactoryRemoval) => {
-                update_factory_status(sql_tx, factory_id, FactoryStatus::Removed).await?;
+                update_factory_status(sql_tx, factory_id, FactoryStatus::Removed, block_height)
+                    .await?;
                 tracing::info!(
                     %factory_id,
                     %txid,

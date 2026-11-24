@@ -98,6 +98,37 @@ pub async fn spend_offer_utxo(
     Ok(())
 }
 
+/// Saves the offer's state before its first in-place update in the block, so the block
+/// can be rolled back. Every in-place `UPDATE offers` must call it first.
+async fn snapshot_offer_state(
+    sql_tx: &mut DbTx<'_>,
+    offer_id: i64,
+    block_height: u64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO offer_state_snapshots (
+            height, offer_id, current_status, current_debt, collateral_remaining,
+            updated_at_height
+        )
+        SELECT $1, id, current_status, current_debt, collateral_remaining, updated_at_height
+        FROM offers
+        WHERE id = $2
+        ON CONFLICT (height, offer_id) DO NOTHING
+        "#,
+        block_height as i64,
+        offer_id,
+    )
+    .execute(&mut **sql_tx)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to snapshot offer state: {e:?}");
+        e
+    })?;
+
+    Ok(())
+}
+
 #[tracing::instrument(
     name = "Updating offer status in DB",
     skip(sql_tx),
@@ -109,6 +140,8 @@ pub async fn update_offer_status(
     new_status: OfferStatus,
     block_height: u64,
 ) -> Result<(), sqlx::Error> {
+    snapshot_offer_state(sql_tx, offer_id, block_height).await?;
+
     sqlx::query!(
         r#"
         UPDATE offers
@@ -211,6 +244,8 @@ pub async fn update_offer_debt_and_collateral(
     collateral_remaining: i64,
     block_height: u64,
 ) -> Result<(), sqlx::Error> {
+    snapshot_offer_state(sql_tx, offer_id, block_height).await?;
+
     sqlx::query!(
         r#"
         UPDATE offers

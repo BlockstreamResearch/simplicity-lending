@@ -41,6 +41,14 @@ To identify transactions creating `PreLock` covenants, the engine applies a stri
 2. Uses the extracted `PreLockArguments` to derive the expected `PreLock` covenant address.
 3. Compares the derived address against the `script_pubkey` of the **0-th** output. If they match, the transaction is indexed as a valid new offer.
 
+#### Chain Reorganizations
+
+Liquid can replace its most recent block. The indexer keeps the hashes of the last few indexed blocks (`indexed_blocks`) and, before indexing block `N + 1`, checks that its parent is the indexed block `N`. While no new block arrives, it compares the hash at `N` instead.
+
+When block `N` left the chain, the indexer rolls it back in one SQL transaction: it deletes the rows created at `N`, clears the spends recorded at `N`, restores the offer and factory state saved before `N` changed it (`offer_state_snapshots`, `factory_state_snapshots`), and moves `sync_state` back to `N - 1`. It then reloads its UTXO caches and indexes the new block. An offer re-indexed from the same creation transaction keeps its id (`offer_id_reservations`), and a factory keeps its id because it is derived from the creation txid.
+
+A rollback emits `block_reverted`. Events already sent for the rolled back block no longer hold. Blocks indexed before this mechanism existed, and blocks deeper than the kept history, cannot be rolled back: the indexer then stops making progress and logs the error.
+
 ### API Service
 
 The API is implemented as a REST service built with `Axum`, leveraging `PostgreSQL` and `SQLx` for asynchronous, type-safe persistence. It features integrated `tracing` to provide structured logging and comprehensive request monitoring out of the box.
@@ -201,6 +209,7 @@ Event types:
 | SSE `event:` | When emitted | Suggested client action |
 | :--- | :--- | :--- |
 | `block_indexed` | After each indexed block | Refetch lists using `not_expired`, overviews |
+| `block_reverted` | An indexed block was replaced on chain (reorg) and its changes were rolled back | Refetch everything; events already received for that block no longer hold |
 | `factory_created` | New issuance factory indexed | Refetch `GET /factories/{id}` or `/factories/by-script` |
 | `offer_created` | New offer indexed (`pending`) | Refetch `GET /borrowers/offers` when `borrower_script_pubkey` matches; or `GET /offers/{id}` |
 | `offer_status_updated` | Offer status transition | Refetch offer details and role-specific lists |
@@ -212,6 +221,9 @@ Examples:
 ```
 event: block_indexed
 data: {"type":"block_indexed","height":2500001}
+
+event: block_reverted
+data: {"type":"block_reverted","height":2500001,"hash":"aabb…"}
 
 event: factory_created
 data: {"type":"factory_created","id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","height":2500001,"factory_auth_script_pubkey":"52ac…"}
@@ -238,7 +250,7 @@ API and indexer may run as separate processes (`RUN_MODE=api` / `RUN_MODE=indexe
 ### Identifiers
 
 - **Offer `id`**: internal auto-increment integer (`BIGINT`), serialized in JSON responses as a **decimal string** (e.g. `"1"`). Assigned by PostgreSQL on insert. Used in nested `offer_id` fields and `GET /offers/by-script` responses. Not present on-chain. The path parameter in `GET /offers/{id}` is a numeric ID (e.g. `/offers/42`).
-- **`issuance_factory_id`**: UUID of the issuance factory that created the offer.
+- **`issuance_factory_id`**: UUID of the issuance factory that created the offer. New factories get a UUID v5 derived from the factory creation txid, so the id stays the same when the factory is re-indexed.
 - **`created_at_txid`**: on-chain unique key (hex) of the offer creation transaction.
 
 Example short offer item:

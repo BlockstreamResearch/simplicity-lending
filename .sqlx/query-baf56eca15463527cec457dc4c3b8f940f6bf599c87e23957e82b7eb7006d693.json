@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE offer_vaults SET spent_txid = NULL, spent_at_height = NULL WHERE spent_at_height = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "baf56eca15463527cec457dc4c3b8f940f6bf599c87e23957e82b7eb7006d693"
+}

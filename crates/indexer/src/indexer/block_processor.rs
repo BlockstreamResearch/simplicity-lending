@@ -1,31 +1,21 @@
-use std::sync::Arc;
-
 use sqlx::PgPool;
-
-use simplex::provider::{EsploraProvider, ProviderTrait};
 
 use uuid::Uuid;
 
 use crate::{
     events::{IndexerEvent, notify_indexer_event},
-    indexer::{db, provider::call_provider, trackers::TrackerRegistry},
+    indexer::{ChainBlock, RollbackError, db, rollback_block, trackers::TrackerRegistry},
 };
 
 pub struct BlockProcessor {
     db_pool: PgPool,
-    provider: Arc<EsploraProvider>,
     tracker_registry: TrackerRegistry,
 }
 
 impl BlockProcessor {
-    pub fn new(
-        db_pool: PgPool,
-        provider: Arc<EsploraProvider>,
-        tracker_registry: TrackerRegistry,
-    ) -> Self {
+    pub fn new(db_pool: PgPool, tracker_registry: TrackerRegistry) -> Self {
         Self {
             db_pool,
-            provider,
             tracker_registry,
         }
     }
@@ -34,25 +24,40 @@ impl BlockProcessor {
         &self.tracker_registry
     }
 
+    /// Rolls back the last indexed block `height` in one SQL transaction and returns its
+    /// parent's hash. The tracker caches are stale afterwards until [`Self::reload_caches`]
+    /// succeeds.
+    pub async fn rollback_block(&mut self, height: u64) -> Result<String, RollbackError> {
+        let mut sql_tx = self.db_pool.begin().await?;
+        let parent_hash = rollback_block(&mut sql_tx, height).await?;
+        sql_tx.commit().await?;
+
+        Ok(parent_hash)
+    }
+
+    pub async fn reload_caches(&mut self) -> anyhow::Result<()> {
+        self.tracker_registry.reload_caches(&self.db_pool).await
+    }
+
+    pub async fn record_starting_block(&self, height: u64, hash: &str) -> anyhow::Result<()> {
+        Ok(db::record_starting_block(&self.db_pool, height, hash).await?)
+    }
+
+    pub async fn drop_starting_block(&self, height: u64) -> anyhow::Result<bool> {
+        Ok(db::drop_starting_block(&self.db_pool, height).await?)
+    }
+
     #[tracing::instrument(
         name = "Processing block",
-        skip(self),
-        fields(block_run_id = %Uuid::new_v4(), height = %block_height)
+        skip(self, block),
+        fields(block_run_id = %Uuid::new_v4(), height = %block.height)
     )]
-    pub async fn process_block(&mut self, block_height: u64) -> anyhow::Result<()> {
-        let height = u32::try_from(block_height)?;
-
-        let (block_hash, txs) = call_provider(&self.provider, move |provider| {
-            let block_hash = provider.fetch_block_hash_at_height(height)?;
-            let txs = provider
-                .fetch_block_txids(&block_hash)?
-                .iter()
-                .map(|txid| provider.fetch_transaction(txid))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            Ok((block_hash, txs))
-        })
-        .await?;
+    pub async fn process_block(&mut self, block: ChainBlock) -> anyhow::Result<()> {
+        let ChainBlock {
+            height: block_height,
+            hash: block_hash,
+            txs,
+        } = block;
         let tx_count = txs.len();
 
         let mut sql_tx = self.db_pool.begin().await?;
@@ -65,6 +70,7 @@ impl BlockProcessor {
                     .await?;
             }
 
+            db::record_indexed_block(&mut sql_tx, block_height, &block_hash).await?;
             db::upsert_sync_state(&mut sql_tx, block_height, block_hash).await?;
 
             notify_indexer_event(
