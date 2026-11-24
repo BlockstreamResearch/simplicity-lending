@@ -6,6 +6,14 @@ export const BPS_DIVISOR = 10_000n
 
 export const VAULT_MIN_REMAINDER = 1n
 
+export const MAX_LTV = 0.55
+
+export const MEDIUM_RISK_LTV = MAX_LTV / 3
+
+export const HIGH_RISK_LTV = (MAX_LTV * 2) / 3
+
+export const MAX_LTV_BAR_POSITION = 64
+
 export const VAULT_CHANGED_MESSAGE = 'The vault has just changed. Reopen and try again.'
 
 export const PROTOCOL_FEE_BPS = 1000

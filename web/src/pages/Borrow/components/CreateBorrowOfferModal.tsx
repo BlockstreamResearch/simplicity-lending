@@ -18,7 +18,7 @@ import { UiTextField } from '@/components/ui/UiTextField'
 import { MINUTES_PER_DAY } from '@/constants/blocks'
 import { env } from '@/constants/env'
 import { type ConfigAsset, NETWORK_CONFIG } from '@/constants/network-config'
-import { BPS_DIVISOR } from '@/constants/offers'
+import { BPS_DIVISOR, MAX_LTV } from '@/constants/offers'
 import { useBorrowerAccount } from '@/hooks/useBorrowerAccount'
 import { useCreateOffer } from '@/hooks/useCreateOffer'
 import { useFeeRateSatPerKvb } from '@/hooks/useFeeRate'
@@ -42,7 +42,6 @@ import {
 } from '@/utils/policyAssetDenomination'
 import { selectByLargestFirst } from '@/utils/utxo'
 
-import { MAX_LTV } from '../helpers'
 import LoanMetricsSummary from './LoanMetricsSummary'
 
 const TERM_OPTIONS = [

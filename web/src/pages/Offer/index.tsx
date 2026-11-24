@@ -4,10 +4,12 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '@/api/errors'
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffer } from '@/api/indexer/hooks'
+import { useAssetPriceUsd } from '@/api/prices/hooks'
 import BackLink from '@/components/BackLink'
+import CardAlert from '@/components/CardAlert'
+import ArrowDownIcon from '@/components/icons/ArrowDownIcon'
 import CheckIcon from '@/components/icons/CheckIcon'
 import ShareNodesIcon from '@/components/icons/ShareNodesIcon'
-import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import { OffersLoadError } from '@/components/OffersLoadError'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { UiButton } from '@/components/ui/UiButton'
@@ -20,8 +22,10 @@ import { resolveActorRole } from '@/utils/offerActions'
 import { getOfferPendingTx } from '@/utils/pendingTransactions'
 
 import OfferActivity from './components/Activity'
-import OfferSidebar from './components/OfferSidebar'
+import { LOAN_RISK_ID } from './components/LoanRisk'
+import OfferSidebar, { OFFER_SIDEBAR_ID } from './components/OfferSidebar'
 import OfferSummary from './components/OfferSummary'
+import { getOfferLtv } from './helpers'
 
 const OFFER_NOT_FOUND_HTTP_STATUS = 404
 const INVALID_OFFER_ID_HTTP_STATUS = 400
@@ -46,6 +50,7 @@ export default function OfferPage() {
   const { scriptPubkey } = useWallet()
   const { data: currentBlockHeight } = useBlockHeight()
   const { formatPrincipalAmount } = useFormatAmount()
+  const collateralPriceUsd = useAssetPriceUsd(NETWORK_CONFIG.collateralAsset.id)
   const { icon: CollateralIcon } = NETWORK_CONFIG.collateralAsset
   const { icon: PrincipalIcon } = NETWORK_CONFIG.principalAsset
   const isNotFound =
@@ -74,6 +79,37 @@ export default function OfferPage() {
               return UNCLAIMED_PRINCIPAL_OVERDUE_HINT
             }
             return OVERDUE_HINT_BY_ROLE[role]
+          })()
+          const isUnderCollateralized =
+            role === 'lender' &&
+            offer.status === 'active' &&
+            (getOfferLtv(offer, collateralPriceUsd) ?? 0) >= 1
+          const banner = (() => {
+            if (isUnderCollateralized && isOverdue) {
+              return {
+                title: 'The deadline has passed and the collateral is worth less than the debt',
+                body: `Liquidating now gets you collateral worth less than the unpaid debt. ${OVERDUE_HINT_BY_ROLE.lender}`,
+                action: 'What to do',
+                targetId: OFFER_SIDEBAR_ID,
+              }
+            }
+            if (isUnderCollateralized) {
+              return {
+                title: `${NETWORK_CONFIG.collateralAsset.symbol} fell – the collateral is now worth less than the debt`,
+                body: "If the borrower doesn't repay by the deadline, the collateral you'd take is worth less than the unpaid debt.",
+                action: 'See Loan Risk',
+                targetId: LOAN_RISK_ID,
+              }
+            }
+            if (overdueHint) {
+              return {
+                title: `The deadline has passed with ${formatPrincipalAmount(offer.current_debt)} still unpaid`,
+                body: overdueHint,
+                action: 'What to do',
+                targetId: OFFER_SIDEBAR_ID,
+              }
+            }
+            return null
           })()
 
           return (
@@ -108,20 +144,19 @@ export default function OfferPage() {
                 </UiButton>
               </header>
 
-              {overdueHint && (
-                <div
+              {banner && (
+                <CardAlert
+                  variant='danger'
+                  isFilled
                   role='alert'
-                  className='border-separator bg-surface-secondary text-foreground flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm'
-                >
-                  <TriangleExclamationIcon className='text-muted mt-0.5 size-4 shrink-0' />
-                  <div className='flex flex-col'>
-                    <p className='font-medium'>
-                      The deadline has passed with {formatPrincipalAmount(offer.current_debt)} still
-                      unpaid.
-                    </p>
-                    <p className='text-muted'>{overdueHint}</p>
-                  </div>
-                </div>
+                  title={banner.title}
+                  description={banner.body}
+                  actionLabel={banner.action}
+                  actionIcon={<ArrowDownIcon className='size-4' />}
+                  onAction={() =>
+                    document.getElementById(banner.targetId)?.scrollIntoView({ behavior: 'smooth' })
+                  }
+                />
               )}
 
               <div className='grid items-start gap-6 lg:grid-cols-3'>

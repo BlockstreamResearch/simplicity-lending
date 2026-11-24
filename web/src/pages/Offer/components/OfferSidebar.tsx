@@ -40,6 +40,8 @@ import {
   getUtxoCreatedHeight,
 } from '../helpers'
 
+export const OFFER_SIDEBAR_ID = 'offer-actions'
+
 const STUCK_CHECK_INTERVAL_MS = 15_000
 
 type ActionWithButton = Exclude<OfferModalAction, 'none'>
@@ -223,15 +225,12 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
                 title: 'Your Loan',
                 amount: renderPrincipal(offer.principal_amount),
                 description: isExpired
-                  ? 'The deadline has passed. Claim your loan, then repay before the lender liquidates your collateral.'
+                  ? undefined
                   : 'The loan is funded and waiting in the contract. The repayment clock is already running.',
               }
             : {
                 title: 'Your Debt',
                 amount: renderPrincipal(offer.current_debt),
-                description: isExpired
-                  ? 'The deadline has passed. Repay before the lender liquidates your collateral.'
-                  : undefined,
               }
         }
         if (isLender) {
@@ -241,8 +240,8 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
             description: (() => {
               if (isExpired) {
                 return vaultBalance > 0n
-                  ? 'The deadline has passed. Liquidate to take the collateral and everything in your vault.'
-                  : 'The deadline has passed. You can take the collateral for the unpaid debt.'
+                  ? 'Liquidate to take the collateral and everything in your vault.'
+                  : 'You can take the collateral for the unpaid debt.'
               }
               return withdrawable > 0n
                 ? 'The borrower has repaid part of the loan. You can withdraw it now.'
@@ -391,7 +390,10 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
   })()
 
   return (
-    <section className='bg-surface-secondary flex min-w-0 flex-col gap-3 rounded-3xl p-4 sm:p-6 lg:row-span-2'>
+    <section
+      id={OFFER_SIDEBAR_ID}
+      className='bg-surface-secondary flex min-w-0 scroll-mt-6 flex-col gap-3 rounded-3xl p-4 sm:p-6 lg:row-span-2'
+    >
       <div className='flex items-center justify-between gap-3'>
         <div className='flex min-w-0 flex-col gap-1'>
           <span

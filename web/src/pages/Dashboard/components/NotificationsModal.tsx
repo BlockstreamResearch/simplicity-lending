@@ -1,9 +1,8 @@
+import CardAlert from '@/components/CardAlert'
 import { UiButton } from '@/components/ui/UiButton'
 import { UiModal } from '@/components/ui/UiModal'
 import { useOpenOffer } from '@/hooks/useOpenOffer'
 import type { OfferNotification } from '@/utils/notifications'
-
-import CardAlert from './CardAlert'
 
 export default function NotificationsModal({
   isOpen,

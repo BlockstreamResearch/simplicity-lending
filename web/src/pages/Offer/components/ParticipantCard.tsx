@@ -2,21 +2,16 @@ import { Chip } from '@heroui/react'
 import type { ReactNode } from 'react'
 
 import type { ParticipantType } from '@/api/indexer/schemas'
+import borrowerAvatarUrl from '@/assets/avatars/borrower.png'
+import lenderAvatarUrl from '@/assets/avatars/lender.png'
 import CopyButton from '@/components/CopyButton'
 import { scriptPubkeyToAddress } from '@/utils/format'
 
-const PARTICIPANT_AVATAR_HUE: Record<ParticipantType, number> = { borrower: 255, lender: 145 }
-const AVATAR_HUE_SPREAD = 30
-const HASH_MULTIPLIER = 31
+import OfferMetric from './OfferMetric'
 
-function addressGradient(seed: string, participant: ParticipantType): string {
-  let hash = 0
-  for (const char of seed) hash = (hash * HASH_MULTIPLIER + char.charCodeAt(0)) | 0
-  const hue =
-    PARTICIPANT_AVATAR_HUE[participant] +
-    (Math.abs(hash) % AVATAR_HUE_SPREAD) -
-    AVATAR_HUE_SPREAD / 2
-  return `radial-gradient(circle at 30% 30%, hsl(${hue - 50} 85% 88%), hsl(${hue} 80% 65%) 55%, hsl(${hue + 15} 70% 45%))`
+const PARTICIPANT_AVATAR_CONFIG: Record<ParticipantType, string> = {
+  borrower: borrowerAvatarUrl,
+  lender: lenderAvatarUrl,
 }
 
 interface ParticipantCardProps {
@@ -25,6 +20,7 @@ interface ParticipantCardProps {
   subtitle: string
   scriptPubkey?: string
   amountLabel: string
+  amountTooltip?: string
   amount: ReactNode
   caption?: string
   isYou?: boolean
@@ -37,6 +33,7 @@ export default function ParticipantCard({
   subtitle,
   scriptPubkey,
   amountLabel,
+  amountTooltip,
   amount,
   caption,
   isYou,
@@ -46,26 +43,27 @@ export default function ParticipantCard({
 
   return (
     <div
-      className={`flex min-w-0 flex-1 flex-col gap-2 rounded-2xl p-4 ${
+      className={`flex min-w-0 flex-1 flex-col gap-3 rounded-sm p-4 sm:p-6 ${
         isPlaceholder ? '' : 'bg-surface'
       }`}
     >
-      <div className='flex items-start justify-between gap-2'>
-        <div className='flex min-w-0 items-center gap-2.5'>
+      <div className='flex items-center justify-between gap-2'>
+        <div className='flex min-w-0 items-center gap-2'>
           {address ? (
-            <span
+            <img
+              src={PARTICIPANT_AVATAR_CONFIG[participant]}
+              alt=''
               aria-hidden='true'
-              className='size-8 shrink-0 rounded-full'
-              style={{ background: addressGradient(address, participant) }}
+              className='size-9 shrink-0 rounded-full object-cover'
             />
           ) : (
             <span
               aria-hidden='true'
-              className='border-muted size-8 shrink-0 rounded-full border border-dashed'
+              className='border-muted size-9 shrink-0 rounded-full border border-dashed'
             />
           )}
           <div className='flex min-w-0 flex-col'>
-            <span className={`font-medium ${isPlaceholder ? 'text-muted' : 'text-foreground'}`}>
+            <span className={`text-h4 ${isPlaceholder ? 'text-muted' : 'text-foreground'}`}>
               {title}
             </span>
             <span className='text-muted flex min-w-0 items-center gap-1 text-xs'>
@@ -81,16 +79,17 @@ export default function ParticipantCard({
           </div>
         </div>
         {isYou && (
-          <Chip variant='soft' size='sm' color={participant === 'borrower' ? 'accent' : 'success'}>
+          <Chip variant='soft' size='lg' color={participant === 'borrower' ? 'accent' : 'success'}>
             You
           </Chip>
         )}
       </div>
-      <span className='text-muted text-sm'>{amountLabel}</span>
-      <p className={`text-xl font-semibold break-all ${isPlaceholder ? 'text-muted' : ''}`}>
-        {amount}
-      </p>
-      {caption && <span className='text-muted text-xs'>{caption}</span>}
+      <OfferMetric
+        label={amountLabel}
+        tooltip={amountTooltip}
+        value={isPlaceholder ? <span className='text-muted'>{amount}</span> : amount}
+        caption={caption}
+      />
     </div>
   )
 }

@@ -1,8 +1,7 @@
-import { Tooltip } from '@heroui/react'
 import type { ReactNode } from 'react'
 
 import CopyButton from '@/components/CopyButton'
-import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
+import InfoTooltip from '@/components/InfoTooltip'
 
 export interface DetailRow {
   label: string
@@ -37,18 +36,11 @@ export default function DetailsPanel({ title, rows, bordered }: DetailsPanelProp
             <span className='text-foreground inline-flex min-w-0 items-center gap-1 font-medium'>
               {row.label}
               {row.tooltip && (
-                <Tooltip delay={0}>
-                  <Tooltip.Trigger className='text-muted inline-flex shrink-0 cursor-help'>
-                    <CircleInfoIcon className='size-3' />
-                  </Tooltip.Trigger>
-                  <Tooltip.Content
-                    className={`text-muted ${
-                      row.multilineTooltip ? 'whitespace-pre' : 'max-w-64 break-normal!'
-                    }`}
-                  >
-                    {row.tooltip}
-                  </Tooltip.Content>
-                </Tooltip>
+                <InfoTooltip
+                  content={row.tooltip}
+                  className='text-muted shrink-0'
+                  isMultiline={row.multilineTooltip}
+                />
               )}
             </span>
             <span className='ml-auto flex shrink-0 items-center gap-1 font-medium'>
