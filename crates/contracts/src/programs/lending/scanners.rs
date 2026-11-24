@@ -643,14 +643,13 @@ fn repayment_vault_deltas(
     debt_before: u64,
     amount_to_repay: u64,
 ) -> Option<(u64, u64)> {
-    let debt_after = debt_before.checked_sub(amount_to_repay)?;
-    let protocol_fee_before = params
+    if amount_to_repay > debt_before {
+        return None;
+    }
+
+    let protocol_fee_repaid = params
         .offer_parameters
-        .get_already_repaid_protocol_fee(debt_before);
-    let protocol_fee_after = params
-        .offer_parameters
-        .get_already_repaid_protocol_fee(debt_after);
-    let protocol_fee_repaid = protocol_fee_after.checked_sub(protocol_fee_before)?;
+        .get_repaid_protocol_fee(debt_before, amount_to_repay);
     let lender_delta = amount_to_repay.checked_sub(protocol_fee_repaid)?;
 
     Some((lender_delta, protocol_fee_repaid))

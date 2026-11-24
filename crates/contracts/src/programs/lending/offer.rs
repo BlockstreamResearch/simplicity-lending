@@ -49,7 +49,7 @@ impl OfferParameters {
     }
 
     pub fn get_protocol_fee_to_repay(&self, current_debt: u64) -> u64 {
-        calculate_protocol_fee(self.get_fee_to_repay(current_debt))
+        self.get_total_protocol_fee() - self.get_already_repaid_protocol_fee(current_debt)
     }
 
     pub fn get_repaid_fee(&self, current_debt: u64, amount_to_repay: u64) -> u64 {
@@ -59,7 +59,10 @@ impl OfferParameters {
     }
 
     pub fn get_repaid_protocol_fee(&self, current_debt: u64, amount_to_repay: u64) -> u64 {
-        calculate_protocol_fee(self.get_repaid_fee(current_debt, amount_to_repay))
+        let debt_after = current_debt.saturating_sub(amount_to_repay);
+
+        self.get_already_repaid_protocol_fee(debt_after)
+            - self.get_already_repaid_protocol_fee(current_debt)
     }
 
     pub fn get_total_amount_to_repay(&self) -> u64 {
@@ -348,6 +351,50 @@ mod tests {
             params.get_repaid_protocol_fee(total_debt - repaid_amount, amount_to_repay),
             0
         );
+    }
+
+    #[test]
+    fn get_repaid_protocol_fee_uses_cumulative_rounding() {
+        // total_fee = 25, total_protocol_fee = 2
+        let params = dummy_lending_offer_parameters(1000, 250);
+        let total_debt = params.get_total_amount_to_repay();
+
+        assert_eq!(params.get_total_protocol_fee(), 2);
+
+        let mut debt = total_debt;
+        let mut charged = Vec::new();
+
+        for _ in 0..5 {
+            charged.push(params.get_repaid_protocol_fee(debt, 5));
+            debt -= 5;
+        }
+
+        assert_eq!(charged, vec![0, 1, 0, 1, 0]);
+
+        // total_fee = 105, total_protocol_fee = 10; three installments of 35.
+        let params = dummy_lending_offer_parameters(1000, 1050);
+        let mut debt = params.get_total_amount_to_repay();
+        let mut charged = Vec::new();
+
+        for _ in 0..3 {
+            charged.push(params.get_repaid_protocol_fee(debt, 35));
+            debt -= 35;
+        }
+
+        assert_eq!(charged, vec![3, 4, 3]);
+    }
+
+    #[test]
+    fn get_protocol_fee_to_repay_uses_cumulative_rounding() {
+        // total_fee = 25, total_protocol_fee = 2
+        let params = dummy_lending_offer_parameters(1000, 250);
+        let total_debt = params.get_total_amount_to_repay();
+
+        // floor((25 - 9) / 10) = 1, but nothing has been charged yet.
+        assert_eq!(params.get_protocol_fee_to_repay(total_debt - 9), 2);
+        assert_eq!(params.get_protocol_fee_to_repay(total_debt - 10), 1);
+        assert_eq!(params.get_protocol_fee_to_repay(total_debt - 25), 0);
+        assert_eq!(params.get_protocol_fee_to_repay(0), 0);
     }
 
     #[test]

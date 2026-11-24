@@ -11,9 +11,9 @@ runs:
   using: composite
   steps:
     - name: Install simplex-cli
-      uses: BlockstreamResearch/simplicityhl-toolchain@v0.0.2
+      uses: BlockstreamResearch/simplicityhl-toolchain@v0.0.3
       with:
-        components: simplex@${{ inputs.simplex-version }}
+        simplex: ${{ inputs.simplex-version }}
 
     - name: Generate contract artifacts
       shell: bash

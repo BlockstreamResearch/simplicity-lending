@@ -311,3 +311,104 @@ fn full_repayment_succeeds_in_repaying_principal_phase(
 
     Ok(())
 }
+
+#[simplex::test]
+fn full_repayment_finalizes_protocol_fee_vault_after_fee_installments(
+    context: simplex::TestContext,
+) -> anyhow::Result<()> {
+    let provider = context.get_default_provider();
+    let borrower = context.get_default_signer();
+    let lender = context.random_signer();
+
+    let (mut offer, offer_parameters) = default_full_repayment_setup(&context, &lender)?;
+
+    let terms = offer_parameters.offer_parameters;
+    let total_fee = terms.get_total_fee();
+    let total_protocol_fee = terms.get_total_protocol_fee();
+
+    // Rounded one by one, the installments charge 1 + 1 + 1 + 95 = 98 of the 100 protocol
+    // fee. Rounded cumulatively they charge 1 + 2 + 1 + 96 = 100, and the last one finalizes
+    // the protocol fee vault.
+    let installments = [15, 15, 15, total_fee];
+
+    for amount in installments {
+        partial_repay_offer(&context, &mut offer, borrower, amount)?;
+    }
+
+    let current_debt = offer.get_current_debt();
+
+    assert_eq!(
+        terms.get_repayment_phase(current_debt),
+        OfferRepaymentPhase::RepayingPrincipal
+    );
+    assert_eq!(
+        terms.get_already_repaid_protocol_fee(current_debt),
+        total_protocol_fee
+    );
+    assert_eq!(
+        get_protocol_fee_vault_utxo(&context, &offer)?.explicit_amount(),
+        total_protocol_fee
+    );
+
+    let active_offer_utxo = provider.fetch_scripthash_utxos(&offer.get_script_pubkey())?[0].clone();
+    let borrower_nft_utxo =
+        borrower.get_utxos_asset(offer_parameters.borrower_nft_asset_id)?[0].clone();
+    let (lender_vault_utxo, protocol_fee_vault_utxo) =
+        get_active_offer_vaults_utxos(&context, &offer)?;
+
+    assert!(lender_vault_utxo.is_some());
+    assert!(protocol_fee_vault_utxo.is_none());
+
+    let borrower_principal_utxo = borrower
+        .get_utxos_asset(offer_parameters.principal_asset_id)?
+        .into_iter()
+        .max_by_key(|utxo| utxo.explicit_amount())
+        .expect("Borrower has no principal UTXOs");
+
+    let principal_utxo_amount = borrower_principal_utxo.explicit_amount();
+    let remaining_collateral =
+        terms.collateral_amount - terms.get_already_unlocked_collateral(current_debt);
+
+    assert!(principal_utxo_amount >= current_debt);
+
+    let mut ft = FinalTransaction::new();
+
+    ft.add_input(
+        PartialInput::new(borrower_nft_utxo),
+        Some(NativeSignature::Ecdsa),
+    );
+
+    offer.attach_full_repayment(
+        &mut ft,
+        active_offer_utxo,
+        lender_vault_utxo,
+        protocol_fee_vault_utxo,
+    );
+
+    ft.add_input(
+        PartialInput::new(borrower_principal_utxo),
+        Some(NativeSignature::Ecdsa),
+    );
+
+    ft.add_output(PartialOutput::new(
+        borrower.get_address().script_pubkey(),
+        remaining_collateral,
+        offer_parameters.collateral_asset_id,
+    ));
+
+    if principal_utxo_amount > current_debt {
+        ft.add_output(PartialOutput::new(
+            borrower.get_address().script_pubkey(),
+            principal_utxo_amount - current_debt,
+            offer_parameters.principal_asset_id,
+        ));
+    }
+
+    borrower.broadcast(&ft)?.wait()?;
+
+    assert_eq!(offer.get_current_debt(), 0);
+
+    check_finalized_vaults(&context, &offer)?;
+
+    Ok(())
+}
