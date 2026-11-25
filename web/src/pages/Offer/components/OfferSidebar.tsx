@@ -40,8 +40,6 @@ import {
   getUtxoCreatedHeight,
 } from '../helpers'
 
-export const OFFER_SIDEBAR_ID = 'offer-actions'
-
 const STUCK_CHECK_INTERVAL_MS = 15_000
 
 type ActionWithButton = Exclude<OfferModalAction, 'none'>
@@ -390,10 +388,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
   })()
 
   return (
-    <section
-      id={OFFER_SIDEBAR_ID}
-      className='bg-surface-secondary flex min-w-0 scroll-mt-6 flex-col gap-3 rounded-3xl p-4 sm:p-6 lg:row-span-2'
-    >
+    <section className='bg-surface-secondary flex min-w-0 flex-col gap-3 rounded-3xl p-4 sm:p-6 lg:row-span-2'>
       <div className='flex items-center justify-between gap-3'>
         <div className='flex min-w-0 flex-col gap-1'>
           <span

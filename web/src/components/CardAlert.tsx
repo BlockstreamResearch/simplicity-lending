@@ -1,4 +1,4 @@
-import type { AriaRole, ReactNode } from 'react'
+import type { AriaRole } from 'react'
 
 import CircleExclamationIcon from '@/components/icons/CircleExclamationIcon'
 import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
@@ -7,13 +7,10 @@ import { UiButton } from '@/components/ui/UiButton'
 
 type CardAlertVariant = 'warning' | 'accent' | 'danger'
 
-const FILLED_VARIANT_CONFIG: Record<
-  CardAlertVariant,
-  { className: string; buttonVariant: 'danger' | 'primary' }
-> = {
-  warning: { className: 'border-warning bg-warning-soft text-warning', buttonVariant: 'primary' },
-  accent: { className: 'border-accent bg-accent-soft text-accent', buttonVariant: 'primary' },
-  danger: { className: 'border-danger bg-danger-soft text-danger', buttonVariant: 'danger' },
+const FILLED_VARIANT_CLASS_CONFIG: Record<CardAlertVariant, string> = {
+  warning: 'border-warning bg-warning-soft text-warning',
+  accent: 'border-accent bg-accent-soft text-accent',
+  danger: 'border-danger bg-danger-soft text-danger',
 }
 
 export default function CardAlert({
@@ -21,7 +18,6 @@ export default function CardAlert({
   title,
   description,
   actionLabel,
-  actionIcon,
   isDisabled,
   isFilled,
   role,
@@ -32,7 +28,6 @@ export default function CardAlert({
   title: string
   description: string
   actionLabel?: string
-  actionIcon?: ReactNode
   isDisabled?: boolean
   isFilled?: boolean
   role?: AriaRole
@@ -40,30 +35,15 @@ export default function CardAlert({
   onAction?: () => void
 }) {
   if (isFilled) {
-    const filledConfig = FILLED_VARIANT_CONFIG[variant]
     return (
       <div
         role={role}
-        className={`flex items-center gap-3 rounded-sm border-2 p-2.5 text-sm ${filledConfig.className}`}
+        className={`flex items-center gap-3 rounded-sm border-2 p-2.5 text-sm ${FILLED_VARIANT_CLASS_CONFIG[variant]}`}
       >
         <TriangleExclamationIcon className='size-6 shrink-0' />
-        <div className='flex flex-1 flex-col gap-3 sm:flex-row sm:items-center'>
-          <div className='flex flex-1 flex-col'>
-            <p className='font-bold'>{title}</p>
-            <p className='font-medium'>{description}</p>
-          </div>
-          {actionLabel && (
-            <UiButton
-              className='gap-1 self-start sm:self-auto'
-              size='sm'
-              variant={filledConfig.buttonVariant}
-              onPress={onAction}
-              isDisabled={isDisabled}
-            >
-              {actionLabel}
-              {actionIcon}
-            </UiButton>
-          )}
+        <div className='flex flex-1 flex-col'>
+          <p className='font-bold'>{title}</p>
+          <p className='font-medium'>{description}</p>
         </div>
       </div>
     )

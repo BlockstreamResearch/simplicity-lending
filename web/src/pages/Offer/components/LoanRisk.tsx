@@ -8,14 +8,17 @@ import LoanRiskChip from '@/components/LoanRiskChip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { HIGH_RISK_LTV, MAX_LTV, MAX_LTV_BAR_POSITION, MEDIUM_RISK_LTV } from '@/constants/offers'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
-import { formatUsd } from '@/utils/format'
+import { DISPLAY_LOCALE, formatUsd } from '@/utils/format'
 import type { ActorRole } from '@/utils/offerActions'
-import { getLtvBarPosition, getLtvThresholdPrice } from '@/utils/offers'
+import {
+  getLoanRiskLevel,
+  getLtvBarPosition,
+  getLtvThresholdPrice,
+  type LoanRiskLevel,
+} from '@/utils/offers'
 
 import { getOfferLtv } from '../helpers'
 import OfferMetric from './OfferMetric'
-
-export const LOAN_RISK_ID = 'loan-risk'
 
 const MAX_LTV_PERCENT = Math.round(MAX_LTV * 100)
 
@@ -24,6 +27,14 @@ const LTV_ZONE_CONFIG = [
   { label: `${Math.round(MEDIUM_RISK_LTV * 100)}%`, className: 'bg-warning' },
   { label: `${Math.round(HIGH_RISK_LTV * 100)}%`, className: 'bg-danger' },
 ]
+
+const MARKER_FILL_CONFIG: Record<LoanRiskLevel, string> = {
+  low: 'bg-success',
+  medium: 'bg-warning',
+  high: 'bg-danger',
+  veryHigh: 'bg-danger',
+  critical: 'bg-danger',
+}
 
 interface LoanRiskProps {
   offer: OfferDetails
@@ -44,7 +55,7 @@ export default function LoanRisk({ offer, role }: LoanRiskProps) {
   if (!isVisible) return null
 
   const ltv = getOfferLtv(offer, collateralPriceUsd)
-  const markerLeft = `clamp(1rem, ${getLtvBarPosition(ltv ?? 0)}%, calc(100% - 2.25rem))`
+  const markerLeft = `${getLtvBarPosition(ltv ?? 0)}%`
   const debtWording =
     offer.status === 'pending'
       ? { title: 'the amount to repay', body: 'to repay' }
@@ -86,7 +97,7 @@ export default function LoanRisk({ offer, role }: LoanRiskProps) {
   ]
 
   return (
-    <div id={LOAN_RISK_ID} className='flex scroll-mt-6 flex-col gap-1'>
+    <div className='flex flex-col gap-1'>
       <div className='bg-surface flex flex-col gap-3 rounded-sm px-4 py-3'>
         <div className='flex items-center justify-between gap-3'>
           <h3 className='text-h4 text-muted'>Loan Risk</h3>
@@ -104,7 +115,7 @@ export default function LoanRisk({ offer, role }: LoanRiskProps) {
           <CardAlert
             variant='danger'
             isFilled
-            title={`Collateral covers only ${Math.floor(100 / ltv)}% of ${debtWording.title}`}
+            title={`Collateral covers only ${ltv > 100 ? '<1' : Math.floor(100 / ltv)}% of ${debtWording.title}`}
             description={`At ${formatPrice(collateralPriceUsd)} per ${collateralAsset.symbol}, the ${formatCollateralDisplay(offer.collateral_remaining)} locked is worth ${formatUsd(offer.collateral_remaining, collateralAsset.decimals, collateralPriceUsd)} against ${formatPrincipalAmount(offer.current_debt)} ${debtWording.body}.`}
           />
         )}
@@ -120,23 +131,24 @@ export default function LoanRisk({ offer, role }: LoanRiskProps) {
           </div>
           {ltv !== null && (
             <>
-              <span
-                className='bg-overlay absolute top-9 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-md'
-                style={{ left: markerLeft }}
-              />
-              <div
-                className='bg-overlay absolute top-0 flex -translate-x-1/2 items-center gap-1 rounded-xl px-2 py-1 text-xs whitespace-nowrap drop-shadow-md'
-                style={{ left: markerLeft }}
-              >
-                {ltv >= 1 ? (
-                  <span className='text-danger flex items-center gap-1'>
-                    <TriangleExclamationIcon className='size-4' />
-                    LTV &gt;100%
-                  </span>
-                ) : (
-                  `LTV ${Math.floor(ltv * 100)}%`
-                )}
-                <span className='bg-overlay absolute top-full left-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-xs' />
+              <div className='absolute -inset-x-2 top-0'>
+                <div
+                  className={`bg-overlay absolute top-0 flex items-center gap-1 rounded-xl px-2 py-1 text-xs whitespace-nowrap drop-shadow-md ${ltv >= 1 ? 'text-danger' : ''}`}
+                  style={{ left: markerLeft, translate: `-${markerLeft}` }}
+                >
+                  {ltv >= 1 && <TriangleExclamationIcon className='size-4' />}
+                  LTV {Math.floor(ltv * 100).toLocaleString(DISPLAY_LOCALE)}%
+                </div>
+              </div>
+              <div className='absolute inset-x-1.75 inset-y-0'>
+                <span
+                  className='bg-overlay absolute top-6 size-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-xs'
+                  style={{ left: markerLeft }}
+                />
+                <span
+                  className={`border-surface absolute top-9 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-md ${MARKER_FILL_CONFIG[getLoanRiskLevel(ltv)]}`}
+                  style={{ left: markerLeft }}
+                />
               </div>
             </>
           )}
