@@ -16,6 +16,10 @@ export function calcInterest(principal: bigint, bps: number): bigint {
   return (principal * BigInt(Math.round(bps))) / BPS_DIVISOR
 }
 
+export function getTotalToRepay(offer: OfferShort): bigint {
+  return offer.principal_amount + calcInterest(offer.principal_amount, offer.interest_rate)
+}
+
 export function computeProtocolFee(feeBaseUnits: bigint): bigint {
   return (feeBaseUnits * BigInt(PROTOCOL_FEE_BPS)) / BPS_DIVISOR
 }

@@ -45,12 +45,16 @@ export function getLenderPayout(offer: OfferShort): bigint {
   return offer.principal_amount + getLenderNetInterest(offer)
 }
 
-export function getRepaidToLender(offer: OfferDetails): bigint {
-  const lenderVault = offer.vaults.find(vault => vault.vault_type === 'lender')
-  if (lenderVault) return lenderVault.already_supplied
+export function getLenderWithdrawn(offer: OfferDetails): bigint {
   return offer.withdrawals
     .filter(withdrawal => withdrawal.vault_type === 'lender')
     .reduce((sum, withdrawal) => sum + withdrawal.amount_withdrawn, 0n)
+}
+
+export function getRepaidToLender(offer: OfferDetails): bigint {
+  const lenderVault = offer.vaults.find(vault => vault.vault_type === 'lender')
+  if (lenderVault) return lenderVault.already_supplied
+  return getLenderWithdrawn(offer)
 }
 
 export function getOfferLtv(offer: OfferShort, collateralPriceUsd: number | null): number | null {

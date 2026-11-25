@@ -68,8 +68,8 @@ function ActivityRow({
     <>
       <ActivityEventHeader title={title} icon={icon} tone={tone} caption={caption} />
       <span className='flex items-center justify-between gap-3 pl-12 sm:shrink-0 sm:justify-end sm:pl-0'>
-        <span className='flex items-center gap-2 sm:flex-col sm:items-end sm:gap-0'>
-          <span className='text-foreground flex items-center gap-1.5 text-sm font-medium whitespace-nowrap'>
+        <span className='flex min-w-0 flex-wrap items-center gap-x-2 sm:flex-col sm:items-end'>
+          <span className='text-foreground flex items-center gap-1.5 text-sm font-medium'>
             <AssetIcon className='size-4 shrink-0' />
             {isCollateral
               ? formatCollateralDisplay(amount.value)

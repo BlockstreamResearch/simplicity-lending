@@ -39,6 +39,35 @@ export function formatAmount(amount: bigint, decimals: number): string {
   return formatDecimalParts(whole, frac.toString().padStart(decimals, '0'), negative)
 }
 
+const SHORT_FRACTION_DIGITS_CONFIG = [
+  { below: 1_000n, fractionDigits: 3 },
+  { below: 10_000n, fractionDigits: 2 },
+]
+const COMPACT_SUFFIX_CONFIG = [
+  { exponent: 12, suffix: 'T' },
+  { exponent: 9, suffix: 'B' },
+  { exponent: 6, suffix: 'M' },
+]
+
+export function formatAmountShort(amount: bigint, decimals: number, isRoundedUp = false): string {
+  const base = 10n ** BigInt(decimals)
+  const compact = COMPACT_SUFFIX_CONFIG.find(
+    ({ exponent }) => amount >= 10n ** BigInt(exponent) * base,
+  )
+  const fractionDigits = compact
+    ? 2
+    : Math.min(
+        SHORT_FRACTION_DIGITS_CONFIG.find(({ below }) => amount < below * base)?.fractionDigits ??
+          0,
+        decimals,
+      )
+  const step =
+    (compact ? 10n ** BigInt(compact.exponent) * base : base) / 10n ** BigInt(fractionDigits)
+  if (amount > 0n && amount < step) return `<${formatAmount(step, decimals)}`
+  if (isRoundedUp) return formatAmountShort(((amount + step - 1n) / step) * step, decimals)
+  return `${formatAmount(amount / step, fractionDigits)}${compact?.suffix ?? ''}`
+}
+
 export function formatAmountInput(amount: bigint, decimals: number): string {
   const base = 10n ** BigInt(decimals)
   const frac = (amount % base).toString().padStart(decimals, '0').replace(/0+$/, '')

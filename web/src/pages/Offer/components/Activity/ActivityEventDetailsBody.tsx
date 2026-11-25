@@ -17,7 +17,7 @@ import {
   truncateAddress,
 } from '@/utils/format'
 import type { ActorRole } from '@/utils/offerActions'
-import { bpsToPercent, calcInterest, computeProtocolFee } from '@/utils/offers'
+import { bpsToPercent, calcInterest, computeProtocolFee, getTotalToRepay } from '@/utils/offers'
 
 import { getLenderNetInterest } from '../../helpers'
 import { ACTIVITY_EVENT_CONFIG, ACTOR_LABEL } from './constants'
@@ -62,7 +62,7 @@ export default function ActivityEventDetailsBody({
 
   const formatPrincipal = (amount: bigint) => formatAmount(amount, principalAsset.decimals)
   const interest = calcInterest(offer.principal_amount, offer.interest_rate)
-  const totalDebt = offer.principal_amount + interest
+  const totalDebt = getTotalToRepay(offer)
   const deadlineRow: DetailRow = {
     label: 'Repayment Deadline',
     value: deadlineDate ? formatDateTime(deadlineDate) : '–',

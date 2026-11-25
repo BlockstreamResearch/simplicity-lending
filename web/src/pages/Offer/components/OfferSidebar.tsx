@@ -24,7 +24,7 @@ import {
   splitBlocksDuration,
 } from '@/utils/format'
 import { type ActorRole, type OfferModalAction, resolveOfferAction } from '@/utils/offerActions'
-import { getOfferTermLeft } from '@/utils/offers'
+import { getOfferTermLeft, getTotalToRepay } from '@/utils/offers'
 import { getOfferPendingTx, isBlockingTxStuck } from '@/utils/pendingTransactions'
 
 import {
@@ -33,12 +33,14 @@ import {
   getFullRepaymentHeight,
   getLenderPayout,
   getLenderVaultBalance,
+  getLenderWithdrawn,
   getLiquidatedCollateral,
   getLiquidationVaultPayout,
   getLoanDurationBlocks,
   getRepaidToLender,
   getUtxoCreatedHeight,
 } from '../helpers'
+import VaultDonut from './VaultDonut'
 
 export const OFFER_SIDEBAR_ID = 'offer-actions'
 
@@ -55,12 +57,19 @@ const ACTION_BUTTON_VARIANT: Record<ActionWithButton, UiButtonProps['variant']> 
   liquidate: 'danger',
 }
 
+const DEADLINE_TONE_CONFIG = {
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
+}
+
 interface DeadlineView {
   title: string
   subtitle: string
   countdownBlocks?: number
   summary?: string | null
-  tone?: 'warning' | 'danger'
+  tone?: 'success' | 'danger'
+  alertTone?: 'warning' | 'danger'
 }
 
 interface ActionPanelView {
@@ -71,6 +80,7 @@ interface ActionPanelView {
 interface ContentView {
   title: string
   amount?: ReactNode
+  chart?: ReactNode
   description?: string
 }
 
@@ -106,8 +116,13 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
   const { scriptPubkey, connectionStatus, reconnecting } = useWallet()
   const { data: currentBlockHeight } = useBlockHeight()
   const { pendingTxs } = usePendingTransactions()
-  const { formatCollateralDisplay, formatPrincipalAmount, collateralUnit, formatCollateralAmount } =
-    useFormatAmount()
+  const {
+    formatCollateralDisplay,
+    formatPrincipalAmount,
+    formatPrincipalShort,
+    collateralUnit,
+    formatCollateralAmount,
+  } = useFormatAmount()
   const { collateralAsset, principalAsset } = NETWORK_CONFIG
   const collateralPriceUsd = useAssetPriceUsd(collateralAsset.id)
   const dueDate = useBlockDate(offer.loan_expiration_height, offer.created_at_height)
@@ -119,6 +134,8 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
   const blocksToDeadline = getOfferTermLeft(offer, currentBlockHeight)
   const isExpired = isHeightKnown && blocksToDeadline < 0
   const vaultBalance = getLenderVaultBalance(offer)
+  const lenderWithdrawn = getLenderWithdrawn(offer)
+  const stillOwed = getLenderPayout(offer) - getRepaidToLender(offer)
   const withdrawable = getWithdrawableAmount(offer)
   const dueDateText = dueDate ? formatDateTime(dueDate) : '–'
   const now = useNow(STUCK_CHECK_INTERVAL_MS)
@@ -139,6 +156,16 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
     <AssetAmount value={formatCollateralAmount(amount)} unit={collateralUnit} />
   )
 
+  const atTodaysPrice = (amount: bigint) => {
+    const usd = formatUsd(amount, collateralAsset.decimals, collateralPriceUsd)
+    return usd ? ` – about ${usd} at today's price` : ''
+  }
+  const isCloseToDeadline =
+    offer.status === 'active' &&
+    isHeightKnown &&
+    !isExpired &&
+    blocksToDeadline < REPAYMENT_DUE_THRESHOLD_BLOCKS
+
   const deadline: DeadlineView = (() => {
     switch (offer.status) {
       case 'pending':
@@ -148,12 +175,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
             title: offer.status === 'pending' ? 'Loan Deadline In' : 'Due In',
             subtitle: `Due ${dueDateText}`,
             countdownBlocks: isHeightKnown ? blocksToDeadline : undefined,
-            tone:
-              offer.status === 'active' &&
-              isHeightKnown &&
-              blocksToDeadline < REPAYMENT_DUE_THRESHOLD_BLOCKS
-                ? 'warning'
-                : undefined,
+            alertTone: isCloseToDeadline ? 'warning' : undefined,
           }
         }
         return offer.status === 'active'
@@ -179,6 +201,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
             margin === null
               ? null
               : `${formatBlocksDuration(Math.abs(margin))} ${margin >= 0 ? 'early' : 'late'}`,
+          tone: role !== 'guest' && margin !== null && margin >= 0 ? 'success' : undefined,
         }
       }
       case 'cancelled':
@@ -189,12 +212,16 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
         }
       case 'liquidated':
         return {
-          title: 'Expired',
+          title: 'Liquidated',
           subtitle: `Was due ${dueDateText}`,
-          summary: formatBlocksAgo(currentBlockHeight, offer.loan_expiration_height),
+          summary: formatBlocksAgo(currentBlockHeight, getUtxoCreatedHeight(offer, 'liquidation')),
+          tone: role === 'lender' ? 'danger' : undefined,
+          alertTone: role === 'borrower' ? 'danger' : undefined,
         }
     }
   })()
+
+  const deadlineToneClass = deadline.tone ? DEADLINE_TONE_CONFIG[deadline.tone] : 'text-foreground'
 
   const content: ContentView | null = (() => {
     const isBorrower = role === 'borrower'
@@ -230,13 +257,42 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
               }
             : {
                 title: 'Your Debt',
-                amount: renderPrincipal(offer.current_debt),
+                chart: (
+                  <VaultDonut
+                    segments={[
+                      {
+                        label: 'Repaid',
+                        amount: getTotalToRepay(offer) - offer.current_debt,
+                        tone: 'accent',
+                      },
+                      {
+                        label: 'Left to Repay',
+                        amount: offer.current_debt,
+                        tone: 'default',
+                        isRoundedUp: true,
+                      },
+                    ]}
+                    centerIndex={1}
+                  />
+                ),
+                description: isCloseToDeadline
+                  ? `Miss the deadline and the lender can take your ${formatCollateralDisplay(offer.collateral_remaining)}${atTodaysPrice(offer.collateral_remaining)}.`
+                  : undefined,
               }
         }
         if (isLender) {
           return {
             title: 'Your Vault',
-            amount: renderPrincipal(vaultBalance),
+            chart: (
+              <VaultDonut
+                segments={[
+                  { label: 'Withdrawn', amount: lenderWithdrawn, tone: 'success' },
+                  { label: 'In Vault', amount: vaultBalance, tone: 'success-soft' },
+                  { label: 'Still Owed', amount: stillOwed, tone: 'default' },
+                ]}
+                centerIndex={1}
+              />
+            ),
             description: (() => {
               if (isExpired) {
                 return vaultBalance > 0n
@@ -254,7 +310,15 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
         if (isLender) {
           return {
             title: 'Your Vault',
-            amount: renderPrincipal(vaultBalance),
+            chart: (
+              <VaultDonut
+                segments={[
+                  { label: 'Withdrawn', amount: lenderWithdrawn, tone: 'success' },
+                  { label: 'In Vault', amount: vaultBalance, tone: 'success-soft' },
+                ]}
+                centerIndex={1}
+              />
+            ),
             description: 'Fully repaid – withdraw everything in one go.',
           }
         }
@@ -290,7 +354,6 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
       case 'liquidated': {
         const liquidatedCollateral = getLiquidatedCollateral(offer)
         if (isLender) {
-          const stillOwed = getLenderPayout(offer) - getRepaidToLender(offer)
           const vaultPayout = getLiquidationVaultPayout(offer)
           const collateralValueInPrincipal =
             collateralPriceUsd === null
@@ -331,8 +394,8 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
               title: 'Collateral Liquidated',
               amount: renderCollateral(liquidatedCollateral),
               description: offer.borrower_principal_utxo
-                ? 'The lender took your collateral. Claim your loan principal.'
-                : 'The deadline passed and the lender took your collateral.',
+                ? `The lender took your collateral${atTodaysPrice(liquidatedCollateral)}. Claim your loan principal.`
+                : `The deadline passed and the lender took your collateral${atTodaysPrice(liquidatedCollateral)}.`,
             }
           : null
       }
@@ -346,7 +409,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
     } as const
     const withdrawButton = {
       action: 'withdraw',
-      label: `Withdraw ${formatPrincipalAmount(withdrawable)}`,
+      label: `Withdraw ${formatPrincipalShort(withdrawable)}`,
     } as const
 
     switch (action) {
@@ -355,9 +418,9 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
           offer.status === 'active' &&
           isHeightKnown &&
           !isExpired &&
-          withdrawable > 0n
+          vaultBalance > 0n
           ? {
-              buttons: [withdrawButton],
+              buttons: withdrawable > 0n ? [withdrawButton] : [],
               hint: `${formatPrincipalAmount(VAULT_MIN_REMAINDER)} stays in the vault until the loan closes. You get it back at the end.`,
             }
           : null
@@ -375,7 +438,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
         }
       case 'claim-principal':
         return {
-          buttons: [{ action, label: `Claim ${formatPrincipalAmount(offer.principal_amount)}` }],
+          buttons: [{ action, label: `Claim ${formatPrincipalShort(offer.principal_amount)}` }],
         }
       case 'withdraw-all':
         return { buttons: [{ action, label: 'Withdraw All' }] }
@@ -396,14 +459,12 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
     >
       <div className='flex items-center justify-between gap-3'>
         <div className='flex min-w-0 flex-col gap-1'>
-          <span
-            className={`text-h4 flex items-center gap-1.5 ${
-              deadline.tone === 'danger' ? 'text-danger' : 'text-foreground'
-            }`}
-          >
+          <span className={`text-h4 flex items-center gap-1.5 ${deadlineToneClass}`}>
             {deadline.title}
-            {deadline.tone === 'warning' && (
-              <TriangleExclamationIcon className='text-warning size-4 shrink-0' />
+            {deadline.alertTone && (
+              <TriangleExclamationIcon
+                className={`size-4 shrink-0 ${DEADLINE_TONE_CONFIG[deadline.alertTone]}`}
+              />
             )}
           </span>
           <span className='text-muted text-xs'>{deadline.subtitle}</span>
@@ -412,7 +473,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
           <Countdown blocks={deadline.countdownBlocks} isOverdue={deadline.tone === 'danger'} />
         )}
         {deadline.summary && (
-          <span className='text-foreground shrink-0 text-sm font-medium'>{deadline.summary}</span>
+          <span className={`text-h4 shrink-0 ${deadlineToneClass}`}>{deadline.summary}</span>
         )}
       </div>
 
@@ -423,6 +484,7 @@ export default function OfferSidebar({ offer, role }: OfferSidebarProps) {
             <span className='text-h4 text-muted'>{content.title}</span>
             {content.amount && <p className='text-xl font-semibold break-all'>{content.amount}</p>}
             {content.description && <p className='text-muted'>{content.description}</p>}
+            {content.chart && <div className='mt-3'>{content.chart}</div>}
           </div>
         </>
       )}

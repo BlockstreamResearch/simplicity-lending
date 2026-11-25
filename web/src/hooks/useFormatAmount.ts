@@ -1,6 +1,6 @@
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useAssetDenomination } from '@/providers/assetDenomination/useAssetDenomination'
-import { formatAmount } from '@/utils/format'
+import { formatAmount, formatAmountShort } from '@/utils/format'
 import {
   formatPolicyAssetAmount,
   formatPolicyAssetDisplay,
@@ -21,5 +21,7 @@ export function useFormatAmount() {
       formatPolicyAssetDisplay(amount, denomination, collateralAsset),
     formatPrincipalAmount: (amount: bigint) =>
       `${formatAmount(amount, principalAsset.decimals)} ${principalAsset.symbol}`,
+    formatPrincipalShort: (amount: bigint, isRoundedUp?: boolean) =>
+      `${formatAmountShort(amount, principalAsset.decimals, isRoundedUp)} ${principalAsset.symbol}`,
   }
 }
