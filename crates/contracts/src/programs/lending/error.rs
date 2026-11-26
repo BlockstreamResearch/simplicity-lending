@@ -13,6 +13,11 @@ pub enum LendingOfferError {
     #[error("Invalid OP_RETURN borrower pubkey bytes: {0}")]
     InvalidMetadataBytes(String),
 
+    #[error(
+        "Transaction {txid} doesn't spend the lending offer at input {input_index} in any way the covenant allows"
+    )]
+    UnclassifiedSpend { txid: Txid, input_index: u32 },
+
     #[error(transparent)]
     SimplexProvider(#[from] ProviderError),
 

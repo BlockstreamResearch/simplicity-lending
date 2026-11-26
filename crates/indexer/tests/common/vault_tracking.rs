@@ -12,9 +12,19 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{
-    factory_model, outpoint_from_offer_id, seed_factory_row, seed_offer_row, seed_offer_utxo_row,
-    tx_with_inputs, unique_32_bytes_from_uuid, unspent_offer_utxo,
+    factory_model, outpoint_from_offer_id, outpoint_with_txid_byte, seed_factory_row,
+    seed_offer_row, seed_offer_utxo_row, tx_with_inputs, unique_32_bytes_from_uuid,
+    unspent_offer_utxo,
 };
+
+/// Repayments spend the borrower NFT from input 0 and the active offer from input 1, followed
+/// by the lender and protocol fee vaults, as the covenant requires.
+fn repayment_inputs(active_input: OutPoint, vault_inputs: &[OutPoint]) -> Vec<OutPoint> {
+    let borrower_nft_input = outpoint_with_txid_byte(0xb0, 0);
+    let mut inputs = vec![borrower_nft_input, active_input];
+    inputs.extend_from_slice(vault_inputs);
+    inputs
+}
 
 pub const TRACKABLE_REPAYMENT_HEIGHT: u64 = 200;
 pub const FIRST_PARTIAL_AMOUNT: u64 = 500;
@@ -191,7 +201,7 @@ pub fn build_full_repayment_tx(
     let protocol_vault = AssetAuthVault::new_finalized(params.get_protocol_fee_vault_parameters());
 
     Ok(tx_with_inputs(
-        vec![active_input],
+        repayment_inputs(active_input, &[]),
         vec![
             op_return_asset(params.borrower_nft_asset_id),
             explicit_output(
@@ -234,7 +244,7 @@ pub fn build_first_partial_repayment_tx(
     let collateral_after = collateral_before - collateral_unlocked;
 
     let tx = tx_with_inputs(
-        vec![active_input],
+        repayment_inputs(active_input, &[]),
         vec![
             explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
             explicit_output(
@@ -299,7 +309,7 @@ pub fn build_second_partial_repayment_tx(
         collateral_before - (collateral_unlocked_total - collateral_unlocked_before);
 
     Ok(tx_with_inputs(
-        vec![lender_vault_input, protocol_vault_input, active_input],
+        repayment_inputs(active_input, &[lender_vault_input, protocol_vault_input]),
         vec![
             explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
             explicit_output(
@@ -372,7 +382,7 @@ pub fn build_principal_phase_partial_repayment_tx(
         collateral_before - (collateral_unlocked_total - collateral_unlocked_before);
 
     Ok(tx_with_inputs(
-        vec![lender_vault_input, active_input],
+        repayment_inputs(active_input, &[lender_vault_input]),
         vec![
             explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
             explicit_output(
@@ -401,7 +411,7 @@ pub fn build_full_repayment_after_partials_tx(
     let protocol_fee = params.offer_parameters.get_total_protocol_fee();
     let lender_amount = params.offer_parameters.get_total_amount_to_repay() - protocol_fee;
 
-    let mut inputs = vec![lender_vault_input, active_input];
+    let mut inputs = repayment_inputs(active_input, &[lender_vault_input]);
     if let Some(protocol_input) = protocol_vault_input {
         inputs.push(protocol_input);
     }

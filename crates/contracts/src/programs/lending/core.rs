@@ -57,6 +57,22 @@ impl LendingOffer {
     pub const CREATION_METADATA_OUTPUT_INDEX: usize = 4;
     pub const CREATION_PENDING_OFFER_OUTPUT_INDEX: usize = 5;
 
+    /// Acceptance and cancellation spend the pending offer from input 0.
+    pub const PENDING_OFFER_SPEND_INPUT_INDEX: u32 = 0;
+    /// Acceptance outputs: active offer @0, borrower principal @1.
+    pub const ACCEPTANCE_ACTIVE_OFFER_OUTPUT_INDEX: u32 = 0;
+    pub const ACCEPTANCE_BORROWER_PRINCIPAL_OUTPUT_INDEX: u32 = 1;
+    /// Cancellation outputs: lender NFT burn @0, borrower NFT burn @1.
+    pub const CANCELLATION_LENDER_NFT_BURN_OUTPUT_INDEX: u32 = 0;
+    pub const CANCELLATION_BORROWER_NFT_BURN_OUTPUT_INDEX: u32 = 1;
+    /// Repayments move the borrower NFT from input 0 to output 0 and spend the offer from input 1.
+    pub const REPAYMENT_BORROWER_NFT_INPUT_INDEX: u32 = 0;
+    pub const REPAYMENT_BORROWER_NFT_OUTPUT_INDEX: u32 = 0;
+    pub const REPAYMENT_OFFER_INPUT_INDEX: u32 = 1;
+    /// Liquidation spends the offer from input 0 and burns the lender NFT at output 0.
+    pub const LIQUIDATION_OFFER_INPUT_INDEX: u32 = 0;
+    pub const LIQUIDATION_LENDER_NFT_BURN_OUTPUT_INDEX: u32 = 0;
+
     pub fn new_pending(parameters: LendingOfferParameters) -> Self {
         let storage = LendingOfferStorage {
             is_active: false,

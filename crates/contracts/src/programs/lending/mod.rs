@@ -4,6 +4,7 @@ mod metadata;
 mod offer;
 mod params;
 mod scanners;
+mod spend;
 mod witness;
 
 pub use core::{LendingOffer, LendingOfferStorage};
@@ -15,4 +16,5 @@ pub use scanners::{
     LendingOfferCreationScan, LendingOfferLiquidationScan, LendingOfferRepaymentScan,
     LendingOfferTxKind, LendingOfferUtxoKind, LendingRepaymentIoLayout,
 };
+pub use spend::LendingOfferSpend;
 pub use witness::LendingOfferWitnessBranch;

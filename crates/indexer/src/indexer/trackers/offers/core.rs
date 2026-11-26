@@ -1,6 +1,8 @@
 use sqlx::PgPool;
 
-use lending_contracts::programs::lending::LendingOfferRepaymentScan;
+use lending_contracts::programs::lending::{
+    LendingOffer, LendingOfferAcceptanceScan, LendingOfferRepaymentScan, LendingOfferSpend,
+};
 use simplex::{
     provider::SimplicityNetwork,
     simplicityhl::elements::{OutPoint, Transaction, Txid},
@@ -11,9 +13,9 @@ use crate::{
     indexer::cache::WatchCache,
     indexer::trackers::offer_vaults::{VaultSnapshotsByOffer, VaultWatchEntry, VaultsTracker},
     indexer::trackers::offers::{
-        ActiveOfferSpendKind, classify_active_offer_spend, fetch_offer, insert_offer_repayment,
-        insert_offer_utxo, load_offer_utxos_cache, partial_repayment_amounts_from_scan,
-        spend_offer_utxo, update_offer_debt_and_collateral, update_offer_status,
+        fetch_offer, fetch_offer_parameters, insert_offer_repayment, insert_offer_utxo,
+        load_offer_utxos_cache, partial_repayment_amounts_from_scan, spend_offer_utxo,
+        update_offer_debt_and_collateral, update_offer_status,
     },
     models::{OfferModel, OfferRepaymentModel, OfferStatus, OfferUtxoModel, UtxoType, VaultType},
 };
@@ -47,11 +49,12 @@ impl OffersTracker {
     ) -> anyhow::Result<bool> {
         let mut offer_spent = false;
 
-        for input in &tx.input {
+        for (input_index, input) in (0u32..).zip(&tx.input) {
             if let Some(entry) = self.cache.get(&input.previous_output) {
                 self.on_spend(
                     sql_tx,
                     tx,
+                    input_index,
                     &input.previous_output,
                     entry.offer_id,
                     entry.utxo_type,
@@ -155,6 +158,7 @@ impl OffersTracker {
         &mut self,
         sql_tx: &mut DbTx<'_>,
         tx: &Transaction,
+        input_index: u32,
         old_outpoint: &OutPoint,
         offer_id: i64,
         utxo_type: UtxoType,
@@ -166,18 +170,32 @@ impl OffersTracker {
 
         match utxo_type {
             UtxoType::PendingOffer => {
-                if Self::is_offer_cancellation_tx(tx) {
-                    self.handle_offer_cancellation(
-                        sql_tx,
-                        old_outpoint,
-                        offer_id,
-                        txid,
-                        block_height,
-                    )
-                    .await
-                } else {
-                    self.handle_offer_acceptance(sql_tx, old_outpoint, offer_id, txid, block_height)
+                let params = fetch_offer_parameters(sql_tx, offer_id, self.network).await?;
+                let offer = LendingOffer::new_pending(params);
+
+                match offer.classify_spend(tx, input_index, None)? {
+                    LendingOfferSpend::Cancellation(_) => {
+                        self.handle_offer_cancellation(
+                            sql_tx,
+                            old_outpoint,
+                            offer_id,
+                            txid,
+                            block_height,
+                        )
                         .await
+                    }
+                    LendingOfferSpend::Acceptance(scan) => {
+                        self.handle_offer_acceptance(
+                            sql_tx,
+                            old_outpoint,
+                            offer_id,
+                            txid,
+                            &scan,
+                            block_height,
+                        )
+                        .await
+                    }
+                    spend => anyhow::bail!("pending offer {offer_id} spent as {spend:?}"),
                 }
             }
             UtxoType::ActiveOffer => {
@@ -191,8 +209,8 @@ impl OffersTracker {
                 let vault_amounts_before = vault_snapshots.get(&offer_id).copied().flatten();
                 let is_first_repayment = vault_amounts_before.is_none();
 
-                match classify_active_offer_spend(&offer, tx, vault_amounts_before)? {
-                    ActiveOfferSpendKind::FullRepayment { scan } => {
+                match offer.classify_spend(tx, input_index, vault_amounts_before)? {
+                    LendingOfferSpend::FullRepayment(scan) => {
                         self.handle_loan_repayment(
                             sql_tx,
                             old_outpoint,
@@ -207,7 +225,7 @@ impl OffersTracker {
                         )
                         .await
                     }
-                    ActiveOfferSpendKind::PartialRepayment { scan } => {
+                    LendingOfferSpend::PartialRepayment(scan) => {
                         self.handle_partial_repayment(
                             sql_tx,
                             old_outpoint,
@@ -222,7 +240,7 @@ impl OffersTracker {
                         )
                         .await
                     }
-                    ActiveOfferSpendKind::Liquidation => {
+                    LendingOfferSpend::Liquidation(_) => {
                         self.handle_loan_liquidation(
                             sql_tx,
                             old_outpoint,
@@ -232,6 +250,7 @@ impl OffersTracker {
                         )
                         .await
                     }
+                    spend => anyhow::bail!("active offer {offer_id} spent as {spend:?}"),
                 }
             }
             UtxoType::BorrowerPrincipal => {
@@ -295,7 +314,7 @@ impl OffersTracker {
 
     #[tracing::instrument(
         name = "Handling pending offer acceptance",
-        skip(self, sql_tx, old_outpoint, offer_id, txid, block_height),
+        skip(self, sql_tx, old_outpoint, offer_id, txid, scan, block_height),
         fields(%offer_id, %txid, %block_height),
     )]
     async fn handle_offer_acceptance(
@@ -304,6 +323,7 @@ impl OffersTracker {
         old_outpoint: &OutPoint,
         offer_id: i64,
         txid: Txid,
+        scan: &LendingOfferAcceptanceScan,
         block_height: u64,
     ) -> anyhow::Result<()> {
         spend_offer_utxo(sql_tx, old_outpoint, block_height, txid).await?;
@@ -311,7 +331,10 @@ impl OffersTracker {
 
         update_offer_status(sql_tx, offer_id, OfferStatus::Active, block_height).await?;
 
-        let lending_outpoint = OutPoint { txid, vout: 0 };
+        let lending_outpoint = OutPoint {
+            txid,
+            vout: scan.active_offer_vout,
+        };
         let lending_offer_utxo = OfferUtxoModel {
             offer_id,
             txid: lending_outpoint.txid.to_byte_array().to_vec(),
@@ -332,7 +355,10 @@ impl OffersTracker {
             },
         );
 
-        let borrower_principal_outpoint = OutPoint { txid, vout: 1 };
+        let borrower_principal_outpoint = OutPoint {
+            txid,
+            vout: scan.borrower_principal_vout,
+        };
         let borrower_principal_utxo = OfferUtxoModel {
             offer_id,
             txid: borrower_principal_outpoint.txid.to_byte_array().to_vec(),
@@ -712,14 +738,6 @@ impl OffersTracker {
 
         tracing::info!(%offer_id, "Offer archived");
         Ok(())
-    }
-
-    fn is_offer_cancellation_tx(tx: &Transaction) -> bool {
-        if tx.output.len() < 4 {
-            return false;
-        }
-
-        tx.output[0].is_null_data() && tx.output[1].is_null_data() && !tx.output[2].is_null_data()
     }
 }
 
