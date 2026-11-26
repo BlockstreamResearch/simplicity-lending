@@ -5,8 +5,9 @@ import {
   BLOCKS_PER_HOUR,
   SECONDS_PER_MINUTE,
 } from '@/constants/blocks'
+import { NETWORK_CONFIG } from '@/constants/network-config'
 import { DISPLAY_LOCALE, formatBlocksDuration } from '@/utils/format'
-import { calcInterest, computeProtocolFee } from '@/utils/offers'
+import { calcInterest, computeLtv, computeProtocolFee } from '@/utils/offers'
 
 const LOAN_TERM_MAX_FRACTION_DIGITS = 2
 
@@ -50,6 +51,16 @@ export function getRepaidToLender(offer: OfferDetails): bigint {
   return offer.withdrawals
     .filter(withdrawal => withdrawal.vault_type === 'lender')
     .reduce((sum, withdrawal) => sum + withdrawal.amount_withdrawn, 0n)
+}
+
+export function getOfferLtv(offer: OfferShort, collateralPriceUsd: number | null): number | null {
+  return computeLtv({
+    principal: offer.current_debt,
+    principalDecimals: NETWORK_CONFIG.principalAsset.decimals,
+    collateral: offer.collateral_remaining,
+    collateralDecimals: NETWORK_CONFIG.collateralAsset.decimals,
+    collateralUsd: collateralPriceUsd,
+  })
 }
 
 export function getLenderVaultBalance(offer: OfferDetails): bigint {

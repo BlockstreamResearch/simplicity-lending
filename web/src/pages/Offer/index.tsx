@@ -5,9 +5,9 @@ import { ApiError } from '@/api/errors'
 import { useBlockHeight } from '@/api/esplora/hooks'
 import { useOffer } from '@/api/indexer/hooks'
 import BackLink from '@/components/BackLink'
+import CardAlert from '@/components/CardAlert'
 import CheckIcon from '@/components/icons/CheckIcon'
 import ShareNodesIcon from '@/components/icons/ShareNodesIcon'
-import TriangleExclamationIcon from '@/components/icons/TriangleExclamationIcon'
 import { OffersLoadError } from '@/components/OffersLoadError'
 import { OfferStatusChip } from '@/components/OfferStatusChip'
 import { UiButton } from '@/components/ui/UiButton'
@@ -109,19 +109,13 @@ export default function OfferPage() {
               </header>
 
               {overdueHint && (
-                <div
+                <CardAlert
+                  variant='danger'
+                  isFilled
                   role='alert'
-                  className='border-separator bg-surface-secondary text-foreground flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm'
-                >
-                  <TriangleExclamationIcon className='text-muted mt-0.5 size-4 shrink-0' />
-                  <div className='flex flex-col'>
-                    <p className='font-medium'>
-                      The deadline has passed with {formatPrincipalAmount(offer.current_debt)} still
-                      unpaid.
-                    </p>
-                    <p className='text-muted'>{overdueHint}</p>
-                  </div>
-                </div>
+                  title={`The deadline has passed with ${formatPrincipalAmount(offer.current_debt)} still unpaid`}
+                  description={overdueHint}
+                />
               )}
 
               <div className='grid items-start gap-6 lg:grid-cols-3'>

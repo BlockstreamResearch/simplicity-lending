@@ -1,6 +1,4 @@
-import { Tooltip } from '@heroui/react'
-
-import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
+import InfoTooltip from '@/components/InfoTooltip'
 
 export function UiFieldLabel({
   children,
@@ -15,14 +13,7 @@ export function UiFieldLabel({
     <span className='inline-flex items-center gap-1'>
       {children}
       {required && <span className='text-danger'>*</span>}
-      {tooltip && (
-        <Tooltip delay={0}>
-          <Tooltip.Trigger className='text-muted inline-flex cursor-help'>
-            <CircleInfoIcon className='size-3' />
-          </Tooltip.Trigger>
-          <Tooltip.Content className='text-muted max-w-64 break-normal!'>{tooltip}</Tooltip.Content>
-        </Tooltip>
-      )}
+      {tooltip && <InfoTooltip content={tooltip} className='text-muted' />}
     </span>
   )
 }

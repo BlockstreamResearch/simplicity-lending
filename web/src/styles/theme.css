@@ -100,3 +100,6 @@
 @utility z-tooltip {
   z-index: var(--z-tooltip);
 }
+@utility bg-stripes-danger {
+  background-image: repeating-linear-gradient(-45deg, var(--danger) 0 1.5px, transparent 1.5px 7px);
+}

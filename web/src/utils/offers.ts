@@ -1,6 +1,13 @@
 import type { AssetAmount, OfferShort } from '@/api/indexer/schemas'
 import { BLOCKS_PER_DAY, BLOCKS_PER_YEAR } from '@/constants/blocks'
-import { BPS_DIVISOR, PROTOCOL_FEE_BPS } from '@/constants/offers'
+import {
+  BPS_DIVISOR,
+  HIGH_RISK_LTV,
+  MAX_LTV,
+  MAX_LTV_BAR_POSITION,
+  MEDIUM_RISK_LTV,
+  PROTOCOL_FEE_BPS,
+} from '@/constants/offers'
 
 import { formatTermLeft } from './format'
 import { normalizeHex } from './hex'
@@ -53,6 +60,41 @@ export function computeLtv({
   const principalValue = Number(principal) / 10 ** principalDecimals
   const collateralValue = (Number(collateral) / 10 ** collateralDecimals) * collateralUsd
   return principalValue / collateralValue
+}
+
+export type LoanRiskLevel = 'low' | 'medium' | 'high' | 'veryHigh' | 'critical'
+
+export function getLoanRiskLevel(ltv: number): LoanRiskLevel {
+  if (ltv >= 1) return 'critical'
+  if (ltv > MAX_LTV) return 'veryHigh'
+  if (ltv >= HIGH_RISK_LTV) return 'high'
+  if (ltv >= MEDIUM_RISK_LTV) return 'medium'
+  return 'low'
+}
+
+export function getLtvBarPosition(ltv: number): number {
+  if (ltv >= 1) return 100
+  if (ltv <= MAX_LTV) return (ltv / MAX_LTV) * MAX_LTV_BAR_POSITION
+  return MAX_LTV_BAR_POSITION + ((ltv - MAX_LTV) / (1 - MAX_LTV)) * (100 - MAX_LTV_BAR_POSITION)
+}
+
+export function getLtvThresholdPrice({
+  debt,
+  debtDecimals,
+  collateral,
+  collateralDecimals,
+  ltv,
+}: {
+  debt: bigint
+  debtDecimals: number
+  collateral: bigint
+  collateralDecimals: number
+  ltv: number
+}): number | null {
+  if (collateral <= 0n) return null
+  const debtValue = Number(debt) / 10 ** debtDecimals
+  const collateralValue = Number(collateral) / 10 ** collateralDecimals
+  return debtValue / (ltv * collateralValue)
 }
 
 export function getOfferTermLeft(offer: OfferShort, currentBlockHeight: number): number {

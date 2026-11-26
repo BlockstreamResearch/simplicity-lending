@@ -1,11 +1,11 @@
-import { buttonVariants, Tooltip } from '@heroui/react'
+import { buttonVariants } from '@heroui/react'
 
 import { getBlockExplorerUrl, getTxExplorerUrl } from '@/api/esplora/utils'
 import type { OfferDetails, ParticipantType } from '@/api/indexer/schemas'
 import CopyButton from '@/components/CopyButton'
 import DetailsPanel, { type DetailRow } from '@/components/DetailsPanel'
 import ArrowUpRightIcon from '@/components/icons/ArrowUpRightIcon'
-import CircleInfoIcon from '@/components/icons/CircleInfoIcon'
+import InfoTooltip from '@/components/InfoTooltip'
 import { NETWORK_CONFIG } from '@/constants/network-config'
 import { useBlockDate } from '@/hooks/useBlockDate'
 import { useFormatAmount } from '@/hooks/useFormatAmount'
@@ -242,14 +242,11 @@ export default function ActivityEventDetailsBody({
         <span className='text-h4 text-muted inline-flex items-center gap-1.5'>
           {details.heroLabel}
           {details.heroTooltip && (
-            <Tooltip delay={0}>
-              <Tooltip.Trigger className='inline-flex shrink-0 cursor-help'>
-                <CircleInfoIcon className='size-4' />
-              </Tooltip.Trigger>
-              <Tooltip.Content className='text-muted max-w-64 break-normal!'>
-                {details.heroTooltip}
-              </Tooltip.Content>
-            </Tooltip>
+            <InfoTooltip
+              content={details.heroTooltip}
+              className='shrink-0'
+              iconClassName='size-4'
+            />
           )}
         </span>
         <p className='flex items-center gap-2'>

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 
+import CardAlert from '@/components/CardAlert'
 import { UiButton } from '@/components/ui/UiButton'
 import { useOpenOffer } from '@/hooks/useOpenOffer'
 import type { OfferNotification } from '@/utils/notifications'
 
-import CardAlert from './CardAlert'
 import NotificationsModal from './NotificationsModal'
 
 export default function CardNotifications({
