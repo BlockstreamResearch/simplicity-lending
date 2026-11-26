@@ -1636,6 +1636,70 @@ async fn lender_offers_returns_paginated_list_for_script() -> anyhow::Result<()>
     Ok(())
 }
 
+#[tokio::test]
+#[serial]
+async fn borrower_offers_applies_exclude_participant_script() -> anyhow::Result<()> {
+    let (base_url, server_handle, pending_offer, _active_offer) = setup_seeded_api().await?;
+    let http = reqwest::Client::new();
+
+    let without_active_lender = get_json(
+        &http,
+        format!(
+            "{base_url}/borrowers/offers?script_pubkey=52ac&exclude_participant_script=53ac&exclude_participant_role=lender"
+        ),
+    )
+    .await?;
+    assert_eq!(without_active_lender["total"], 1);
+    assert_eq!(
+        without_active_lender["items"][0]["id"],
+        pending_offer.to_string()
+    );
+
+    let invalid = http
+        .get(format!(
+            "{base_url}/borrowers/offers?script_pubkey=52ac&exclude_participant_script=zzzz"
+        ))
+        .send()
+        .await?;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn lender_offers_applies_exclude_participant_script() -> anyhow::Result<()> {
+    let (base_url, server_handle, active_offer, repaid_offer) = setup_seeded_lender_api().await?;
+    let http = reqwest::Client::new();
+
+    let other_borrower = get_json(
+        &http,
+        format!("{base_url}/lenders/offers?script_pubkey=53ac&exclude_participant_script=99ac"),
+    )
+    .await?;
+    assert_eq!(other_borrower["total"], 2);
+    assert_ids_match_unordered(&other_borrower["items"], &[active_offer, repaid_offer]);
+
+    let own_borrower = get_json(
+        &http,
+        format!("{base_url}/lenders/offers?script_pubkey=53ac&exclude_participant_script=52ac"),
+    )
+    .await?;
+    assert_eq!(own_borrower["total"], 0);
+
+    let invalid = http
+        .get(format!(
+            "{base_url}/lenders/offers?script_pubkey=53ac&exclude_participant_script=zzzz"
+        ))
+        .send()
+        .await?;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    server_handle.abort();
+    Ok(())
+}
+
 fn seed_protocol_fee_vault(
     offer_id: i64,
     txid_byte: u8,

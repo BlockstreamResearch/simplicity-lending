@@ -51,6 +51,11 @@ pub struct BorrowerOffersParams {
     pub collateral_asset: Option<String>,
     pub principal_asset: Option<String>,
     pub factory_id: Option<Uuid>,
+    /// Excludes offers where this script is the latest participant for the given role.
+    #[param(example = "52ac")]
+    pub exclude_participant_script: Option<String>,
+    /// Participant role for `exclude_participant_script` (default: `borrower`).
+    pub exclude_participant_role: Option<ParticipantType>,
     /// When true, only offers that have not yet expired at the indexer's current height.
     pub not_expired: Option<bool>,
     #[param(minimum = 0, maximum = 100, example = 50)]
@@ -77,6 +82,11 @@ pub struct LenderOffersParams {
     pub collateral_asset: Option<String>,
     pub principal_asset: Option<String>,
     pub factory_id: Option<Uuid>,
+    /// Excludes offers where this script is the latest participant for the given role.
+    #[param(example = "52ac")]
+    pub exclude_participant_script: Option<String>,
+    /// Participant role for `exclude_participant_script` (default: `borrower`).
+    pub exclude_participant_role: Option<ParticipantType>,
     /// When true, only offers that have not yet expired at the indexer's current height.
     pub not_expired: Option<bool>,
     #[param(minimum = 0, maximum = 100, example = 50)]
