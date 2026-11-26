@@ -10,4 +10,4 @@ pub use db::{
     update_offer_status,
 };
 pub use repayment::{PartialRepaymentAmounts, partial_repayment_amounts_from_scan};
-pub use tx_outputs::{OfferCreationOutputs, scan_offer_creation_outputs};
+pub use tx_outputs::OfferCreationOutputs;
