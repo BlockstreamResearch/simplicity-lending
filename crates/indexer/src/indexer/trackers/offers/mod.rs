@@ -9,8 +9,5 @@ pub use db::{
     load_offer_utxos_cache, spend_offer_utxo, update_offer_debt_and_collateral,
     update_offer_status,
 };
-pub use repayment::{
-    ActiveOfferSpendKind, PartialRepaymentAmounts, classify_active_offer_spend,
-    partial_repayment_amounts_from_scan,
-};
+pub use repayment::{PartialRepaymentAmounts, partial_repayment_amounts_from_scan};
 pub use tx_outputs::{OfferCreationOutputs, scan_offer_creation_outputs};
