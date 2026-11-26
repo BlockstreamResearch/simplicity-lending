@@ -1,12 +1,17 @@
 use std::{
+    collections::BTreeSet,
     path::{Path, PathBuf},
     time::Duration,
 };
 
+use lending_contracts::utils::MAX_BASIS_POINTS;
 use simplex::{
     provider::{EsploraProvider, SimplicityNetwork},
     simplicityhl::elements::AssetId,
 };
+
+/// Key of the comma-separated list override, e.g. `INDEXER_INDEXER__ALLOWED_PROTOCOL_FEE_RATES=0,1000`.
+const ALLOWED_PROTOCOL_FEE_RATES_KEY: &str = "indexer.allowed_protocol_fee_rates";
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
@@ -65,10 +70,61 @@ pub struct AssetRegistrySettings {
 #[derive(serde::Deserialize, Clone)]
 pub struct IndexerSettings {
     pub protocol_fee_keeper_asset_id: AssetId,
+    #[serde(deserialize_with = "deserialize_protocol_fee_rates")]
+    pub allowed_protocol_fee_rates: BTreeSet<u16>,
     pub interval: u64,
     pub last_indexed_height: u64,
     #[serde(default)]
     pub asset_registry: AssetRegistrySettings,
+}
+
+/// Accepts a YAML list or the comma-separated string an environment override provides.
+fn deserialize_protocol_fee_rates<'de, D>(deserializer: D) -> Result<BTreeSet<u16>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Rates {
+        List(BTreeSet<u16>),
+        CommaSeparated(String),
+    }
+
+    match <Rates as serde::Deserialize>::deserialize(deserializer)? {
+        Rates::List(rates) => Ok(rates),
+        Rates::CommaSeparated(rates) => rates
+            .split(',')
+            .map(|rate| rate.trim())
+            .filter(|rate| !rate.is_empty())
+            .map(|rate| {
+                rate.parse::<u16>().map_err(|error| {
+                    serde::de::Error::custom(format!("invalid protocol fee rate {rate:?}: {error}"))
+                })
+            })
+            .collect(),
+    }
+}
+
+impl IndexerSettings {
+    fn validate(&self) -> Result<(), config::ConfigError> {
+        if self.allowed_protocol_fee_rates.is_empty() {
+            return Err(config::ConfigError::Message(format!(
+                "{ALLOWED_PROTOCOL_FEE_RATES_KEY} must list at least one rate"
+            )));
+        }
+
+        if let Some(rate) = self
+            .allowed_protocol_fee_rates
+            .iter()
+            .find(|rate| u64::from(**rate) > MAX_BASIS_POINTS)
+        {
+            return Err(config::ConfigError::Message(format!(
+                "{ALLOWED_PROTOCOL_FEE_RATES_KEY} contains {rate}, above {MAX_BASIS_POINTS} basis points"
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 impl Settings {
@@ -91,12 +147,16 @@ impl Settings {
             .filter(|url| !url.trim().is_empty())
             .ok_or_else(|| config::ConfigError::NotFound("DATABASE_URL".into()))?;
 
-        config::Config::builder()
+        let settings: Self = config::Config::builder()
             .add_source(config::File::from(directory.join("base.yaml")))
             .add_source(environment)
             .set_override("database.url", database_url)?
             .build()?
-            .try_deserialize()
+            .try_deserialize()?;
+
+        settings.indexer.validate()?;
+
+        Ok(settings)
     }
 
     /// `override_path` (from `INDEXER_CONFIGURATION_DIR`) wins over `./configuration`.
@@ -165,7 +225,7 @@ impl From<Network> for SimplicityNetwork {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
 
     use std::time::Duration;
 
@@ -206,6 +266,35 @@ mod tests {
         assert!(matches!(settings.esplora.network, Network::LiquidTestnet));
         assert_eq!(settings.indexer.interval, 10000);
         assert!(settings.indexer.asset_registry.domain.is_none());
+        assert_eq!(
+            settings.indexer.allowed_protocol_fee_rates,
+            BTreeSet::from([1_000])
+        );
+    }
+
+    #[test]
+    fn allowed_protocol_fee_rates_are_read_from_a_comma_separated_list() {
+        let settings = load_with_env(&[("INDEXER_INDEXER__ALLOWED_PROTOCOL_FEE_RATES", "1000,0")])
+            .expect("load configuration");
+
+        assert_eq!(
+            settings.indexer.allowed_protocol_fee_rates,
+            BTreeSet::from([0, 1_000])
+        );
+    }
+
+    #[test]
+    fn invalid_allowed_protocol_fee_rates_are_rejected() {
+        for rates in ["", "10001", "1000,10001", "-1"] {
+            let error = load_with_env(&[("INDEXER_INDEXER__ALLOWED_PROTOCOL_FEE_RATES", rates)])
+                .err()
+                .unwrap_or_else(|| panic!("{rates:?} must be rejected"));
+
+            assert!(
+                error.to_string().contains("allowed_protocol_fee_rates"),
+                "{rates:?}: {error}"
+            );
+        }
     }
 
     #[test]

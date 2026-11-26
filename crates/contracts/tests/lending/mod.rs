@@ -11,3 +11,4 @@ mod offer_liquidation_failure_flows;
 mod offer_liquidation_success_flows;
 mod partial_offer_repayment_success_flows;
 mod setup;
+mod zero_protocol_fee_flows;

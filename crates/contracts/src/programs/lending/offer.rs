@@ -1,6 +1,6 @@
 use std::cmp::min;
 
-use crate::utils::{apply_basis_points, mul_div};
+use crate::utils::{MAX_BASIS_POINTS, apply_basis_points, mul_div};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OfferParameters {
@@ -8,6 +8,7 @@ pub struct OfferParameters {
     pub principal_amount: u64,
     pub loan_expiration_time: u32,
     pub principal_interest_rate: u16,
+    pub protocol_fee_rate: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,19 +19,25 @@ pub enum OfferRepaymentPhase {
     Repaid,
 }
 
-const PROTOCOL_FEE_PERCENTAGE: u16 = 1_000; // 10%
-
-pub fn calculate_protocol_fee(fee_amount: u64) -> u64 {
-    apply_basis_points(fee_amount, PROTOCOL_FEE_PERCENTAGE).unwrap()
+pub fn calculate_protocol_fee(fee_amount: u64, protocol_fee_rate: u16) -> u64 {
+    apply_basis_points(fee_amount, protocol_fee_rate).unwrap()
 }
 
 impl OfferParameters {
+    pub fn has_valid_protocol_fee_rate(&self) -> bool {
+        u64::from(self.protocol_fee_rate) <= MAX_BASIS_POINTS
+    }
+
     pub fn get_total_fee(&self) -> u64 {
         apply_basis_points(self.principal_amount, self.principal_interest_rate).unwrap()
     }
 
+    pub fn get_protocol_fee(&self, fee_amount: u64) -> u64 {
+        calculate_protocol_fee(fee_amount, self.protocol_fee_rate)
+    }
+
     pub fn get_total_protocol_fee(&self) -> u64 {
-        calculate_protocol_fee(self.get_total_fee())
+        self.get_protocol_fee(self.get_total_fee())
     }
 
     pub fn get_already_repaid_fee(&self, current_debt: u64) -> u64 {
@@ -41,7 +48,7 @@ impl OfferParameters {
     }
 
     pub fn get_already_repaid_protocol_fee(&self, current_debt: u64) -> u64 {
-        calculate_protocol_fee(self.get_already_repaid_fee(current_debt))
+        self.get_protocol_fee(self.get_already_repaid_fee(current_debt))
     }
 
     pub fn get_fee_to_repay(&self, current_debt: u64) -> u64 {
@@ -49,7 +56,7 @@ impl OfferParameters {
     }
 
     pub fn get_protocol_fee_to_repay(&self, current_debt: u64) -> u64 {
-        calculate_protocol_fee(self.get_fee_to_repay(current_debt))
+        self.get_total_protocol_fee() - self.get_already_repaid_protocol_fee(current_debt)
     }
 
     pub fn get_repaid_fee(&self, current_debt: u64, amount_to_repay: u64) -> u64 {
@@ -58,8 +65,26 @@ impl OfferParameters {
         min(fee_left, amount_to_repay)
     }
 
+    /// Protocol share of a repayment, taken as the difference of the rounded cumulative shares
+    /// before and after it, exactly as the covenant splits it.
     pub fn get_repaid_protocol_fee(&self, current_debt: u64, amount_to_repay: u64) -> u64 {
-        calculate_protocol_fee(self.get_repaid_fee(current_debt, amount_to_repay))
+        let already_repaid_fee_after = self.get_already_repaid_fee(current_debt)
+            + self.get_repaid_fee(current_debt, amount_to_repay);
+
+        self.get_protocol_fee(already_repaid_fee_after)
+            - self.get_already_repaid_protocol_fee(current_debt)
+    }
+
+    pub fn get_repaid_lender_amount(&self, current_debt: u64, amount_to_repay: u64) -> u64 {
+        amount_to_repay - self.get_repaid_protocol_fee(current_debt, amount_to_repay)
+    }
+
+    pub fn has_lender_vault(&self, current_debt: u64) -> bool {
+        self.get_already_repaid_amount(current_debt) > 0
+    }
+
+    pub fn has_protocol_fee_vault(&self, current_debt: u64) -> bool {
+        self.get_already_repaid_protocol_fee(current_debt) > 0
     }
 
     pub fn get_total_amount_to_repay(&self) -> u64 {
@@ -122,6 +147,7 @@ mod tests {
             principal_amount,
             loan_expiration_time: 100_000,
             principal_interest_rate,
+            protocol_fee_rate: 1_000,
         }
     }
 
@@ -365,6 +391,7 @@ mod tests {
             principal_amount: 10_000,
             loan_expiration_time: 100_000,
             principal_interest_rate: 1_000,
+            protocol_fee_rate: 1_000,
         };
         let total_debt = params.get_total_amount_to_repay();
 
@@ -391,6 +418,7 @@ mod tests {
             principal_amount: 10_000,
             loan_expiration_time: 100_000,
             principal_interest_rate: 1_000,
+            protocol_fee_rate: 1_000,
         };
         let total_debt = params.get_total_amount_to_repay();
 
@@ -398,5 +426,56 @@ mod tests {
         assert_eq!(params.get_already_unlocked_collateral(total_debt - 16), 4);
         assert_eq!(params.get_already_unlocked_collateral(total_debt - 46), 12);
         assert_eq!(params.get_already_unlocked_collateral(0), 3_000);
+    }
+
+    #[test]
+    fn zero_protocol_fee_rate_routes_everything_to_lender() {
+        let params = OfferParameters {
+            protocol_fee_rate: 0,
+            ..dummy_lending_offer_parameters(1000, 1000)
+        };
+        let total_debt = params.get_total_amount_to_repay();
+
+        assert_eq!(params.get_total_protocol_fee(), 0);
+        assert_eq!(params.get_repaid_protocol_fee(total_debt, 50), 0);
+        assert_eq!(params.get_repaid_lender_amount(total_debt, 50), 50);
+        assert!(params.has_lender_vault(total_debt - 50));
+        assert!(!params.has_protocol_fee_vault(total_debt - 50));
+        assert!(!params.has_protocol_fee_vault(0));
+    }
+
+    #[test]
+    fn get_repaid_protocol_fee_follows_cumulative_rounding() {
+        // total_fee = 100, protocol share 10%
+        let params = dummy_lending_offer_parameters(1000, 1000);
+        let total_debt = params.get_total_amount_to_repay();
+
+        // floor(5 * 0.1) = 0: no protocol share, no protocol fee vault yet.
+        assert_eq!(params.get_repaid_protocol_fee(total_debt, 5), 0);
+        assert!(!params.has_protocol_fee_vault(total_debt - 5));
+
+        // floor(10 * 0.1) - floor(9 * 0.1) = 1: a 1-unit repayment leaves nothing for the lender.
+        assert_eq!(params.get_repaid_protocol_fee(total_debt - 9, 1), 1);
+        assert_eq!(params.get_repaid_lender_amount(total_debt - 9, 1), 0);
+    }
+
+    #[test]
+    fn has_valid_protocol_fee_rate_caps_at_full_interest() {
+        let params = dummy_lending_offer_parameters(1000, 1000);
+
+        assert!(
+            OfferParameters {
+                protocol_fee_rate: 10_000,
+                ..params
+            }
+            .has_valid_protocol_fee_rate()
+        );
+        assert!(
+            !OfferParameters {
+                protocol_fee_rate: 10_001,
+                ..params
+            }
+            .has_valid_protocol_fee_rate()
+        );
     }
 }

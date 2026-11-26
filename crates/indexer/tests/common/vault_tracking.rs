@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use anyhow::Context;
 use lending_contracts::programs::asset_auth_vault::AssetAuthVault;
 use lending_contracts::programs::lending::LendingOffer;
@@ -19,12 +21,29 @@ use super::{
 pub const TRACKABLE_REPAYMENT_HEIGHT: u64 = 200;
 pub const FIRST_PARTIAL_AMOUNT: u64 = 500;
 pub const SECOND_PARTIAL_AMOUNT: u64 = 200;
+pub const TRACKABLE_PROTOCOL_FEE_RATE: u16 = 1_000;
+/// Rates the test registry indexes offers with.
+pub const ALLOWED_PROTOCOL_FEE_RATES: [u16; 2] = [0, TRACKABLE_PROTOCOL_FEE_RATE];
 
 /// Offer parameters large enough to produce non-zero protocol fees and meaningful vault splits.
 pub fn trackable_offer_model(
     txid_seed: i64,
     issuance_factory_id: Uuid,
     created_at_height: i64,
+) -> OfferModel {
+    trackable_offer_model_with_fee_rate(
+        txid_seed,
+        issuance_factory_id,
+        created_at_height,
+        TRACKABLE_PROTOCOL_FEE_RATE,
+    )
+}
+
+pub fn trackable_offer_model_with_fee_rate(
+    txid_seed: i64,
+    issuance_factory_id: Uuid,
+    created_at_height: i64,
+    protocol_fee_rate: u16,
 ) -> OfferModel {
     let total_debt = 11_000_i64;
     OfferModel {
@@ -40,6 +59,7 @@ pub fn trackable_offer_model(
         current_debt: total_debt,
         collateral_remaining: 3_000,
         interest_rate: 1_000,
+        protocol_fee_rate: i32::from(protocol_fee_rate),
         loan_expiration_time: 1_234_567,
         current_status: OfferStatus::Active,
         updated_at_height: created_at_height,
@@ -61,7 +81,29 @@ pub async fn seed_trackable_active_offer(
     txid_seed: i64,
     created_at_height: i64,
 ) -> anyhow::Result<(i64, OutPoint, OfferModel)> {
-    let mut offer = trackable_offer_model(txid_seed, factory_id, created_at_height);
+    seed_trackable_active_offer_with_fee_rate(
+        pool,
+        factory_id,
+        txid_seed,
+        created_at_height,
+        TRACKABLE_PROTOCOL_FEE_RATE,
+    )
+    .await
+}
+
+pub async fn seed_trackable_active_offer_with_fee_rate(
+    pool: &PgPool,
+    factory_id: Uuid,
+    txid_seed: i64,
+    created_at_height: i64,
+    protocol_fee_rate: u16,
+) -> anyhow::Result<(i64, OutPoint, OfferModel)> {
+    let mut offer = trackable_offer_model_with_fee_rate(
+        txid_seed,
+        factory_id,
+        created_at_height,
+        protocol_fee_rate,
+    );
     let offer_id = seed_offer_row(pool, &mut offer).await?;
     let active_outpoint = outpoint_from_offer_id(txid_seed, 0);
     seed_offer_utxo_row(
@@ -83,6 +125,7 @@ pub async fn load_registry(pool: &PgPool) -> anyhow::Result<TrackerRegistry> {
     TrackerRegistry::load(
         pool,
         protocol_fee_keeper_asset_id,
+        BTreeSet::from(ALLOWED_PROTOCOL_FEE_RATES),
         SimplicityNetwork::LiquidTestnet,
         None,
     )
@@ -148,6 +191,28 @@ pub async fn fetch_active_vault_rows(
     Ok(rows)
 }
 
+/// Counts every vault row of `vault_type`, spent or not.
+pub async fn count_vault_rows_of_type(
+    pool: &PgPool,
+    offer_id: i64,
+    vault_type: VaultType,
+) -> anyhow::Result<i64> {
+    let count = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*)::BIGINT
+        FROM offer_vaults
+        WHERE offer_id = $1
+          AND vault_type = $2
+        "#,
+        offer_id,
+        vault_type as VaultType
+    )
+    .fetch_one(pool)
+    .await?
+    .unwrap_or(0);
+    Ok(count)
+}
+
 pub async fn count_unspent_utxos_of_type(
     pool: &PgPool,
     offer_id: i64,
@@ -190,23 +255,28 @@ pub fn build_full_repayment_tx(
     let lender_vault = AssetAuthVault::new_finalized(params.get_lender_vault_parameters());
     let protocol_vault = AssetAuthVault::new_finalized(params.get_protocol_fee_vault_parameters());
 
-    Ok(tx_with_inputs(
-        vec![active_input],
-        vec![
-            op_return_asset(params.borrower_nft_asset_id),
-            explicit_output(
-                params.principal_asset_id,
-                lender_amount,
-                lender_vault.get_script_pubkey(),
-            ),
-            explicit_output(
-                params.principal_asset_id,
-                protocol_fee,
-                protocol_vault.get_script_pubkey(),
-            ),
-            explicit_output(params.collateral_asset_id, 10, script(&[0x99])),
-        ],
-    ))
+    let mut outputs = vec![
+        op_return_asset(params.borrower_nft_asset_id),
+        explicit_output(
+            params.principal_asset_id,
+            lender_amount,
+            lender_vault.get_script_pubkey(),
+        ),
+    ];
+    if protocol_fee > 0 {
+        outputs.push(explicit_output(
+            params.principal_asset_id,
+            protocol_fee,
+            protocol_vault.get_script_pubkey(),
+        ));
+    }
+    outputs.push(explicit_output(
+        params.collateral_asset_id,
+        10,
+        script(&[0x99]),
+    ));
+
+    Ok(tx_with_inputs(vec![active_input], outputs))
 }
 
 pub fn build_first_partial_repayment_tx(
@@ -233,35 +303,36 @@ pub fn build_first_partial_repayment_tx(
         .get_collateral_for_principal(amount_to_repay);
     let collateral_after = collateral_before - collateral_unlocked;
 
-    let tx = tx_with_inputs(
-        vec![active_input],
-        vec![
-            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
-            explicit_output(
-                params.collateral_asset_id,
-                collateral_after,
-                continuing.get_script_pubkey(),
-            ),
-            explicit_output(
-                params.principal_asset_id,
-                lender_amount,
-                lender_vault.get_script_pubkey(),
-            ),
-            explicit_output(
-                params.principal_asset_id,
-                protocol_fee,
-                protocol_vault.get_script_pubkey(),
-            ),
-        ],
-    );
+    let mut outputs = vec![
+        explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+        explicit_output(
+            params.collateral_asset_id,
+            collateral_after,
+            continuing.get_script_pubkey(),
+        ),
+        explicit_output(
+            params.principal_asset_id,
+            lender_amount,
+            lender_vault.get_script_pubkey(),
+        ),
+    ];
+    if protocol_fee > 0 {
+        outputs.push(explicit_output(
+            params.principal_asset_id,
+            protocol_fee,
+            protocol_vault.get_script_pubkey(),
+        ));
+    }
 
-    Ok((tx, debt_after))
+    Ok((tx_with_inputs(vec![active_input], outputs), debt_after))
 }
 
+/// A repayment after the first one. The protocol fee vault is spent when `protocol_vault_input` is
+/// given and gets an output whenever this repayment carries a protocol share.
 pub fn build_second_partial_repayment_tx(
     active_input: OutPoint,
     lender_vault_input: OutPoint,
-    protocol_vault_input: OutPoint,
+    protocol_vault_input: Option<OutPoint>,
     offer: &OfferModel,
     debt_before: u64,
     amount_to_repay: u64,
@@ -298,27 +369,32 @@ pub fn build_second_partial_repayment_tx(
     let collateral_after =
         collateral_before - (collateral_unlocked_total - collateral_unlocked_before);
 
-    Ok(tx_with_inputs(
-        vec![lender_vault_input, protocol_vault_input, active_input],
-        vec![
-            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
-            explicit_output(
-                params.collateral_asset_id,
-                collateral_after,
-                continuing.get_script_pubkey(),
-            ),
-            explicit_output(
-                params.principal_asset_id,
-                lender_before + lender_delta,
-                lender_after.get_script_pubkey(),
-            ),
-            explicit_output(
-                params.principal_asset_id,
-                protocol_before + protocol_fee,
-                protocol_after.get_script_pubkey(),
-            ),
-        ],
-    ))
+    let mut inputs = vec![lender_vault_input];
+    inputs.extend(protocol_vault_input);
+    inputs.push(active_input);
+
+    let mut outputs = vec![
+        explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+        explicit_output(
+            params.collateral_asset_id,
+            collateral_after,
+            continuing.get_script_pubkey(),
+        ),
+        explicit_output(
+            params.principal_asset_id,
+            lender_before + lender_delta,
+            lender_after.get_script_pubkey(),
+        ),
+    ];
+    if protocol_fee > 0 {
+        outputs.push(explicit_output(
+            params.principal_asset_id,
+            protocol_before + protocol_fee,
+            protocol_after.get_script_pubkey(),
+        ));
+    }
+
+    Ok(tx_with_inputs(inputs, outputs))
 }
 
 pub fn apply_repayment_to_offer(

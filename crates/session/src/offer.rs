@@ -50,9 +50,9 @@ fn parse_amount(field: &'static str, value: &str) -> Result<u64, SessionError> {
     })
 }
 
-fn parse_interest_rate(value: u32) -> Result<u16, SessionError> {
+fn parse_rate(field: &'static str, value: u32) -> Result<u16, SessionError> {
     u16::try_from(value).map_err(|_| SessionError::InvalidOfferData {
-        field: "interest_rate",
+        field,
         value: value.to_string(),
     })
 }
@@ -74,7 +74,8 @@ fn lending_offer_parameters_from_indexer(
             collateral_amount: parse_amount("collateral_amount", &info.base.collateral_amount)?,
             principal_amount: parse_amount("principal_amount", &info.base.principal_amount)?,
             loan_expiration_time: info.base.loan_expiration_height,
-            principal_interest_rate: parse_interest_rate(info.base.interest_rate)?,
+            principal_interest_rate: parse_rate("interest_rate", info.base.interest_rate)?,
+            protocol_fee_rate: parse_rate("protocol_fee_rate", info.base.protocol_fee_rate)?,
         },
         network,
     })

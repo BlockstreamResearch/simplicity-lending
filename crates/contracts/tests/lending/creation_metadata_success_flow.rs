@@ -24,6 +24,7 @@ fn default_pending_offer_setup(
         principal_amount: 10000,
         loan_expiration_time: current_height + 60,
         principal_interest_rate: 1000,
+        protocol_fee_rate: 1_000,
     };
 
     setup_pending_offer(
@@ -48,7 +49,7 @@ fn creates_pending_offer_with_creation_metadata(
         .to_vec();
 
     assert!(lending_offer_creation_tx.output[4].is_null_data());
-    assert_eq!(op_return_data.len(), 50);
+    assert_eq!(op_return_data.len(), 52);
     assert_eq!(
         &op_return_data[0..4],
         LendingOffer::get_program_id().as_slice()
@@ -81,6 +82,14 @@ fn creates_pending_offer_with_creation_metadata(
         lending_offer_parameters
             .offer_parameters
             .principal_interest_rate
+            .to_le_bytes()
+            .to_vec(),
+    );
+    assert_eq!(
+        &op_return_data[50..52],
+        lending_offer_parameters
+            .offer_parameters
+            .protocol_fee_rate
             .to_le_bytes()
             .to_vec(),
     );
@@ -121,6 +130,10 @@ fn decodes_pending_offer_creation_metadata(context: simplex::TestContext) -> any
         lending_offer_parameters
             .offer_parameters
             .principal_interest_rate
+    );
+    assert_eq!(
+        decoded_metadata.protocol_fee_rate,
+        lending_offer_parameters.offer_parameters.protocol_fee_rate
     );
 
     Ok(())

@@ -30,6 +30,7 @@ impl Worker {
         let tracker_registry = TrackerRegistry::load(
             &db_pool,
             settings.protocol_fee_keeper_asset_id,
+            settings.allowed_protocol_fee_rates,
             *provider.get_network(),
             AssetRegistration::from_settings(&settings.asset_registry),
         )

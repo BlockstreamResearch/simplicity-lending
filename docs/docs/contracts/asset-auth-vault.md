@@ -8,7 +8,7 @@ An asset auth vault holds one asset and lets an authorized party add to it or ta
 
 ## Where it is spent
 
-A repayment creates or extends two vaults, both holding the principal asset. One receives the lender's share of the fee and then the principal. The other receives the protocol fee. [Lending](./lending.md) requires those outputs on every repayment. The lender later spends their vault in [Claim the repayment](../lender/claim-repayment.md). The protocol fee vault is spent the same way by whoever holds its keeper asset.
+A repayment creates or extends up to two vaults, both holding the principal asset. The lender's vault receives the lender's share of the fee and then the principal, and [Lending](./lending.md) requires it on every repayment. The protocol fee vault receives the protocol fee. It is created by the first repayment that pays a non-zero protocol share and extended only by repayments that pay one, so an offer with a zero protocol fee rate never has it. The lender later spends their vault in [Claim the repayment](../lender/claim-repayment.md). The protocol fee vault is spent the same way by whoever holds its keeper asset.
 
 The lender's vault is authorized by the lender NFT, and taking the whole balance burns that token. The protocol fee vault is authorized by a separate keeper asset, which is not burned. Adding funds is authorized by the borrower NFT.
 

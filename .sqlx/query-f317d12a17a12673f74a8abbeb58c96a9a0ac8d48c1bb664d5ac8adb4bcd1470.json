@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COUNT(*)::BIGINT\n        FROM offer_vaults\n        WHERE offer_id = $1\n          AND vault_type = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        {
+          "Custom": {
+            "name": "vault_type",
+            "kind": {
+              "Enum": [
+                "lender",
+                "protocol_fee"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f317d12a17a12673f74a8abbeb58c96a9a0ac8d48c1bb664d5ac8adb4bcd1470"
+}

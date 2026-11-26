@@ -67,6 +67,18 @@ impl AssetAuthVault {
         Self::new(parameters, storage)
     }
 
+    pub fn new_with_supplied(parameters: AssetAuthVaultParameters, already_supplied: u64) -> Self {
+        if already_supplied >= parameters.supply_goal {
+            Self::new_finalized(parameters)
+        } else {
+            Self::new_active(parameters, already_supplied)
+        }
+    }
+
+    pub fn get_program_tapleaf_hash(parameters: AssetAuthVaultParameters) -> [u8; 32] {
+        Self::new_finalized(parameters).get_tapleaf_hash()
+    }
+
     fn new(parameters: AssetAuthVaultParameters, storage: AssetAuthVaultStorage) -> Self {
         let mut asset_auth_vault_program =
             AssetAuthVaultProgram::new(parameters.build_arguments()).with_storage_capacity(2);

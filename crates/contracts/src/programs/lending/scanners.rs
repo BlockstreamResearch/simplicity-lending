@@ -6,7 +6,7 @@ use simplex::{
 use crate::programs::asset_auth_vault::AssetAuthVault;
 use crate::programs::lending::metadata::LendingOfferCreationMetadata;
 use crate::programs::lending::{
-    LendingOffer, LendingOfferError, LendingOfferParameters, OfferParameters, OfferRepaymentPhase,
+    LendingOffer, LendingOfferError, LendingOfferParameters, OfferParameters,
 };
 use crate::programs::program::{MetadataProgram, SimplexProgram};
 use crate::programs::script_auth::ScriptAuth;
@@ -202,18 +202,26 @@ impl LendingOffer {
         let borrower_nft_asset_id = borrower_nft_tx_out.asset.explicit()?;
         let lender_nft_asset_id = lender_nft_tx_out.asset.explicit()?;
 
+        let offer_parameters = OfferParameters {
+            collateral_amount,
+            principal_amount: creation_metadata.principal_amount,
+            loan_expiration_time: creation_metadata.loan_expiration_time,
+            principal_interest_rate: creation_metadata.principal_interest_rate,
+            protocol_fee_rate: creation_metadata.protocol_fee_rate,
+        };
+
+        // Such an offer can never be accepted, so it is not a lending offer worth tracking.
+        if !offer_parameters.has_valid_protocol_fee_rate() {
+            return None;
+        }
+
         Some(LendingOfferParameters {
             collateral_asset_id,
             principal_asset_id: creation_metadata.principal_asset_id,
             protocol_fee_keeper_asset_id,
             borrower_nft_asset_id,
             lender_nft_asset_id,
-            offer_parameters: OfferParameters {
-                collateral_amount,
-                principal_amount: creation_metadata.principal_amount,
-                loan_expiration_time: creation_metadata.loan_expiration_time,
-                principal_interest_rate: creation_metadata.principal_interest_rate,
-            },
+            offer_parameters,
             network,
         })
     }
@@ -294,9 +302,8 @@ impl LendingOffer {
     /// Classify a spend/related tx for this offer instance (`self` = pre-state).
     ///
     /// Partial repayment is detected via `discover_partial_repayment(..., None)`, so only the
-    /// first partial (`NoRepayments` vault creates) is classified here. Later fee/principal
-    /// partials need prevout vault amounts — call `discover_partial_repayment` with
-    /// `vault_amounts_before` instead. Borrower NFT I/O indexes are fixed at `(0, 0)` (simf default).
+    /// first partial (vault creates) is classified here. Later partials need prevout vault
+    /// amounts — call `discover_partial_repayment` with `vault_amounts_before` instead. Borrower NFT I/O indexes are fixed at `(0, 0)` (simf default).
     pub fn classify_tx(&self, tx: &Transaction) -> Option<LendingOfferTxKind> {
         if self.is_pending_offer() {
             if self.scan_creation(tx).is_some() && Self::has_creation_metadata(tx).is_some() {
@@ -315,7 +322,7 @@ impl LendingOffer {
         if self.scan_full_repayment(tx, 0, 0).is_some() {
             return Some(LendingOfferTxKind::FullRepayment);
         }
-        // `None` prevouts: only NoRepayments-phase partials.
+        // `None` prevouts: only the first partial, which creates the vaults.
         if self.discover_partial_repayment(tx, 0, 0, None).is_some() {
             return Some(LendingOfferTxKind::PartialRepayment);
         }
@@ -419,8 +426,9 @@ impl LendingOffer {
     /// Discover a partial repayment from vault principal deltas, then verify layout.
     ///
     /// `vault_amounts_before` is `(lender_vault_amount, protocol_vault_amount)` from prevouts.
-    /// Required for supply phases (`RepayingOfferFee` / `RepayingPrincipal`);
-    /// ignored for `NoRepayments` vault creates (use output amounts as the delta from zero).
+    /// It is required once the lender vault exists (any repayment before this one); the protocol
+    /// amount is required once the protocol fee vault exists. Vaults that do not exist yet are
+    /// created by this repayment, so their output amounts are the deltas from zero.
     pub fn discover_partial_repayment(
         &self,
         tx: &Transaction,
@@ -433,10 +441,17 @@ impl LendingOffer {
         }
 
         let layout = Self::partial_repayment_layout(borrower_nft_input, borrower_nft_output);
-        let amount_to_repay =
-            self.discover_repayment_amount_from_vaults(tx, &layout, vault_amounts_before)?;
 
-        self.scan_partial_repayment(tx, amount_to_repay, borrower_nft_input, borrower_nft_output)
+        self.repayment_amount_candidates(tx, &layout, vault_amounts_before)
+            .into_iter()
+            .find_map(|amount_to_repay| {
+                self.scan_partial_repayment(
+                    tx,
+                    amount_to_repay,
+                    borrower_nft_input,
+                    borrower_nft_output,
+                )
+            })
     }
 
     /// Full repayment: borrower NFT burned, vaults absorb full debt.
@@ -505,74 +520,69 @@ impl LendingOffer {
         )
     }
 
-    /// Recover `amount_to_repay` from vault principal output deltas at fixed layout indexes.
-    ///
-    /// For `NoRepayments`, only sums create outs and checks fee-split; vault script matching
-    /// is left to [`Self::scan_repayment_vaults`] via [`Self::scan_partial_repayment`].
-    fn discover_repayment_amount_from_vaults(
+    /// Candidate `amount_to_repay` values recovered from vault principal output deltas at fixed
+    /// layout indexes: one where the protocol fee vault output is part of the repayment, and one
+    /// where it is not touched. Each candidate already follows the fee split; vault scripts are
+    /// checked afterwards by [`Self::scan_partial_repayment`].
+    fn repayment_amount_candidates(
         &self,
         tx: &Transaction,
         layout: &LendingRepaymentIoLayout,
         vault_amounts_before: Option<(u64, Option<u64>)>,
-    ) -> Option<u64> {
+    ) -> Vec<u64> {
         let debt_before = self.get_current_debt();
-        let params = self.get_parameters();
-        let phase = params.offer_parameters.get_repayment_phase(debt_before);
+        let offer_parameters = self.get_parameters().offer_parameters;
 
-        let lender_out_amount = explicit_output_amount(tx, layout.lender_vault_output)?;
-
-        let amount_to_repay = match phase {
-            OfferRepaymentPhase::NoRepayments => {
-                let protocol_vout = layout.protocol_fee_vault_output?;
-                let protocol_out_amount = explicit_output_amount(tx, protocol_vout)?;
-                let amount = lender_out_amount.checked_add(protocol_out_amount)?;
-
-                // Create outs must follow the protocol fee split for this total.
-                let protocol_fee_repaid = params
-                    .offer_parameters
-                    .get_repaid_protocol_fee(debt_before, amount);
-
-                if protocol_fee_repaid != protocol_out_amount {
-                    return None;
-                }
-
-                amount
-            }
-            OfferRepaymentPhase::RepayingOfferFee => {
-                let (lender_before, protocol_before) = vault_amounts_before?;
-                let protocol_before = protocol_before?;
-
-                let protocol_vout = layout.protocol_fee_vault_output?;
-                let protocol_out_amount = explicit_output_amount(tx, protocol_vout)?;
-
-                let lender_delta = lender_out_amount.checked_sub(lender_before)?;
-                let protocol_delta = protocol_out_amount.checked_sub(protocol_before)?;
-
-                if lender_delta == 0 && protocol_delta == 0 {
-                    return None;
-                }
-
-                lender_delta.checked_add(protocol_delta)?
-            }
-            OfferRepaymentPhase::RepayingPrincipal => {
-                let (lender_before, _) = vault_amounts_before?;
-
-                let lender_delta = lender_out_amount.checked_sub(lender_before)?;
-
-                if lender_delta == 0 {
-                    return None;
-                }
-
-                lender_delta
-            }
-            OfferRepaymentPhase::Repaid => return None,
+        let Some(lender_out_amount) = explicit_output_amount(tx, layout.lender_vault_output) else {
+            return Vec::new();
         };
 
-        if amount_to_repay == 0 || amount_to_repay >= debt_before {
-            return None;
-        }
+        let (lender_before, protocol_before) = if offer_parameters.has_lender_vault(debt_before) {
+            let Some(amounts_before) = vault_amounts_before else {
+                return Vec::new();
+            };
+            amounts_before
+        } else {
+            (0, None)
+        };
+        let protocol_before = if offer_parameters.has_protocol_fee_vault(debt_before) {
+            protocol_before
+        } else {
+            Some(0)
+        };
 
-        Some(amount_to_repay)
+        let Some(lender_delta) = lender_out_amount.checked_sub(lender_before) else {
+            return Vec::new();
+        };
+
+        let protocol_delta = layout
+            .protocol_fee_vault_output
+            .and_then(|vout| explicit_output_amount(tx, vout))
+            .zip(protocol_before)
+            .and_then(|(protocol_out_amount, protocol_before)| {
+                protocol_out_amount.checked_sub(protocol_before)
+            })
+            .filter(|protocol_delta| *protocol_delta > 0);
+
+        let with_protocol_fee = protocol_delta.map(|protocol_delta| (lender_delta, protocol_delta));
+        let without_protocol_fee = Some((lender_delta, 0));
+
+        [with_protocol_fee, without_protocol_fee]
+            .into_iter()
+            .flatten()
+            .filter_map(|(lender_delta, protocol_delta)| {
+                let amount_to_repay = lender_delta.checked_add(protocol_delta)?;
+
+                if amount_to_repay == 0 || amount_to_repay >= debt_before {
+                    return None;
+                }
+
+                let deltas =
+                    repayment_vault_deltas(self.get_parameters(), debt_before, amount_to_repay)?;
+
+                (deltas == (lender_delta, protocol_delta)).then_some(amount_to_repay)
+            })
+            .collect()
     }
 
     fn scan_repayment_vaults(
@@ -583,58 +593,32 @@ impl LendingOffer {
         layout: &LendingRepaymentIoLayout,
     ) -> Option<(u32, Option<u32>)> {
         let params = self.get_parameters();
-        let phase = params.offer_parameters.get_repayment_phase(debt_before);
+        let debt_after = debt_before.checked_sub(amount_to_repay)?;
         let (lender_delta, protocol_fee_repaid) =
             repayment_vault_deltas(params, debt_before, amount_to_repay)?;
 
-        let lender_vout = layout.lender_vault_output;
-        let protocol_vout = layout.protocol_fee_vault_output;
-
-        match phase {
-            OfferRepaymentPhase::NoRepayments => {
-                let (lender_after, protocol_after) = expected_vaults_after_first_repayment(
-                    params,
-                    debt_before,
-                    amount_to_repay,
-                    lender_delta,
-                    protocol_fee_repaid,
-                );
-
-                match_vault_outs(
-                    tx,
-                    lender_vout,
-                    protocol_vout,
-                    &lender_after,
-                    Some(&protocol_after),
-                )
-            }
-            OfferRepaymentPhase::RepayingOfferFee => {
-                let (lender_after, protocol_after) = expected_vaults_after_fee_supply(
-                    params,
-                    debt_before,
-                    lender_delta,
-                    protocol_fee_repaid,
-                );
-
-                match_vault_outs(
-                    tx,
-                    lender_vout,
-                    protocol_vout,
-                    &lender_after,
-                    Some(&protocol_after),
-                )
-            }
-            OfferRepaymentPhase::RepayingPrincipal => {
-                let lender_after = expected_lender_vault_after_principal_supply(
-                    params,
-                    debt_before,
-                    amount_to_repay,
-                );
-
-                match_vault_outs(tx, lender_vout, None, &lender_after, None)
-            }
-            OfferRepaymentPhase::Repaid => None,
+        // The covenant rejects repayments that leave nothing for the lender.
+        if lender_delta == 0 {
+            return None;
         }
+
+        let lender_after = params.get_lender_vault(debt_after);
+
+        // The protocol fee vault only changes when this repayment carries a protocol share.
+        let protocol_after =
+            (protocol_fee_repaid > 0).then(|| params.get_protocol_fee_vault(debt_after));
+        let protocol_vout = match protocol_after {
+            Some(_) => Some(layout.protocol_fee_vault_output?),
+            None => None,
+        };
+
+        match_vault_outs(
+            tx,
+            layout.lender_vault_output,
+            protocol_vout,
+            &lender_after,
+            protocol_after.as_ref(),
+        )
     }
 }
 
@@ -654,84 +638,6 @@ fn repayment_vault_deltas(
     let lender_delta = amount_to_repay.checked_sub(protocol_fee_repaid)?;
 
     Some((lender_delta, protocol_fee_repaid))
-}
-
-/// Post-state vaults after the first repayment (vault creates; supplied == delta).
-fn expected_vaults_after_first_repayment(
-    params: &LendingOfferParameters,
-    debt_before: u64,
-    amount_to_repay: u64,
-    lender_delta: u64,
-    protocol_fee_repaid: u64,
-) -> (AssetAuthVault, AssetAuthVault) {
-    let lender_after = if amount_to_repay < debt_before {
-        AssetAuthVault::new_active(params.get_lender_vault_parameters(), lender_delta)
-    } else {
-        AssetAuthVault::new_finalized(params.get_lender_vault_parameters())
-    };
-
-    let protocol_after = if protocol_fee_repaid < params.offer_parameters.get_total_protocol_fee() {
-        AssetAuthVault::new_active(
-            params.get_protocol_fee_vault_parameters(),
-            protocol_fee_repaid,
-        )
-    } else {
-        AssetAuthVault::new_finalized(params.get_protocol_fee_vault_parameters())
-    };
-
-    (lender_after, protocol_after)
-}
-
-/// Post-state vaults after a fee-phase supply.
-fn expected_vaults_after_fee_supply(
-    params: &LendingOfferParameters,
-    debt_before: u64,
-    lender_delta: u64,
-    protocol_fee_repaid: u64,
-) -> (AssetAuthVault, AssetAuthVault) {
-    let lender_before = params.get_lender_vault(debt_before);
-    let protocol_before = params.get_protocol_fee_vault(debt_before);
-
-    let lender_after_supplied = lender_before.get_already_supplied_amount() + lender_delta;
-    let protocol_after_supplied =
-        protocol_before.get_already_supplied_amount() + protocol_fee_repaid;
-
-    let lender_after = if lender_after_supplied >= params.get_lender_vault_parameters().supply_goal
-    {
-        AssetAuthVault::new_finalized(params.get_lender_vault_parameters())
-    } else {
-        AssetAuthVault::new_active(params.get_lender_vault_parameters(), lender_after_supplied)
-    };
-
-    let protocol_after =
-        if protocol_after_supplied >= params.get_protocol_fee_vault_parameters().supply_goal {
-            AssetAuthVault::new_finalized(params.get_protocol_fee_vault_parameters())
-        } else {
-            AssetAuthVault::new_active(
-                params.get_protocol_fee_vault_parameters(),
-                protocol_after_supplied,
-            )
-        };
-
-    (lender_after, protocol_after)
-}
-
-/// Post-state lender vault after a principal-phase supply.
-fn expected_lender_vault_after_principal_supply(
-    params: &LendingOfferParameters,
-    debt_before: u64,
-    amount_to_repay: u64,
-) -> AssetAuthVault {
-    let lender_before = params.get_lender_vault(debt_before);
-    let lender_after_supplied = lender_before.get_already_supplied_amount() + amount_to_repay;
-
-    if lender_after_supplied >= params.get_lender_vault_parameters().supply_goal
-        || amount_to_repay == debt_before
-    {
-        AssetAuthVault::new_finalized(params.get_lender_vault_parameters())
-    } else {
-        AssetAuthVault::new_active(params.get_lender_vault_parameters(), lender_after_supplied)
-    }
 }
 
 fn match_vault_outs(
@@ -831,6 +737,7 @@ mod tests {
                 principal_amount: 10_000,
                 loan_expiration_time: 12_345,
                 principal_interest_rate: 1_000,
+                protocol_fee_rate: 1_000,
             },
             network: SimplicityNetwork::default_regtest(),
         }
@@ -1146,5 +1053,160 @@ mod tests {
         assert_eq!(full.offer_output, None);
         assert_eq!(full.lender_vault_output, 1);
         assert_eq!(full.protocol_fee_vault_output, Some(2));
+    }
+
+    fn zero_protocol_fee_params() -> LendingOfferParameters {
+        let mut params = test_params();
+        params.offer_parameters.protocol_fee_rate = 0;
+        params
+    }
+
+    #[test]
+    fn discover_partial_repayment_zero_protocol_fee_creates_only_lender_vault() {
+        let params = zero_protocol_fee_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let active = LendingOffer::new_active(params, total);
+        let amount_to_repay = 500_u64;
+        let debt_after = total - amount_to_repay;
+        let continuing = LendingOffer::new_active(params, debt_after);
+
+        let lender_vault =
+            AssetAuthVault::new_active(params.get_lender_vault_parameters(), amount_to_repay);
+
+        // nft@0, offer@1, lender@2; the output at 3 is wallet change, not a protocol fee vault.
+        let tx = tx_with_outputs(vec![
+            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+            explicit_output(
+                params.collateral_asset_id,
+                3_000
+                    - params
+                        .offer_parameters
+                        .get_collateral_for_principal(amount_to_repay),
+                continuing.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                amount_to_repay,
+                lender_vault.get_script_pubkey(),
+            ),
+            explicit_output(params.principal_asset_id, 7, script(&[0x53])),
+        ]);
+
+        let scan = active
+            .discover_partial_repayment(&tx, 0, 0, None)
+            .expect("zero-fee partial");
+        assert_eq!(scan.amount_to_repay, amount_to_repay);
+        assert_eq!(scan.lender_vault_vout, 2);
+        assert_eq!(scan.protocol_fee_vault_vout, None);
+        assert_eq!(
+            active.classify_tx(&tx),
+            Some(LendingOfferTxKind::PartialRepayment)
+        );
+    }
+
+    #[test]
+    fn discover_partial_repayment_zero_protocol_fee_supplies_lender_vault() {
+        let params = zero_protocol_fee_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let debt_before = total - 500;
+        let active = LendingOffer::new_active(params, debt_before);
+        let amount_to_repay = 200_u64;
+        let debt_after = debt_before - amount_to_repay;
+        let continuing = LendingOffer::new_active(params, debt_after);
+
+        let lender_after = params.get_lender_vault(debt_after);
+        assert_eq!(lender_after.get_already_supplied_amount(), 700);
+
+        let tx = tx_with_outputs(vec![
+            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+            explicit_output(
+                params.collateral_asset_id,
+                3_000 - params.offer_parameters.get_collateral_for_principal(700),
+                continuing.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                700,
+                lender_after.get_script_pubkey(),
+            ),
+        ]);
+
+        // The protocol fee vault never exists, so no protocol amount is passed.
+        let scan = active
+            .discover_partial_repayment(&tx, 0, 0, Some((500, None)))
+            .expect("zero-fee second partial");
+        assert_eq!(scan.amount_to_repay, amount_to_repay);
+        assert_eq!(scan.protocol_fee_vault_vout, None);
+    }
+
+    #[test]
+    fn scan_full_repayment_zero_protocol_fee_has_no_protocol_vault() {
+        let params = zero_protocol_fee_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let active = LendingOffer::new_active(params, total);
+        let lender_vault = AssetAuthVault::new_finalized(params.get_lender_vault_parameters());
+
+        // burn nft@0, lender vault@1
+        let tx = tx_with_outputs(vec![
+            op_return_asset(params.borrower_nft_asset_id),
+            explicit_output(
+                params.principal_asset_id,
+                total,
+                lender_vault.get_script_pubkey(),
+            ),
+        ]);
+
+        let scan = active
+            .scan_full_repayment(&tx, 0, 0)
+            .expect("zero-fee full");
+        assert_eq!(scan.amount_to_repay, total);
+        assert_eq!(scan.lender_vault_vout, 1);
+        assert_eq!(scan.protocol_fee_vault_vout, None);
+    }
+
+    // floor(5 * 0.1) = 0: the first repayment carries no protocol share, so the protocol fee vault
+    // is created only by the next one, floor(10 * 0.1) - floor(5 * 0.1) = 1.
+    #[test]
+    fn discover_partial_repayment_creates_protocol_vault_after_rounded_out_share() {
+        let params = test_params();
+        let total = params.offer_parameters.get_total_amount_to_repay();
+        let debt_before = total - 5;
+        let active = LendingOffer::new_active(params, debt_before);
+        assert!(params.offer_parameters.has_lender_vault(debt_before));
+        assert!(!params.offer_parameters.has_protocol_fee_vault(debt_before));
+
+        let amount_to_repay = 5_u64;
+        let debt_after = debt_before - amount_to_repay;
+        let continuing = LendingOffer::new_active(params, debt_after);
+
+        let lender_after = params.get_lender_vault(debt_after);
+        let protocol_after = params.get_protocol_fee_vault(debt_after);
+        assert_eq!(lender_after.get_already_supplied_amount(), 9);
+        assert_eq!(protocol_after.get_already_supplied_amount(), 1);
+
+        let tx = tx_with_outputs(vec![
+            explicit_output(params.borrower_nft_asset_id, 1, script(&[0x51])),
+            explicit_output(
+                params.collateral_asset_id,
+                3_000 - params.offer_parameters.get_collateral_for_principal(10),
+                continuing.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                9,
+                lender_after.get_script_pubkey(),
+            ),
+            explicit_output(
+                params.principal_asset_id,
+                1,
+                protocol_after.get_script_pubkey(),
+            ),
+        ]);
+
+        let scan = active
+            .discover_partial_repayment(&tx, 0, 0, Some((5, None)))
+            .expect("protocol vault created by second repayment");
+        assert_eq!(scan.amount_to_repay, amount_to_repay);
+        assert_eq!(scan.protocol_fee_vault_vout, Some(3));
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use sqlx::PgPool;
 
 use simplex::{
@@ -27,6 +29,7 @@ impl TrackerRegistry {
     pub async fn load(
         db_pool: &PgPool,
         protocol_fee_keeper_asset_id: AssetId,
+        allowed_protocol_fee_rates: BTreeSet<u16>,
         network: SimplicityNetwork,
         asset_registration: Option<AssetRegistration>,
     ) -> anyhow::Result<Self> {
@@ -45,6 +48,7 @@ impl TrackerRegistry {
             participants: OfferParticipantsTracker::load(db_pool).await?,
             creations: OfferCreationsTracker::new(
                 protocol_fee_keeper_asset_id,
+                allowed_protocol_fee_rates,
                 network,
                 asset_registration,
             ),

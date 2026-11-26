@@ -5,7 +5,7 @@ use crate::programs::{
     program::{CreationMetadata, MetadataProgram, PROGRAM_ID_LENGTH, ProgramId, SimplexProgram},
 };
 
-const LENDING_OFFER_CREATION_METADATA_LENGTH: usize = 50;
+const LENDING_OFFER_CREATION_METADATA_LENGTH: usize = 52;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LendingOfferCreationMetadata {
@@ -14,6 +14,7 @@ pub struct LendingOfferCreationMetadata {
     pub principal_amount: u64,
     pub loan_expiration_time: u32,
     pub principal_interest_rate: u16,
+    pub protocol_fee_rate: u16,
 }
 
 impl LendingOfferCreationMetadata {
@@ -28,6 +29,7 @@ impl LendingOfferCreationMetadata {
             principal_amount: offer_parameters.principal_amount,
             loan_expiration_time: offer_parameters.loan_expiration_time,
             principal_interest_rate: offer_parameters.principal_interest_rate,
+            protocol_fee_rate: offer_parameters.protocol_fee_rate,
         }
     }
 }
@@ -71,6 +73,13 @@ impl CreationMetadata for LendingOfferCreationMetadata {
                 .try_into()
                 .expect("u16 length is fixed"),
         );
+        cursor += std::mem::size_of::<u16>();
+
+        let protocol_fee_rate = u16::from_le_bytes(
+            op_return_bytes[cursor..cursor + std::mem::size_of::<u16>()]
+                .try_into()
+                .expect("u16 length is fixed"),
+        );
 
         Ok(Self {
             program_id,
@@ -78,6 +87,7 @@ impl CreationMetadata for LendingOfferCreationMetadata {
             principal_amount,
             loan_expiration_time,
             principal_interest_rate,
+            protocol_fee_rate,
         })
     }
 
@@ -88,6 +98,7 @@ impl CreationMetadata for LendingOfferCreationMetadata {
         op_return_data.extend_from_slice(&self.principal_amount.to_le_bytes());
         op_return_data.extend_from_slice(&self.loan_expiration_time.to_le_bytes());
         op_return_data.extend_from_slice(&self.principal_interest_rate.to_le_bytes());
+        op_return_data.extend_from_slice(&self.protocol_fee_rate.to_le_bytes());
 
         op_return_data
     }
