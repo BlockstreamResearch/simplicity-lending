@@ -52,9 +52,10 @@ pub async fn get_overview_by_script(
 #[tracing::instrument(name = "Getting borrower offers by script", skip(state, query))]
 pub async fn list_offers_by_script(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<BorrowerOffersQuery>,
+    Query(mut query): Query<BorrowerOffersQuery>,
 ) -> Result<Json<OfferListResponse>, ApiError> {
     let script_bytes = parse_script_pubkey(&query.script_pubkey)?;
+    query.filters.prepare_exclude_participant()?;
 
     let offers = super::db::fetch_offer_list(&state.db, &script_bytes, &query.filters).await?;
 
