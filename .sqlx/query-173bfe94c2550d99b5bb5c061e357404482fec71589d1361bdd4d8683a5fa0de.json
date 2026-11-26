@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT DISTINCT ON (participant_type)\n            offer_id,\n            participant_type AS \"participant_type: ParticipantType\",\n            script_pubkey,\n            txid,\n            vout,\n            created_at_height,\n            spent_txid,\n            spent_at_height\n        FROM offer_participants\n        WHERE offer_id = $1\n        ORDER BY participant_type, created_at_height DESC\n        ",
+  "query": "\n        SELECT DISTINCT ON (participant_type)\n            offer_id,\n            participant_type AS \"participant_type: ParticipantType\",\n            script_pubkey,\n            txid,\n            vout,\n            created_at_height,\n            spent_txid,\n            spent_at_height\n        FROM offer_participants\n        WHERE offer_id = $1\n        ORDER BY participant_type, id DESC\n        ",
   "describe": {
     "columns": [
       {
@@ -70,5 +70,5 @@
       true
     ]
   },
-  "hash": "929cf2d6bfe7cb5a40c60cbe4429ca6888fb588444638f942b03afc9138e023d"
+  "hash": "173bfe94c2550d99b5bb5c061e357404482fec71589d1361bdd4d8683a5fa0de"
 }

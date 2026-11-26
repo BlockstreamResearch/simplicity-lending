@@ -33,6 +33,7 @@ pub fn attach_exclude_participant_script_scope<'a>(
     );
 }
 
+/// Offers whose latest participant of `participant_type` (highest `id`) holds `script_pubkey`.
 fn attach_participant_script_scope<'a>(
     query_builder: &mut QueryBuilder<'a, Postgres>,
     mode: ParticipantScopeMode,
@@ -48,16 +49,20 @@ fn attach_participant_script_scope<'a>(
         }
     }
     query_builder.push(
-        "SELECT offer_id FROM (
-            SELECT DISTINCT ON (offer_id) offer_id, script_pubkey
-            FROM offer_participants
-            WHERE participant_type = ",
+        "SELECT participant.offer_id
+        FROM offer_participants participant
+        WHERE participant.participant_type = ",
     );
     query_builder.push_bind(participant_type);
-    query_builder.push(
-        " ORDER BY offer_id, created_at_height DESC
-        ) latest_participant WHERE script_pubkey = ",
-    );
+    query_builder.push(" AND participant.script_pubkey = ");
     query_builder.push_bind(script_pubkey);
-    query_builder.push(")");
+    query_builder.push(
+        " AND NOT EXISTS (
+            SELECT 1
+            FROM offer_participants newer
+            WHERE newer.offer_id = participant.offer_id
+              AND newer.participant_type = participant.participant_type
+              AND newer.id > participant.id
+        ))",
+    );
 }

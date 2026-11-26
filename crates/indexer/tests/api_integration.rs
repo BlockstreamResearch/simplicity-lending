@@ -15,9 +15,9 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::common::{
-    factory_model, offer_model, outpoint_from_offer_id, seed_factory_row, seed_offer_row,
-    seed_offer_utxo_row, seed_participant_utxo_row, seed_sync_state, spent_offer_utxo,
-    spent_participant, test_pool, unique_32_bytes_from_uuid, unspent_offer_utxo,
+    factory_model, offer_model, outpoint_from_offer_id, outpoint_with_txid_byte, seed_factory_row,
+    seed_offer_row, seed_offer_utxo_row, seed_participant_utxo_row, seed_sync_state,
+    spent_offer_utxo, spent_participant, test_pool, unique_32_bytes_from_uuid, unspent_offer_utxo,
     unspent_participant, vault_tracking,
 };
 
@@ -587,6 +587,246 @@ async fn offers_exclude_participant_script_honors_role() -> anyhow::Result<()> {
         offer_list_items(&exclude_lender)[0]["id"],
         offer_a.to_string()
     );
+
+    server_handle.abort();
+    Ok(())
+}
+
+/// Seeds one participant row per NFT move in processing order. Each row is spent by the
+/// next move; the last one stays unspent unless `burned_at_height` is set.
+async fn seed_participant_moves(
+    pool: &PgPool,
+    offer_id: i64,
+    participant_type: ParticipantType,
+    height: i64,
+    moves: &[(u8, &str)],
+    burned_at_height: Option<i64>,
+) -> anyhow::Result<()> {
+    let vout = match participant_type {
+        ParticipantType::Borrower => 0,
+        ParticipantType::Lender => 1,
+    };
+
+    for (index, (txid_byte, script)) in moves.iter().enumerate() {
+        let outpoint = outpoint_with_txid_byte(*txid_byte, vout);
+        let script_pubkey = hex::decode(script)?;
+        let spent_by = moves
+            .get(index + 1)
+            .map(|(next_txid_byte, _)| (height, *next_txid_byte))
+            .or(burned_at_height.map(|burned_at| (burned_at, 0xee)));
+
+        let participant = match spent_by {
+            Some((spent_at_height, spent_txid_byte)) => spent_participant(
+                offer_id,
+                participant_type,
+                outpoint,
+                script_pubkey,
+                height,
+                spent_at_height,
+                spent_txid_byte,
+            ),
+            None => {
+                unspent_participant(offer_id, participant_type, outpoint, script_pubkey, height)
+            }
+        };
+        seed_participant_utxo_row(pool, &participant).await?;
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn participant_scope_follows_nft_moves_within_one_block() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+
+    let factory_id = vault_tracking::seed_minimal_factory(&pool).await?;
+
+    let offer_a = seed_offer_row(&pool, &mut offer_model(30, factory_id, 100)).await?;
+    seed_participant_moves(
+        &pool,
+        offer_a,
+        ParticipantType::Borrower,
+        100,
+        &[(0x61, "61ac"), (0x62, "62ac"), (0x63, "63ac")],
+        None,
+    )
+    .await?;
+    // The NFT returns to its previous owner.
+    let offer_b = seed_offer_row(&pool, &mut offer_model(31, factory_id, 100)).await?;
+    seed_participant_moves(
+        &pool,
+        offer_b,
+        ParticipantType::Borrower,
+        100,
+        &[(0x64, "61ac"), (0x65, "62ac"), (0x66, "61ac")],
+        None,
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    for (script, expected) in [
+        ("61ac", vec![offer_b]),
+        ("62ac", vec![]),
+        ("63ac", vec![offer_a]),
+    ] {
+        let offers = get_json(
+            &http,
+            format!("{base_url}/borrowers/offers?script_pubkey={script}"),
+        )
+        .await?;
+        assert_eq!(offers["total"], expected.len());
+        assert_ids_match_unordered(&offers["items"], &expected);
+
+        let overview = get_json(
+            &http,
+            format!("{base_url}/borrowers/overview?script_pubkey={script}"),
+        )
+        .await?;
+        assert_eq!(overview["pending_offers"], expected.len());
+    }
+
+    let exclude_current = get_json(
+        &http,
+        format!(
+            "{base_url}/offers?exclude_participant_script=63ac&exclude_participant_role=borrower"
+        ),
+    )
+    .await?;
+    assert_ids_match_unordered(offer_list_items(&exclude_current), &[offer_b]);
+
+    let exclude_previous = get_json(
+        &http,
+        format!(
+            "{base_url}/offers?exclude_participant_script=62ac&exclude_participant_role=borrower"
+        ),
+    )
+    .await?;
+    assert_ids_match_unordered(offer_list_items(&exclude_previous), &[offer_a, offer_b]);
+
+    let all = get_json(&http, format!("{base_url}/offers")).await?;
+    for (offer_id, owner) in [(offer_a, "63ac"), (offer_b, "61ac")] {
+        let item = find_list_item(offer_list_items(&all), offer_id).expect("seeded offer");
+        assert_eq!(participant_script(item, "borrower"), Some(owner));
+
+        let details = get_json(&http, format!("{base_url}/offers/{offer_id}")).await?;
+        assert_eq!(participant_script(&details, "borrower"), Some(owner));
+    }
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn participant_scope_keeps_last_owner_after_nft_burn() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+
+    let factory_id = vault_tracking::seed_minimal_factory(&pool).await?;
+
+    let mut offer = offer_model(30, factory_id, 100);
+    offer.current_status = OfferStatus::Repaid;
+    let offer_id = seed_offer_row(&pool, &mut offer).await?;
+    seed_participant_moves(
+        &pool,
+        offer_id,
+        ParticipantType::Borrower,
+        100,
+        &[(0x61, "61ac"), (0x62, "62ac")],
+        Some(200),
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    let last_owner = get_json(
+        &http,
+        format!("{base_url}/borrowers/offers?script_pubkey=62ac"),
+    )
+    .await?;
+    assert_ids_match_unordered(&last_owner["items"], &[offer_id]);
+
+    let previous_owner = get_json(
+        &http,
+        format!("{base_url}/borrowers/offers?script_pubkey=61ac"),
+    )
+    .await?;
+    assert_eq!(previous_owner["total"], 0);
+
+    let details = get_json(&http, format!("{base_url}/offers/{offer_id}")).await?;
+    assert_eq!(participant_script(&details, "borrower"), Some("62ac"));
+
+    server_handle.abort();
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn participant_scope_separates_roles_moved_by_one_tx() -> anyhow::Result<()> {
+    let pool = test_pool().await?;
+
+    let factory_id = vault_tracking::seed_minimal_factory(&pool).await?;
+
+    let mut offer = offer_model(30, factory_id, 100);
+    offer.current_status = OfferStatus::Active;
+    let offer_id = seed_offer_row(&pool, &mut offer).await?;
+    // Tx 0x63 moves both NFTs; 61ac goes from borrower to lender.
+    seed_participant_moves(
+        &pool,
+        offer_id,
+        ParticipantType::Borrower,
+        100,
+        &[(0x61, "61ac"), (0x63, "63ac")],
+        None,
+    )
+    .await?;
+    seed_participant_moves(
+        &pool,
+        offer_id,
+        ParticipantType::Lender,
+        100,
+        &[(0x62, "62ac"), (0x63, "61ac")],
+        None,
+    )
+    .await?;
+
+    let (base_url, server_handle) = start_api(pool).await?;
+    let http = reqwest::Client::new();
+
+    for (role, script, expected) in [
+        ("borrowers", "61ac", vec![]),
+        ("borrowers", "63ac", vec![offer_id]),
+        ("lenders", "61ac", vec![offer_id]),
+        ("lenders", "62ac", vec![]),
+    ] {
+        let offers = get_json(
+            &http,
+            format!("{base_url}/{role}/offers?script_pubkey={script}"),
+        )
+        .await?;
+        assert_ids_match_unordered(&offers["items"], &expected);
+    }
+
+    let exclude_borrower = get_json(
+        &http,
+        format!(
+            "{base_url}/offers?exclude_participant_script=61ac&exclude_participant_role=borrower"
+        ),
+    )
+    .await?;
+    assert_ids_match_unordered(offer_list_items(&exclude_borrower), &[offer_id]);
+
+    let exclude_lender = get_json(
+        &http,
+        format!(
+            "{base_url}/offers?exclude_participant_script=61ac&exclude_participant_role=lender"
+        ),
+    )
+    .await?;
+    assert_ids_match_unordered(offer_list_items(&exclude_lender), &[]);
 
     server_handle.abort();
     Ok(())
